@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SynergyRuleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/synergy_rule_data.gd" id="1_srd"]
+
+[resource]
+script = ExtResource("1_srd")
+id = &"SYN_BOUNCE_SPEC"
+pool_id = &"bounce_dmg"
+condition_id = 3
+condition_params = {}
+contribution_expr = "value"
+cap_pool_p = 0.8
+priority = 0

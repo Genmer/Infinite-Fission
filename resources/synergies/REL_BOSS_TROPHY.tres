@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SynergyRuleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/synergy_rule_data.gd" id="1_srd"]
+
+[resource]
+script = ExtResource("1_srd")
+id = &"REL_BOSS_TROPHY"
+pool_id = &"elite_dmg"
+condition_id = 7
+condition_params = {"tags": [1, 2]}
+contribution_expr = "value"
+cap_pool_p = 0.25
+priority = 0

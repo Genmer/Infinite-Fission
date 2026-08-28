@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SynergyRuleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/synergy_rule_data.gd" id="1_srd"]
+
+[resource]
+script = ExtResource("1_srd")
+id = &"SYN_FROST_EXEC"
+pool_id = &"frost_dmg"
+condition_id = 0
+condition_params = {}
+contribution_expr = "value"
+cap_pool_p = 1.0
+priority = 0

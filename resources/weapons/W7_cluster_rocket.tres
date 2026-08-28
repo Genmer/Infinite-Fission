@@ -1,0 +1,79 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_level_stats.gd" id="2_wls"]
+
+[sub_resource type="Resource" id="WeaponLevelStats_l1"]
+script = ExtResource("2_wls")
+base_atk = 14.0
+rof = 0.3125
+cd = 3.2
+pierce = 1
+pellets = 1
+note = "A3 §3.7 L1：主/子弹头同值 14；sub_count 5；群体 DPS 28/目标"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l2"]
+script = ExtResource("2_wls")
+base_atk = 14.0
+rof = 0.3125
+cd = 3.2
+pierce = 1
+pellets = 1
+note = "A3 §3.7 L2：sub_count 5→6；群体 DPS 43/目标"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l3"]
+script = ExtResource("2_wls")
+base_atk = 17.0
+rof = 0.3125
+cd = 3.2
+pierce = 1
+pellets = 1
+note = "A3 §3.7 L3：atk 14→17；群体 DPS 53/目标"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l4"]
+script = ExtResource("2_wls")
+base_atk = 17.0
+rof = 0.3125
+cd = 3.2
+pierce = 1
+pellets = 1
+note = "A3 §3.7 L4：sub_count 6→8；群体 DPS 74/目标"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l5"]
+script = ExtResource("2_wls")
+base_atk = 22.0
+rof = 0.3846
+cd = 2.6
+pierce = 1
+pellets = 1
+note = "A3 §3.7 L5：atk 22；cd 3.2→2.6s；群体 DPS 75.4/目标"
+
+[resource]
+script = ExtResource("1_wd")
+id = &"W7_cluster_rocket"
+display_name = "集束火箭"
+form = 2
+crit_rate = 0.05
+crit_dmg = 2.0
+hitbox_r = 6.0
+unlock_rarity = 1
+threshold_traits = [{
+"threshold_id": &"TH_SIZE_NOVA", "metric": "size_mult", "threshold": 3.0,
+"effect_id": &"EF_SIZE", "params": {"radius_mult": 1.5, "atk_ratio": 0.4}
+}, {
+"threshold_id": &"TH_FRACTAL_ECHO", "metric": "split_depth", "threshold": 3.0,
+"effect_id": &"EF_FRACTAL", "params": {"inherit_ratio": 0.6}
+}, {
+"threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
+"effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
+}, {
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
+}]
+homing = {
+"proj_speed_init": 300.0, "proj_speed_max": 720.0, "accel": 900.0,
+"turn_rate": 480.0, "arm_delay": 0.15, "blast_r": 55.0, "blast_falloff": 0.6,
+"sub_count": 5, "sub_delay": 0.4, "sub_speed_init": 180.0, "sub_accel": 600.0,
+"sub_count_levels": [5.0, 6.0, 6.0, 8.0, 8.0]
+}
+upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

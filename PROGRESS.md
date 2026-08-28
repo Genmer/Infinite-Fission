@@ -20,7 +20,7 @@
 | D-包0 基座 | EventBus/池×6/SpaceGrid/ModifierStack/10 Resource 类/启动校验 | ✅ 自测 129/129 PASS |
 | D-包1 伤害结算管线 | 九步 resolve/反应通道/幂等/审计/固定种子 | ✅ 自测 108/108 PASS |
 | D-包2 实体基座 | ProjectileBase 六事件/Enemy/Player/WaveDirector/透传桩 | ✅ 自测 140/140 PASS |
-| **D-包3 武器/词缀/元素/内容** | 四形态武器+TraitStack+内置词条+ElementalSystem | 🔄 代码+自测完成（128/128）；**.tres 内容待建（见 §4）** |
+| **D-包3 武器/词缀/元素/内容** | 四形态武器+TraitStack+内置词条+ElementalSystem+全部内容 .tres | ✅ 完成（自测 128/128 + 内容 66 资源 0 剔除） |
 | D-包4 GameLoop/GameFeel/UI/卡牌流 | 主循环/打击感/HUD/三选一 | ⬜ 未开始 |
 | D-集成包 | main.tscn 组装/全链验收/压力 soak | ⬜ 未开始 |
 | E 审查+测试（并行） | 独立代码审查 + 运行验证 | ⬜ 未开始 |
@@ -52,6 +52,14 @@
 - `scripts/combat/elemental/`：elemental_system.gd、elemental_state.gd
 - `scenes/combat/lasers/laser_beam.tscn`
 - `tests/runner/test_pkg3.gd` + `pkg3_cases.gd`（128 项断言，覆盖 §4 原 10 个测试要点全绿）
+- `resources/`：weapons×9（含 5 级 upgrade_table + 四通用质变阈值）、traits×28（ADD12/MULT6/MECH6/ELEM4）、relics×11、enemies×8（E1~E5+三 Boss）、waves/wave_table_main（30 波）、synergies×8 —— **DataRegistry 加载 66 资源、rejected=0**
+
+**内容侧已裁决的口径（docs 矛盾按 C_architecture > B_spec > A3 链裁定，2026-08-28）：**
+- W5 L5 refract_depth=3 → 取 2（引擎 MAX_REFRACT_DEPTH=2 + 校验器双硬闸，.tres note 留痕）
+- 精英 HP 取波表口径（单一 E5 模板 = grunt 基底 ×4.2；A3 §2.2 与 §2.4 矛盾时从波表），精英类型差异延后
+- ADD 词条 decay_delta=0.85（架构示例值；A3 §9.1「3 层=+45%」线性假设在 F-21 衰减框架 δ≤0.92 下不可达）
+- HOMING/MELEE 等级表 rof 列 A3 未给 → 填 1/cd 等效值；W4/W5/W8 的 cd 填 1.0 轮询占位（仅影响轮询节拍）
+- **转包 4 的新遗留**：爆虫自爆机制（半径 110/1.2s 引爆/警示圈，EnemyData schema 无字段）；Boss 波伴随怪差异（A3：w20 伴 R、w30 混合怪×1/2s 场上≤14；现 WaveDirector 硬编码最便宜敌 ×1/2.5s ≤12）
 
 **本次会话（ZCode）修复的 4 个业务 bug（tester 发现 → coder 修复 → 测试翻转全绿）：**
 1. `elemental_state.gd`：gauges 3 槽越界（元素枚举 KIN=0/FIR=1/ICE=2/LTG=3，LTG 恒 Out of bounds）→ **改 4 槽按枚举直索引**（KIN 槽弃用），tick 衰减 λ 取 `lambdas[i-1]`（λ 真源恰 3 项 [FIR,ICE,LTG]）
@@ -60,17 +68,16 @@
 4. `orbit_weapon.gd` `_ensure_orbit_field` 漏注入 `orbit_field.weapon = self` → 周期弧斩从死代码变可用
 - 次生修复：`elemental_system._spread_reaction` 补窄相收窄（粗筛在网格、窄相在调用方口径）
 
-**包 3 仍缺（下一个会话要补的）：**
-1. **内容 .tres 全部未建**：`resources/` 下 9 把武器、28 词条、11 遗物、敌表/波表等（数值真源 = `docs/analysis/A3_numbers.md`；schema = C_architecture §三；启动校验会自动剔除坏数据不崩溃）
-2. 包 3 收紧位（包 2 代码里已用注释标明恢复点）：`_build_trait_ctx` 已改构 TraitContext 实例 ✅；trait_stack/elemental/武器数组 duck-typing 收紧、`Player.add_weapon(data)` 形态工厂
-3. 遗留小项：R_rxn 反应伤害独立告警线字段（现用 ×500 兜底）、易伤注入去重（管线注释有说明）、is_first_hit_of_wave 接线、敌间分离力 E-10、RANGED 敌弹池注入
+**包 3 仍缺（均已并入 §5 行动项）：**
+1. 包 3 收紧位（包 2 代码里已用注释标明恢复点）：`_build_trait_ctx` 已改构 TraitContext 实例 ✅；trait_stack/elemental/武器数组 duck-typing 收紧、`Player.add_weapon(data)` 形态工厂
+2. 遗留小项：R_rxn 反应伤害独立告警线字段（现用 ×500 兜底）、易伤注入去重（管线注释有说明）、is_first_hit_of_wave 接线、敌间分离力 E-10、RANGED 敌弹池注入
 
 ## 5. 下一步行动（按序执行）
 
 1. ~~跑基线确认 377 PASS~~ ✅（本会话已做，见 §7 现基线 505）
 2. ~~补包 3 自测 test_pkg3.gd~~ ✅（128/128 全 PASS，顺带修复 4 个业务 bug，见 §4）
-3. **补包 3 内容 .tres**：按 A3 数值 + C_architecture schema 建全部资源文件；用 DataRegistry 启动加载验证 0 剔除 ← **当前断点**
-4. **收紧 duck-typing 恢复点**（包 2/包 0 代码内注释标明处）
+3. ~~补包 3 内容 .tres~~ ✅（66 资源 0 剔除；pkg0 两条占位断言翻转为正向断言；裁决记录见 §4） ← **已过，当前断点在 4**
+4. **收紧 duck-typing 恢复点**（包 2/包 0 代码内注释标明处）← **当前断点**
 5. **派发包 4**：GameLoop（状态机 Boot→Menu→Playing→Paused→LevelUp→GameOver、固定帧序①~⑧、game_delta 双时间通道——顿帧不写 Engine.time_scale！）、GameFeelDirector（顿帧/震屏 trauma/色差/粒子池）、HUD/跳字/三选一卡牌 UI
 6. **集成包**：main.tscn 组装、切真管线（默认已是真件，桩仅 debug）、压力测试（500 弹+100 敌 P95<8.3ms、10 分钟 soak 零实例化）、AC 验收矩阵（A1 §3）
 7. **阶段 E**：并行派发独立代码审查 + 运行测试两路子代理

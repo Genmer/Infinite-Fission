@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_WORDS_TIDE"
+display_name = "词缀潮汐"
+description = "每波开始时重随当前三选一卡池（保留稀有度 roll），每波 1 次（A3 §5）"
+rarity = 3
+listen_events = [&"wave_started"]
+effect_id = &"REL_EF_CARD_REROLL"
+params = {"per_wave": 1}
+unique = true

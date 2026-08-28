@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_MOMENTUM"
+display_name = "动量守恒"
+description = "同一弹幕每次反弹叠 +8% 伤害（并入 bounce_dmg 乘区），上限 10 层（A3 §5）"
+rarity = 3
+listen_events = [&"damage_resolved"]
+effect_id = &"REL_EF_BOUNCE_MOMENTUM"
+params = {"per_bounce_pct": 0.08, "max_layers": 10, "pool": "bounce_dmg"}
+unique = true

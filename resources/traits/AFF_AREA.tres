@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"AFF_AREA"
+display_name = "扩大印刻"
+description = "体积 +15%，可叠 3 层（A3 §4.2）"
+pool = 0
+pool_id = &"add_size"
+effect_id = &"EF_SIZE"
+value = 0.15
+value2 = 0.0
+params = {"stat": "size_pct"}
+event_hooks = [0]
+stack_max = 3
+decay_delta = 0.85
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+condition = {}

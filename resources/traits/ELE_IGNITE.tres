@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"ELE_IGNITE"
+display_name = "点燃"
+description = "火附着 22/跳；满槽点燃：3s 内每 0.5s 一跳 DOT = 15% 攻击者 ATK；2 层 DOT→22%（A3 §4.5）"
+pool = 4
+pool_id = &""
+effect_id = &"EF_ELEMENTAL"
+value = 22.0
+value2 = 0.0
+params = {"element": 1, "dot_ratio_lv2": 0.22}
+event_hooks = [0, 2]
+stack_max = 2
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+condition = {}

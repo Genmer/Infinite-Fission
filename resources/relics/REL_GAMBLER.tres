@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_GAMBLER"
+display_name = "赌徒硬币"
+description = "三选一变四选一，但第 4 张必带诅咒（ATK −10%，可被净化）（A3 §5）"
+rarity = 3
+listen_events = [&"card_chosen"]
+effect_id = &"REL_EF_CARD_EXTRA"
+params = {"cards": 4, "curse_atk_pct": -0.1}
+unique = true

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"MEC_FRACTAL"
+display_name = "几何分裂"
+description = "击中分裂 2 枚（±28°，继承母弹 ATK 面板 40%）；2 层 3 枚/±22°/45%；深度 ≥3 触发 TH_FRACTAL_ECHO（A3 §4.4）"
+pool = 3
+pool_id = &""
+effect_id = &"EF_FRACTAL"
+value = 2.0
+value2 = 0.4
+params = {"spread_deg": 28.0, "count_lv2": 3.0, "spread_deg_lv2": 22.0, "inherit_lv2": 0.45}
+event_hooks = [5]
+stack_max = 2
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 3
+tags = 0
+condition = {}

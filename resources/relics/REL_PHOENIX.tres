@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_PHOENIX"
+display_name = "不死鸟"
+description = "致死伤害时保留 1 HP 并释放清屏冲击（300% ATK，半径 400），每场 1 次（A3 §5）"
+rarity = 3
+listen_events = [&"player_hit"]
+effect_id = &"REL_EF_DEATH_CHEAT"
+params = {"atk_ratio": 3.0, "radius": 400.0, "uses": 1}
+unique = true

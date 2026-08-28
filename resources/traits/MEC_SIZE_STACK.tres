@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"MEC_SIZE_STACK"
+display_name = "体积极限"
+description = "每层体积 +18%（加算叠层），总体积 ≥3.0× 触发 TH_SIZE_NOVA 冲击波（A3 §4.4）"
+pool = 3
+pool_id = &""
+effect_id = &"EF_SIZE"
+value = 0.18
+value2 = 0.0
+params = {}
+event_hooks = [0, 2]
+stack_max = 5
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 2
+tags = 0
+condition = {}

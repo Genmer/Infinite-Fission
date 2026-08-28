@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"MEC_BOUNCE"
+display_name = "边界反弹"
+description = "反弹次数 +2（边缘或命中后向最近敌折射），反弹 ≥5 次触发 TH_BOUNCE_ETERNAL（A3 §4.4）"
+pool = 3
+pool_id = &""
+effect_id = &"EF_BOUNCE"
+value = 2.0
+value2 = 0.0
+params = {}
+event_hooks = [0, 4]
+stack_max = 3
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 2
+tags = 0
+condition = {}

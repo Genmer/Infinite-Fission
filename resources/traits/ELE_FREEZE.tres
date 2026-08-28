@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"ELE_FREEZE"
+display_name = "冰冻"
+description = "冰附着 22/跳；满槽寒滞 2.5s（移速 −40% + 所受伤害 ×1.25）；二次满槽完全冻结 1.2s；2 层附着→30/跳（A3 §4.5）"
+pool = 4
+pool_id = &""
+effect_id = &"EF_ELEMENTAL"
+value = 22.0
+value2 = 0.0
+params = {"element": 2, "value_lv2": 30.0}
+event_hooks = [0, 2]
+stack_max = 2
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+condition = {}

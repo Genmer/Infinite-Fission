@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_HARVEST"
+display_name = "收割协议"
+description = "击杀回复 0.4% max_hp（A3 §5）"
+rarity = 3
+listen_events = [&"enemy_killed"]
+effect_id = &"REL_EF_KILL_HEAL"
+params = {"heal_pct_max_hp": 0.004}
+unique = true

@@ -1,0 +1,79 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_level_stats.gd" id="2_wls"]
+
+[sub_resource type="Resource" id="WeaponLevelStats_l1"]
+script = ExtResource("2_wls")
+base_atk = 7.0
+rof = 11.0
+cd = 0.0
+pierce = 1
+pellets = 1
+note = "A3 §3.2 L1：冷 rof 11 / 满热 14；面板 DPS（热）98"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l2"]
+script = ExtResource("2_wls")
+base_atk = 8.0
+rof = 11.0
+cd = 0.0
+pierce = 1
+pellets = 1
+note = "A3 §3.2 L2：冷 rof 11 / 满 14；面板 DPS（热）112"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l3"]
+script = ExtResource("2_wls")
+base_atk = 9.0
+rof = 12.0
+cd = 0.0
+pierce = 1
+pellets = 1
+note = "A3 §3.2 L3：冷 rof 12 / 满 15；面板 DPS（热）135"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l4"]
+script = ExtResource("2_wls")
+base_atk = 11.0
+rof = 12.0
+cd = 0.0
+pierce = 1
+pellets = 1
+note = "A3 §3.2 L4：冷 rof 12 / 满 16；面板 DPS（热）176"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l5"]
+script = ExtResource("2_wls")
+base_atk = 13.0
+rof = 13.0
+cd = 0.0
+pierce = 1
+pellets = 1
+note = "A3 §3.2 L5：冷 rof 13 / 满 17.5；面板 DPS（热）227.5"
+
+[resource]
+script = ExtResource("1_wd")
+id = &"W2_gatling"
+display_name = "加特林"
+form = 0
+crit_rate = 0.05
+crit_dmg = 2.0
+hitbox_r = 5.0
+unlock_rarity = 1
+threshold_traits = [{
+"threshold_id": &"TH_SIZE_NOVA", "metric": "size_mult", "threshold": 3.0,
+"effect_id": &"EF_SIZE", "params": {"radius_mult": 1.5, "atk_ratio": 0.4}
+}, {
+"threshold_id": &"TH_FRACTAL_ECHO", "metric": "split_depth", "threshold": 3.0,
+"effect_id": &"EF_FRACTAL", "params": {"inherit_ratio": 0.6}
+}, {
+"threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
+"effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
+}, {
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
+}]
+ballistic = {
+"proj_speed": 700.0, "range": 620.0, "spread_deg": 6.0,
+"pierce": 1, "pellets": 1, "spin_up_time": 2.0, "rof_hot": 14.0,
+"spin_up_time_levels": [2.0, 1.8, 1.6, 1.4, 1.2],
+"rof_hot_levels": [14.0, 14.0, 15.0, 16.0, 17.5]
+}
+upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

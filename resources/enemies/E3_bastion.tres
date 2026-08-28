@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/enemy_data.gd" id="1_ed"]
+
+[resource]
+script = ExtResource("1_ed")
+id = &"E3_bastion"
+display_name = "重甲"
+behavior = 0
+hp_base = 180.0
+spd_base = 45.0
+dmg_base = 15.0
+exp_base = 10.0
+tp_cost = 4.0
+resist = [0.3, 0.0, 0.0, 0.0]
+immune_mask = 0
+tags = 0
+hitbox_r = 22.0
+ranged = {}
+elite_mult = {}
+boss = {}
+gold_drop = {"chance": 0.25, "min": 15, "max": 20}

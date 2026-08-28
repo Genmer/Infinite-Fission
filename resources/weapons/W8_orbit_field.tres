@@ -1,0 +1,80 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_level_stats.gd" id="2_wls"]
+
+[sub_resource type="Resource" id="WeaponLevelStats_l1"]
+script = ExtResource("2_wls")
+base_atk = 10.0
+rof = 1.0
+cd = 1.0
+pierce = 1
+pellets = 1
+note = "A3 §3.8 L1：orb_atk 10 × 2 球；贴身单体 DPS 40（cd 为轮询节拍占位，力场常驻）"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l2"]
+script = ExtResource("2_wls")
+base_atk = 13.0
+rof = 1.0
+cd = 1.0
+pierce = 1
+pellets = 1
+note = "A3 §3.8 L2：orb_atk 13；贴身单体 DPS 52"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l3"]
+script = ExtResource("2_wls")
+base_atk = 13.0
+rof = 1.0
+cd = 1.0
+pierce = 1
+pellets = 1
+note = "A3 §3.8 L3：orbs 2→3；贴身单体 DPS 78"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l4"]
+script = ExtResource("2_wls")
+base_atk = 17.0
+rof = 1.0
+cd = 1.0
+pierce = 1
+pellets = 1
+note = "A3 §3.8 L4：orb_atk 17；贴身单体 DPS 102"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l5"]
+script = ExtResource("2_wls")
+base_atk = 17.0
+rof = 1.0
+cd = 1.0
+pierce = 1
+pellets = 1
+note = "A3 §3.8 L5：orbs 3→4；orbit_radius 90→110；贴身单体 DPS 136"
+
+[resource]
+script = ExtResource("1_wd")
+id = &"W8_orbit_field"
+display_name = "环绕力场"
+form = 3
+crit_rate = 0.05
+crit_dmg = 2.0
+hitbox_r = 6.0
+unlock_rarity = 1
+threshold_traits = [{
+"threshold_id": &"TH_SIZE_NOVA", "metric": "size_mult", "threshold": 3.0,
+"effect_id": &"EF_SIZE", "params": {"radius_mult": 1.5, "atk_ratio": 0.4}
+}, {
+"threshold_id": &"TH_FRACTAL_ECHO", "metric": "split_depth", "threshold": 3.0,
+"effect_id": &"EF_FRACTAL", "params": {"inherit_ratio": 0.6}
+}, {
+"threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
+"effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
+}, {
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
+}]
+melee = {
+"orbit_radius": 90.0, "angular_speed": 240.0, "orbs": 2, "hit_cd": 0.5,
+"knockback": 40.0, "slash_radius": 150.0, "arc_deg": 120.0,
+"max_targets": 8, "nullify": false, "orb_r": 16.0,
+"orbit_radius_levels": [90.0, 90.0, 90.0, 90.0, 110.0],
+"orbs_levels": [2.0, 2.0, 3.0, 3.0, 4.0]
+}
+upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"ELE_REACTION_VOID"
+display_name = "元素裂变"
+description = "全部混合反应的结算值 ×1.8（常驻；A3 §4.5）"
+pool = 4
+pool_id = &""
+effect_id = &"EF_ELEMENTAL"
+value = 1.8
+value2 = 0.0
+params = {"reaction_mult": 1.8}
+event_hooks = []
+stack_max = 1
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 3
+tags = 0
+condition = {}

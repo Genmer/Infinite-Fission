@@ -1,0 +1,80 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_level_stats.gd" id="2_wls"]
+
+[sub_resource type="Resource" id="WeaponLevelStats_l1"]
+script = ExtResource("2_wls")
+base_atk = 10.0
+rof = 5.0
+cd = 1.0
+pierce = 1
+pellets = 1
+note = "A3 §3.5 L1：tick_atk 10 × 5 跳/s；单体 DPS 50；三目标群 DPS 146"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l2"]
+script = ExtResource("2_wls")
+base_atk = 12.0
+rof = 5.0
+cd = 1.0
+pierce = 1
+pellets = 1
+note = "A3 §3.5 L2：tick_atk 12 × 5 跳/s；单体 DPS 60；三目标群 DPS 175"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l3"]
+script = ExtResource("2_wls")
+base_atk = 12.0
+rof = 5.0
+cd = 1.0
+pierce = 1
+pellets = 1
+note = "A3 §3.5 L3：tick_atk 12 × 5 跳/s；折射束 2→3；三目标群 DPS 216"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l4"]
+script = ExtResource("2_wls")
+base_atk = 15.0
+rof = 5.0
+cd = 1.0
+pierce = 1
+pellets = 1
+note = "A3 §3.5 L4：tick_atk 15 × 5 跳/s；单体 DPS 75；三目标群 DPS 270"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l5"]
+script = ExtResource("2_wls")
+base_atk = 15.0
+rof = 5.0
+cd = 1.0
+pierce = 1
+pellets = 1
+note = "A3 §3.5 L5：tick_atk 15 × 5 跳/s；refract_ratio 0.6→0.75；三目标群 DPS 358"
+
+[resource]
+script = ExtResource("1_wd")
+id = &"W5_prism"
+display_name = "折射棱镜"
+form = 1
+crit_rate = 0.05
+crit_dmg = 2.0
+hitbox_r = 6.0
+unlock_rarity = 1
+threshold_traits = [{
+"threshold_id": &"TH_SIZE_NOVA", "metric": "size_mult", "threshold": 3.0,
+"effect_id": &"EF_SIZE", "params": {"radius_mult": 1.5, "atk_ratio": 0.4}
+}, {
+"threshold_id": &"TH_FRACTAL_ECHO", "metric": "split_depth", "threshold": 3.0,
+"effect_id": &"EF_FRACTAL", "params": {"inherit_ratio": 0.6}
+}, {
+"threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
+"effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
+}, {
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
+}]
+laser = {
+"beam_length": 520.0, "beam_width": 14.0, "tick_rate": 5.0,
+"scorch_max_layers": 5, "scorch_per_layer": 0.08,
+"refract_beams": 2, "refract_ratio": 0.6, "refract_depth": 2,
+"refract_beams_levels": [2.0, 2.0, 3.0, 3.0, 3.0],
+"refract_ratio_levels": [0.6, 0.6, 0.6, 0.6, 0.75]
+}
+upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

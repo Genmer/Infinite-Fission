@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="SynergyRuleData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/synergy_rule_data.gd" id="1_srd"]
+
+[resource]
+script = ExtResource("1_srd")
+id = &"SYN_LOWHP_FURY"
+pool_id = &"fury_dmg"
+condition_id = 5
+condition_params = {"pct": 0.35}
+contribution_expr = "value"
+cap_pool_p = 0.6
+priority = 0

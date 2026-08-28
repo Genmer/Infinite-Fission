@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"SYN_FROST_EXEC"
+display_name = "冰渊裁决"
+description = "对寒滞/冻结目标伤害 ×1.5，叠 2 层合并为 ×2.0（A3 §4.3）"
+pool = 1
+pool_id = &"frost_dmg"
+effect_id = &"EF_STAT"
+value = 0.5
+value2 = 0.0
+params = {}
+event_hooks = [2]
+stack_max = 2
+decay_delta = 0.0
+cap_pool_p = 1.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 2
+tags = 0
+condition = {"condition_id": 0, "params": {}}

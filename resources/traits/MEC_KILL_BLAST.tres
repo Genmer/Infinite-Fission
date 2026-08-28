@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"MEC_KILL_BLAST"
+display_name = "死亡新星"
+description = "击杀时爆炸 30% ATK 半径 70；2 层 45%/半径 90（A3 §4.4）"
+pool = 3
+pool_id = &""
+effect_id = &"EF_MECH"
+value = 0.3
+value2 = 0.0
+params = {"atk_ratio": 0.3, "radius": 70.0, "atk_ratio_lv2": 0.45, "radius_lv2": 90.0}
+event_hooks = [5]
+stack_max = 2
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+condition = {}

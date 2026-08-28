@@ -656,8 +656,9 @@ func _test_data_registry() -> void:
 	_check("报告：total ≥ 1 且 rejected = 0", int(reg.report["total"]) >= 1 and int(reg.report["rejected"]) == 0)
 	_check("get_game_feel 单件入口", reg.get_game_feel() == reg.game_feel)
 	_check("get_weapon 未命中返回 null（fail-fast）", reg.get_weapon(&"W_MISSING") == null)
-	_check("trait_ids_by_pool（ADD）为空（内容词条属后续包）", reg.trait_ids_by_pool(GameConst.PoolClass.ADD).is_empty())
-	_check("波表缺失 → null（运行时回退公式，内容属包 2/4）", reg.get_wave_table() == null)
+	_check("trait_ids_by_pool（ADD）= 12 条内容词条（pkg3 内容落地）", reg.trait_ids_by_pool(GameConst.PoolClass.ADD).size() == 12)
+	var wave_tbl := reg.get_wave_table()
+	_check("波表加载：30 波 entries（pkg3 内容落地）", wave_tbl != null and wave_tbl.entries.size() == 30)
 	# 注入坏词条 → validate_all 剔除 + 错误清单含文件名/字段名
 	var bad := TraitData.new()
 	bad.id = &"AFF_BAD"

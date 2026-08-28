@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"AFF_CRIT_DMG"
+display_name = "致命一击"
+description = "暴击伤害 +30%，可叠 2 层（A3 §4.2）"
+pool = 0
+pool_id = &"add_critdmg"
+effect_id = &"EF_STAT"
+value = 0.3
+value2 = 0.0
+params = {"stat": "crit_dmg"}
+event_hooks = [2]
+stack_max = 2
+decay_delta = 0.85
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+condition = {}

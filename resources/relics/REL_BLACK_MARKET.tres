@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_BLACK_MARKET"
+display_name = "黑市准入"
+description = "追加商店波（w35 起每 10 波），商店追加「随机金卡」货架，金卡价 260（A3 §5）"
+rarity = 3
+listen_events = [&"wave_cleared"]
+effect_id = &"REL_EF_BLACK_MARKET"
+params = {"start_wave": 35, "interval": 10, "gold_card_price": 260}
+unique = true

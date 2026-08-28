@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/enemy_data.gd" id="1_ed"]
+
+[resource]
+script = ExtResource("1_ed")
+id = &"E5_elite"
+display_name = "精英（通用变异模板）"
+behavior = 0
+hp_base = 72.0
+spd_base = 75.0
+dmg_base = 8.0
+exp_base = 3.0
+tp_cost = 16.0
+resist = [0.0, 0.0, 0.0, 0.0]
+immune_mask = 0
+tags = 1
+hitbox_r = 14.0
+ranged = {}
+elite_mult = {"hp": 4.2, "spd": 0.92, "dmg": 1.5, "exp": 8.0}
+boss = {}
+gold_drop = {"chance": 1.0, "min": 20, "max": 30}
