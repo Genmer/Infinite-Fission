@@ -1,0 +1,203 @@
+# scripts/entities/player/player.gd
+# M-02 Player（架构 §2.12）：Area2D 命中盒（低频，Q-15 例外通道）+ 磁吸拾取区（120px）。
+# 操作：相对拖动（Q-3）——_unhandled_input 采样拖动向量，tick 应用 + 活动区钳制（下 40% 屏，E-15）。
+# 受击：简化路径（Q-16）——无敌帧 contact_tick=0.6s 判定 → 直接扣 HP → 事件，不入 M-12。
+# 编排说明（§2.17）：tick(game_delta, move_delta) 由 GameLoop ② 驱动；
+# move_delta 非零 = GameLoop 显式投递（E-15 输入采样）；零向量 = 玩家消费自身 _unhandled_input 采样。
+class_name Player
+extends Area2D
+
+var max_hp: float = 100.0
+var hp: float = 100.0
+var move_speed: float = 280.0                 # 移速（相对拖动 1:1 口径下的调试/键盘备用参数）
+var pickup_radius: float = 120.0              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
+var invuln_left: float = 0.0                  # 受击无敌帧（contact_tick=0.6s 口径）
+var weapon_slots: Array = []                  # ≤5（包 3 WeaponBase 在途——数组 duck-typing，合入后收紧）
+var unlocked_slots: int = 1                   # w3→2 / w7→3 / Boss1→4 / Boss2 或 w21→5（F-19）
+var level: int = 1
+var xp: float = 0.0
+var xp_need: float = 14.0                     # 14 × lv^1.4
+var hitbox_radius: float = 16.0               # 命中盒半径（敌弹距离判定口径）
+
+var _dead: bool = false
+var _drag_accum: Vector2 = Vector2.ZERO       # 相对拖动采样累计（E-15）
+var _pickup_area: Area2D = null
+var _pickup_shape: CollisionShape2D = null
+var _hit_shape: CollisionShape2D = null
+var _sprite: Sprite2D = null
+var _deps: Dictionary = {}                     # setup 注入位（pipeline/pools/grid/registry——包 3/4 接线）
+
+const MAX_SLOTS := 5
+const TEX_SIZE := 32
+static var _shared_texture: ImageTexture = null
+const BODY_COLOR := Color(0.35, 0.9, 1.0)
+
+
+func _ready() -> void:
+	# 组注册（敌/敌弹经组查找缓存玩家引用）+ 命中盒/拾取区/占位渲染组装（代码组装为主）
+	add_to_group(&"player")
+	_hit_shape = CollisionShape2D.new()
+	_hit_shape.name = "HitShape"
+	var hit_circle := CircleShape2D.new()
+	hit_circle.radius = hitbox_radius
+	_hit_shape.shape = hit_circle
+	add_child(_hit_shape)
+	_pickup_area = Area2D.new()
+	_pickup_area.name = "PickupArea"
+	_pickup_shape = CollisionShape2D.new()
+	_pickup_shape.name = "PickupShape"
+	var pickup_circle := CircleShape2D.new()
+	pickup_circle.radius = pickup_radius
+	_pickup_shape.shape = pickup_circle
+	_pickup_area.add_child(_pickup_shape)
+	add_child(_pickup_area)
+	_sprite = Sprite2D.new()
+	_sprite.name = "Visual"
+	_sprite.centered = true
+	_sprite.texture = _get_placeholder_texture()
+	var scale_f := hitbox_radius / (TEX_SIZE * 0.5)
+	_sprite.scale = Vector2(scale_f, scale_f)
+	_sprite.self_modulate = BODY_COLOR
+	add_child(_sprite)
+	weapon_slots.resize(MAX_SLOTS)
+	EventBus.slot_unlocked.connect(_on_slot_unlocked_event)
+	var bal := GameConfig.balance
+	if bal != null:
+		max_hp = GameConfig.get_constant(&"player_base_hp", 100.0)   # player_base_hp 真源 cfg（A3 §0.1）
+		hp = max_hp
+		pickup_radius = bal.pickup_radius
+		xp_need = _xp_need_for(level)
+
+
+func setup(p_deps: Dictionary) -> void:
+	# 注入 pipeline/pools/grid/registry（包 3/4 接线；当前仅存档，武器实例由 equip 装载）
+	_deps = p_deps
+
+
+func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
+	# 相对拖动移动 + 边界钳制 + 无敌帧推进 + 武器自动开火调度
+	if _dead:
+		return
+	if invuln_left > 0.0:
+		invuln_left -= p_game_delta
+		if invuln_left < 0.0:
+			invuln_left = 0.0
+	var total := p_move_delta
+	if total == Vector2.ZERO:
+		total = _drag_accum                 # GameLoop 未投递时消费自采样拖动
+	_drag_accum = Vector2.ZERO
+	global_position += total
+	_clamp_to_playfield()
+	# 武器自动开火调度（每帧 tick；武器实例包 3 在途——duck-typing）
+	for weapon in weapon_slots:
+		if weapon is Object and (weapon as Object).has_method(&"tick"):
+			(weapon as Object).call(&"tick", p_game_delta)
+
+
+func _unhandled_input(p_event: InputEvent) -> void:
+	# 输入抽象：相对拖动采样（Q-3；E-15 单指针锁定由 GameLoop 输入层承担，本层累计拖动向量）
+	if p_event is InputEventScreenDrag:
+		_drag_accum += (p_event as InputEventScreenDrag).relative
+	elif p_event is InputEventMouseMotion:
+		var mm := p_event as InputEventMouseMotion
+		if (mm.button_mask & MOUSE_BUTTON_LEFT) != 0:
+			_drag_accum += mm.relative
+
+
+func take_contact_damage(p_dmg: float) -> void:
+	# ★ 简化路径（Q-16）：无敌帧判定 → 直接扣 HP → player_hit 事件（不入 M-12）
+	if _dead or invuln_left > 0.0:
+		return
+	var dmg := maxf(p_dmg, 0.0)
+	hp -= dmg
+	invuln_left = GameConfig.balance.contact_tick if GameConfig.balance != null else 0.6
+	EventBus.emit_player_hit(dmg, 0)
+	if hp <= 0.0:
+		hp = 0.0
+		_on_died()
+
+
+func equip_weapon(p_weapon: Node) -> bool:
+	# 装入武器实例（包 3 WeaponBase 在途——duck-typing；add_weapon(data) 形态工厂属包 3 合入后补）
+	for i in range(weapon_slots.size()):
+		if weapon_slots[i] == null:
+			if i >= unlocked_slots:
+				return false                 # 槽未解锁
+			weapon_slots[i] = p_weapon
+			if p_weapon.get_parent() == null:
+				add_child(p_weapon)
+			return true
+	return false                             # 无空槽
+
+
+func unlock_slot(p_slot: int) -> bool:
+	# 槽位解锁（幂等；事件由 WaveDirector/集成侧派发）
+	if p_slot > unlocked_slots and p_slot <= MAX_SLOTS:
+		unlocked_slots = p_slot
+		return true
+	return false
+
+
+func gain_xp(p_amount: float) -> void:
+	# 经验/等级：xp_gained → 升级（多级连升逐次广播，弹卡排队由 GameLoop 仲裁 E-16）
+	var amount := maxf(p_amount, 0.0)
+	xp += amount
+	EventBus.emit_xp_gained(amount)
+	while xp >= xp_need:
+		xp -= xp_need
+		level += 1
+		xp_need = _xp_need_for(level)
+		EventBus.emit_level_up(level)
+
+
+func get_hp_pct() -> float:
+	# 背水协议条件（SYN_LOWHP_FURY ctx）
+	if max_hp <= 0.0:
+		return 0.0
+	return hp / max_hp
+
+
+func _on_died() -> void:
+	# 死亡事件（E-16 优先级最高——GameLoop 仲裁；只派发一次）
+	if _dead:
+		return
+	_dead = true
+	EventBus.emit_player_died()
+
+
+func _on_slot_unlocked_event(p_slot: int) -> void:
+	unlock_slot(p_slot)
+
+
+func _clamp_to_playfield() -> void:
+	# E-15：位置钳制活动区（下 40% 屏）
+	var size := Vector2(720.0, 1280.0)
+	if GameConfig.balance != null:
+		size = Vector2(GameConfig.balance.res_logic)
+	global_position.x = clampf(global_position.x, hitbox_radius, size.x - hitbox_radius)
+	global_position.y = clampf(global_position.y, size.y * 0.6, size.y - hitbox_radius)
+
+
+func _xp_need_for(p_level: int) -> float:
+	# 14 × lv^1.4（balance.xp_curve 真源；lv → lv+1 升级所需）
+	var base := 14.0
+	var power := 1.4
+	if GameConfig.balance != null:
+		base = float(GameConfig.balance.xp_curve.get("base", 14.0))
+		power = float(GameConfig.balance.xp_curve.get("power", 1.4))
+	return base * pow(float(maxi(p_level, 1)), power)
+
+
+static func _get_placeholder_texture() -> ImageTexture:
+	# 共享静态占位圆形纹理（程序化生成；美术后续替换）
+	if _shared_texture == null:
+		var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
+		var c := float(TEX_SIZE) * 0.5 - 0.5
+		for y in range(TEX_SIZE):
+			for x in range(TEX_SIZE):
+				var dx := float(x) - c
+				var dy := float(y) - c
+				if dx * dx + dy * dy <= c * c:
+					img.set_pixel(x, y, Color.WHITE)
+		_shared_texture = ImageTexture.create_from_image(img)
+	return _shared_texture

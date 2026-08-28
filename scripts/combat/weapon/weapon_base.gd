@@ -1,0 +1,275 @@
+# scripts/combat/weapon/weapon_base.gd
+# M-05~M-08 WeaponBase（架构 §2.8.1）：武器抽象基类（四形态子类按 form 分派）。
+# · 冷却/射速节拍 tick(game_delta)：冷却推进 → 满足节拍时 try_fire（射速上限 30/s 双护栏）。
+# · 词条挂载 trait_stack（武器主栈 ≤12）：常驻面板聚合（build_panel_snapshot，F-13 母本）
+#   + OnHit 注入源（copy_runtime → 投射物/光束运行时栈）。
+# · 面板快照：{base_atk, crit_rate, crit_mult, flat_bonus, add_entries[]}——分裂继承比例的
+#   母本（F-13）；add_atk 池经 add_entries 入管线步骤 3（F3 衰减真源），其余加算池
+#   参数侧聚合（rof/cdr/crit/critdmg/spd/pierce/pellets）。
+class_name WeaponBase
+extends Node2D
+
+signal leveled(new_level: int)
+
+const MAX_LEVEL: int = 5                       # L1~L5（升级表终值口径）
+const AIM_FALLBACK := Vector2.UP               # 无目标时的默认指向（全自动开火持续）
+
+var data: WeaponData = null                    # 形态参数（M-14 注入）
+var uid: int = 0
+var level: int = 1                             # L1~L5（升级表终值口径）
+var player: Node2D = null                      # 宿主注入（Player；宽类型规避循环解析）
+var trait_stack: TraitStack = null             # 武器级词条（常驻面板聚合 + OnHit 注入源）
+var target_strategy: int = GameConst.TargetStrategy.NEAREST
+var cooldown_left: float = 0.0
+var damage_pipeline: RefCounted = null          # 注入（DamagePipeline / 桩——resolve 签名一致）
+var projectile_pool: ProjectilePool = null      # 注入（ballistic 场景池）
+var enemy_grid: SpaceGrid = null               # 注入（索敌）
+var laser_pool: LaserBeamPool = null           # 注入（LASER 形态）
+var elemental: ElementalSystem = null          # 注入（元素附着通道）
+
+var _panel_cache: Dictionary = {}              # 面板快照缓存（词条挂载/升级时失效）
+
+
+func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
+	# 绑定数据/宿主/依赖注入包（§2.8.1：deps = pipeline/projectile_pool/enemy_grid/…）
+	data = p_data
+	player = p_player
+	uid = GameConst.next_uid()
+	trait_stack = TraitStack.new()
+	damage_pipeline = p_deps.get("pipeline")
+	projectile_pool = p_deps.get("projectile_pool")
+	enemy_grid = p_deps.get("enemy_grid")
+	laser_pool = p_deps.get("laser_pool")
+	elemental = p_deps.get("elemental")
+	cooldown_left = 0.0
+	level = 1
+	_invalidate_panel()
+
+
+func tick(p_game_delta: float) -> void:
+	# 冷却推进 → 满足节拍时 try_fire（子类行为）；词条冷却推进
+	if data == null:
+		return
+	if trait_stack != null:
+		trait_stack.advance_cooldowns(p_game_delta)
+	if cooldown_left > 0.0:
+		cooldown_left = maxf(cooldown_left - p_game_delta, 0.0)
+	else:
+		if try_fire():
+			cooldown_left = _fire_interval()
+	_on_tick_post(p_game_delta)
+
+
+func try_fire() -> bool:
+	# ★ 开火入口（抽象：子类实现开火行为；软上限检查在 ProjectilePool）
+	return false
+
+
+func attach_trait(p_trait: TraitData) -> bool:
+	# 词条挂载（单武器 ≤12，超出拒绝 + 计数；卡牌流前置过滤）
+	if trait_stack == null or p_trait == null:
+		return false
+	var attached := trait_stack.attach(p_trait)
+	if attached:
+		_invalidate_panel()
+		if p_trait.pool == GameConst.PoolClass.ELEM \
+				and p_trait.params.has("reaction_mult") and elemental != null:
+			# ELE_REACTION_VOID：反应强化注册到 ElementalSystem（全局 ×1.8 聚合）
+			elemental.register_reaction_mult(uid, float(p_trait.params["reaction_mult"]))
+	return attached
+
+
+func get_stat(p_key: StringName) -> float:
+	# 当前等级终值（upgrade_table[level-1]）
+	if data == null or level < 1 or level > data.upgrade_table.size():
+		return 0.0
+	return float(data.upgrade_table[level - 1].get(p_key))
+
+
+func get_current_atk() -> float:
+	# F2：get_stat("base_atk") × g_global（g_global 当前 = 1）
+	return get_stat(&"base_atk")
+
+
+func build_panel_snapshot() -> Dictionary:
+	# 面板段快照（分裂继承比例的母本，F-13）：add_atk 池以原始条目入 add_entries
+	# （衰减职责在管线步骤 3）；crit 参数武器侧聚合（F3 同式预览）。
+	if not _panel_cache.is_empty():
+		return _panel_cache
+	var aggregate: Dictionary = trait_stack.aggregate_panel() if trait_stack != null else {}
+	var crit_rate := 0.05
+	var crit_dmg := 2.0
+	if data != null:
+		crit_rate = data.crit_rate
+		crit_dmg = data.crit_dmg
+	var crit_cap := 1.0
+	if GameConfig.balance != null:
+		crit_cap = GameConfig.balance.cap_crit_rate
+	var snapshot := {
+		"base_atk": get_current_atk(),
+		"crit_rate": clampf(crit_rate + float(aggregate.get("add_crit", 0.0)), 0.0, crit_cap),
+		"crit_mult": crit_dmg + float(aggregate.get("add_critdmg", 0.0)),
+		"flat_bonus": 0.0,
+		"add_entries": trait_stack.aggregate_add_entries() if trait_stack != null else [],
+	}
+	_panel_cache = snapshot
+	return snapshot
+
+
+func build_damage_context(p_target: Node2D) -> DamageContext:
+	# 武器侧聚合 ctx（近战/光束等无投射物路径；投射物路径经 panel_snapshot 展开）
+	var snapshot := build_panel_snapshot()
+	var ctx := DamageContext.make()
+	ctx.source_uid = uid
+	ctx.target = p_target
+	ctx.target_uid = int(p_target.get("uid"))
+	ctx.frame_stamp = GameConfig.frame_stamp
+	ctx.base_atk = float(snapshot.get("base_atk", 0.0))
+	ctx.flat_bonus = float(snapshot.get("flat_bonus", 0.0))
+	ctx.crit_chance = float(snapshot.get("crit_rate", 0.0))
+	ctx.crit_mult = float(snapshot.get("crit_mult", 2.0))
+	var entries: Variant = snapshot.get("add_entries", [])
+	if entries is Array:
+		for entry in entries:
+			ctx.add_entries.append(entry)
+	ctx.element = GameConst.Element.KIN
+	if p_target != null:
+		ctx.pos = p_target.global_position
+		ctx.target_resist = _read_resist(p_target)
+	inject_vuln_pool(ctx, p_target)
+	return ctx
+
+
+func collect_context_mults(p_ctx: DamageContext, p_tctx: TraitContext) -> void:
+	# 词条乘区预聚合（§4.4 ②：光束/近战路径）+ 目标侧易伤乘区注入（A2 §1.8 vuln 池）
+	if trait_stack != null:
+		for pool in trait_stack.collect_mult_pools(p_tctx):
+			p_ctx.mult_pools.append(pool)
+	inject_vuln_pool(p_ctx, p_tctx.target)
+
+
+func get_threshold(p_threshold_id: StringName) -> Dictionary:
+	# 通用质变阈值查询（A3 §3.11；threshold_traits 声明，词条效果侧消费）
+	if data == null:
+		return {}
+	for entry in data.threshold_traits:
+		if StringName(str(entry.get("threshold_id", ""))) == p_threshold_id:
+			return entry
+	return {}
+
+
+func settle_aoe(p_pos: Vector2, p_radius: float, p_atk: float, p_secondary: bool) -> void:
+	# 圆查询逐敌独立结算（死亡新星/TH_SIZE_NOVA 冲击波/武器 AOE 通道）
+	if enemy_grid == null or damage_pipeline == null:
+		return
+	var candidates: Array[Node2D] = []
+	candidates.append_array(enemy_grid.query_circle(p_pos, p_radius))
+	for target in candidates:
+		if target == null or bool(target.get("dead")):
+			continue
+		var ctx := DamageContext.make()
+		ctx.source_uid = uid
+		ctx.target = target
+		ctx.target_uid = int(target.get("uid"))
+		ctx.frame_stamp = GameConfig.frame_stamp
+		ctx.base_atk = maxf(p_atk, 0.0)
+		ctx.element = GameConst.Element.KIN
+		if p_secondary:
+			ctx.hit_flags |= GameConst.HIT_IS_AOE_SECONDARY
+		ctx.pos = (target as Node2D).global_position
+		var result: DamageResult = damage_pipeline.call(&"resolve", ctx)
+		if result != null and target.has_method(&"take_result"):
+			target.call(&"take_result", result)
+
+
+func acquire_target() -> Node2D:
+	# 索敌（目标策略：NEAREST/FOREMOST/LOWEST_HP/LOCKED——M1 实现 NEAREST 全量口径）
+	if enemy_grid == null:
+		return null
+	var origin := muzzle_position()
+	var found := enemy_grid.query_nearest(origin, 1600.0, null)
+	if found != null and bool(found.get("dead")):
+		return null
+	return found
+
+
+func aim_direction() -> Vector2:
+	# 开火指向：目标方向 / 无目标回退 UP（全自动开火持续）
+	var target := acquire_target()
+	if target != null:
+		var dir := (target.global_position - muzzle_position()).normalized()
+		if dir != Vector2.ZERO:
+			return dir
+	return AIM_FALLBACK
+
+
+func muzzle_position() -> Vector2:
+	# 出射点（宿主位置；武器随宿主平移）
+	return global_position
+
+
+func level_up() -> void:
+	# 武器精通卡应用 → leveled 信号
+	if level < MAX_LEVEL:
+		level += 1
+		_invalidate_panel()
+		leveled.emit(level)
+
+
+# ── 内部 ──────────────────────────────────────────────────────────
+func _fire_interval() -> float:
+	# 节拍间隔：BALLISTIC = 1/rof（子类覆写射速口径）；其余形态 = cd × (1−ΣCDR)
+	if data == null:
+		return 1.0
+	if data.form == GameConst.WeaponForm.BALLISTIC:
+		var rof := clampf(get_stat(&"rof"), 0.1, _cap_rof())
+		return 1.0 / rof
+	var cd := maxf(get_stat(&"cd"), 0.01)
+	var cdr := 0.0
+	var cap_cdr := 0.6
+	if trait_stack != null:
+		cdr = float(trait_stack.aggregate_panel().get("add_cdr", 0.0))
+	if GameConfig.balance != null:
+		cap_cdr = GameConfig.balance.cap_cdr_sum
+	cdr = clampf(cdr, 0.0, cap_cdr)
+	return cd * (1.0 - cdr)
+
+
+func _cap_rof() -> float:
+	# 单武器射速封顶 30/s（性能双护栏）
+	if GameConfig.balance != null:
+		return GameConfig.balance.cap_rof_per_weapon
+	return 30.0
+
+
+func _on_tick_post(p_game_delta: float) -> void:
+	# 子类逐帧附加调度钩子（光束推进/近战实体推进等）
+	pass
+
+
+func _invalidate_panel() -> void:
+	_panel_cache = {}
+
+
+func _read_resist(p_target: Node2D) -> float:
+	# 目标抗性快照（KIN 通道；光束/近战为动能伤害）
+	if p_target != null and p_target.has_method(&"get_resist"):
+		return float(p_target.call(&"get_resist", GameConst.Element.KIN))
+	return 0.0
+
+
+func inject_vuln_pool(p_ctx: DamageContext, p_target: Node2D) -> void:
+	# 目标侧易伤乘区注入（A2 §1.8：vuln 池在⑤入池——冰冻易伤 ×1.25 正式路径）
+	if p_target == null:
+		return
+	var state: Variant = p_target.get("elemental")
+	if state is ElementalState:
+		var factor := (state as ElementalState).get_vuln_factor()
+		if factor > 1.0:
+			p_ctx.mult_pools.append({
+				"pool_id": &"vuln",
+				"source_uid": 0,
+				"contrib": factor - 1.0,
+				"cap_pool": factor - 1.0,
+				"priority": 0,
+			})

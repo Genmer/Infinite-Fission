@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="GameFeelConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/game_feel_config.gd" id="1_gfc"]
+
+[resource]
+script = ExtResource("1_gfc")
+hit_stop_ms = [0, 30, 50, 120]
+hit_stop_scale = 0.05
+hit_stop_merge_ms = 30
+shake_trauma = [0.15, 0.4, 0.5, 1.0]
+shake_max_offset_px = 8.0
+shake_max_rot_deg = 1.5
+shake_decay_s = 0.4
+ca_base_intensity = 0.004
+ca_decay_s = 0.15
+ca_level_mult = [1.0, 2.0, 4.0, 6.0]
+particle_max_emitters = 64
+particle_priorities = {"KILL": 4, "CRIT": 3, "HIT": 2, "AMBIENT": 1}
+ca_enabled = true

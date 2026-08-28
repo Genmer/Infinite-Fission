@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="BalanceTables" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/balance_tables.gd" id="1_bt"]
+
+[resource]
+script = ExtResource("1_bt")
+res_logic = Vector2i(720, 1280)
+cap_prod = 8.0
+r_alarm_ratio = 500.0
+cap_mul_count = 8
+cap_proj_traits = 12
+flat_ratio_cap = 0.5
+add_pool_caps = {"add_atk": 2.0, "add_rof": 1.5, "add_cdr": 0.6, "add_crit": 1.0, "add_critdmg": 2.0}
+cap_cdr_sum = 0.6
+cap_rof_per_weapon = 30.0
+cap_crit_rate = 1.0
+decay_delta_max = 0.92
+split_max_generation = 3
+split_max_children = 8
+split_inherit_ratio = 0.5
+projectile_soft_limit = 1500
+projectile_hard_limit = 2000
+pool_prewarm = {"projectile": 640, "enemy": 128, "popup": 80, "particle": 64, "laser": 12, "xp": 160}
+frame_budget_ms = 8.3
+contact_tick = 0.6
+pickup_radius = 120.0
+hp_growth_per_wave = 1.12
+dmg_growth_per_wave = 1.06
+spd_growth_per_wave = 0.008
+exp_inflation_per_wave = 1.085
+xp_curve = {"base": 14.0, "power": 1.4}
+rarity_weights = {"WHITE": 58, "BLUE": 30, "PURPLE": 10, "GOLD": 2}
+category_weights = {"MASTERY": 12, "ADD": 40, "MULT": 18, "MECH": 14, "ELEM": 10, "RELIC": 6}
+cd_rxn = 2.0
+element_decay_lambda = [0.35, 0.3, 0.4]
+element_states = {"burn": {"dot_ratio": 0.15, "tick": 0.5, "duration": 3.0, "max_layers": 5}, "freeze": {"chill_slow": 0.4, "chill_dur": 2.5, "freeze_dur": 1.2, "vuln_mult": 1.25, "vuln_dur": 3.0}, "shock": {"chain_targets": 3, "chain_radius": 160.0, "chain_ratio": 0.35, "chain_depth": 2, "chain_decay": 0.6}}
+reaction_table = {"RXN_FIR_ICE": {"coef": 2.0}, "RXN_FIR_LTG": {"coef": 1.2, "radius": 90.0}, "RXN_ICE_LTG": {"resist_delta": -0.3, "duration": 6.0}}
+event_storm_threshold = 128
+data_version = 1
