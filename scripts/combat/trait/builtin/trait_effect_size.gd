@@ -30,7 +30,9 @@ func _apply_size_mult(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 
 func _maybe_nova(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 	# ON_HIT：总体积 ≥3.0× → TH_SIZE_NOVA 冲击波（半径 1.5×弹体、40% ATK 范围伤害）
-	if p_ctx.projectile == null or p_ctx.weapon == null:
+	# 宿主武器可能中途被移除（飞行中弹体）——失效引用按无武器处理
+	if p_ctx.projectile == null or p_ctx.weapon == null \
+			or not is_instance_valid(p_ctx.weapon):
 		return
 	var threshold: Dictionary = p_ctx.weapon.get_threshold(&"TH_SIZE_NOVA")
 	if threshold.is_empty():
@@ -41,5 +43,9 @@ func _maybe_nova(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 	var radius := p_ctx.projectile.effective_radius() * float(params.get("radius_mult", 1.5))
 	var atk: float = p_ctx.projectile.panel_snapshot.get("base_atk", 0.0) \
 		* float(params.get("atk_ratio", 0.4))
-	p_ctx.weapon.settle_aoe(p_ctx.projectile.global_position, radius, float(atk), true)
+	# 排除直击主目标（冲击波 = 次级结算，不重复结算本跳直击目标）
+	var exclude: Node2D = null
+	if p_ctx.damage_ctx != null:
+		exclude = p_ctx.damage_ctx.target as Node2D
+	p_ctx.weapon.settle_aoe(p_ctx.projectile.global_position, radius, float(atk), true, exclude)
 	DebugStats.count(&"size_nova_triggered")

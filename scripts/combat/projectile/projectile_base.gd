@@ -23,6 +23,7 @@ var element: int = GameConst.Element.KIN
 var attach_value: float = 0.0                 # 元素附着负载（命中时提交 ElementalSystem）
 var size_mult: float = 1.0                    # 体积极限累计（碰撞盒/精灵等比）
 var weapon_uid: int = 0                       # 来源武器（面板快照归属）
+var weapon_ref: WeaponBase = null             # 来源武器引用（spawn 参数字典可选键——词条效果引擎侧结算通道，池化复位清零防陈旧引用）
 var panel_snapshot: Dictionary = {}           # 武器面板快照 {base_atk, crit_rate, crit_mult, flat_bonus, add_entries[]}
 # 包 3 收口：真件 TraitStack 替换鸭子接口（spawn 参数字典契约不变；引用类型收紧）
 var trait_stack: TraitStack = null            # 本弹词条宿主（M-10 运行时栈副本）
@@ -74,6 +75,8 @@ func spawn(p_params: Dictionary) -> void:
 	# ★ 池取出后统一初始化（参数字典契约，冻结给包 3——架构 §2.7.1 注）：
 	#   基础键：{velocity, lifetime, pierce, bounces, hitbox_radius, element, attach_value,
 	#            generation, weapon_uid, panel_snapshot, trait_stack, team}
+	#   可选键：{weapon_ref（来源武器引用——TH_SIZE_NOVA/MEC 系效果引擎侧结算通道，
+	#            Variant 判 is WeaponBase 后赋值；飞行中武器可能被移除，消费侧须守卫）}
 	#   Homing 追加：{target_uid, turn_rate, speed_init, speed_max, accel, arm_delay,
 	#                blast_radius, blast_falloff}
 	#   Ballistic 可选：{accel（默认 0）, range（默认 0 = 仅寿命过期）}
@@ -95,6 +98,10 @@ func spawn(p_params: Dictionary) -> void:
 	panel_snapshot = snap if typeof(snap) == TYPE_DICTIONARY else {}
 	# 包 3 收口：TraitStack 真件类型收窄（契约键 trait_stack 语义不变）
 	trait_stack = p_params.get("trait_stack", null) as TraitStack
+	weapon_ref = null                            # 默认清零（可选键缺省 = 无宿主武器）
+	var wref: Variant = p_params.get("weapon_ref", null)
+	if wref is WeaponBase:
+		weapon_ref = wref
 	_traits_cache = []
 	if trait_stack != null:
 		var mounted: Variant = trait_stack.get("traits")
@@ -379,6 +386,9 @@ func _build_trait_ctx(p_event: int, p_extra: Dictionary = {}) -> TraitContext:
 	ctx.target = p_extra.get("target")
 	ctx.damage_ctx = p_extra.get("damage_ctx")
 	ctx.game_delta = float(p_extra.get("game_delta", 0.0))
+	# 来源武器接线（TH_SIZE_NOVA/MEC 系效果依赖 ctx.weapon 的 get_threshold/settle_aoe）；
+	# 武器可能中途被移除——飞行中弹体守卫，失效引用按无武器处理
+	ctx.weapon = weapon_ref if is_instance_valid(weapon_ref) else null
 	return ctx
 
 
@@ -424,6 +434,7 @@ func request_split(p_count: int, p_spread_deg: float, p_inherit_ratio: float,
 			"attach_value": 0.0,             # F-13：不继承元素附着
 			"generation": generation + 1,
 			"weapon_uid": weapon_uid,
+			"weapon_ref": weapon_ref,            # 分裂子代继承来源武器（效果引擎侧通道）
 			"panel_snapshot": child_panel,
 			"team": team,
 		}
@@ -532,6 +543,7 @@ func _reset_state() -> void:
 	attach_value = 0.0
 	size_mult = 1.0
 	weapon_uid = 0
+	weapon_ref = null                           # 池复用防陈旧引用（武器可能已销毁）
 	team = 0
 	panel_snapshot = {}
 	trait_stack = null

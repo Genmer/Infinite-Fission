@@ -58,6 +58,7 @@ func _ensure_orbit_field() -> void:
 	orbit_field = OrbitField.new()
 	orbit_field.name = "OrbitField"
 	add_child(orbit_field)
+	orbit_field.weapon = self                   # 结算宿主注入（缺失 → OrbitField.tick 判定早退）
 	orbit_field.spawn({
 		"orbs": _leveled_param("orbs", float(data.melee.get("orbs", 2))) + orbs_bonus,
 		"orbit_radius": _leveled_param("orbit_radius", float(data.melee.get("orbit_radius", 90.0))),

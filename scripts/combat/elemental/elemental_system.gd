@@ -201,7 +201,8 @@ func _settle_reaction(p_enemy: Node2D, p_snapshot: float, p_coef: float, p_rxn: 
 
 
 func _spread_reaction(p_center: Node2D, p_radius: float, p_snapshot: float, p_coef: float) -> void:
-	# 过载半径扩散：圆查询逐敌独立结算（去中心；同帧幂等键分流独立 uid）
+	# 过载半径扩散：圆查询逐敌独立结算（去中心；同帧幂等键分流独立 uid）。
+	# 网格候选为保守超集（入桶半径 = max_entity_radius）——此处窄相收窄到结算半径 + 目标 hitbox_r
 	if enemy_grid == null:
 		return
 	var center: Vector2 = (p_center as Node2D).global_position
@@ -209,6 +210,10 @@ func _spread_reaction(p_center: Node2D, p_radius: float, p_snapshot: float, p_co
 	candidates.append_array(enemy_grid.query_circle(center, p_radius))
 	for cand in candidates:
 		if cand == p_center or bool(cand.get("dead")):
+			continue
+		var hr: Variant = cand.get("hitbox_r")
+		var reach := p_radius + (float(hr) if hr != null else 0.0)
+		if (cand as Node2D).global_position.distance_to(center) > reach:
 			continue
 		_settle_reaction(cand, p_snapshot, p_coef, GameConst.ReactionType.RXN_FIR_LTG)
 

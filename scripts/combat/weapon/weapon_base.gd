@@ -158,14 +158,16 @@ func get_threshold(p_threshold_id: StringName) -> Dictionary:
 	return {}
 
 
-func settle_aoe(p_pos: Vector2, p_radius: float, p_atk: float, p_secondary: bool) -> void:
-	# 圆查询逐敌独立结算（死亡新星/TH_SIZE_NOVA 冲击波/武器 AOE 通道）
+func settle_aoe(p_pos: Vector2, p_radius: float, p_atk: float, p_secondary: bool,
+		p_exclude: Node2D = null) -> void:
+	# 圆查询逐敌独立结算（死亡新星/TH_SIZE_NOVA 冲击波/武器 AOE 通道；网格距离精判口径）。
+	# p_exclude：主结算目标排除（冲击波不重复结算本跳直击目标，同构 Homing._blast_secondaries）
 	if enemy_grid == null or damage_pipeline == null:
 		return
 	var candidates: Array[Node2D] = []
 	candidates.append_array(enemy_grid.query_circle(p_pos, p_radius))
 	for target in candidates:
-		if target == null or bool(target.get("dead")):
+		if target == null or target == p_exclude or bool(target.get("dead")):
 			continue
 		var ctx := DamageContext.make()
 		ctx.source_uid = uid

@@ -1,6 +1,7 @@
 # scripts/combat/elemental/elemental_state.gd
-# M-11 ElementalState（架构 §2.10）：单敌三槽状态容器（A2 §4.1 附着—衰减—触发—消耗）。
-# · gauges：FIR/ICE/LTG 附着计量 G（容量 100，满槽触发状态并清空该槽，F19/F20 稳态免疫线）。
+# M-11 ElementalState（架构 §2.10）：单敌状态容器（A2 §4.1 附着—衰减—触发—消耗）。
+# · gauges：附着计量 G（4 槽，下标 = GameConst.Element 枚举值直索引：KIN=0 槽恒 0 弃用，
+#   FIR/ICE/LTG = 1/2/3；容量 100，满槽触发状态并清空该槽，F19/F20 稳态免疫线）。
 # · 状态运行时：点燃 DOT（15%ATK/0.5s×3s，层 ≤5——第 6 次附着拒绝）；寒滞（−40% 移速）
 #   + 易伤（×1.25 独立乘区，vuln 池注入）；二次满槽 → 完全冻结 1.2s（定身，受 immune_mask）；
 #   感电连锁参数（3 目标/160px/35%每跳/深度 2 衰减 60%——执行在 ElementalSystem）。
@@ -16,7 +17,7 @@ const TRIGGER_CHILL: int = 2
 const TRIGGER_FREEZE: int = 3
 const TRIGGER_SHOCK: int = 4
 
-var gauges: Array[float] = [0.0, 0.0, 0.0]     # FIR / ICE / LTG 附着计量 G
+var gauges: Array[float] = [0.0, 0.0, 0.0, 0.0]  # 元素枚举直索引（KIN 槽恒 0 弃用）：FIR/ICE/LTG = 1/2/3
 var immune_mask: int = 0                       # 宿主 Enemy 注入（F-17 免疫矩阵）
 # 状态运行时
 var burn_layers: int = 0                       # ≤5（第 6 次附着拒绝）
@@ -55,10 +56,12 @@ func apply(p_element: int, p_value: float, p_snapshot: float = 0.0,
 
 func tick(p_game_delta: float, p_decay_lambdas: Array[float]) -> void:
 	# λ 比例衰减（F-22）+ 全部状态计时
-	for i in range(gauges.size()):
+	# 槽 0（KIN）弃用跳过；λ 数组真源 BalanceTables.element_decay_lambda 为 [FIR, ICE, LTG]
+	# 无 KIN 位——槽 i≥1 取 p_decay_lambdas[i − 1]。
+	for i in range(1, gauges.size()):
 		var lambda := 0.35
-		if i < p_decay_lambdas.size():
-			lambda = p_decay_lambdas[i]
+		if i - 1 < p_decay_lambdas.size():
+			lambda = p_decay_lambdas[i - 1]
 		gauges[i] *= maxf(1.0 - lambda * p_game_delta, 0.0)
 	if burn_timer > 0.0:
 		burn_timer = maxf(burn_timer - p_game_delta, 0.0)
@@ -147,7 +150,7 @@ func apply_superconduct(p_delta: float, p_duration: float) -> void:
 
 func reset() -> void:
 	# 归还清零（AC-11.1：死亡/回收清 DOT）
-	gauges = [0.0, 0.0, 0.0]
+	gauges = [0.0, 0.0, 0.0, 0.0]
 	burn_layers = 0
 	burn_timer = 0.0
 	dot_tick_left = 0.5

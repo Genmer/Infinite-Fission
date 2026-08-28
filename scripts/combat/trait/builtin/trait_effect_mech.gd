@@ -12,7 +12,8 @@ func handle(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 		return
 	match p_ctx.event:
 		GameConst.TraitEvent.ON_SPAWN:
-			if p_ctx.weapon is OrbitWeapon:
+			if p_ctx.weapon != null and is_instance_valid(p_ctx.weapon) \
+					and p_ctx.weapon is OrbitWeapon:
 				(p_ctx.weapon as OrbitWeapon).orbs_bonus += p_trait.layers
 		GameConst.TraitEvent.ON_EXPIRE:
 			_maybe_kill_blast(p_trait, p_ctx)
@@ -20,7 +21,9 @@ func handle(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 
 func _maybe_kill_blast(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 	# 死亡新星：击杀时爆炸（引擎在 _on_settled 记录 killed_target/last_hit_pos）
-	if p_ctx.projectile == null or p_ctx.weapon == null:
+	# 宿主武器可能中途被移除（飞行中弹体）——失效引用按无武器处理
+	if p_ctx.projectile == null or p_ctx.weapon == null \
+			or not is_instance_valid(p_ctx.weapon):
 		return
 	if not p_ctx.projectile.killed_target:
 		return

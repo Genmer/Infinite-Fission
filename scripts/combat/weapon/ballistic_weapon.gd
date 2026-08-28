@@ -48,6 +48,7 @@ func try_fire() -> bool:
 			"attach_value": 0.0,
 			"generation": 0,
 			"weapon_uid": uid,
+			"weapon_ref": self,
 			"panel_snapshot": build_panel_snapshot(),
 			"trait_stack": trait_stack.copy_runtime() if trait_stack != null else null,
 			"team": 0,

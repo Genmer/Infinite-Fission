@@ -82,6 +82,7 @@ func _spawn_beam(p_origin: Vector2, p_dir: Vector2, p_depth: int, p_dmg_mult: fl
 		"panel_snapshot": build_panel_snapshot(),
 		"trait_stack": trait_stack.copy_runtime() if trait_stack != null else null,
 		"weapon_uid": uid,
+		"weapon_ref": self,
 		"target_uid": p_target_uid,
 		"exclusions": p_exclusions,
 		"team": 0,
@@ -92,6 +93,8 @@ func _spawn_beam(p_origin: Vector2, p_dir: Vector2, p_depth: int, p_dmg_mult: fl
 
 func _on_beam_refracted(p_hit_pos: Vector2, p_parent: LaserBeam, p_count: int) -> void:
 	# 命中带折射词条 → 分叉子光束：p_count 枚，向最近未命中目标（250px 内 ≠ 原目标，§5.2-5）
+	# 排除集语义分离：子束继承「祖先链已命中集」快照（防回打祖先/已打过的目标），
+	# 不含子束自己刚锁定的目标——否则子束首触锁定目标即被短路，深度 2 链不可达。
 	if enemy_grid == null:
 		return
 	var exclusions := p_parent.hit_exclusions()
@@ -100,6 +103,9 @@ func _on_beam_refracted(p_hit_pos: Vector2, p_parent: LaserBeam, p_count: int) -
 		var target := _nearest_unhit(p_hit_pos, exclusions)
 		if target == null:
 			break
+		# 锁定目标只追加进寻的排除集（多分叉兄弟互斥）；子束携带追加前快照
+		var child_exclusions: Array[int] = []
+		child_exclusions.assign(exclusions)
 		exclusions.append(int(target.get("uid")))
 		var dir := ((target as Node2D).global_position - p_hit_pos).normalized()
 		if dir == Vector2.ZERO:
@@ -107,7 +113,7 @@ func _on_beam_refracted(p_hit_pos: Vector2, p_parent: LaserBeam, p_count: int) -
 		# 折射率乘区（二段 = ratio²：子束 dmg_mult = 父 × ratio）
 		if _spawn_beam(p_hit_pos, dir, p_parent.depth + 1,
 				p_parent.dmg_mult * p_parent.refract_ratio,
-				int(target.get("uid")), exclusions) == null:
+				int(target.get("uid")), child_exclusions) == null:
 			break                             # 深度拒绝/池满：分叉终止
 		remaining -= 1
 		DebugStats.count(&"laser_refract_spawned")
