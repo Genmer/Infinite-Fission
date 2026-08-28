@@ -25,12 +25,24 @@ var _wave_elapsed: float = 0.0
 var _hard_cap_left: float = 0.0
 var _boss_wave: bool = false
 var _trickle_left: float = 0.0
+var _escort_interval: float = BOSS_TRICKLE_INTERVAL   # 本波伴随怪节奏（start_wave 解析）
+var _escort_cap: int = BOSS_TRICKLE_CAP
+var _escort_mix: Array[EnemyData] = []                # 本波伴随敌池（空 = 最便宜敌 fallback）
+var _escort_cursor: int = 0                           # 混合轮转游标（确定性）
 
 const HARD_CAP_BONUS := 8.0                   # wave_hard_cap = spawn_window + 8s（A3 §1.3）
 const INTER_WAVE_BUFFER := 1.0                # 波间缓冲 1s
 const LOOT_BUFFER := 3.0                       # 全清后拾取缓冲 3s
-const BOSS_TRICKLE_INTERVAL := 2.5             # Boss 伴随怪节奏（A3 §2.4：×1/2.5s 场上≤12）
+const BOSS_TRICKLE_INTERVAL := 2.5             # Boss 伴随怪节奏 fallback（A3 §2.4 w10 行：×1/2.5s 场上≤12）
 const BOSS_TRICKLE_CAP := 12
+# Boss 波伴随怪分波节奏（包 4 遗留项；真源 A3 §2.4 波表行原文：w10「Boss1+G×1/2.5s（场上≤12）」、
+# w20「Boss2+R×1/2.5s（场上≤12）」、w30「Boss3+混合怪×1/2s（场上≤14）」；无尽段 Boss（w>30）沿用 w30。
+# 敌种按波表 composition 首现序的基础敌池驱动（_base_enemy_pool）；表缺/池空 → 最便宜敌 fallback
+#（行为与 pkg2 冻结用例一致）。
+const ESCORT_RUNNER_WAVE := 20                # w20 起：伴 R（波表基础敌池第 2 首现敌）
+const ESCORT_MIX_WAVE := 30                   # w30 起：混合怪 ×1/2s 场上≤14
+const ESCORT_MIX_INTERVAL := 2.0
+const ESCORT_MIX_CAP := 14
 const ELITE_SCATTER: Array[int] = [8, 12, 16, 22, 24, 26, 28]   # A3 §2.4 精英散布（fallback）
 const TP_FALLBACK := {"base": 14.0, "slope": 3.2, "elite_wave_mult": 1.25}   # A3 §1.4
 const ENDLESS_FALLBACK := {
@@ -48,11 +60,17 @@ func start_wave(p_wave: int) -> void:
 	current_wave = p_wave
 	wave_first_kill_done = false
 	_boss_wave = _is_boss_wave(p_wave)
+	var rhythm := _escort_rhythm(p_wave)
+	_escort_interval = float(rhythm["interval"])
+	_escort_cap = int(rhythm["cap"])
+	_escort_mix.clear()
+	_escort_mix.assign(rhythm["mix"])            # assign 搬运（Dictionary 取出为 untyped Array）
+	_escort_cursor = 0
 	tp_budget = _tp_for_wave(p_wave)
 	window_left = _window_for_wave(p_wave)
 	_wave_elapsed = 0.0
 	_hard_cap_left = window_left + HARD_CAP_BONUS
-	_trickle_left = BOSS_TRICKLE_INTERVAL
+	_trickle_left = _escort_interval
 	_phase = WavePhase.SPAWNING
 	if spawner != null:
 		var composition := _roll_composition(p_wave)
@@ -80,14 +98,14 @@ func tick(p_game_delta: float) -> void:
 			if window_left <= 0.0:
 				window_left = 0.0
 				_phase = WavePhase.CLEARING
-			# Boss 波伴随怪持续刷（场上 ≤12，A3 §2.4）
+			# Boss 波伴随怪持续刷（Boss 存活期间流水；节奏/上限/敌种按波分波驱动，A3 §2.4）
 			if _boss_wave:
 				_trickle_left -= p_game_delta
-				if _trickle_left <= 0.0 and spawner.active_count() < BOSS_TRICKLE_CAP:
-					var companion := _cheapest_enemy()
+				if _trickle_left <= 0.0 and spawner.active_count() < _escort_cap:
+					var companion := _next_companion()
 					if companion != null:
 						spawner.enqueue({"data_id": companion.id, "wave": current_wave, "tags": 0})
-					_trickle_left = BOSS_TRICKLE_INTERVAL
+					_trickle_left = _escort_interval
 			# 硬上限：到时未清完强制叠波（压力叠加，不清场直接开下一波）
 			if _hard_cap_left <= 0.0:
 				start_wave(current_wave + 1)
@@ -224,6 +242,55 @@ func _table_entry(p_wave: int) -> WaveEntryData:
 		if entry.index == p_wave:
 			return entry
 	return null
+
+
+func _escort_rhythm(p_wave: int) -> Dictionary:
+	# Boss 波伴随怪节奏（分波驱动；真源 A3 §2.4 波表三行，见常量块注释）。
+	# 敌种：波表基础敌池切片；表缺/池空 → mix 空 → _next_companion 走最便宜敌 fallback（pkg2 兼容）。
+	var pool := _base_enemy_pool()
+	if pool.is_empty():
+		return {"interval": BOSS_TRICKLE_INTERVAL, "cap": BOSS_TRICKLE_CAP, "mix": []}
+	if p_wave >= ESCORT_MIX_WAVE:
+		# w30+（含无尽 Boss）：混合怪 ×1/2s 场上≤14（全池轮转）
+		return {"interval": ESCORT_MIX_INTERVAL, "cap": ESCORT_MIX_CAP, "mix": pool}
+	if p_wave >= ESCORT_RUNNER_WAVE:
+		# w20~29：伴 R（波表基础敌池第 2 首现敌 = 疾冲者；池不足 2 种时取末位）×1/2.5s ≤12
+		return {"interval": BOSS_TRICKLE_INTERVAL, "cap": BOSS_TRICKLE_CAP,
+			"mix": [pool[mini(1, pool.size() - 1)]]}
+	# w10~19（及其它 Boss 波）：伴 G（池首个基础敌）×1/2.5s ≤12
+	return {"interval": BOSS_TRICKLE_INTERVAL, "cap": BOSS_TRICKLE_CAP, "mix": [pool[0]]}
+
+
+func _base_enemy_pool() -> Array[EnemyData]:
+	# 波表 composition 首现序的基础敌池（排除 Boss / 精英模板敌；悬空 id 跳过）
+	var out: Array[EnemyData] = []
+	if wave_table == null or registry == null:
+		return out
+	var seen: Dictionary = {}
+	var entries: Array = wave_table.entries.duplicate()
+	entries.sort_custom(func(a: WaveEntryData, b: WaveEntryData) -> bool: return a.index < b.index)
+	for entry in entries:
+		for comp in entry.composition:
+			var id := StringName(String(comp.get("enemy_id", "")))
+			if seen.has(id):
+				continue
+			seen[id] = true
+			var e := registry.get_enemy(id)
+			if e == null or (e.tags & GameConst.TAG_BOSS) != 0:
+				continue
+			if not e.elite_mult.is_empty():
+				continue                       # 精英模板敌不入伴随池（A3 波表伴随仅基础怪）
+			out.append(e)
+	return out
+
+
+func _next_companion() -> EnemyData:
+	# 伴随怪选取：mix 池轮转（混合怪/单一种类）；池空 → 最便宜敌 fallback（pkg2 冻结行为）
+	if not _escort_mix.is_empty():
+		var e := _escort_mix[_escort_cursor % _escort_mix.size()]
+		_escort_cursor += 1
+		return e
+	return _cheapest_enemy()
 
 
 func _cheapest_enemy() -> EnemyData:

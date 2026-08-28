@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[node name="BurstEmitter" type="GPUParticles2D"]
+emitting = false
+amount = 12
+lifetime = 0.4
+one_shot = true
+explosiveness = 0.9

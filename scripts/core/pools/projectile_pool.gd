@@ -16,6 +16,9 @@ var forced_recycle_count: int = 0                     # FORCED 路径计数（�
 # 存活弹出借顺序（Dictionary 保插入序 → 取最老 O(1)；release 时 O(1) 擦除）
 var _live_order: Dictionary = {}
 
+# 活跃弹列表（包 4 帧序④：GameLoop 逐弹 tick 的数据源；acquire/release 双向维护）
+var _active_list: Array[Node2D] = []
+
 
 func acquire() -> Node2D:
 	# 类型收窄；超软上限 → null + 计数（调用方丢弃）
@@ -29,6 +32,7 @@ func acquire() -> Node2D:
 		node = super.acquire()
 	if node != null:
 		_live_order[node] = true
+		_active_list.append(node)
 	return node as Node2D
 
 
@@ -36,7 +40,13 @@ func release(node: Node) -> void:
 	# 架构原文签名 release(p: ProjectileBase)；GDScript 覆写不允许参数收窄，保持 Node 签名。
 	# 清零契约由基类 _before_repool → p._reset_state() 承担（唯一清零入口）。
 	_live_order.erase(node)
+	_active_list.erase(node)
 	super.release(node)
+
+
+func active_projectiles() -> Array[Node2D]:
+	# 活跃弹列表（包 4 GameLoop 帧序④ tick 数据源；遍历方需倒序防回收重入）
+	return _active_list
 
 
 func force_recycle_oldest() -> void:

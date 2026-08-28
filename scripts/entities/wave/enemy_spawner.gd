@@ -13,6 +13,7 @@ var pool: EnemyPool = null                    # 注入
 var registry: DataRegistry = null             # 注入（data_id → EnemyData 解析）
 var projectile_pool: ProjectilePool = null    # 注入（RANGED 敌人敌弹池——ballistic 场景）
 var enemy_grid: SpaceGrid = null              # 最近一次 tick 的网格（E-10 分离力/查询预留）
+var elemental_system: ElementalSystem = null  # 注入（包 4 帧序⑤：出生 register_host 挂状态容器）
 var spawn_queue: Array[Dictionary] = []      # 待生成队列 {data_id, wave, tags, pos}
 var active: Array[Node2D] = []                # 活跃敌列表（GameLoop ④ enemy_grid.rebuild 数据源）
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -57,6 +58,8 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		enemy.spawn(data, int(entry.get("wave", 1)), int(entry.get("tags", 0)))
 		enemy.projectile_pool = projectile_pool
 		enemy.enemy_grid = enemy_grid
+		if elemental_system != null:
+			elemental_system.register_host(enemy)   # 包 4：出生挂元素状态容器（帧序⑤宿主）
 		var pos_v: Variant = entry.get("pos", null)
 		if pos_v is Vector2:
 			enemy.position = pos_v
@@ -69,8 +72,10 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 
 
 func on_enemy_killed(p_enemy: Node2D) -> void:
-	# 死亡通知：活跃表移除 → _reset_state + 池归还（经 pool.release 前置钩子）
+	# 死亡通知：活跃表移除 → 元素宿主注销（清 DOT，AC-11.1）→ _reset_state + 池归还（经 pool.release 前置钩子）
 	active.erase(p_enemy)
+	if elemental_system != null:
+		elemental_system.unregister_host(p_enemy)
 	if pool != null:
 		pool.release(p_enemy)
 

@@ -32,6 +32,21 @@ var bullet_atk_ratio: float = 0.5
 var spread_deg: float = 0.0
 var fire_range: float = 340.0
 
+# ── 爆虫自爆（包 3 转包 4 遗留） ─────────────────────────────────
+# 真源 A3 §2.2 敌表 E4 行：「爆炸 20（半径 110，接触后 1.2s 引爆，警示圈）」+ 警报后冲刺 260；
+# A3 §3.9 备注：「击退可打断自爆引导」。EnemyData schema 无自爆字段（包 4 裁定：机制常量落
+# 敌人 AI 代码侧，注释真源；后续扩展点 = EnemyBehavior 枚举增项，需框架评审），
+# 种类判定按 .tres id 约定（resources/enemies/E4_volatile.tres）。
+const VOLATILE_ID := &"E4_volatile"
+const VOLATILE_FUSE_TIME := 1.2          # 接触后引爆倒计时 s（A3 §2.2 E4 行）
+const VOLATILE_BLAST_RADIUS := 110.0     # 爆炸半径 px（= 警示圈半径，A3 §2.2 E4 行）
+const VOLATILE_CHARGE_SPEED := 260.0     # 警报后冲刺速度 px/s（A3 §2.2 E4 行）
+const VOLATILE_TRIGGER_SLACK := 4.0      # 接触触发余量 px（命中盒和 + 判定缓冲）
+
+var _fuse_armed: bool = false                 # 自爆引导激活（接触后置位）
+var _fuse_left: float = 0.0                   # 引爆倒计时（game_delta 通道——顿帧自然冻结）
+var _fuse_ring: FuseRing = null               # 警示圈（程序化绘制）
+
 # ── 内部运行时 ─────────────────────────────────────────────────
 var _hit_area: Area2D = null                  # 接触伤害判定（低频通道）
 var _hit_shape: CollisionShape2D = null
@@ -70,6 +85,11 @@ func _ready() -> void:
 	_hit_shape.name = "HitShape"
 	_hit_area.add_child(_hit_shape)
 	add_child(_hit_area)
+	_fuse_ring = FuseRing.new()
+	_fuse_ring.name = "FuseRing"
+	_fuse_ring.radius = VOLATILE_BLAST_RADIUS
+	_fuse_ring.visible = false
+	add_child(_fuse_ring)
 	visible = false                            # 池内不可见（取出 spawn 后激活）
 
 
@@ -140,7 +160,11 @@ func tick(p_game_delta: float) -> void:
 		GameConst.EnemyBehavior.CHASE:
 			if player != null:
 				var dir := (player.global_position - global_position).normalized()
-				global_position += dir * speed * sf * p_game_delta
+				var spd := speed * sf
+				if _fuse_armed:
+					spd = VOLATILE_CHARGE_SPEED    # 警报后冲刺（A3 §2.2 E4 行；自爆冲刺不受寒滞减速修正口径）
+				global_position += dir * spd * p_game_delta
+				_tick_volatile_fuse(p_game_delta, player)
 		GameConst.EnemyBehavior.RANGED:
 			_tick_ranged(p_game_delta, player, sf)
 		_:
@@ -189,8 +213,63 @@ func get_vuln_factor() -> float:
 
 
 func knockback(p_force: Vector2) -> void:
-	# 近战击退（可打断自爆引导——引导行为 M2 实现）；M1 即时位移
+	# 近战击退（A3 §3.9：击退可打断自爆引导）；M1 即时位移
 	global_position += p_force
+	if _fuse_armed:
+		_cancel_fuse()
+
+
+func is_volatile() -> bool:
+	# 爆虫种类判定（EnemyData schema 无自爆字段——包 4 裁定按 .tres id 约定，见常量块注释）
+	return data != null and data.id == VOLATILE_ID
+
+
+# ── 爆虫自爆引导（包 3 转包 4 遗留；数值真源见常量块注释） ──────────
+func _tick_volatile_fuse(p_game_delta: float, p_player: Node2D) -> void:
+	# CHASE 分支内调用：未引导时检测接触 → 激活 1.2s 引爆倒计时 + 警示圈；引导中倒计时归零引爆
+	if not is_volatile() or dead:
+		return
+	if not _fuse_armed:
+		var reach := hitbox_r + float(p_player.get("hitbox_radius")) + VOLATILE_TRIGGER_SLACK
+		if global_position.distance_to(p_player.global_position) <= reach:
+			_fuse_armed = true
+			_fuse_left = VOLATILE_FUSE_TIME
+			_fuse_ring.visible = true
+			_fuse_ring.progress = 0.0
+		return
+	_fuse_left -= p_game_delta
+	_fuse_ring.progress = 1.0 - clampf(_fuse_left / VOLATILE_FUSE_TIME, 0.0, 1.0)
+	_fuse_ring.queue_redraw()
+	if _fuse_left <= 0.0:
+		_explode(p_player)
+
+
+func _explode(p_player: Node2D) -> void:
+	# 引爆：半径 110px 内玩家结算爆炸伤害（= dmg_base 波次成长值，A3「爆炸 20」）；本体死亡
+	_fuse_armed = false
+	_fuse_left = 0.0
+	_fuse_ring.visible = false
+	if p_player != null and is_instance_valid(p_player):
+		if global_position.distance_to(p_player.global_position) <= VOLATILE_BLAST_RADIUS:
+			(p_player as Player).take_contact_damage(contact_dmg)
+	hp = 0.0
+	_on_died()
+
+
+func _cancel_fuse() -> void:
+	# 击退打断（A3 §3.9 备注）；警示圈收起，回到普通追击（可再次触发）
+	_fuse_armed = false
+	_fuse_left = 0.0
+	_fuse_ring.visible = false
+
+
+func fuse_armed() -> bool:
+	# 测试/遥测观测口
+	return _fuse_armed
+
+
+func fuse_left() -> float:
+	return _fuse_left
 
 
 func is_boss() -> bool:
@@ -281,6 +360,11 @@ func _reset_state() -> void:
 	bullet_atk_ratio = 0.5
 	spread_deg = 0.0
 	fire_range = 340.0
+	_fuse_armed = false
+	_fuse_left = 0.0
+	if _fuse_ring != null:
+		_fuse_ring.visible = false
+		_fuse_ring.progress = 0.0
 	_flash_left = 0.0
 	_fade_left = 0.0
 	modulate.a = 1.0
@@ -355,3 +439,18 @@ void fragment() {\n\
 	COLOR = vec4(mix(tex.rgb, vec3(1.0), flash_amount), tex.a);\n\
 }\n"
 	return _flash_shader
+
+
+# ── 爆虫警示圈（程序化占位绘制；半径 = VOLATILE_BLAST_RADIUS，A3 §2.2「警示圈」） ──
+class FuseRing:
+	extends Node2D
+
+	var radius: float = 110.0
+	var progress: float = 0.0                   # 引导进度 0~1（圈色渐亮渐红）
+
+	func _draw() -> void:
+		# 外圈描边 + 内域淡填充（进度越深越醒目；程序化占位美术）
+		var edge := Color(1.0, 0.25, 0.2, 0.35 + 0.45 * progress)
+		var fill := Color(1.0, 0.2, 0.15, 0.06 + 0.12 * progress)
+		draw_circle(Vector2.ZERO, radius, fill)
+		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, edge, 3.0, true)
