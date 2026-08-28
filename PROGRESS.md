@@ -69,7 +69,7 @@
 - 次生修复：`elemental_system._spread_reaction` 补窄相收窄（粗筛在网格、窄相在调用方口径）
 
 **包 3 仍缺（均已并入 §5 行动项）：**
-1. 包 3 收紧位（包 2 代码里已用注释标明恢复点）：`_build_trait_ctx` 已改构 TraitContext 实例 ✅；trait_stack/elemental/武器数组 duck-typing 收紧、`Player.add_weapon(data)` 形态工厂
+1. ~~包 3 收紧位~~ ✅ 第一批完成（2026-08-28）：`enemy.elemental` 收紧为 ElementalState 直调、`data_validator` effect_id 悬空剔除（TECH_EFFECT_IDS 注册表）、`Player.add_weapon(data)` 形态工厂（BALLISTIC/LASER/HOMING/MELEE 分派 + 槽位预检 + setup 依赖注入）。**第二批 6 处待包 4/集成期**（被冻结测试锁定：player.weapon_slots/ equip_weapon/ tick duck 三处被 pkg2 纯 Node 用例锁定；三池 acquire() 返回值被 pkg0 dummy 场景锁定；DamageContext.target 被 pkg1 裸 Node2D 用例锁定——迁移用例后再收紧）
 2. 遗留小项：R_rxn 反应伤害独立告警线字段（现用 ×500 兜底）、易伤注入去重（管线注释有说明）、is_first_hit_of_wave 接线、敌间分离力 E-10、RANGED 敌弹池注入
 
 ## 5. 下一步行动（按序执行）
@@ -77,8 +77,8 @@
 1. ~~跑基线确认 377 PASS~~ ✅（本会话已做，见 §7 现基线 505）
 2. ~~补包 3 自测 test_pkg3.gd~~ ✅（128/128 全 PASS，顺带修复 4 个业务 bug，见 §4）
 3. ~~补包 3 内容 .tres~~ ✅（66 资源 0 剔除；pkg0 两条占位断言翻转为正向断言；裁决记录见 §4） ← **已过，当前断点在 4**
-4. **收紧 duck-typing 恢复点**（包 2/包 0 代码内注释标明处）← **当前断点**
-5. **派发包 4**：GameLoop（状态机 Boot→Menu→Playing→Paused→LevelUp→GameOver、固定帧序①~⑧、game_delta 双时间通道——顿帧不写 Engine.time_scale！）、GameFeelDirector（顿帧/震屏 trauma/色差/粒子池）、HUD/跳字/三选一卡牌 UI
+4. ~~收紧 duck-typing 恢复点~~ ✅ 第一批完成（第二批 6 处转包 4/集成期，清单见 §4）
+5. **派发包 4**：GameLoop（状态机 Boot→Menu→Playing→Paused→LevelUp→GameOver、固定帧序①~⑧、game_delta 双时间通道——顿帧不写 Engine.time_scale！）、GameFeelDirector（顿帧/震屏 trauma/色差/粒子池）、HUD/跳字/三选一卡牌 UI；**另带包 3 转来的两笔**：爆虫自爆机制（半径 110/1.2s 引爆/警示圈）、Boss 波伴随怪差异（w20 伴 R、w30 混合怪×1/2s 场上≤14，现 WaveDirector 硬编码）← **当前断点**
 6. **集成包**：main.tscn 组装、切真管线（默认已是真件，桩仅 debug）、压力测试（500 弹+100 敌 P95<8.3ms、10 分钟 soak 零实例化）、AC 验收矩阵（A1 §3）
 7. **阶段 E**：并行派发独立代码审查 + 运行测试两路子代理
 8. **阶段 F**：交付报告（含关键决策清单）

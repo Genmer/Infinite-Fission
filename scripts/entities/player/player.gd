@@ -12,7 +12,7 @@ var hp: float = 100.0
 var move_speed: float = 280.0                 # 移速（相对拖动 1:1 口径下的调试/键盘备用参数）
 var pickup_radius: float = 120.0              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
 var invuln_left: float = 0.0                  # 受击无敌帧（contact_tick=0.6s 口径）
-var weapon_slots: Array = []                  # ≤5（包 3 WeaponBase 在途——数组 duck-typing，合入后收紧）
+var weapon_slots: Array = []                  # ≤5（收紧受阻：pkg2 冻结用例喂 Node duck 武器——迁移后收 Array[WeaponBase]）
 var unlocked_slots: int = 1                   # w3→2 / w7→3 / Boss1→4 / Boss2 或 w21→5（F-19）
 var level: int = 1
 var xp: float = 0.0
@@ -88,7 +88,7 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 	_drag_accum = Vector2.ZERO
 	global_position += total
 	_clamp_to_playfield()
-	# 武器自动开火调度（每帧 tick；武器实例包 3 在途——duck-typing）
+	# 武器自动开火调度（每帧 tick；duck 调用受阻于 pkg2 冻结用例的 Node duck 武器——迁移后收紧为直调）
 	for weapon in weapon_slots:
 		if weapon is Object and (weapon as Object).has_method(&"tick"):
 			(weapon as Object).call(&"tick", p_game_delta)
@@ -118,7 +118,7 @@ func take_contact_damage(p_dmg: float) -> void:
 
 
 func equip_weapon(p_weapon: Node) -> bool:
-	# 装入武器实例（包 3 WeaponBase 在途——duck-typing；add_weapon(data) 形态工厂属包 3 合入后补）
+	# 装入武器实例（签名保持 Node 宽类型：pkg2 冻结用例喂 duck 武器——迁移后收窄 WeaponBase）
 	for i in range(weapon_slots.size()):
 		if weapon_slots[i] == null:
 			if i >= unlocked_slots:
@@ -128,6 +128,49 @@ func equip_weapon(p_weapon: Node) -> bool:
 				add_child(p_weapon)
 			return true
 	return false                             # 无空槽
+
+
+func add_weapon(p_data: WeaponData) -> WeaponBase:
+	# 形态工厂（架构 §2.12）：槽位检查 → 实例化（按 form 分派）→ setup → 装槽挂载。
+	# 无可用槽 / 未知形态 → 返回 null（不实例化，调用方按 null 降级）。
+	if p_data == null:
+		return null
+	var slot := _first_available_slot()
+	if slot < 0:
+		return null                          # 无空槽（或槽未解锁）
+	var weapon := _instantiate_weapon(p_data)
+	if weapon == null:
+		return null
+	weapon.setup(p_data, self, _deps)        # 注入包：pipeline/pools/grid/laser_pool/elemental
+	weapon_slots[slot] = weapon
+	if weapon.get_parent() == null:
+		add_child(weapon)
+	return weapon
+
+
+# ── 内部 ──────────────────────────────────────────────────────────
+func _first_available_slot() -> int:
+	# 首个已解锁空槽索引（无 → -1；与 equip_weapon 遍历口径一致）
+	for i in range(weapon_slots.size()):
+		if weapon_slots[i] == null:
+			if i >= unlocked_slots:
+				return -1                    # 槽未解锁（槽序即解锁序）
+			return i
+	return -1
+
+
+func _instantiate_weapon(p_data: WeaponData) -> WeaponBase:
+	# 形态分派（WeaponForm：BALLISTIC/LASER/HOMING/MELEE → 对应武器子类）
+	match p_data.form:
+		GameConst.WeaponForm.BALLISTIC:
+			return BallisticWeapon.new()
+		GameConst.WeaponForm.LASER:
+			return LaserWeapon.new()
+		GameConst.WeaponForm.HOMING:
+			return HomingWeapon.new()
+		GameConst.WeaponForm.MELEE:
+			return OrbitWeapon.new()
+	return null                              # 未知形态（WeaponData 校验已封 {0,1,2,3}）
 
 
 func unlock_slot(p_slot: int) -> bool:

@@ -33,6 +33,10 @@ const EVENT_NAMES: Array[StringName] = [
 ]
 # contribution_expr 白名单模板（§三.5：两个模板，编译期映射；禁运行时 Expression）
 const CONTRIBUTION_EXPRS: Array[String] = ["value", "value * (ctx.pierce_index - 1)"]
+# builtin 效果处理器注册表镜像（AC-13.3；包 3 收紧——与 TraitEffect._BUILTIN_PATHS 六家族键对账）
+const TECH_EFFECT_IDS: Array[StringName] = [
+	&"EF_STAT", &"EF_SIZE", &"EF_FRACTAL", &"EF_BOUNCE", &"EF_ELEMENTAL", &"EF_MECH",
+]
 # F-21 硬约束（与 BalanceTables.decay_delta_max 默认值一致；单一常数避免加载循环依赖）
 const MAX_DECAY_DELTA := 0.92
 
@@ -151,8 +155,9 @@ func validate_trait(t: TraitData) -> Array:
 			_err(out, &"pool_id", t.pool_id == &"" or not MULT_POOL_IDS.has(t.pool_id), "pool_id 必填且 ∈ 乘区封闭注册表")
 		GameConst.PoolClass.LOCAL:
 			_err(out, &"pool_id", t.pool_id == &"" or not LOCAL_POOL_IDS.has(t.pool_id), "pool_id 必填且 ∈ Local 池封闭注册表")
-	# effect_id 必填（∈ builtin 处理器注册表——注册表属包 3，落地后收紧；AC-13.3）
-	_err(out, &"effect_id", t.effect_id == &"", "effect_id 必填（处理器注册表校验属包 3）")
+	# effect_id 必填且 ∈ builtin 处理器注册表（包 3 落地后收紧；AC-13.3 悬空 effect_id 剔除）
+	_err(out, &"effect_id", t.effect_id == &"" or not TECH_EFFECT_IDS.has(t.effect_id),
+		"effect_id 必填且 ∈ TECH_EFFECT_IDS（EF_STAT/EF_SIZE/EF_FRACTAL/EF_BOUNCE/EF_ELEMENTAL/EF_MECH）")
 	_err(out, &"stack_max", t.stack_max < 1, "stack_max ≥ 1")
 	if t.pool == GameConst.PoolClass.ADD:
 		_err(out, &"decay_delta", t.decay_delta <= 0.0 or t.decay_delta > MAX_DECAY_DELTA,

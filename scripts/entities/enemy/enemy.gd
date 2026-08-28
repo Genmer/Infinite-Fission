@@ -18,7 +18,7 @@ var behavior: int = GameConst.EnemyBehavior.CHASE
 var hitbox_r: float = 14.0                    # 碰撞半径快照（data.hitbox_r；投射物窄相判定读取）
 var resist: Array[float] = [0.0, 0.0, 0.0, 0.0]  # KIN/FIR/ICE/LTG 快照（超导 −30% 实时改写）
 var immune_mask: int = 0
-var elemental: RefCounted = null              # 状态容器（M-11 注入；包 3 ElementalState 在途——duck-typing）
+var elemental: ElementalState = null          # 状态容器（M-11 注入；包 3 收紧：register_host 挂 ElementalState）
 var dead: bool = false                        # 死亡短路标志（E-06：首次致死立即置位）
 var boss_phase: int = 0                       # Boss 阶段（HP<50% → 2 等）
 var fire_cd_left: float = 0.0                 # RANGED 行为射击冷却
@@ -131,10 +131,10 @@ func tick(p_game_delta: float) -> void:
 	if _flash_left > 0.0:
 		_flash_left -= p_game_delta
 		_apply_flash(clampf(_flash_left / FLASH_TIME, 0.0, 1.0))
-	# 状态效果速度因子（寒滞 0.6 / 冻结 0.0——包 3 ElementalState duck-typing；无容器时 1.0）
+	# 状态效果速度因子（寒滞 0.6 / 冻结 0.0——包 3 收紧为 ElementalState 直调；无容器时 1.0）
 	var sf := 1.0
-	if elemental != null and elemental.has_method(&"get_speed_factor"):
-		sf = float(elemental.call(&"get_speed_factor"))
+	if elemental != null:
+		sf = elemental.get_speed_factor()
 	var player := _player()
 	match behavior:
 		GameConst.EnemyBehavior.CHASE:
@@ -182,9 +182,9 @@ func get_resist(p_element: int) -> float:
 
 
 func get_vuln_factor() -> float:
-	# 目标侧易伤因子（冰冻易伤 ×1.25——包 3 ElementalState duck-typing；默认 1.0）
-	if elemental != null and elemental.has_method(&"get_vuln_factor"):
-		return float(elemental.call(&"get_vuln_factor"))
+	# 目标侧易伤因子（冰冻易伤 ×1.25——包 3 收紧为 ElementalState 直调；默认 1.0）
+	if elemental != null:
+		return elemental.get_vuln_factor()
 	return 1.0
 
 
