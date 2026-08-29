@@ -15,21 +15,28 @@ var value: float = 0.0                        # 面值（已含点金手倍率�
 
 var _magnet: bool = false                     # 已进入磁吸半径（加速飞向玩家）
 var _sprite: Sprite2D = null
+var _halo: Sprite2D = null                    # 底光晕（吸附光迹：磁吸时拉长指向玩家）
 var _player_cache: Node2D = null
 
 const ABSORB_DISTANCE := 24.0                 # 吸收判定距离 px（玩家 hitbox 16 + 碎片半径 ~6 + 余量）
 const MAGNET_SPEED := 520.0                   # 磁吸飞行速度 px/s（A3 未给吸附速度——手感占位值）
-const TEX_SIZE := 12                          # 占位碎片纹理边长
-static var _shared_texture: ImageTexture = null
-const SHARD_COLOR := Color(1.0, 0.85, 0.3)    # 金黄色占位（经验碎片识别色）
+const SHARD_COLOR := Palette.AMBER            # 琥珀（经验/稀有识别色——视觉单源）
 
 
 func _ready() -> void:
-	# 池化实例化期组装占位渲染（代码组装为主；.tscn 仅做容器）
+	# 池化实例化期组装渲染（代码组装为主；.tscn 仅做容器）
+	_halo = Sprite2D.new()
+	_halo.name = "Halo"
+	_halo.texture = TextureFactory.glow_dot()
+	_halo.material = TextureFactory.mat_add()
+	_halo.self_modulate = Color(SHARD_COLOR, 0.4)
+	_halo.scale = Vector2.ONE * (44.0 / float(TextureFactory.GLOW_DOT_SIZE))
+	add_child(_halo)
 	_sprite = Sprite2D.new()
 	_sprite.name = "Visual"
 	_sprite.centered = true
-	_sprite.texture = _get_placeholder_texture()
+	_sprite.texture = TextureFactory.diamond()
+	_sprite.material = TextureFactory.mat_add()
 	_sprite.self_modulate = SHARD_COLOR
 	add_child(_sprite)
 	visible = false                            # 池内不可见（activate 后可见）
@@ -67,6 +74,7 @@ func tick(p_game_delta: float) -> bool:
 		return true
 	global_position = global_position.move_toward(player.global_position,
 		MAGNET_SPEED * p_game_delta)
+	_sync_streak(player.global_position)       # 吸附光迹（指向玩家的拉长光条）
 	return false
 
 
@@ -75,6 +83,7 @@ func _reset_state() -> void:
 	value = 0.0
 	_magnet = false
 	_player_cache = null
+	_sync_visual()
 
 
 # ── 内部 ──────────────────────────────────────────────────────────
@@ -95,21 +104,23 @@ func _player() -> Node2D:
 
 
 func _sync_visual() -> void:
-	# 面值越大越醒目（1.2×~1.6× 等比；程序化占位表现）
+	# 面值越大越醒目（1.2×~1.6× 等比；琥珀菱形晶体）
 	if _sprite == null:
 		return
 	var scale_f := 1.0 + clampf(value / 30.0, 0.0, 0.6)
 	_sprite.scale = Vector2(scale_f, scale_f)
+	_sprite.rotation = 0.0
+	if _halo != null:
+		_halo.scale = Vector2.ONE * ((36.0 + 20.0 * (scale_f - 1.0))
+			/ float(TextureFactory.GLOW_DOT_SIZE))
 
 
-static func _get_placeholder_texture() -> ImageTexture:
-	# 共享静态占位菱形纹理（程序化生成；美术后续替换）
-	if _shared_texture == null:
-		var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
-		var c := float(TEX_SIZE) * 0.5 - 0.5
-		for y in range(TEX_SIZE):
-			for x in range(TEX_SIZE):
-				if absf(float(x) - c) + absf(float(y) - c) <= c:
-					img.set_pixel(x, y, Color.WHITE)
-		_shared_texture = ImageTexture.create_from_image(img)
-	return _shared_texture
+func _sync_streak(p_target: Vector2) -> void:
+	# 吸附光迹：磁吸飞行中晶体沿速度方向拉长（菱形纵轴对齐目标方向）
+	if _sprite == null:
+		return
+	var dir := p_target - global_position
+	if dir.length_squared() < 0.01:
+		return
+	_sprite.rotation = dir.angle() - PI / 2.0   # 菱形纵轴（本地 Y）对齐飞行方向
+	_sprite.scale.y *= 1.9

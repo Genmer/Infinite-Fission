@@ -24,18 +24,17 @@ var _drag_accum: Vector2 = Vector2.ZERO       # 相对拖动采样累计（E-15�
 var _pickup_area: Area2D = null
 var _pickup_shape: CollisionShape2D = null
 var _hit_shape: CollisionShape2D = null
-var _sprite: Sprite2D = null
+var _ship: NeonShip = null                    # 霓虹舰体视觉（纯表现层）
 var _deps: Dictionary = {}                     # setup 注入位（pipeline/pools/grid/registry——包 3/4 接线）
 
 const MAX_SLOTS := 5
 const RESPAWN_INVULN_S := 1.5                 # 重生无敌帧 s（B_spec 无数值 → 主控裁定，见 respawn 注释）
-const TEX_SIZE := 32
-static var _shared_texture: ImageTexture = null
-const BODY_COLOR := Color(0.35, 0.9, 1.0)
+const FLASH_TIME := 0.12                      # 受击闪白时长（纯视觉）
+const BODY_COLOR := Palette.CYAN              # 主色（我方青；视觉单源）
 
 
 func _ready() -> void:
-	# 组注册（敌/敌弹经组查找缓存玩家引用）+ 命中盒/拾取区/占位渲染组装（代码组装为主）
+	# 组注册（敌/敌弹经组查找缓存玩家引用）+ 命中盒/拾取区/舰体视觉组装（代码组装为主）
 	add_to_group(&"player")
 	_hit_shape = CollisionShape2D.new()
 	_hit_shape.name = "HitShape"
@@ -52,14 +51,11 @@ func _ready() -> void:
 	_pickup_shape.shape = pickup_circle
 	_pickup_area.add_child(_pickup_shape)
 	add_child(_pickup_area)
-	_sprite = Sprite2D.new()
-	_sprite.name = "Visual"
-	_sprite.centered = true
-	_sprite.texture = _get_placeholder_texture()
-	var scale_f := hitbox_radius / (TEX_SIZE * 0.5)
-	_sprite.scale = Vector2(scale_f, scale_f)
-	_sprite.self_modulate = BODY_COLOR
-	add_child(_sprite)
+	_ship = NeonShip.new()
+	_ship.name = "Visual"
+	_ship.setup(hitbox_radius)
+	_ship.z_index = 1
+	add_child(_ship)
 	weapon_slots.resize(MAX_SLOTS)
 	EventBus.slot_unlocked.connect(_on_slot_unlocked_event)
 	var bal := GameConfig.balance
@@ -89,6 +85,10 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 	_drag_accum = Vector2.ZERO
 	global_position += total
 	_clamp_to_playfield()
+	# 舰体视觉（倾斜/喷焰/无敌呼吸——纯表现层，不影响逻辑）
+	if _ship != null:
+		_ship.apply_motion(total, p_game_delta, invuln_left > 0.0)
+		_ship.tick_visual(p_game_delta)
 	# 武器自动开火调度（每帧 tick；集成包 B.8 第二批收紧：weapon_slots 已收窄 WeaponBase——直调）
 	for weapon in weapon_slots:
 		if weapon != null:
@@ -112,6 +112,8 @@ func take_contact_damage(p_dmg: float) -> void:
 	var dmg := maxf(p_dmg, 0.0)
 	hp -= dmg
 	invuln_left = GameConfig.balance.contact_tick if GameConfig.balance != null else 0.6
+	if _ship != null:
+		_ship.flash()                         # 受击闪白（纯视觉）
 	EventBus.emit_player_hit(dmg, 0)
 	if hp <= 0.0:
 		hp = 0.0
@@ -247,18 +249,3 @@ func _xp_need_for(p_level: int) -> float:
 		base = float(GameConfig.balance.xp_curve.get("base", 14.0))
 		power = float(GameConfig.balance.xp_curve.get("power", 1.4))
 	return base * pow(float(maxi(p_level, 1)), power)
-
-
-static func _get_placeholder_texture() -> ImageTexture:
-	# 共享静态占位圆形纹理（程序化生成；美术后续替换）
-	if _shared_texture == null:
-		var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
-		var c := float(TEX_SIZE) * 0.5 - 0.5
-		for y in range(TEX_SIZE):
-			for x in range(TEX_SIZE):
-				var dx := float(x) - c
-				var dy := float(y) - c
-				if dx * dx + dy * dy <= c * c:
-					img.set_pixel(x, y, Color.WHITE)
-		_shared_texture = ImageTexture.create_from_image(img)
-	return _shared_texture

@@ -50,35 +50,20 @@ var _fuse_ring: FuseRing = null               # 警示圈（程序化绘制）
 # ── 内部运行时 ─────────────────────────────────────────────────
 var _hit_area: Area2D = null                  # 接触伤害判定（低频通道）
 var _hit_shape: CollisionShape2D = null
-var _sprite: Sprite2D = null                  # 占位渲染（共享受击闪白 shader）
-var _material: ShaderMaterial = null
+var _visual: EnemyVisual = null               # 霓虹分型视觉（受击闪白经 visual 委托）
 var _flash_left: float = 0.0
 var _fade_left: float = 0.0
 var _player_cache: Node2D = null
 
 const FLASH_TIME := 0.12                     # 受击闪白时长
 const FADE_IN_TIME := 0.3                     # 入场渐显时长
-const TEX_SIZE := 64                          # 占位圆形纹理边长
-static var _shared_texture: ImageTexture = null
-static var _flash_shader: Shader = null
-const BODY_COLORS := {
-	"boss": Color(0.9, 0.25, 0.3),
-	"elite": Color(1.0, 0.6, 0.15),
-	"ranged": Color(0.7, 0.5, 0.9),
-	"default": Color(0.5, 0.65, 0.8),
-}
 
 
 func _ready() -> void:
 	# 池化实例化期组装（代码组装为主，.tscn 仅做容器，§1.4）
-	_sprite = Sprite2D.new()
-	_sprite.name = "Visual"
-	_sprite.centered = true
-	_sprite.texture = _get_placeholder_texture()
-	_material = ShaderMaterial.new()
-	_material.shader = _get_flash_shader()
-	_sprite.material = _material
-	add_child(_sprite)
+	_visual = EnemyVisual.new()
+	_visual.name = "Visual"
+	add_child(_visual)
 	_hit_area = Area2D.new()
 	_hit_area.name = "HitArea"
 	_hit_shape = CollisionShape2D.new()
@@ -151,6 +136,8 @@ func tick(p_game_delta: float) -> void:
 	if _flash_left > 0.0:
 		_flash_left -= p_game_delta
 		_apply_flash(clampf(_flash_left / FLASH_TIME, 0.0, 1.0))
+	if _visual != null:
+		_visual.tick_anim(p_game_delta)       # 脉动/旋转/闪白推进（静态分型零开销）
 	# 状态效果速度因子（寒滞 0.6 / 冻结 0.0——包 3 收紧为 ElementalState 直调；无容器时 1.0）
 	var sf := 1.0
 	if elemental != null:
@@ -386,62 +373,21 @@ func _player() -> Node2D:
 
 
 func _sync_visual() -> void:
-	# 占位渲染同步：半径等比缩放 + 染色（按 tag/行为）
-	if _sprite == null or data == null:
-		return
-	var r := hitbox_r
-	var scale_f := r / (TEX_SIZE * 0.5)
-	_sprite.scale = Vector2(scale_f, scale_f)
-	_sprite.self_modulate = _body_color()
+	# 霓虹分型视觉同步：按 id/tag 分型 + 半径送绘（碰撞圆形状仍在此维护）
 	if _hit_shape != null:
 		var shape := CircleShape2D.new()
-		shape.radius = r
+		shape.radius = hitbox_r
 		_hit_shape.shape = shape
-
-
-func _body_color() -> Color:
-	if is_boss():
-		return BODY_COLORS["boss"]
-	if is_elite():
-		return BODY_COLORS["elite"]
-	if behavior == GameConst.EnemyBehavior.RANGED:
-		return BODY_COLORS["ranged"]
-	return BODY_COLORS["default"]
+	if _visual != null:
+		var kind := EnemyVisual.kind_for(
+			data.id if data != null else &"", is_boss())
+		_visual.setup(kind, hitbox_r, is_elite())
 
 
 func _apply_flash(p_amount: float) -> void:
-	# 受击闪白（shader 占位：flash_amount 0→1 白色混合）
-	if _material != null:
-		_material.set_shader_parameter(&"flash_amount", p_amount)
-
-
-static func _get_placeholder_texture() -> ImageTexture:
-	# 共享静态占位圆形纹理（程序化生成；美术后续替换）
-	if _shared_texture == null:
-		var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
-		var c := float(TEX_SIZE) * 0.5 - 0.5
-		for y in range(TEX_SIZE):
-			for x in range(TEX_SIZE):
-				var dx := float(x) - c
-				var dy := float(y) - c
-				if dx * dx + dy * dy <= c * c:
-					img.set_pixel(x, y, Color.WHITE)
-		_shared_texture = ImageTexture.create_from_image(img)
-	return _shared_texture
-
-
-static func _get_flash_shader() -> Shader:
-	# 受击闪白 shader 占位（共享 shader；材质按实例持有，flash_amount 独立）
-	if _flash_shader == null:
-		_flash_shader = Shader.new()
-		_flash_shader.code = "\
-shader_type canvas_item;\n\
-uniform float flash_amount : hint_range(0.0, 1.0) = 0.0;\n\
-void fragment() {\n\
-	vec4 tex = texture(TEXTURE, UV);\n\
-	COLOR = vec4(mix(tex.rgb, vec3(1.0), flash_amount), tex.a);\n\
-}\n"
-	return _flash_shader
+	# 受击闪白（委托 EnemyVisual；入场首帧 visual 未就绪安全）
+	if _visual != null:
+		_visual.set_flash(p_amount)
 
 
 # ── 爆虫警示圈（程序化占位绘制；半径 = VOLATILE_BLAST_RADIUS，A3 §2.2「警示圈」） ──

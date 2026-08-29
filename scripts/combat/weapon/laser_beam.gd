@@ -45,15 +45,24 @@ var _scorch_accum: Dictionary = {}             # target_uid -> 叠层计时累�
 var _hit_exclusions: Dictionary = {}           # target_uid -> true（折射去重：已命中目标）
 var _time_alive: float = 0.0
 var _live: bool = false
-var _line: Line2D = null
+var _line: Line2D = null                      # 白色内核线（渲染主体）
+var _glow_line: Line2D = null                 # 青色辉光外层（加色柔光，双层激光）
 
 
 func _ready() -> void:
 	# 池化实例化期组装渲染（代码组装为主，.tscn 仅做容器，§1.4）
+	# 双层激光：白内核 + 青辉光（外层宽 ~3×，加色混合——霓虹能量束观感）
+	_glow_line = Line2D.new()
+	_glow_line.name = "BeamGlow"
+	_glow_line.width = beam_width
+	_glow_line.default_color = Color(Palette.CYAN, 0.30)
+	_glow_line.material = TextureFactory.mat_add()
+	add_child(_glow_line)
 	_line = Line2D.new()
 	_line.name = "BeamLine"
 	_line.width = beam_width
-	_line.default_color = Color(0.4, 0.9, 1.0, 0.75)
+	_line.default_color = Color(Palette.TEXT_MAIN, 0.95)
+	_line.material = TextureFactory.mat_add()
 	add_child(_line)
 	visible = false
 
@@ -99,6 +108,8 @@ func spawn(p_params: Dictionary) -> void:
 	visible = true
 	if _line != null:
 		_line.width = beam_width
+	if _glow_line != null:
+		_glow_line.width = beam_width * 3.0
 	_dispatch_event(GameConst.TraitEvent.ON_SPAWN)
 
 
@@ -189,6 +200,8 @@ func _reset_state() -> void:
 	pool = null
 	if _line != null:
 		_line.clear_points()
+	if _glow_line != null:
+		_glow_line.clear_points()
 
 
 # ── 内部 ──────────────────────────────────────────────────────────
@@ -343,12 +356,18 @@ func popup_due(p_uid: int) -> bool:
 
 
 func _sync_line(p_end: Vector2) -> void:
-	# 线段渲染（局部坐标：起点原点）
+	# 线段渲染（局部坐标：起点原点；内核 + 辉光双层同步）
 	if _line == null:
 		return
+	var tip := to_local(p_end)
 	_line.clear_points()
 	_line.add_point(Vector2.ZERO)
-	_line.add_point(to_local(p_end))
+	_line.add_point(tip)
+	if _glow_line != null:
+		_glow_line.clear_points()
+		_glow_line.add_point(Vector2.ZERO)
+		_glow_line.add_point(tip)
+		_glow_line.width = beam_width * 3.0
 
 
 func _dispatch_event(p_event: int) -> void:

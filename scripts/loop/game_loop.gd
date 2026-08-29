@@ -69,6 +69,7 @@ var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
 var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp}
+var vignette: Vignette = null                 # 方向 A：暗角 + 受击红边（表现层，_tick_ui 驱动）
 
 var frame_order: Array[StringName] = []       # 帧序探针（每帧重建；测试断言固定帧序）
 var current_candidates: Array[Dictionary] = []   # 当前货架（测试观测）
@@ -420,7 +421,15 @@ func _boot_build_actors() -> void:
 
 
 func _boot_build_presentation() -> void:
-	# 表现层组装：粒子导演 → GameFeel → 跳字 → HUD/Boss 条/结算屏 → 卡牌流
+	# 表现层组装：全局氛围（星空/2D glow/暗角）→ 粒子导演 → GameFeel → 跳字 →
+	# HUD/Boss 条/结算屏 → 卡牌流。氛围层零逻辑数值（纯渲染，headless 零开销）。
+	var starfield := Starfield.new()
+	starfield.name = "Starfield"
+	add_child(starfield)
+	var world_env := WorldEnvironment.new()
+	world_env.name = "NeonEnvironment"
+	world_env.environment = _build_neon_environment()
+	add_child(world_env)
 	var particles := ParticleDirector.new()
 	particles.name = "ParticleDirector"
 	add_child(particles)
@@ -467,9 +476,27 @@ func _boot_build_presentation() -> void:
 	menu_screen.name = "MenuScreen"
 	add_child(menu_screen)
 	menu_screen.start_requested.connect(start_run)
+	# 方向 A：暗角 + 受击红边（世界之上、HUD 之下；_tick_ui raw 通道驱动）
+	vignette = Vignette.new()
+	vignette.name = "Vignette"
+	add_child(vignette)
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）
 	EventBus.player_died.connect(_on_player_died)
 	EventBus.level_up.connect(_on_level_up)
+
+
+func _build_neon_environment() -> Environment:
+	# 2D glow（克制档）：加色辉光 + 高阈值——霓虹描边/弹丸发光，无泛白
+	var env := Environment.new()
+	env.glow_enabled = true
+	env.glow_intensity = 0.5
+	env.glow_strength = 1.05
+	env.glow_bloom = 0.05
+	env.glow_hdr_threshold = 0.95
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
+	env.set_glow_level(3, 0.8)                # 近环（锐利描边光）
+	env.set_glow_level(5, 0.5)                # 远环（柔和光晕）
+	return env
 
 
 # ── 帧序支撑 ──────────────────────────────────────────────────────
@@ -494,10 +521,12 @@ func _collect_enemy_bullets() -> Array[Node2D]:
 
 
 func _tick_ui(p_raw_delta: float) -> void:
-	# ⑧ UI 阶段（raw 通道）：跳字 → HUD → Boss 条 → 相机震屏偏移（trauma² 映射应用位）
+	# ⑧ UI 阶段（raw 通道）：跳字 → HUD → Boss 条 → 暗角/受击红边 → 相机震屏偏移
 	popup_manager.tick(p_raw_delta)
 	hud.tick(p_raw_delta)
 	boss_bar.tick(p_raw_delta)
+	if vignette != null:
+		vignette.tick(p_raw_delta)
 	_apply_camera_shake()
 
 

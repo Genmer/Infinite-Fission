@@ -9,6 +9,7 @@ extends Node2D
 var merged_value: float = 0.0                 # 合并累加值
 var style: int = 0                            # GameConst.PopupStyle
 var target_uid: int = 0                       # 合并窗口判据（同目标）
+var element_hint: int = -1                    # 元素提示（REACTION 按元素分色；PopupManager 注入）
 var is_active: bool = false                   # 池外活跃标记
 
 var _label: Label = null
@@ -18,23 +19,30 @@ var _rise_from: Vector2 = Vector2.ZERO        # 上浮起点（相对坐标基�
 const LIFE_TIME := 0.6                        # 单段展示时长（s）
 const RISE_PX := 42.0                         # 上浮距离 px
 const MERGE_LIFE_RESET := 0.35                # 合并后重置的展示时长（短于新起，观感收敛）
+const OUTLINE_SIZE := 6                       # 描边（深空底上的可读性）
 
-# 样式占位配色（程序化美术；正式样式后续迭代）
+# 跳字分级配色（视觉单源 Palette；深空霓虹分级）：
+#   NORMAL 正文白 / CRIT 品红加大 / REACTION 按元素（点燃橙/冰冻青/感电紫，element_hint）
+#   / DOT 点燃橙 / HEAL 成功绿 / XP 弱化灰青
 const STYLE_COLORS := {
-	GameConst.PopupStyle.NORMAL: Color(0.95, 0.95, 0.95),
-	GameConst.PopupStyle.CRIT: Color(1.0, 0.82, 0.2),
-	GameConst.PopupStyle.REACTION: Color(0.55, 0.85, 1.0),
-	GameConst.PopupStyle.DOT: Color(0.7, 0.85, 0.4),
-	GameConst.PopupStyle.HEAL: Color(0.4, 1.0, 0.5),
-	GameConst.PopupStyle.XP: Color(0.6, 0.6, 0.7),
+	GameConst.PopupStyle.NORMAL: Palette.TEXT_MAIN,
+	GameConst.PopupStyle.CRIT: Palette.MAGENTA,
+	GameConst.PopupStyle.REACTION: Palette.LTG,
+	GameConst.PopupStyle.DOT: Palette.FIR,
+	GameConst.PopupStyle.HEAL: Palette.GREEN,
+	GameConst.PopupStyle.XP: Palette.TEXT_DIM,
 }
 
 
 func _ready() -> void:
-	# 池化实例化期组装：Label 子节点（程序化占位，无字体资源——默认主题字体）
+	# 池化实例化期组装：Label 子节点（等宽加重 + 深描边；基数比正文大一档——可读性硬性要求）
 	_label = Label.new()
 	_label.name = "Value"
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_label.add_theme_font_size_override("font_size", Palette.FONT_POPUP)
+	_label.add_theme_color_override("font_outline_color", Palette.OUTLINE_COLOR)
+	_label.add_theme_constant_override("outline_size", OUTLINE_SIZE)
+	_label.add_theme_font_override("font", UITheme.font_mono())
 	add_child(_label)
 	visible = false
 
@@ -87,9 +95,12 @@ func _reset_state() -> void:
 
 
 func _refresh_label() -> void:
-	# 数值 + 样式刷新（CRIT 加大字号——占位分级）
+	# 数值 + 样式刷新（CRIT 品红加大字号；REACTION 按 element_hint 元素分色）
 	if _label == null:
 		return
 	_label.text = str(int(round(merged_value)))
-	_label.self_modulate = STYLE_COLORS.get(style, Color.WHITE)
-	_label.scale = Vector2.ONE * (1.35 if style == GameConst.PopupStyle.CRIT else 1.0)
+	var col: Color = STYLE_COLORS.get(style, Palette.TEXT_MAIN)
+	if style == GameConst.PopupStyle.REACTION and element_hint > 0:
+		col = Palette.element_color(element_hint)
+	_label.self_modulate = col
+	_label.scale = Vector2.ONE * (1.55 if style == GameConst.PopupStyle.CRIT else 1.0)

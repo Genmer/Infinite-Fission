@@ -45,6 +45,7 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 		_dropped_count += 1
 		return
 	var popup := node as DamagePopup
+	popup.element_hint = p_result.element      # REACTION 元素分色（点燃橙/冰冻青/感电紫）
 	popup.show_popup(p_result.pos, p_result.final_value, p_result.popup_style, uid)
 	_active_list.append(popup)
 	_merge_registry[uid] = {"popup": popup, "window_left": merge_window}
