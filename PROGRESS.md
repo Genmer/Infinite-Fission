@@ -23,10 +23,15 @@
 | **D-包3 武器/词缀/元素/内容** | 四形态武器+TraitStack+内置词条+ElementalSystem+全部内容 .tres | ✅ 完成（自测 128/128 + 内容 66 资源 0 剔除） |
 | D-包4 GameLoop/GameFeel/UI/卡牌流 | 主循环/打击感/HUD/三选一 | ✅ 完成（自测 98/98；4 笔待确认转集成包） |
 | D-集成包 | main.tscn 组装/全链验收/压力 soak | ✅ 完成（pkg5 自测 98/98；扫尾 8 项全落；压力 P95=5.62ms PASS；soak 180s 满载 0 实例化；详见 §5.6） |
-| E 审查+测试（并行） | 独立代码审查 + 运行验证 | ⬜ 未开始 |
-| F 交付报告 | 汇总判定+关键决策清单 | ⬜ 未开始 |
+| E 审查+测试（并行） | 独立代码审查 + 运行验证（两轮） | ✅ 完成（一轮：1C+3I 修复；二轮：可交付判定，720/720 终验 PASS） |
+| F 交付报告 | 汇总判定+关键决策清单 | ✅ 完成（判定 = 可交付；见 §5.8 与 §4 裁定记录） |
 
-**仓库当前可编译（0 解析错误），回归 701/701 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 98）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95=5.62ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**（pkg4 提交 3c43634 因 github 443 超时 push 待重试）
+**仓库当前可编译（0 解析错误），回归 720/720 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 117）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~5.8ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。全部已推送（HEAD = ff9240d）。**
+
+**阶段 E 关键战果（审查/测试发现并修复）：**
+- 一轮审查 1C+3I：重开不清场（残留战场秒杀重生）→ `_clear_battlefield` 清场序 + respawn 1.5s 无敌；GameFeel 订阅晚于 Spawner 清 tags（Boss 击杀打击感永不触发）→ early_bind；Boss 波伴随怪流水锁死 wave_cleared → `_boss_ref` 存活闸；TH_CRIT_SHARD 全武器声明零实现 + 校验器空承诺 → 补 `trait_effect_crit_shard.gd` + check_references ② 落地
+- coder 实现中发现的**双落血 bug 族 5 处**（settle_aoe/投射物直击/激光/环绕/弧斩：真件管线 9b 内部落血 + 调用方再落血 = 实际游戏全部伤害 ×2）→ 全部改双轨口径（`is DamagePipeline` 真件不落血/桩落血），pkg2/3 桩口径用例原样全绿验证；连带修 laser_beam._recycle 归还恒短路池泄漏
+- pkg5 偶发抖动（randomize 漂移卡牌流）→ card_generator rng 定种子 42 + 遗物用例幂等化
 
 ## 3. 开发流水线（自创，非标准流水线）
 
@@ -80,9 +85,19 @@
 4. ~~收紧 duck-typing 恢复点~~ ✅ 第一批完成（第二批 6 处转包 4/集成期，清单见 §4）
 5. ~~派发包 4~~ ✅（GameLoop/GameFeel/HUD/卡牌流/爆虫/Boss 伴随怪；自测 98/98；提交 3c43634，push 待网络恢复重试）
 6. ~~集成包~~ ✅（2026-08-29，两段接力：前任智能体完成 A/B/D 后跑 soak 超时被中断，续作智能体盘点补缺。main.tscn 全链可跑；扫尾 8 项全落；压力 P95=5.62ms<8.3ms + soak 180s 满载 0 实例化；pkg5 98/98。**续作额外修 3 bug**：game_feel_director.on_player_hit 双参信号签名、enemy._reset_state 归还置 dead=true（防二次死亡广播）、GameLoop spawner/wave_director 入树序（F-19 Boss 击杀解锁失效））
-7. **阶段 E**：并行派发独立代码审查 + 运行测试两路子代理 ← **当前断点**
-8. **阶段 F**：交付报告（含关键决策清单）
-9. 每完成一个包：**git commit + push**（纪律！）
+7. ~~阶段 E~~ ✅ 两轮：一轮（reviewer 1C+3I ∥ tester 全量复现通过）→ coder 修复（1f7d3db/ff9240d，含双落血族 5 处 + 2 项追加裁定）→ 二轮（reviewer 判可交付 ∥ tester 720/720 终验 + 专项 24/24）
+8. ~~阶段 F~~ ✅ 交付判定：**可交付**。关键决策清单 = §4 全部裁定条目 + §2 阶段 E 战果 + §8.1 weapon_ref 增量契约；后续改进清单见 §11
+9. 每完成一个包：**git commit + push**（纪律！全程遵守，HEAD = ff9240d 已推）
+
+## 11. 后续改进清单（不阻塞交付，下轮迭代）
+
+1. **release 模板真跑复测**：压力/soak 均为 headless debug 逻辑帧代理口径，M1 交付前用 release 模板真跑一次（架构允许，进 CI）
+2. **soak 10 分钟版**：脚本就绪（SOAK_FRAMES 常量），10 分钟口径跑一次（~12 分钟实际，须后台+轮询）
+3. particle_pool.gd:43 `is_connected` 未绑 Callable 检查恒 false → 复用重复 connect 靠池守卫兜底刷 push_error，统一为 bound callable 检查
+4. game_feel_director.gd:79 `p_enemy.get("tags")` 直接 `int()`，探针/异常实体喂 null 报 SCRIPT ERROR（生产路径无影响），加类型守卫
+5. pkg2/pkg5 退出泄漏三元组（ObjectDB leaked WARNING + resources in use）为测试入口基建既有现象，核对一次测试退出释放
+6. W5 L5 refract_depth=3（A3）与引擎 MAX=2 双硬闸矛盾、爆虫自爆 EnemyData schema 字段化、精英敌类型差异（速度/行为）、Boss 波伴随怪构成差异全量表达——均已按裁定从波表/常量口径实现，正式美术/数值迭代时统一回收
+7. PopupPool/LaserBeamPool acquire() 返回值仍是 Node2D（第二批收紧未授权的两处）
 
 ## 6. 关键文档地图（全部在工作区 docs/）
 
@@ -102,7 +117,7 @@
 - 导入：`"$G" --headless --path "<项目根>" --import`
 - 跑测试：`"$G" --headless --path "<项目根>" -s tests/runner/test_pkg0.gd`（pkg1/pkg2/pkg3 同理）
 - 注意：`-s` 模式下入口脚本编译早于 autoload 注册，测试用「入口引导 + 运行时 load 用例体」两段式（pkg0~pkg3 都是这个模式，新测试照抄）
-- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 98，全 PASS（共 701）**
+- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 117，全 PASS（共 720）**
 - 压力/soak：`tests/stress/test_perf_500p100e.gd`（AC-01.2，headless 逻辑帧口径）与 `tests/stress/test_soak.gd`（AC-14.1，SOAK_FRAMES 常量控时长；10 分钟版预计 ~12 分钟实际，长跑须后台+轮询防会话超时）
 
 ## 8. 冻结契约速查（跨包接口，改动需全包评估）
