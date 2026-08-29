@@ -76,6 +76,12 @@ func attach_trait(p_trait: TraitData) -> bool:
 	var attached := trait_stack.attach(p_trait)
 	if attached:
 		_invalidate_panel()
+		if p_trait.pool == GameConst.PoolClass.ADD \
+				and p_trait.pool_id == &"add_hp" and player != null:
+			# AFF_HP_UP 消费点（原死池接线修复）：add_hp 池逐层落地玩家血条——A3 §4.2
+			# 每层 max_hp +25（stack_max 4，线性不衰减）；上限增量同步回补等量当前血
+			#（主控裁定 2026-08-29）。挂载收束口接线：选卡与 REL_ECHO 回响复制共用本路径。
+			player.call(&"apply_max_hp_up", p_trait.value)
 		if p_trait.pool == GameConst.PoolClass.ELEM \
 				and p_trait.params.has("reaction_mult") and elemental != null:
 			# ELE_REACTION_VOID：反应强化注册到 ElementalSystem（全局 ×1.8 聚合）

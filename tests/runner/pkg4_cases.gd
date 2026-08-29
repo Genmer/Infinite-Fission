@@ -258,8 +258,8 @@ func _test_hud_binding() -> void:
 	_check("HUD HP 绑定", hud.displayed_hp_text() == "HP %d/%d" % [int(player.hp), int(player.max_hp)])
 	player.hp = 55.0
 	hud.refresh_stats()
-	# 断言字面量随死亡张力裁定更新（用户实测反馈 2026-08-29：初始 HP 100→60，代码侧
-	# DEATH_TENSION_MAX_HP；本断言原锁定旧默认 max_hp=100 的显示串，刷新逻辑本身相对值）。
+	# 断言字面量 55/60（用户实测反馈 2026-08-29：初始 HP 100→60，现 cfg player_base_hp=60
+	# 唯一真源——张力调校值已回注 cfg、代码侧双轨常量已删；显示串口径不变）。
 	# 动因/证据见交付报告「HP 相关测试断言的处理」。
 	_check("HUD HP 刷新（55/60）", hud.displayed_hp_text() == "HP 55/60")
 	EventBus.emit_wave_started(7)

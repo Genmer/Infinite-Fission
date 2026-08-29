@@ -11,10 +11,11 @@ const PATH_VERSION := "res://data/version.cfg"
 
 # 期望键表（A3 §0.1 GlobalConstants.cfg；缺失键 → 默认值 + 告警）。
 # player_pickup_radius 取 B_spec Q-13 裁定 120px（A3 §0.1 原值 90 已被 B_spec 覆盖）。
+# player_base_hp 回退默认同 cfg 真源 60（主控裁定 2026-08-29 张力口径回注）。
 const _EXPECTED_CONSTANTS: Dictionary = {
 	&"res_logic_width": 720.0,
 	&"res_logic_height": 1280.0,
-	&"player_base_hp": 100.0,
+	&"player_base_hp": 60.0,
 	&"player_base_speed": 280.0,
 	&"player_pickup_radius": 120.0,
 	&"contact_tick": 0.6,

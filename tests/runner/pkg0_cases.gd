@@ -278,7 +278,8 @@ func _test_event_bus() -> void:
 # ── 4. GameConfig ─────────────────────────────────────────────────
 func _test_game_config() -> void:
 	print("── GameConfig ──")
-	_check("cfg 常量：player_base_hp = 100", is_equal_approx(GameConfig.get_constant(&"player_base_hp", 0.0), 100.0))
+	# 字面量 100→60：主控裁定 2026-08-29，cfg 为 HP 唯一真源（张力调校值回注，双轨消除）
+	_check("cfg 常量：player_base_hp = 60", is_equal_approx(GameConfig.get_constant(&"player_base_hp", 0.0), 60.0))
 	_check("cfg 常量：hp_growth_per_wave = 1.12", is_equal_approx(GameConfig.get_constant(&"hp_growth_per_wave", 0.0), 1.12))
 	_check("cfg 常量：player_pickup_radius = 120（B_spec Q-13）", is_equal_approx(GameConfig.get_constant(&"player_pickup_radius", 0.0), 120.0))
 	_check("cfg 常量：缺键回退默认值", is_equal_approx(GameConfig.get_constant(&"nonexistent_key", 42.0), 42.0))

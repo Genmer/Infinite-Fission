@@ -35,6 +35,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_battlefield_reset()                     # 审查 Fix 1：重开清场 + 重生无敌回归
 	_test_boss_kill_feel_and_escort_gate()        # 审查 Fix 2/3：Boss 击杀顿帧 + 伴随怪存活闸
 	_test_crit_shard_and_validator()              # 审查 Fix 4：暴击弹片结算 + 悬空 threshold 剔除
+	_test_aff_hp_up_wiring()                      # AFF_HP_UP 死池接线（hp 真源 60 回归）
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -976,6 +977,40 @@ func _test_crit_shard_and_validator() -> void:
 		stripped == 1 and wdata.threshold_traits.size() == 1
 		and StringName(str(wdata.threshold_traits[0].get("threshold_id", ""))) == &"TH_CRIT_SHARD"
 		and reg.weapons.has(&"W_SHARD_TEST"))
+
+
+# ── AFF_HP_UP 死池接线（hp 真源 60 + add_hp 池消费回归） ────────────
+func _test_aff_hp_up_wiring() -> void:
+	print("── AFF_HP_UP 死池接线 ──")
+	# 隔离（末位用例）：清遗物常驻位——防此前用例偶得 REL_ECHO 回响复制附加挂载，
+	# 扰动「每层 +25」层数口径；reset_run 不影响任何前序已完成的断言。
+	_gl.relic_handler.reset_run()
+	_gl.card_generator.owned_relics.clear()
+	var t: TraitData = _gl.registry.get_trait(&"AFF_HP_UP")
+	if t == null:
+		_check("AFF_HP_UP 接线：注册表含 AFF_HP_UP（.tres 加载）", false)
+		return
+	# 基线锚定 cfg 真源 60（等价 fresh run：满血、单起始武器在槽 0）
+	_gl.player.max_hp = float(GameConfig.get_constant(&"player_base_hp", 60.0))
+	_gl.player.hp = _gl.player.max_hp
+	var card := {
+		"kind": CardGenerator.CardKind.TRAIT,
+		"id": &"AFF_HP_UP",
+		"rarity": 0,
+		"data": t,
+		"display_name": String(t.display_name),
+		"description": String(t.description),
+	}
+	_gl.card_generator.apply_choice(card, _gl.player)   # 第 1 层（选卡应用）
+	_gl.card_generator.apply_choice(card, _gl.player)   # 第 2 层（同 ID 叠层）
+	var layers := 0
+	for tb: TraitBase in _gl.player.weapon_slots[0].trait_stack.traits:
+		if tb.data.id == &"AFF_HP_UP":
+			layers = tb.layers
+	_check("AFF_HP_UP 接线：2 层 → max_hp = 60+25×2 = 110 且 hp 等量回补",
+		layers == 2 and is_equal_approx(_gl.player.max_hp, 110.0)
+		and is_equal_approx(_gl.player.hp, 110.0),
+		"layers=%d max_hp=%s hp=%s" % [layers, str(_gl.player.max_hp), str(_gl.player.hp)])
 
 
 # ── 支撑（原有） ──────────────────────────────────────────────────
