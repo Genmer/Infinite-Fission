@@ -45,16 +45,29 @@ var _scorch_accum: Dictionary = {}             # target_uid -> 叠层计时累�
 var _hit_exclusions: Dictionary = {}           # target_uid -> true（折射去重：已命中目标）
 var _time_alive: float = 0.0
 var _live: bool = false
-var _line: Line2D = null
+var _line: Line2D = null                      # 外层蓝束（粗，方向 C：蓝白渐变观感）
+var _core: Line2D = null                      # 内层白芯（细亮，圆头端帽）
 
 
 func _ready() -> void:
 	# 池化实例化期组装渲染（代码组装为主，.tscn 仅做容器，§1.4）
+	# 粗圆头光束：外层天空蓝 + 内层白芯（双线叠加 = 蓝白渐变；LINE_CAP_ROUND 端头圆帽）
 	_line = Line2D.new()
 	_line.name = "BeamLine"
 	_line.width = beam_width
-	_line.default_color = Color(0.4, 0.9, 1.0, 0.75)
+	_line.default_color = Color(PopPalette.PLAYER.r, PopPalette.PLAYER.g, PopPalette.PLAYER.b, 0.85)
+	_line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	_line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	_line.joint_mode = Line2D.LINE_JOINT_ROUND
 	add_child(_line)
+	_core = Line2D.new()
+	_core.name = "BeamCore"
+	_core.width = beam_width * 0.42
+	_core.default_color = Color(1.0, 1.0, 1.0, 0.95)
+	_core.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	_core.end_cap_mode = Line2D.LINE_CAP_ROUND
+	_core.joint_mode = Line2D.LINE_JOINT_ROUND
+	add_child(_core)
 	visible = false
 
 
@@ -99,6 +112,8 @@ func spawn(p_params: Dictionary) -> void:
 	visible = true
 	if _line != null:
 		_line.width = beam_width
+	if _core != null:
+		_core.width = beam_width * 0.42
 	_dispatch_event(GameConst.TraitEvent.ON_SPAWN)
 
 
@@ -189,6 +204,8 @@ func _reset_state() -> void:
 	pool = null
 	if _line != null:
 		_line.clear_points()
+	if _core != null:
+		_core.clear_points()
 
 
 # ── 内部 ──────────────────────────────────────────────────────────
@@ -343,12 +360,18 @@ func popup_due(p_uid: int) -> bool:
 
 
 func _sync_line(p_end: Vector2) -> void:
-	# 线段渲染（局部坐标：起点原点）
+	# 线段渲染（局部坐标：起点原点）；束宽轻微呼吸（方向 C：束流活力，零 shader）
 	if _line == null:
 		return
 	_line.clear_points()
 	_line.add_point(Vector2.ZERO)
 	_line.add_point(to_local(p_end))
+	_line.width = beam_width * (1.0 + 0.07 * sin(_time_alive * 26.0))
+	if _core != null:
+		_core.clear_points()
+		_core.add_point(Vector2.ZERO)
+		_core.add_point(to_local(p_end))
+		_core.width = beam_width * 0.42 * (1.0 + 0.07 * sin(_time_alive * 26.0 + 1.2))
 
 
 func _dispatch_event(p_event: int) -> void:

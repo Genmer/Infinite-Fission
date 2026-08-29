@@ -1,7 +1,11 @@
 # scripts/entities/enemy/enemy.gd
-# M-03 Enemy（架构 §2.11）：Node2D + 子 Area2D（接触伤害，低频）+ Sprite2D（共享受击闪白材质）。
+# M-03 Enemy（架构 §2.11）：Node2D + 子 Area2D（接触伤害，低频）+ Sprite2D（方向 C 分型贴图
+# + 共享受击闪白材质 + 果冻感动画）。
 # 弹-敌命中由投射物侧 SpaceGrid 查询完成（Q-15，Area2D 只承担玩家接触例外通道）；
 # 敌间分离力走网格 10Hz（E-10）——包 4 集成期挂入（enemy_grid 引用已就绪）。
+# 方向 C 分型（贴纸风：厚描边 + 眼睛脸）：E1 珊瑚圆球怪 / E2 尖头飞镖（朝向+拉长）/
+# E3 方胖装甲块（特厚描边）/ E4 爆虫（充气变大+红脸，警示圈改虚线）/ E5 基底+金冠 /
+# Boss 大型聚合体（多层本体 + 漂浮小卫星球，受击果冻抖动）。
 # 编排说明（§2.17）：本实体只做自身行为/受击/死亡；tick(game_delta) 由 GameLoop ⑤ 驱动。
 class_name Enemy
 extends Node2D
@@ -50,23 +54,28 @@ var _fuse_ring: FuseRing = null               # 警示圈（程序化绘制）
 # ── 内部运行时 ─────────────────────────────────────────────────
 var _hit_area: Area2D = null                  # 接触伤害判定（低频通道）
 var _hit_shape: CollisionShape2D = null
-var _sprite: Sprite2D = null                  # 占位渲染（共享受击闪白 shader）
+var _sprite: Sprite2D = null                  # 渲染（方向 C 分型贴图 + 共享受击闪白 shader）
 var _material: ShaderMaterial = null
 var _flash_left: float = 0.0
 var _fade_left: float = 0.0
 var _player_cache: Node2D = null
 
+# 方向 C 表现层（贴纸分型：厚描边 + 眼睛脸 + 果冻感）
+var _base_scale: float = 1.0                  # hitbox 口径基础缩放（果冻/充能缩放的乘算基准）
+var _crown: Sprite2D = null                   # 精英金色皇冠挂件（TAG_ELITE）
+var _satellites: Array[Sprite2D] = []         # Boss 漂浮小卫星球（聚合体多层）
+var _wobble_left: float = 0.0                 # 受击果冻抖动剩余
+var _angry: bool = false                      # E4 充能变脸（红脸贴图切换）
+var _anim_t: float = 0.0                      # 表现时钟（卫星公转/抖动相位）
+var _boss_orbit: float = 0.0                  # 卫星公转角
+
 const FLASH_TIME := 0.12                     # 受击闪白时长
 const FADE_IN_TIME := 0.3                     # 入场渐显时长
-const TEX_SIZE := 64                          # 占位圆形纹理边长
-static var _shared_texture: ImageTexture = null
+const TEX_SIZE := 64                          # 敌人贴图画布边长（逻辑半径 32 = hitbox 口径）
+const BOSS_TEX_R := 40.0                      # Boss 贴图本体半径 px（96 画布聚合体）
+const BOSS_VISUAL_MULT := 1.9                 # Boss 视觉放大倍率（大型聚合体观感；碰撞盒不变）
+const WOBBLE_TIME := 0.22                     # 受击果冻抖动时长
 static var _flash_shader: Shader = null
-const BODY_COLORS := {
-	"boss": Color(0.9, 0.25, 0.3),
-	"elite": Color(1.0, 0.6, 0.15),
-	"ranged": Color(0.7, 0.5, 0.9),
-	"default": Color(0.5, 0.65, 0.8),
-}
 
 
 func _ready() -> void:
@@ -74,7 +83,7 @@ func _ready() -> void:
 	_sprite = Sprite2D.new()
 	_sprite.name = "Visual"
 	_sprite.centered = true
-	_sprite.texture = _get_placeholder_texture()
+	_sprite.texture = TextureFactory.enemy_tex(&"grunt")
 	_material = ShaderMaterial.new()
 	_material.shader = _get_flash_shader()
 	_sprite.material = _material
@@ -135,6 +144,9 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	fire_cd_left = fire_cd * 0.5              # 开场半冷却（避免同帧齐射）
 	_flash_left = 0.0
 	_fade_left = FADE_IN_TIME
+	_wobble_left = 0.0
+	_angry = false
+	_anim_t = 0.0
 	modulate.a = 0.0                          # 入场渐显起点
 	_apply_flash(0.0)
 	visible = true
@@ -145,6 +157,7 @@ func tick(p_game_delta: float) -> void:
 	# 行为机（追击/远程）+ 状态效果速度因子 + 接触伤害 + Boss 阶段检查
 	if dead:
 		return
+	_tick_visual(p_game_delta)
 	if _fade_left > 0.0:
 		_fade_left -= p_game_delta
 		modulate.a = clampf(1.0 - _fade_left / FADE_IN_TIME, 0.0, 1.0)
@@ -178,11 +191,12 @@ func tick(p_game_delta: float) -> void:
 
 
 func take_result(p_result: DamageResult) -> void:
-	# 受击入口（pipeline 步骤 9 之后由投射物侧调用）：扣血 + 受击闪白 + 死亡广播
+	# 受击入口（pipeline 步骤 9 之后由投射物侧调用）：扣血 + 受击闪白/果冻抖动 + 死亡广播
 	# 易伤标记：包 3 ElementalSystem 合入后经 elemental 容器承担（get_vuln_factor 已就绪）
 	apply_damage(p_result.final_value)
 	if not dead:
 		_flash_left = FLASH_TIME
+		_wobble_left = WOBBLE_TIME           # 方向 C：果冻抖动（squash & stretch）
 		_apply_flash(1.0)
 
 
@@ -370,8 +384,14 @@ func _reset_state() -> void:
 		_fuse_ring.progress = 0.0
 	_flash_left = 0.0
 	_fade_left = 0.0
+	_wobble_left = 0.0
+	_angry = false
+	_anim_t = 0.0
 	modulate.a = 1.0
 	_apply_flash(0.0)
+	if _sprite != null:
+		_sprite.rotation = 0.0
+		_sprite.scale = Vector2(_base_scale, _base_scale)
 
 
 # ── 支撑 ──────────────────────────────────────────────────────────
@@ -386,48 +406,125 @@ func _player() -> Node2D:
 
 
 func _sync_visual() -> void:
-	# 占位渲染同步：半径等比缩放 + 染色（按 tag/行为）
+	# 方向 C 分型渲染同步：贴图按种类切换 + 半径等比缩放（Boss 视觉放大；碰撞盒不变）
 	if _sprite == null or data == null:
 		return
 	var r := hitbox_r
-	var scale_f := r / (TEX_SIZE * 0.5)
-	_sprite.scale = Vector2(scale_f, scale_f)
-	_sprite.self_modulate = _body_color()
+	var kind := _visual_kind()
+	if kind == &"boss":
+		_base_scale = r * BOSS_VISUAL_MULT / BOSS_TEX_R
+		_sprite.texture = TextureFactory.enemy_tex(&"boss")
+	else:
+		_base_scale = r / (TEX_SIZE * 0.5)
+		if kind == &"volatile":
+			_sprite.texture = TextureFactory.enemy_tex(&"volatile", _angry)
+		else:
+			_sprite.texture = TextureFactory.enemy_tex(kind)
+	_sprite.scale = Vector2(_base_scale, _base_scale)
+	_sprite.rotation = 0.0
+	_ensure_crown(kind)
+	_ensure_satellites(kind)
 	if _hit_shape != null:
 		var shape := CircleShape2D.new()
 		shape.radius = r
 		_hit_shape.shape = shape
 
 
-func _body_color() -> Color:
+func _visual_kind() -> StringName:
+	# 分型判定（.tres id 约定 + tag 优先级：Boss > E1~E5 前缀；E5 精英 = grunt 基底 + 皇冠）
 	if is_boss():
-		return BODY_COLORS["boss"]
-	if is_elite():
-		return BODY_COLORS["elite"]
-	if behavior == GameConst.EnemyBehavior.RANGED:
-		return BODY_COLORS["ranged"]
-	return BODY_COLORS["default"]
+		return &"boss"
+	if data == null:
+		return &"grunt"
+	var sid := String(data.id)
+	if sid.begins_with("E2"):
+		return &"dart"
+	if sid.begins_with("E3"):
+		return &"bastion"
+	if sid.begins_with("E4"):
+		return &"volatile"
+	return &"grunt"
+
+
+func _ensure_crown(p_kind: StringName) -> void:
+	# 精英金色皇冠小标（E5 基底 + 皇冠；非精英回收挂件）
+	var want := is_elite() and p_kind != &"boss"
+	if want and _crown == null:
+		_crown = Sprite2D.new()
+		_crown.name = "Crown"
+		_crown.texture = TextureFactory.crown()
+		add_child(_crown)
+	if _crown != null:
+		_crown.visible = want
+		if want:
+			_crown.scale = Vector2(_base_scale, _base_scale)
+			_crown.position = Vector2(0.0, -(hitbox_r * 1.18))
+
+
+func _ensure_satellites(p_kind: StringName) -> void:
+	# Boss 漂浮小卫星球（聚合体多层；两颗白珠公转，运行期只更新位置）
+	# 非 Boss 复用时仅隐藏（节点随池实例存活，跨复用零实例化）
+	var want := p_kind == &"boss"
+	if want and _satellites.is_empty():
+		for i in range(2):
+			var orb := Sprite2D.new()
+			orb.name = "Satellite%d" % i
+			orb.texture = TextureFactory.bead(PopPalette.PANEL, 32, false)
+			add_child(orb)
+			_satellites.append(orb)
+	for i in range(_satellites.size()):
+		var orb := _satellites[i]
+		orb.visible = want
+		if want:
+			orb.scale = Vector2(_base_scale, _base_scale) * 0.42
+
+
+func _tick_visual(p_game_delta: float) -> void:
+	# 方向 C 表现层（game_delta 通道——顿帧自然冻结）：果冻抖动 / E2 朝向 / E4 充能变脸
+	# 越滚越大 / Boss 卫星公转。零碰撞、零数值副作用。
+	_anim_t += p_game_delta
+	var kind := _visual_kind()
+	# 受击果冻抖动（squash & stretch 弹性衰减）
+	if _wobble_left > 0.0:
+		_wobble_left = maxf(_wobble_left - p_game_delta, 0.0)
+		var bt := 1.0 - _wobble_left / WOBBLE_TIME
+		var s := 1.0 + 0.22 * exp(-4.5 * bt) * sin(bt * 22.0)
+		_sprite.scale = Vector2(_base_scale * s, _base_scale * (2.0 - s))
+	elif kind == &"volatile" and _fuse_armed:
+		# E4 充气：越滚越大（引导进度 → 1.5×）+ 变脸红脸（警示升级）
+		var grow := 1.0 + 0.5 * (1.0 - clampf(_fuse_left / VOLATILE_FUSE_TIME, 0.0, 1.0))
+		_sprite.scale = Vector2(_base_scale * grow, _base_scale * grow)
+		if not _angry:
+			_angry = true
+			_sprite.texture = TextureFactory.enemy_tex(&"volatile", true)
+	elif kind == &"dart":
+		# E2 尖头飞镖：朝玩家方向旋转 + 飞行拉长挤压
+		var player := _player()
+		if player != null and is_instance_valid(player):
+			var dir := (player.global_position - global_position).normalized()
+			_sprite.rotation = dir.angle() + PI * 0.5   # 贴图朝上 → 旋转对齐
+			_sprite.scale = Vector2(_base_scale * 0.82, _base_scale * 1.18)
+	elif kind == &"grunt" or kind == &"bastion":
+		# 平时轻微呼吸（果冻感基调；E4 未充能态同享）
+		var breathe := 1.0 + 0.035 * sin(_anim_t * 5.0 + float(uid % 32))
+		_sprite.scale = Vector2(_base_scale * breathe, _base_scale * (2.0 - breathe))
+	# E4 变脸回常态（引爆打断/取消引导后）
+	if kind == &"volatile" and _angry and not _fuse_armed:
+		_angry = false
+		_sprite.texture = TextureFactory.enemy_tex(&"volatile", false)
+	# Boss 卫星公转
+	if kind == &"boss" and not _satellites.is_empty():
+		_boss_orbit += p_game_delta * 2.1
+		var orbit_r := hitbox_r * BOSS_VISUAL_MULT * 1.18
+		for i in range(_satellites.size()):
+			var ang := _boss_orbit + PI * float(i)
+			_satellites[i].position = Vector2(cos(ang), sin(ang)) * orbit_r
 
 
 func _apply_flash(p_amount: float) -> void:
 	# 受击闪白（shader 占位：flash_amount 0→1 白色混合）
 	if _material != null:
 		_material.set_shader_parameter(&"flash_amount", p_amount)
-
-
-static func _get_placeholder_texture() -> ImageTexture:
-	# 共享静态占位圆形纹理（程序化生成；美术后续替换）
-	if _shared_texture == null:
-		var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
-		var c := float(TEX_SIZE) * 0.5 - 0.5
-		for y in range(TEX_SIZE):
-			for x in range(TEX_SIZE):
-				var dx := float(x) - c
-				var dy := float(y) - c
-				if dx * dx + dy * dy <= c * c:
-					img.set_pixel(x, y, Color.WHITE)
-		_shared_texture = ImageTexture.create_from_image(img)
-	return _shared_texture
 
 
 static func _get_flash_shader() -> Shader:
@@ -444,7 +541,7 @@ void fragment() {\n\
 	return _flash_shader
 
 
-# ── 爆虫警示圈（程序化占位绘制；半径 = VOLATILE_BLAST_RADIUS，A3 §2.2「警示圈」） ──
+# ── 爆虫警示圈（方向 C：虚线圈 + 进度环；半径 = VOLATILE_BLAST_RADIUS，A3 §2.2「警示圈」） ──
 class FuseRing:
 	extends Node2D
 
@@ -452,8 +549,16 @@ class FuseRing:
 	var progress: float = 0.0                   # 引导进度 0~1（圈色渐亮渐红）
 
 	func _draw() -> void:
-		# 外圈描边 + 内域淡填充（进度越深越醒目；程序化占位美术）
-		var edge := Color(1.0, 0.25, 0.2, 0.35 + 0.45 * progress)
-		var fill := Color(1.0, 0.2, 0.15, 0.06 + 0.12 * progress)
+		# 虚线警戒圈（亮底风格：虚线圆 + 淡填充 + 进度弧，程序化绘制）
+		var fill := Color(1.0, 0.36, 0.36, 0.05 + 0.13 * progress)
 		draw_circle(Vector2.ZERO, radius, fill)
-		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, edge, 3.0, true)
+		var segs := 28
+		var seg_arc := TAU / float(segs * 2)
+		var edge := Color(1.0, 0.36, 0.36, 0.4 + 0.5 * progress)
+		for i in range(segs):
+			var a0 := float(i) * seg_arc * 2.0
+			draw_arc(Vector2.ZERO, radius, a0, a0 + seg_arc, 8, edge, 3.5, true)
+		# 进度弧（柠檬金→珊瑚红，贴近倒计时紧迫感）
+		if progress > 0.01:
+			draw_arc(Vector2.ZERO, radius * 0.86, -PI * 0.5,
+				-PI * 0.5 + TAU * progress, 48, PopPalette.XP, 5.0, true)

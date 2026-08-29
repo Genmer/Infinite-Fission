@@ -19,18 +19,15 @@ var _player_cache: Node2D = null
 
 const ABSORB_DISTANCE := 24.0                 # 吸收判定距离 px（玩家 hitbox 16 + 碎片半径 ~6 + 余量）
 const MAGNET_SPEED := 520.0                   # 磁吸飞行速度 px/s（A3 未给吸附速度——手感占位值）
-const TEX_SIZE := 12                          # 占位碎片纹理边长
-static var _shared_texture: ImageTexture = null
-const SHARD_COLOR := Color(1.0, 0.85, 0.3)    # 金黄色占位（经验碎片识别色）
+const TEX_SIZE := 44                          # 星星贴图画布边长（TextureFactory 口径）
 
 
 func _ready() -> void:
-	# 池化实例化期组装占位渲染（代码组装为主；.tscn 仅做容器）
+	# 池化实例化期组装渲染（代码组装为主；.tscn 仅做容器）
 	_sprite = Sprite2D.new()
 	_sprite.name = "Visual"
 	_sprite.centered = true
-	_sprite.texture = _get_placeholder_texture()
-	_sprite.self_modulate = SHARD_COLOR
+	_sprite.texture = TextureFactory.star(TEX_SIZE, PopPalette.XP)
 	add_child(_sprite)
 	visible = false                            # 池内不可见（activate 后可见）
 
@@ -95,21 +92,8 @@ func _player() -> Node2D:
 
 
 func _sync_visual() -> void:
-	# 面值越大越醒目（1.2×~1.6× 等比；程序化占位表现）
+	# 柠檬星星：面值越大越醒目（0.9×~1.5× 等比；方向 C 口径）
 	if _sprite == null:
 		return
-	var scale_f := 1.0 + clampf(value / 30.0, 0.0, 0.6)
+	var scale_f := 0.9 + clampf(value / 30.0, 0.0, 0.6)
 	_sprite.scale = Vector2(scale_f, scale_f)
-
-
-static func _get_placeholder_texture() -> ImageTexture:
-	# 共享静态占位菱形纹理（程序化生成；美术后续替换）
-	if _shared_texture == null:
-		var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
-		var c := float(TEX_SIZE) * 0.5 - 0.5
-		for y in range(TEX_SIZE):
-			for x in range(TEX_SIZE):
-				if absf(float(x) - c) + absf(float(y) - c) <= c:
-					img.set_pixel(x, y, Color.WHITE)
-		_shared_texture = ImageTexture.create_from_image(img)
-	return _shared_texture

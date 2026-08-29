@@ -68,6 +68,7 @@ var card_select_ui: CardSelectUI = null
 var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处理器
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
+var confetti: ConfettiBurst = null            # 方向 C：Boss 死亡彩纸屑（actors 段前置订阅）
 var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp}
 
 var frame_order: Array[StringName] = []       # 帧序探针（每帧重建；测试断言固定帧序）
@@ -387,6 +388,12 @@ func _boot_build_actors() -> void:
 	game_feel.name = "GameFeelDirector"
 	add_child(game_feel)
 	game_feel.early_bind()
+	# ★ 方向 C 彩纸屑前置组装 + enemy_killed 前置订阅（连接序 = 派发序，F-19 同纪律）：
+	#   Boss 击杀庆祝读取 enemy.tags 必须先于 EnemySpawner 死亡归还的 tags 清零
+	#   （_reset_state 置 0）——否则彩纸屑恒不触发
+	confetti = ConfettiBurst.new()
+	confetti.name = "ConfettiBurst"
+	add_child(confetti)
 	spawner = EnemySpawner.new()
 	spawner.name = "EnemySpawner"
 	add_child(spawner)
@@ -420,7 +427,11 @@ func _boot_build_actors() -> void:
 
 
 func _boot_build_presentation() -> void:
-	# 表现层组装：粒子导演 → GameFeel → 跳字 → HUD/Boss 条/结算屏 → 卡牌流
+	# 表现层组装：淡云背景 → 粒子导演 → GameFeel → 跳字 → HUD/Boss 条/结算屏 → 卡牌流
+	# （方向 C：淡云蓝白底 z=-20——纯视觉层，零事件依赖；彩纸屑已在 actors 段前置订阅）
+	var backdrop := CloudBackdrop.new()
+	backdrop.name = "CloudBackdrop"
+	add_child(backdrop)
 	var particles := ParticleDirector.new()
 	particles.name = "ParticleDirector"
 	add_child(particles)

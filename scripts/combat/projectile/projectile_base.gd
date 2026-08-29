@@ -50,15 +50,7 @@ var _screen := Vector2(720.0, 1280.0)        # 逻辑分辨率缓存（spawn 期
 var _sprite: Sprite2D = null                  # 占位渲染子节点（美术后续替换）
 
 const OFFSCREEN_MARGIN := 96.0                # 出界回收余量（半径 + 边距）
-const TEX_SIZE := 32                          # 占位圆形纹理边长（共享静态）
-static var _shared_texture: ImageTexture = null
-const ELEMENT_COLORS: Array[Color] = [
-	Color(0.92, 0.92, 0.92),                 # KIN
-	Color(1.0, 0.45, 0.2),                    # FIR
-	Color(0.4, 0.8, 1.0),                     # ICE
-	Color(0.75, 0.5, 1.0),                    # LTG
-]
-const ENEMY_TEAM_TINT := Color(1.0, 0.35, 0.45)   # 敌弹统一染色（敌我识别）
+const TEX_SIZE := 64                          # 弹珠贴图画布边长（逻辑半径 32，TextureFactory 口径）
 
 
 func _ready() -> void:
@@ -66,7 +58,7 @@ func _ready() -> void:
 	_sprite = Sprite2D.new()
 	_sprite.name = "Visual"
 	_sprite.centered = true
-	_sprite.texture = _get_placeholder_texture()
+	_sprite.texture = TextureFactory.bead(PopPalette.PLAYER, TEX_SIZE)
 	add_child(_sprite)
 	visible = false                            # 池内不可见（取出 spawn 后激活）
 
@@ -580,17 +572,14 @@ func _reset_state() -> void:
 
 # ── 支撑 ──────────────────────────────────────────────────────────
 func _sync_visual() -> void:
-	# 占位渲染同步：半径等比缩放 + 元素染色（敌弹统一敌我识别色）
+	# 方向 C 渲染同步：半径等比缩放 + 阵营贴图（我方=蓝亮圆珠白高光 / 敌方=珊瑚圆珠白高光，
+	# 描边+高光烘焙——亮底敌我辨识核心；元素差异由弹道词条表现层承担，弹珠色保持阵营纯色）
 	if _sprite == null:
 		return
 	var scale_f := effective_radius() / (TEX_SIZE * 0.5)
 	_sprite.scale = Vector2(scale_f, scale_f)
-	var color: Color = ELEMENT_COLORS[0]
-	if element >= 0 and element < ELEMENT_COLORS.size():
-		color = ELEMENT_COLORS[element]
-	if team == 1:
-		color = ENEMY_TEAM_TINT
-	_sprite.self_modulate = color
+	_sprite.texture = TextureFactory.bead(
+		PopPalette.ENEMY if team == 1 else PopPalette.PLAYER, TEX_SIZE)
 
 
 func _find_player() -> Node2D:
@@ -610,17 +599,3 @@ func _player_hp_pct() -> float:
 		return float(player.call(&"get_hp_pct"))
 	return 1.0
 
-
-static func _get_placeholder_texture() -> ImageTexture:
-	# 共享静态占位圆形纹理（程序化生成；美术后续替换）
-	if _shared_texture == null:
-		var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
-		var c := float(TEX_SIZE) * 0.5 - 0.5
-		for y in range(TEX_SIZE):
-			for x in range(TEX_SIZE):
-				var dx := float(x) - c
-				var dy := float(y) - c
-				if dx * dx + dy * dy <= c * c:
-					img.set_pixel(x, y, Color.WHITE)
-		_shared_texture = ImageTexture.create_from_image(img)
-	return _shared_texture

@@ -25,17 +25,25 @@ var _pickup_area: Area2D = null
 var _pickup_shape: CollisionShape2D = null
 var _hit_shape: CollisionShape2D = null
 var _sprite: Sprite2D = null
+var _flame: Sprite2D = null                    # 喷气小尾巴（移动时点亮 + 抖动）
+var _flash: Sprite2D = null                    # 受击白闪剪影（叠在舰体上方）
+var _flash_left: float = 0.0
+var _punch_left: float = 0.0                   # 受击 squash punch 剩余
+var _tilt: float = 0.0                         # 移动倾斜（横移 bank）
+var _anim_t: float = 0.0                       # 帧内动画时钟（尾焰抖动/无敌闪烁）
+var _visual_scale: float = 1.0                 # 舰体基础缩放（hitbox 口径换算）
 var _deps: Dictionary = {}                     # setup 注入位（pipeline/pools/grid/registry——包 3/4 接线）
 
 const MAX_SLOTS := 5
-const RESPAWN_INVULN_S := 1.5                 # 重生无敌帧 s（B_spec 无数值 → 主控裁定，见 respawn 注释）
-const TEX_SIZE := 32
-static var _shared_texture: ImageTexture = null
-const BODY_COLOR := Color(0.35, 0.9, 1.0)
+const RESPAWN_INVULN_S := 1.5                 # 重开无敌帧 s（B_spec 无数值 → 主控裁定，见 respawn 注释）
+const SHIP_TEX_R := 38.0                       # 舰体贴图本体半径 px（TextureFactory.ship 96 画布）
+const VISUAL_MULT := 1.35                      # 视觉半径 / 命中盒（弹幕游戏惯例：盒小于形）
+const FLASH_TIME := 0.18                       # 受击白闪时长
+const PUNCH_TIME := 0.24                       # 受击 squash punch 时长
 
 
 func _ready() -> void:
-	# 组注册（敌/敌弹经组查找缓存玩家引用）+ 命中盒/拾取区/占位渲染组装（代码组装为主）
+	# 组注册（敌/敌弹经组查找缓存玩家引用）+ 命中盒/拾取区/贴纸渲染组装（代码组装为主）
 	add_to_group(&"player")
 	_hit_shape = CollisionShape2D.new()
 	_hit_shape.name = "HitShape"
@@ -52,14 +60,26 @@ func _ready() -> void:
 	_pickup_shape.shape = pickup_circle
 	_pickup_area.add_child(_pickup_shape)
 	add_child(_pickup_area)
+	# 方向 C「哨兵-9」：天空蓝圆头小飞船（厚描边 + 白肚皮）+ 喷气小尾巴
+	_visual_scale = hitbox_radius * VISUAL_MULT / SHIP_TEX_R
+	_flame = Sprite2D.new()
+	_flame.name = "Flame"
+	_flame.texture = TextureFactory.ship_flame()
+	_flame.position = Vector2(0.0, 26.0)
+	_flame.visible = false
+	add_child(_flame)
 	_sprite = Sprite2D.new()
 	_sprite.name = "Visual"
 	_sprite.centered = true
-	_sprite.texture = _get_placeholder_texture()
-	var scale_f := hitbox_radius / (TEX_SIZE * 0.5)
-	_sprite.scale = Vector2(scale_f, scale_f)
-	_sprite.self_modulate = BODY_COLOR
+	_sprite.texture = TextureFactory.ship()
+	_sprite.scale = Vector2(_visual_scale, _visual_scale)
 	add_child(_sprite)
+	_flash = Sprite2D.new()
+	_flash.name = "Flash"
+	_flash.texture = TextureFactory.ship(true)
+	_flash.scale = Vector2(_visual_scale, _visual_scale)
+	_flash.visible = false
+	add_child(_flash)
 	weapon_slots.resize(MAX_SLOTS)
 	EventBus.slot_unlocked.connect(_on_slot_unlocked_event)
 	var bal := GameConfig.balance
@@ -93,6 +113,7 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 	for weapon in weapon_slots:
 		if weapon != null:
 			weapon.tick(p_game_delta)
+	_tick_visual(p_game_delta, total)
 
 
 func _unhandled_input(p_event: InputEvent) -> void:
@@ -112,6 +133,8 @@ func take_contact_damage(p_dmg: float) -> void:
 	var dmg := maxf(p_dmg, 0.0)
 	hp -= dmg
 	invuln_left = GameConfig.balance.contact_tick if GameConfig.balance != null else 0.6
+	_flash_left = FLASH_TIME                     # 方向 C：受击变白弹回
+	_punch_left = PUNCH_TIME
 	EventBus.emit_player_hit(dmg, 0)
 	if hp <= 0.0:
 		hp = 0.0
@@ -209,6 +232,13 @@ func respawn() -> void:
 	unlocked_slots = 1
 	invuln_left = RESPAWN_INVULN_S
 	_drag_accum = Vector2.ZERO
+	_flash_left = 0.0                            # 表现态复位（方向 C）
+	_punch_left = 0.0
+	_tilt = 0.0
+	modulate.a = 1.0
+	if _sprite != null:
+		_sprite.scale = Vector2(_visual_scale, _visual_scale)
+		_sprite.rotation = 0.0
 
 
 func get_hp_pct() -> float:
@@ -249,16 +279,37 @@ func _xp_need_for(p_level: int) -> float:
 	return base * pow(float(maxi(p_level, 1)), power)
 
 
-static func _get_placeholder_texture() -> ImageTexture:
-	# 共享静态占位圆形纹理（程序化生成；美术后续替换）
-	if _shared_texture == null:
-		var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
-		var c := float(TEX_SIZE) * 0.5 - 0.5
-		for y in range(TEX_SIZE):
-			for x in range(TEX_SIZE):
-				var dx := float(x) - c
-				var dy := float(y) - c
-				if dx * dx + dy * dy <= c * c:
-					img.set_pixel(x, y, Color.WHITE)
-		_shared_texture = ImageTexture.create_from_image(img)
-	return _shared_texture
+# ── 方向 C 表现层（贴纸舰体：倾斜 / 尾焰 / 受击白闪弹回 / 无敌闪烁） ──
+func _tick_visual(p_game_delta: float, p_move: Vector2) -> void:
+	# 纯表现（game_delta 通道——顿帧自然冻结）；不触碰数值与碰撞
+	_anim_t += p_game_delta
+	# 移动倾斜（横移 bank）+ 移动拉伸
+	var target_tilt := clampf(-p_move.x * 0.05, -0.38, 0.38)
+	_tilt += (target_tilt - _tilt) * minf(p_game_delta * 16.0, 1.0)
+	var moving := p_move.length_squared() > 0.01
+	var squash := minf(p_move.length() * 0.012, 0.18)
+	var punch := 1.0
+	if _punch_left > 0.0:
+		_punch_left = maxf(_punch_left - p_game_delta, 0.0)
+		var bt := 1.0 - _punch_left / PUNCH_TIME
+		punch = 1.0 + 0.34 * exp(-5.0 * bt) * sin(bt * 20.0)
+	_sprite.rotation = _tilt
+	_sprite.scale = Vector2(_visual_scale * (1.0 - squash) * punch,
+		_visual_scale * (1.0 + squash) / punch)
+	# 尾焰：移动时点亮 + 频闪抖动
+	_flame.visible = moving and not _dead
+	if _flame.visible:
+		_flame.rotation = _tilt
+		_flame.position = Vector2(0.0, 26.0).rotated(_tilt)
+		var flicker := 0.9 + 0.25 * sin(_anim_t * 42.0)
+		_flame.scale = Vector2(_visual_scale * flicker, _visual_scale * (1.6 - flicker * 0.5))
+	# 受击白闪剪影
+	if _flash_left > 0.0:
+		_flash_left = maxf(_flash_left - p_game_delta, 0.0)
+		_flash.visible = true
+		_flash.rotation = _tilt
+		_flash.modulate.a = clampf(_flash_left / FLASH_TIME, 0.0, 1.0)
+	else:
+		_flash.visible = false
+	# 无敌帧闪烁（半透呼吸）
+	modulate.a = 0.62 + 0.38 * sin(_anim_t * 26.0) if invuln_left > 0.0 else 1.0
