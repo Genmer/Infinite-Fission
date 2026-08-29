@@ -62,7 +62,7 @@ func bind_events() -> void:
 	EventBus.state_changed.connect(_on_state_changed)
 	EventBus.damage_resolved.connect(_on_damage_resolved)
 	EventBus.boss_spawned.connect(_on_boss_banner)
-	EventBus.achievements_changed.connect(_on_achievement_toast)
+	Meta.achievements_changed.connect(_on_achievement_toast)   # 信号在 Meta（非 EventBus）
 	EventBus.card_chosen.connect(_on_card_chosen_build)
 
 
