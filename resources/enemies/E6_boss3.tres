@@ -18,5 +18,5 @@ tags = 2
 hitbox_r = 14.0
 ranged = {}
 elite_mult = {}
-boss = {"phases": 3, "phase2_resist": 0.2, "bullet_patterns": {"interval_s": 4.0, "pattern": "spiral", "count": 20, "dmg": 20.0}, "summons": {"interval_s": 8.0, "phase": 2, "enemy_id": "E4_volatile", "count": 6}, "charge": {"phase": 2, "hp_threshold": 0.66, "spd": 380.0}, "phase3": {"hp_threshold": 0.33, "resist": 0.25, "laser_sweep": {"interval_s": 9.0, "warn_s": 1.2, "width_px": 90.0, "dmg": 35.0}}}
+boss = {"phases": 3, "phase2_resist": 0.2, "bullet_patterns": {"interval_s": 3.2, "pattern": "spiral", "count": 32, "dmg": 20.0}, "summons": {"interval_s": 8.0, "phase": 2, "enemy_id": "E4_volatile", "count": 6}, "charge": {"phase": 2, "hp_threshold": 0.66, "spd": 380.0}, "phase3": {"hp_threshold": 0.33, "resist": 0.25, "laser_sweep": {"interval_s": 9.0, "warn_s": 1.2, "width_px": 90.0, "dmg": 35.0}}}
 gold_drop = {"chance": 1.0, "min": 100, "max": 160}

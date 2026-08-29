@@ -18,7 +18,7 @@ var _cards: Array[Dictionary] = []            # 当前货架（open 注入）
 var _title: Label = null
 var _card_faces: Array[Dictionary] = []       # 卡面子件 {band, stamp, kind, name, desc, dots}
 
-const KIND_NAMES: Array[String] = ["精通", "词条", "遗物", "保底"]
+const KIND_NAMES: Array[String] = ["精通", "词条", "遗物", "保底", "新武器"]
 const CARD_SIZE := Vector2(600.0, 180.0)
 const CARD_X := 60.0
 const CARD_TOP := 264.0                       # 首卡 y（错峰果冻出场基准）

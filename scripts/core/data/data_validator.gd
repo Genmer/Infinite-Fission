@@ -37,7 +37,7 @@ const CONTRIBUTION_EXPRS: Array[String] = ["value", "value * (ctx.pierce_index -
 # EF_CRIT_SHARD 随审查 Fix 4 落地，双清单必须同步）
 const TECH_EFFECT_IDS: Array[StringName] = [
 	&"EF_STAT", &"EF_SIZE", &"EF_FRACTAL", &"EF_BOUNCE", &"EF_ELEMENTAL", &"EF_MECH",
-	&"EF_CRIT_SHARD",
+	&"EF_CRIT_SHARD", &"EF_HIT_BURST",
 ]
 # F-21 硬约束（与 BalanceTables.decay_delta_max 默认值一致；单一常数避免加载循环依赖）
 const MAX_DECAY_DELTA := 0.92
@@ -159,7 +159,7 @@ func validate_trait(t: TraitData) -> Array:
 			_err(out, &"pool_id", t.pool_id == &"" or not LOCAL_POOL_IDS.has(t.pool_id), "pool_id 必填且 ∈ Local 池封闭注册表")
 	# effect_id 必填且 ∈ builtin 处理器注册表（AC-13.3 悬空 effect_id 剔除）
 	_err(out, &"effect_id", t.effect_id == &"" or not TECH_EFFECT_IDS.has(t.effect_id),
-		"effect_id 必填且 ∈ TECH_EFFECT_IDS（EF_STAT/EF_SIZE/EF_FRACTAL/EF_BOUNCE/EF_ELEMENTAL/EF_MECH/EF_CRIT_SHARD）")
+		"effect_id 必填且 ∈ TECH_EFFECT_IDS（EF_STAT/EF_SIZE/EF_FRACTAL/EF_BOUNCE/EF_ELEMENTAL/EF_MECH/EF_CRIT_SHARD/EF_HIT_BURST）")
 	_err(out, &"stack_max", t.stack_max < 1, "stack_max ≥ 1")
 	if t.pool == GameConst.PoolClass.ADD:
 		_err(out, &"decay_delta", t.decay_delta <= 0.0 or t.decay_delta > MAX_DECAY_DELTA,

@@ -254,6 +254,33 @@ static func _enemy_layers(p_kind: StringName, p_angry: bool) -> Array:
 				Vector2(1.5, 8.5), Vector2(5.0, 8.5), Vector2(3.2, 13.5),
 			])), "fill": Color.WHITE, "ow": 0.0})
 			return layers3
+		&"spitter":
+			# E7 喷吐者（远程兵）：深红圆球 + 顶生三叶喷口 + 张开的大管嘴 + 斜吊不爽眼
+			var leaf_l := PackedVector2Array([
+				Vector2(-4.0, -24.0), Vector2(-20.0, -34.0), Vector2(-8.0, -16.0),
+			])
+			var leaf_r := PackedVector2Array([
+				Vector2(4.0, -24.0), Vector2(20.0, -34.0), Vector2(8.0, -16.0),
+			])
+			var leaf_c := PackedVector2Array([
+				Vector2(0.0, -26.0), Vector2(-4.5, -40.0), Vector2(4.5, -40.0),
+			])
+			return [
+				{"sd": _circle_at(Vector2(0.0, 4.0), 25.0), "fill": PopPalette.ENEMY_DEEP, "ow": 6.5},
+				{"sd": _poly_sd(leaf_l), "fill": PopPalette.SUCCESS.lerp(PopPalette.ENEMY, 0.25), "ow": 3.0},
+				{"sd": _poly_sd(leaf_r), "fill": PopPalette.SUCCESS.lerp(PopPalette.ENEMY, 0.25), "ow": 3.0},
+				{"sd": _poly_sd(leaf_c), "fill": PopPalette.SUCCESS, "ow": 3.0},
+				{"sd": _circle_at(Vector2(0.0, 10.0), 11.0), "fill": PopPalette.OUTLINE, "ow": 3.0},
+				{"sd": _circle_at(Vector2(0.0, 8.0), 6.0), "fill": Color(0.16, 0.09, 0.12, 1.0), "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(-10.0, -6.0), Vector2(6.4, 1.9), 1.0, -0.38),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(10.0, -6.0), Vector2(6.4, 1.9), 1.0, 0.38),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-12.5, -4.6), 1.7), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(12.5, -4.6), 1.7), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-18.0, 8.0), 3.4), "fill": blush, "ow": 0.0},
+				{"sd": _circle_at(Vector2(18.0, 8.0), 3.4), "fill": blush, "ow": 0.0},
+			]
 		_:
 			# grunt（E1 杂兵）：珊瑚圆球 + 好奇眼睛 + 腮红小嘴 + 顶呆毛（气球结剪影）
 			return _grunt_face(blush, 26.0)
@@ -419,7 +446,7 @@ static func confetti_piece(p_kind: int) -> ImageTexture:
 
 static func type_icon(p_kind: int, p_pool: int) -> ImageTexture:
 	# 选卡类型圆章：白圆章 + 藏青描边，内嵌类别形（ADD 菱 / MULT 三角 / LOCAL 圆角方 /
-	# MECH 六边 / ELEM 圆环 / MASTERY 金星 / RELIC 葡萄钻 / FALLBACK 灰菱）
+	# MECH 六边 / ELEM 圆环 / MASTERY 金星 / RELIC 葡萄钻 / FALLBACK 灰菱 / WEAPON 小火箭）
 	var key := "type_icon_%d_%d" % [p_kind, p_pool]
 	return _cached(key, func() -> ImageTexture:
 		var layers: Array = [
@@ -436,6 +463,10 @@ static func type_icon(p_kind: int, p_pool: int) -> ImageTexture:
 					_: layers.append({"sd": _ring_at(9.0, 4.6), "fill": PopPalette.SHOCK, "ow": 0.0})
 			0: layers.append({"sd": _poly_sd(_star_pts(14.0, 6.4)), "fill": PopPalette.GOLD, "ow": 0.0})   # MASTERY
 			2: layers.append({"sd": _poly_sd(_regular_pts(4, 13.5, 0.0)), "fill": PopPalette.SHOCK, "ow": 0.0})  # RELIC
+			4:                                     # WEAPON：小火箭（新武器卡，玩家蓝）
+				layers.append({"sd": _poly_sd(PackedVector2Array([
+					Vector2(0.0, -14.0), Vector2(8.0, 8.0), Vector2(0.0, 3.0), Vector2(-8.0, 8.0),
+				])), "fill": PopPalette.PLAYER, "ow": 0.0})
 			_: layers.append({"sd": _poly_sd(_regular_pts(4, 13.5)), "fill": PopPalette.INK_SOFT, "ow": 0.0})  # FALLBACK
 		return _render(64, 64, _shade(layers)))
 

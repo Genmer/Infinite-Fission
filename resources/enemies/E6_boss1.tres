@@ -18,5 +18,5 @@ tags = 2
 hitbox_r = 14.0
 ranged = {}
 elite_mult = {}
-boss = {"phases": 2, "phase2_resist": 0.2, "bullet_patterns": {"interval_s": 6.0, "pattern": "fan", "count": 8, "count_phase2": 12, "dmg": 12.0}, "summons": {"interval_s": 12.0, "enemy_id": "E1_grunt", "count": 4}}
+boss = {"phases": 2, "phase2_resist": 0.2, "bullet_patterns": {"interval_s": 4.6, "pattern": "fan", "count": 14, "count_phase2": 22, "dmg": 12.0}, "summons": {"interval_s": 12.0, "enemy_id": "E1_grunt", "count": 4}}
 gold_drop = {"chance": 1.0, "min": 100, "max": 140}

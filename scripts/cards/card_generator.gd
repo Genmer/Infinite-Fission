@@ -11,7 +11,7 @@
 class_name CardGenerator
 extends RefCounted
 
-enum CardKind { MASTERY, TRAIT, RELIC, FALLBACK }
+enum CardKind { MASTERY, TRAIT, RELIC, FALLBACK, WEAPON }
 
 var registry: DataRegistry = null             # M-14 注入
 var rarity_weights: Dictionary = {}           # {rarity(int) -> weight(float)}（按波次折算）
@@ -30,9 +30,12 @@ func _init() -> void:
 	# 承担，卡牌流不引入额外随机源。
 	rng.seed = RNG_SEED
 
-# 类别权重静态表（A3 §6.3 原值；BalanceTables.category_weights 为同源镜像）
+# 类别权重静态表（A3 §6.3 原值；BalanceTables.category_weights 为同源镜像）。
+# WEAPON（用户反馈 2026-08-29「怎么只有手枪」：原版无任何新武器获取途径——equip_weapon
+# 全工程零调用点；新武器卡补全构筑获取链）。
 const CATEGORY_WEIGHTS := {
-	"MASTERY": 12.0, "ADD": 40.0, "MULT": 18.0, "MECH": 14.0, "ELEM": 10.0, "RELIC": 6.0,
+	"MASTERY": 12.0, "ADD": 36.0, "MULT": 18.0, "MECH": 14.0, "ELEM": 10.0, "RELIC": 6.0,
+	"WEAPON": 10.0,
 }
 const CANDIDATE_COUNT := 3                    # 三选一
 const MAX_WEAPON_TRAITS := 12                 # 单武器词条上限（WeaponBase.attach_trait 拒绝线）
@@ -158,6 +161,11 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 				# 紫/金精通连升 2 级（level_boosts 由 _apply_rarity_values 落卡；封顶在 level_up 内）
 				for i in range(maxi(int(p_card.get("level_boosts", 1)), 1)):
 					weapon.call(&"level_up")     # WeaponBase.level_up：level+1 → 面板失效 → leveled 信号
+		CardKind.WEAPON:
+			# 新武器装配（用户反馈 2026-08-29「怎么只有手枪」——原版无获取途径）
+			var wdata: WeaponData = p_card.get("data")
+			if wdata != null and p_player != null and p_player.has_method(&"equip_weapon"):
+				p_player.call(&"equip_weapon", wdata)
 		CardKind.TRAIT, CardKind.FALLBACK:
 			var data: TraitData = p_card.get("data")
 			if data != null:
@@ -208,6 +216,12 @@ func _roll_one(p_player: Node, p_wave: int, p_picked: Array[StringName]) -> Dict
 				if not trait_pool.is_empty():
 					var tid: StringName = trait_pool[rng.randi_range(0, trait_pool.size() - 1)]
 					return _make_trait_card(tid, p_wave)
+			"WEAPON":
+				# 新武器卡（用户反馈 2026-08-29）：未持有武器 + 有空槽 → 随机一把上架
+				var weapon_pool := _weapon_candidates(p_player)
+				if not weapon_pool.is_empty():
+					var wdata: WeaponData = weapon_pool[rng.randi_range(0, weapon_pool.size() - 1)]
+					return _make_weapon_card(wdata)
 			"RELIC":
 				var relics := _unowned_relic_ids()
 				if not relics.is_empty():
@@ -247,6 +261,53 @@ func _mastery_candidates(p_player: Node) -> Array:
 		if w is WeaponBase and is_instance_valid(w) and int(w.get("level")) < WeaponBase.MAX_LEVEL:
 			out.append(w)
 	return out
+
+
+func _weapon_candidates(p_player: Node) -> Array[WeaponData]:
+	# 新武器卡候选（用户反馈 2026-08-29「怎么只有手枪」）：注册表武器 − 已持有，
+	# 且玩家存在已解锁空槽（equip_weapon 首空槽口径，满员不上架）
+	var out: Array[WeaponData] = []
+	if registry == null or p_player == null:
+		return out
+	var has_free_slot := false
+	var owned: Dictionary = {}
+	for w in p_player.get("weapon_slots"):
+		if w is WeaponBase and is_instance_valid(w):
+			var wd: WeaponData = w.get("data")
+			if wd != null:
+				owned[wd.id] = true
+	var unlocked: int = int(p_player.get("unlocked_slots"))
+	var slots: Array = p_player.get("weapon_slots")
+	for i in range(mini(unlocked, slots.size())):
+		if slots[i] == null:
+			has_free_slot = true
+			break
+	if not has_free_slot:
+		return out
+	for wid in registry.weapons.keys():
+		if owned.has(wid):
+			continue
+		var wd := registry.get_weapon(wid)
+		if wd != null:
+			out.append(wd)
+	return out
+
+
+func _make_weapon_card(p_wdata: WeaponData) -> Dictionary:
+	# 新武器卡：应用 = Player.equip_weapon（首空槽装配 + 词条随武器重建）
+	var wname := p_wdata.display_name if p_wdata != null else "?"
+	var form_names := ["弹道", "激光", "自导", "近战"]
+	var form_txt: String = form_names[clampi(int(p_wdata.form), 0, 3)] \
+		if p_wdata != null else "?"
+	return {
+		"kind": CardKind.WEAPON,
+		"id": StringName(String(p_wdata.id)) if p_wdata != null else &"",
+		"rarity": 2,
+		"data": p_wdata,
+		"display_name": "新武器：%s" % wname,
+		"description": "%s形态武器，装配至空槽位（词条随武器独立成长）" % form_txt,
+		"value_scale": 1.0,
+	}
 
 
 func _unowned_relic_ids() -> Array[StringName]:
@@ -345,15 +406,16 @@ const CARD_EXTRA_CURSE_PARAMS := {"curse_atk_pct": -0.1}
 
 # ── 内部：权重工具 ────────────────────────────────────────────────
 func _roll_rarity(p_wave: int) -> int:
-	# A3 §6.1：w<10 基础 {58,30,10,2}；w≥10 调整公式（收敛于深度列）
+	# A3 §6.1 基础 {58,30,10,2} → 用户反馈 2026-08-29「金色概率稍微高点」：{46,30,15,6}
+	# + 波次成长加强（金 6×(1+0.06w)；w≥10 生效调整公式）
 	rarity_weights = {
-		0: 58.0, 1: 30.0, 2: 10.0, 3: 2.0,
+		0: 46.0, 1: 30.0, 2: 15.0, 3: 6.0,
 	}
 	if p_wave >= 10:
-		rarity_weights[0] = maxf(58.0 - 0.7 * float(p_wave), 40.0)
+		rarity_weights[0] = maxf(46.0 - 0.6 * float(p_wave), 34.0)
 		rarity_weights[1] = minf(30.0 + 0.1 * float(p_wave), 34.0)
-		rarity_weights[2] = 10.0 * (1.0 + 0.045 * float(p_wave))
-		rarity_weights[3] = 2.0 * (1.0 + 0.075 * float(p_wave))
+		rarity_weights[2] = minf(15.0 * (1.0 + 0.05 * float(p_wave)), 30.0)
+		rarity_weights[3] = 6.0 * (1.0 + 0.06 * float(p_wave))
 	return int(_weighted_key(rarity_weights))
 
 

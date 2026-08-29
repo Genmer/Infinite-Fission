@@ -208,10 +208,14 @@ func _reset_state() -> void:
 
 func _draw() -> void:
 	# 力场本体渲染：淡薄荷填充 + 虚线轨道环 + 公转扫掠残辉（占位圆已废——用户反馈）
+	# + 底部数值标注（用户反馈二轮「下面还要有具体的值」：环绕数 / 单击伤害）
 	if not visible:
 		return
 	var mint := PopPalette.SUCCESS
-	draw_circle(Vector2.ZERO, orbit_radius, Color(mint.r, mint.g, mint.b, 0.05))
+	draw_circle(Vector2.ZERO, orbit_radius, Color(mint.r, mint.g, mint.b, 0.07))
+	var pulse := 0.5 + 0.5 * sin(angle * 2.0)
+	draw_arc(Vector2.ZERO, orbit_radius, 0.0, TAU, 64,
+		Color(mint.r, mint.g, mint.b, 0.05 + 0.04 * pulse), orbit_radius * 0.10, true)
 	var seg_arc := TAU / float(PATH_DASHES)
 	for i in range(PATH_DASHES):
 		if i % 2 == 0:
@@ -223,3 +227,11 @@ func _draw() -> void:
 	var trail_a := angle - deg_to_rad(42.0)
 	draw_arc(Vector2.ZERO, orbit_radius, trail_a, angle, 12,
 		Color(mint.r, mint.g, mint.b, 0.18), orb_radius * 1.5, true)
+	# 数值标注（力场下缘：环绕 ×N · 单击伤害；半透明贴纸风小字）
+	var atk := 0.0
+	if weapon != null and is_instance_valid(weapon):
+		atk = float(weapon.build_panel_snapshot().get("base_atk", 0.0))
+	var txt := "环绕 ×%d · %.0f/击" % [orbs, atk]
+	var font := ThemeDB.fallback_font
+	draw_string(font, Vector2(-60.0, orbit_radius + 22.0), txt,
+		HORIZONTAL_ALIGNMENT_CENTER, 120.0, 13, Color(mint.r, mint.g, mint.b, 0.85))

@@ -341,13 +341,13 @@ func _test_card_flow() -> void:
 		if not c.has("kind") or not c.has("id") or not c.has("display_name"):
 			kinds_ok = false
 	_check("卡面字段齐全（kind/id/display_name）", kinds_ok)
-	# 稀有度 roll（A3 §6.1 权重分布抽样：金卡概率 2/100 → 500 抽 0~30 张）
+	# 稀有度 roll（用户反馈 2026-08-29 提金率：基础 {46,30,15,6} → w5 金卡 6% → 500 抽期望 30）
 	var gold := 0
 	gen.rng.seed = 777
 	for i in range(500):
 		if gen._roll_rarity(5) == 3:
 			gold += 1
-	_check("稀有度权重分布合理（金卡 500 抽 ≤40，w<10 基础权重 2%）", gold <= 40, "gold=%d" % gold)
+	_check("稀有度权重分布合理（金卡 500 抽 ≤55，w<10 基础权重 6%）", gold <= 55, "gold=%d" % gold)
 	# 池过滤：叠层上限（AFF_ATK_UP stack_max=3，§6.4 至上限移出池）
 	var atk := _gl.registry.get_trait(&"AFF_ATK_UP")
 	_check("夹具：AFF_ATK_UP 存在（stack_max=3）", atk != null and atk.stack_max == 3)

@@ -114,6 +114,9 @@ func request_hit_stop(p_duration_ms: float) -> void:
 
 func tick(p_raw_delta: float) -> void:
 	# raw 通道：顿帧剩余衰减 / trauma 衰减 / 色差线性归零（顿帧期间表现层照常，Q-14）
+	# + 粒子发射器寿命兜底回收（爆炸残留修复，用户反馈 2026-08-29）
+	if particles != null and particles.particle_pool != null:
+		particles.particle_pool.reap_expired(p_raw_delta)
 	_raw_elapsed += p_raw_delta
 	if hit_stop_left > 0.0:
 		hit_stop_left = maxf(hit_stop_left - p_raw_delta, 0.0)

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"MEC_HIT_BURST"
+display_name = "命中迸裂"
+description = "命中时向落点半径 80 内迸裂 35% ATK（用户反馈 2026-08-29「命中分裂扩散」）；2 层 45%/半径 100"
+pool = 3
+pool_id = &""
+effect_id = &"EF_HIT_BURST"
+value = 0.35
+value2 = 0.0
+params = {"radius": 80.0, "ratio_lv2": 1.28, "radius_lv2": 100.0}
+event_hooks = [2]
+stack_max = 2
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 2
+tags = 0
+condition = {}
