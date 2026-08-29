@@ -37,6 +37,13 @@ const CATEGORY_WEIGHTS := {
 const CANDIDATE_COUNT := 3                    # 三选一
 const MAX_WEAPON_TRAITS := 12                 # 单武器词条上限（WeaponBase.attach_trait 拒绝线）
 const FALLBACK_ATK_PCT := 0.05                # fallback 属性卡：攻击 +5%（AC-16.4 原文）
+# 稀有度数值倍率（用户反馈 2026-08-29「不同等级数值差距大点，不然没有刷金卡的爽感」：
+# 原口径稀有度 roll 只影响卡面颜色，词条 value 恒为 .tres 定值 → 金白同值无爽感）。
+# 白/蓝/紫/金 → value ×倍率，卡面描述首百分比同步重写；MASTERY 紫/金 → 连升 2 级。
+const RARITY_VALUE_SCALE := [1.0, 1.4, 1.9, 2.6]
+const MASTERY_DOUBLE_RARITY := 2              # 紫(2)/金(3) 精通卡 → +2 级
+
+var _re_pct := RegEx.create_from_string("[+-]?\\d+(\\.\\d+)?%")   # 描述首百分比定位
 
 
 func setup(p_registry: DataRegistry) -> void:
@@ -85,7 +92,60 @@ func generate_candidates(p_context: Dictionary) -> Array[Dictionary]:
 	# REL_GAMBLER：第 4 张必带诅咒（apply_choice 侧附加 ATK −10% 诅咒词条）
 	if bool(p_context.get("curse_last", false)) and out.size() >= 4:
 		out[3]["cursed"] = true
+	# 稀有度 → 数值落值（必须在 floor/fixed 覆盖之后：保底/重随改写稀有度时数值随行）
+	_apply_rarity_values(out)
 	return out
+
+
+func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
+	# 稀有度 × RARITY_VALUE_SCALE 落值：TRAIT 复制注册表资源后缩放 value（共享 .tres
+	# 不落改，E-08 纪律）+ 描述首百分比重写；MASTERY 紫/金 = 连升 2 级（封顶 MAX_LEVEL）。
+	for card in p_cards:
+		var rarity := clampi(int(card.get("rarity", 0)), 0, RARITY_VALUE_SCALE.size() - 1)
+		var scale := float(RARITY_VALUE_SCALE[rarity])
+		match int(card.get("kind", CardKind.FALLBACK)):
+			CardKind.TRAIT:
+				if bool(card.get("scaled", false)):
+					continue
+				card["value_scale"] = scale
+				card["scaled"] = true
+				var data: TraitData = card.get("data")
+				if data == null or scale <= 1.0:
+					continue
+				var scaled := data.duplicate() as TraitData
+				scaled.value = data.value * scale
+				scaled.description = _scaled_description(data.description, scale, rarity)
+				card["data"] = scaled
+				card["description"] = scaled.description
+			CardKind.MASTERY:
+				var weapon: Object = card.get("weapon")
+				if weapon == null or not is_instance_valid(weapon):
+					continue
+				var boosts := 2 if rarity >= MASTERY_DOUBLE_RARITY else 1
+				card["level_boosts"] = boosts
+				var lv := int(weapon.get("level"))
+				var target := mini(lv + boosts, WeaponBase.MAX_LEVEL)
+				var wdata: WeaponData = weapon.get("data")
+				var wname := wdata.display_name if wdata != null else "?"
+				card["display_name"] = "精通：%s +%d" % [wname, target]
+				card["description"] = ("武器等级 +%d（终值表口径）" % (target - lv)) \
+					if target > lv else "已满级（终值表口径）"
+
+
+func _scaled_description(p_desc: String, p_scale: float, p_rarity: int) -> String:
+	# 描述首 "N%" 重写为缩放后值（+15% → 金卡 +39%）；无百分比 → 追加品质倍率尾注
+	var m := _re_pct.search(p_desc)
+	if m == null:
+		return "%s（%s强化 ×%.1f）" % [p_desc, PopPalette.rarity_name(p_rarity), p_scale]
+	var raw := m.get_string()
+	var num := raw.trim_suffix("%").to_float()
+	var scaled_num := num * p_scale
+	var txt := ("%+.0f" % scaled_num) if (raw.begins_with("+") or raw.begins_with("-")) \
+		else ("%.0f" % scaled_num)
+	if not is_equal_approx(scaled_num, roundf(scaled_num)):
+		txt = ("%+.1f" % scaled_num) if (raw.begins_with("+") or raw.begins_with("-")) \
+			else ("%.1f" % scaled_num)
+	return p_desc.substr(0, m.get_start()) + txt + "%" + p_desc.substr(m.get_end())
 
 
 func apply_choice(p_card: Dictionary, p_player: Node) -> void:
@@ -95,7 +155,9 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 		CardKind.MASTERY:
 			var weapon: Object = p_card.get("weapon")
 			if weapon != null and is_instance_valid(weapon) and weapon.has_method(&"level_up"):
-				weapon.call(&"level_up")         # WeaponBase.level_up：level+1 → 面板失效 → leveled 信号
+				# 紫/金精通连升 2 级（level_boosts 由 _apply_rarity_values 落卡；封顶在 level_up 内）
+				for i in range(maxi(int(p_card.get("level_boosts", 1)), 1)):
+					weapon.call(&"level_up")     # WeaponBase.level_up：level+1 → 面板失效 → leveled 信号
 		CardKind.TRAIT, CardKind.FALLBACK:
 			var data: TraitData = p_card.get("data")
 			if data != null:

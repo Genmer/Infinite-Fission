@@ -82,14 +82,17 @@ var _dash_dir: Vector2 = Vector2.ZERO         # E2 冲刺锁定方向（蓄力�
 
 # 方向 C 元素状态表现层（用户反馈 2026-08-29「闪电/灼烧等特效」；只读 ElementalState，
 # 零数值/碰撞副作用，_reset_state 全复位，共享贴图 + 无逐敌 shader）：
-var _burn_flames: Array[Sprite2D] = []        # 点燃：顶部上飘火苗 ×3（循环重生）
+var _burn_flames: Array[Sprite2D] = []        # 点燃：顶部上飘火苗 ×4（循环重生）
+var _burn_ember: Sprite2D = null              # 点燃：体周余烬光晕（本底下层呼吸，用户反馈「燃烧看不见」）
 var _frost_shards: Array[Sprite2D] = []       # 寒滞/冻结：结霜菱形冰渣 ×3
 var _frost_ring: Sprite2D = null              # 冻结冰壳描边圈（白环）
-var _super_mist: Sprite2D = null              # 超导淡紫雾圈（半透明覆盖）
-var _shock_arc: Line2D = null                 # 感电锯齿小电弧（0.08s 即消）
-var _shock_arc_left: float = 0.0              # 电弧剩余显示时长
+var _super_mist: Sprite2D = null              # 超导淡紫雾圈（低 alpha 底层氛围）
+var _super_ring: Sprite2D = null              # 超导：旋转虚线电环（雾圈去「球」感——用户反馈）
+var _shock_arcs: Array[Line2D] = []           # 感电：双锯齿电弧（相位错开→半常亮感）
+var _shock_arc_left: float = 0.0              # 电弧剩余显示时长（两弧共用相位）
 var _shock_arc_cd: float = 0.0                # 下次电弧倒计时
 var _arc_pattern_idx: int = 0                 # 电弧顶点池轮换游标
+var _shock_ring: Sprite2D = null              # 感电：紫色电环（感电全程脉冲可见）
 static var _arc_pattern_pool: Array[PackedVector2Array] = []   # 预生成电弧折线顶点池（全敌共享）
 
 # E2 疾冲冲刺周期（视觉+走位表现；数值真源 = 本块常量，用户裁定方向 C 敌人角色化：
@@ -110,10 +113,10 @@ const BOSS_TEX_R := 40.0                      # Boss 贴图本体半径 px（96 
 const BOSS_VISUAL_MULT := 1.9                 # Boss 视觉放大倍率（大型聚合体观感；碰撞盒不变）
 const WOBBLE_TIME := 0.22                     # 受击果冻抖动时长
 const HOVER_AMP := 6.0                        # E5 悬浮幅度 px
-const BURN_FLAME_COUNT := 3                   # 点燃火苗并发数（粒子预算按敌数封顶的口径）
+const BURN_FLAME_COUNT := 4                   # 点燃火苗并发数（用户反馈「燃烧看不见」→ 加量放大）
 const FROST_SHARD_COUNT := 3                  # 结霜冰渣数
-const SHOCK_ARC_TIME := 0.08                  # 感电小电弧存活时长 s（任务口径）
-const SHOCK_ARC_PERIOD := 0.5                 # 电弧出现基础周期 s（±0.25 随机相位）
+const SHOCK_ARC_TIME := 0.13                  # 感电小电弧存活时长 s（0.08 太一闪而过，用户反馈敷衍）
+const SHOCK_ARC_PERIOD := 0.26                # 电弧出现基础周期 s（双弧相位错开 ±0.25 随机）
 static var _flash_shader: Shader = null
 
 
@@ -882,23 +885,14 @@ func _tick_status_fx(p_game_delta: float) -> void:
 	var supercon: bool = elemental.superconduct_active
 	_tick_burn_flames(p_game_delta, burning)
 	_tick_frost(chilled, frozen)
-	if shocked:
-		_tick_shock_arc(p_game_delta)
-	elif _shock_arc != null:
-		_shock_arc.visible = false
-	if supercon:
-		_ensure_super_mist()
-		_super_mist.visible = true
-		_super_mist.position = Vector2.ZERO
-		_super_mist.scale = Vector2.ONE * (hitbox_r * 3.8 / 64.0)
-		_super_mist.modulate.a = 0.34 + 0.09 * sin(_anim_t * 3.1)
-	elif _super_mist != null:
-		_super_mist.visible = false
+	_tick_shock_fx(p_game_delta, shocked)
+	_tick_super_fx(supercon)
 	_tick_status_tint(burning, chilled, frozen, shocked)
 
 
 func _ensure_super_mist() -> void:
-	# 超导淡紫雾圈（半透明覆盖；柔边白点贴图 + SHOCK 染色，非冻结不复用）
+	# 超导：淡紫雾圈（低 alpha 氛围底层）+ 旋转虚线电环（「是球」→ 环形电场感；
+	# 用户反馈 2026-08-29「感电特效敷衍，是个球」）
 	if _super_mist == null:
 		_super_mist = Sprite2D.new()
 		_super_mist.name = "SuperMist"
@@ -906,6 +900,90 @@ func _ensure_super_mist() -> void:
 		_super_mist.modulate = Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g,
 			PopPalette.SHOCK.b, 0.3)
 		add_child(_super_mist)
+	if _super_ring == null:
+		_super_ring = Sprite2D.new()
+		_super_ring.name = "SuperRing"
+		_super_ring.texture = TextureFactory.ring_tex(
+			PopPalette.SHOCK.lerp(Color.WHITE, 0.35), 64, 3.2)
+		add_child(_super_ring)
+
+
+func _tick_super_fx(p_supercon: bool) -> void:
+	# 超导表现：雾圈压暗到氛围级（alpha 0.18）+ 电环放大旋转 + 呼吸
+	if not p_supercon:
+		if _super_mist != null:
+			_super_mist.visible = false
+		if _super_ring != null:
+			_super_ring.visible = false
+		return
+	_ensure_super_mist()
+	_super_mist.visible = true
+	_super_mist.position = Vector2.ZERO
+	_super_mist.scale = Vector2.ONE * (hitbox_r * 3.0 / 64.0)
+	_super_mist.modulate.a = 0.16 + 0.05 * sin(_anim_t * 3.1)
+	_super_ring.visible = true
+	_super_ring.position = Vector2.ZERO
+	_super_ring.scale = Vector2.ONE * (hitbox_r * 2.9 / 27.0) \
+		* (1.0 + 0.05 * sin(_anim_t * 5.7))       # 贴图环半径 27px 口径（64 画布 - 描边）
+	_super_ring.rotation = _anim_t * 2.4
+	_super_ring.modulate.a = 0.62 + 0.2 * sin(_anim_t * 6.3)
+
+
+func _tick_shock_fx(p_game_delta: float, p_shocked: bool) -> void:
+	# 感电表现：紫色电环全程脉冲 + 双锯齿电弧相位错开轮闪（高频→近似常亮的「带电感」）
+	if not p_shocked:
+		for arc in _shock_arcs:
+			arc.visible = false
+		if _shock_ring != null:
+			_shock_ring.visible = false
+		return
+	if _shock_ring == null:
+		_shock_ring = Sprite2D.new()
+		_shock_ring.name = "ShockRing"
+		_shock_ring.texture = TextureFactory.ring_tex(
+			PopPalette.SHOCK.lerp(Color.WHITE, 0.5), 64, 4.2)
+		add_child(_shock_ring)
+	_shock_ring.visible = true
+	_shock_ring.position = Vector2.ZERO
+	_shock_ring.scale = Vector2.ONE * (hitbox_r * 2.2 / 27.0) \
+		* (1.0 + 0.06 * sin(_anim_t * 11.0))
+	_shock_ring.rotation = -_anim_t * 3.1
+	_shock_ring.modulate.a = 0.5 + 0.24 * sin(_anim_t * 9.2)
+	# 双电弧：同一相位池错半周期（第二弧翻转朝向），覆盖感电全程 ~100% 可见
+	if _shock_arcs.is_empty():
+		for i in range(2):
+			var arc := Line2D.new()
+			arc.name = "ShockArc%d" % i
+			arc.width = clampf(hitbox_r * 0.18, 3.0, 6.0)
+			arc.default_color = PopPalette.SHOCK.lerp(Color.WHITE, 0.25 if i == 0 else 0.0)
+			arc.joint_mode = Line2D.LINE_JOINT_ROUND
+			arc.begin_cap_mode = Line2D.LINE_CAP_ROUND
+			arc.end_cap_mode = Line2D.LINE_CAP_ROUND
+			arc.visible = false
+			add_child(arc)
+			_shock_arcs.append(arc)
+	if _shock_arc_left > 0.0:
+		_shock_arc_left = maxf(_shock_arc_left - p_game_delta, 0.0)
+		if _shock_arc_left <= 0.0:
+			for arc in _shock_arcs:
+				arc.visible = false
+	_shock_arc_cd -= p_game_delta
+	if _shock_arc_cd <= 0.0:
+		_shock_arc_cd = SHOCK_ARC_PERIOD + randf() * 0.12
+		var patterns := _get_arc_patterns()
+		for i in range(_shock_arcs.size()):
+			var arc := _shock_arcs[i]
+			arc.points = patterns[_arc_pattern_idx % patterns.size()]
+			_arc_pattern_idx += 1
+			arc.rotation = randf() * TAU
+			arc.scale = Vector2.ONE * hitbox_r * 1.35
+			arc.visible = i == 0
+		# 第二弧延迟半程点亮（错相闪烁）
+		_shock_arcs[1].visible = false
+		_shock_arc_left = SHOCK_ARC_TIME
+	if _shock_arcs.size() > 1 and _shock_arc_left > 0.0 \
+			and _shock_arc_left < SHOCK_ARC_TIME * 0.5:
+		_shock_arcs[1].visible = true
 
 
 func _reset_status_fx() -> void:
@@ -921,14 +999,35 @@ func _reset_status_fx() -> void:
 		_frost_ring.visible = false
 	if _super_mist != null:
 		_super_mist.visible = false
-	if _shock_arc != null:
-		_shock_arc.visible = false
+	if _super_ring != null:
+		_super_ring.visible = false
+	for arc in _shock_arcs:
+		arc.visible = false
+	if _shock_ring != null:
+		_shock_ring.visible = false
+	if _burn_ember != null:
+		_burn_ember.visible = false
 	if _sprite != null:
 		_sprite.self_modulate = Color.WHITE
 
 
 func _tick_burn_flames(p_game_delta: float, p_burning: bool) -> void:
-	# 点燃：顶部 2~3 粒橙红火苗循环上飘（升起→淡出→重生；预算恒 = BURN_FLAME_COUNT）
+	# 点燃：体周余烬光晕（本底下层呼吸）+ 顶部 4 粒放大火苗循环上飘（用户反馈
+	# 「燃烧的特效没看见」→ 火苗 ×2.2 放大 + 常驻光晕，小体型敌也可读）
+	if _burn_ember == null:
+		_burn_ember = Sprite2D.new()
+		_burn_ember.name = "BurnEmber"
+		_burn_ember.texture = TextureFactory.soft_dot(64)
+		_burn_ember.show_behind_parent = true     # 压到本体贴图下层（光晕不糊脸）
+		_burn_ember.modulate = Color(PopPalette.ENEMY.r, PopPalette.ENEMY.g,
+			PopPalette.ENEMY.b, 0.0)
+		add_child(_burn_ember)
+	_burn_ember.visible = p_burning
+	if p_burning:
+		_burn_ember.position = Vector2(0.0, hitbox_r * 0.12)
+		_burn_ember.scale = Vector2.ONE * hitbox_r * 0.24 \
+			* (1.0 + 0.1 * sin(_anim_t * 8.4))
+		_burn_ember.modulate.a = 0.3 + 0.1 * sin(_anim_t * 7.2)
 	if _burn_flames.is_empty():
 		if not p_burning:
 			return
@@ -947,12 +1046,12 @@ func _tick_burn_flames(p_game_delta: float, p_burning: bool) -> void:
 		var f := _burn_flames[i]
 		f.visible = true
 		var cyc := fmod(_anim_t * 1.35 + float(i) * 0.37, 1.0)     # 0→1 生命周期相位
-		var sway := sin(_anim_t * 7.0 + float(i) * 2.4) * base * 0.12
-		f.position = Vector2((float(i) - 1.0) * base * 0.5 + sway,
-			-hitbox_r * _base_scale * (0.75 + cyc * 0.85))
-		f.rotation = sway * 0.06
-		f.scale = Vector2.ONE * _base_scale * (0.58 + 0.5 * cyc)
-		f.modulate = Color(1.0, 1.0, 1.0, clampf(maxf(sin(cyc * PI) * 1.2, 0.32), 0.0, 1.0))
+		var sway := sin(_anim_t * 7.0 + float(i) * 2.4) * base * 0.16
+		f.position = Vector2((float(i) - 1.5) * base * 0.55 + sway,
+			-hitbox_r * _base_scale * (0.7 + cyc * 0.95))
+		f.rotation = sway * 0.08
+		f.scale = Vector2.ONE * _base_scale * (1.25 + 1.05 * cyc)  # ×2.2 放大（原 0.58+0.5）
+		f.modulate = Color(1.0, 1.0, 1.0, clampf(maxf(sin(cyc * PI) * 1.35, 0.4), 0.0, 1.0))
 		# 白（贴图本色：橙外焰+亮黄内芯）→ 橙红渐深（自带饱和度，避免淡黄洗白）
 		f.self_modulate = Color.WHITE.lerp(PopPalette.ENEMY, cyc * 0.7)
 
@@ -995,34 +1094,6 @@ func _tick_frost(p_chilled: bool, p_frozen: bool) -> void:
 		_frost_ring.modulate.a = 0.68 + 0.27 * sin(_anim_t * 5.2)
 	elif _frost_ring != null:
 		_frost_ring.visible = false
-
-
-func _tick_shock_arc(p_game_delta: float) -> void:
-	# 感电：绕体随机角度锯齿小电弧（3~4 段预生成折线轮换，0.08s 即消）
-	if _shock_arc == null:
-		_shock_arc = Line2D.new()
-		_shock_arc.name = "ShockArc"
-		_shock_arc.width = clampf(hitbox_r * 0.16, 2.5, 5.0)
-		_shock_arc.default_color = PopPalette.SHOCK
-		_shock_arc.joint_mode = Line2D.LINE_JOINT_ROUND
-		_shock_arc.begin_cap_mode = Line2D.LINE_CAP_ROUND
-		_shock_arc.end_cap_mode = Line2D.LINE_CAP_ROUND
-		_shock_arc.visible = false
-		add_child(_shock_arc)
-	if _shock_arc_left > 0.0:
-		_shock_arc_left = maxf(_shock_arc_left - p_game_delta, 0.0)
-		if _shock_arc_left <= 0.0:
-			_shock_arc.visible = false
-	_shock_arc_cd -= p_game_delta
-	if _shock_arc_cd <= 0.0:
-		_shock_arc_cd = SHOCK_ARC_PERIOD + randf() * 0.25
-		var patterns := _get_arc_patterns()
-		_shock_arc.points = patterns[_arc_pattern_idx % patterns.size()]
-		_arc_pattern_idx += 1
-		_shock_arc.rotation = randf() * TAU
-		_shock_arc.scale = Vector2.ONE * hitbox_r * 1.25
-		_shock_arc.visible = true
-		_shock_arc_left = SHOCK_ARC_TIME
 
 
 static func _get_arc_patterns() -> Array[PackedVector2Array]:

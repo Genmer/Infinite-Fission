@@ -22,6 +22,10 @@ const RING_R0 := 14.0                         # 冲击环起始半径 px
 const RING_R1 := 62.0                         # 冲击环结束半径 px
 const RIPPLE_COUNT := 12                      # 青色涟漪并发池（护盾格挡 / 弧斩消弹共用）
 const RIPPLE_LIFE := 0.24                     # 涟漪时长 s
+const ZAP_COUNT := 12                         # 电花碎屑并发池（闪电落点迸溅——用户反馈「是个球」）
+const ZAP_LIFE := 0.2                         # 电花碎屑时长 s
+const GLOW_COUNT := 8                         # DOT 橙光晕并发池（点燃跳伤瞬间体周闪光）
+const GLOW_LIFE := 0.18                       # 橙光晕时长 s
 
 var _bolts: Array[Dictionary] = []            # [{root, core, glow, flash, left}]（池条目）
 var _bolt_idx: int = 0
@@ -33,6 +37,10 @@ var _rings: Array[Dictionary] = []            # [{sprite, left}]
 var _ring_idx: int = 0
 var _ripples: Array[Dictionary] = []          # [{sprite, left, r0, r1}]（青色涟漪池）
 var _ripple_idx: int = 0
+var _zaps: Array[Dictionary] = []             # [{sprite, vel, rot_vel, left}]（电花碎屑池）
+var _zap_idx: int = 0
+var _glows: Array[Dictionary] = []            # [{sprite, left}]（DOT 橙光晕池）
+var _glow_idx: int = 0
 
 
 func _ready() -> void:
@@ -42,6 +50,8 @@ func _ready() -> void:
 	_build_sparks()
 	_build_rings()
 	_build_ripples()
+	_build_zaps()
+	_build_glows()
 	EventBus.chain_lightning.connect(_on_chain_lightning)
 	EventBus.elemental_dot_fired.connect(_on_dot_fired)
 	EventBus.reaction_triggered.connect(_on_reaction_triggered)
@@ -55,6 +65,8 @@ func tick(p_raw_delta: float) -> void:
 	_tick_sparks(p_raw_delta)
 	_tick_rings(p_raw_delta)
 	_tick_ripples(p_raw_delta)
+	_tick_zaps(p_raw_delta)
+	_tick_glows(p_raw_delta)
 
 
 # ── 感电连锁主锯齿闪电（签名特效） ────────────────────────────────
@@ -81,7 +93,8 @@ func _build_bolts() -> void:
 		root.add_child(core)
 		var flash := Sprite2D.new()
 		flash.name = "Flash"
-		flash.texture = TextureFactory.soft_dot(64)
+		# 星形爆闪（用户反馈「感电是个球」→ soft_dot 球换四角星 + 起始小尺寸速缩）
+		flash.texture = TextureFactory.star(48, Color.WHITE)
 		flash.modulate = Color(1.0, 1.0, 1.0, 0.9)
 		flash.visible = true
 		root.add_child(flash)
@@ -91,8 +104,8 @@ func _build_bolts() -> void:
 
 
 func _on_chain_lightning(p_from: Vector2, p_to: Vector2) -> void:
-	# 取池内下一道闪电（轮换）：定位源敌 → 重铺双层折线 + 中点闪光；终点存 meta
-	#（生命期逐帧重铺折线复用，零额外分配）
+	# 取池内下一道闪电（轮换）：定位源敌 → 重铺双层折线 + 中点星闪 + 落点电花迸溅；
+	# 终点存 meta（生命期逐帧重铺折线复用，零额外分配）
 	var bolt: Dictionary = _bolts[_bolt_idx % BOLT_COUNT]
 	_bolt_idx += 1
 	var root: Node2D = bolt["root"]
@@ -104,6 +117,8 @@ func _on_chain_lightning(p_from: Vector2, p_to: Vector2) -> void:
 	root.modulate.a = 1.0
 	_layout_bolt(bolt, local_to, 1.0)
 	bolt["left"] = BOLT_LIFE
+	for i in range(3):
+		_fire_zap(p_to)
 
 
 func _layout_bolt(p_bolt: Dictionary, p_local_to: Vector2, p_amp: float) -> void:
@@ -126,7 +141,7 @@ func _layout_bolt(p_bolt: Dictionary, p_local_to: Vector2, p_amp: float) -> void
 	glow.points = pts
 	var flash: Sprite2D = p_bolt["flash"]
 	flash.position = p_local_to * 0.5
-	flash.scale = Vector2.ONE * clampf(p_local_to.length() / 150.0, 0.5, 1.3)
+	flash.scale = Vector2.ONE * clampf(p_local_to.length() / 260.0, 0.35, 0.75)
 
 
 func _tick_bolts(p_raw_delta: float) -> void:
@@ -145,6 +160,10 @@ func _tick_bolts(p_raw_delta: float) -> void:
 		var local_to: Vector2 = root.get_meta(&"bolt_to") as Vector2
 		_layout_bolt(bolt, local_to, maxf(sin(progress * PI), 0.35))
 		root.modulate.a = clampf(1.15 - progress * 0.9, 0.25, 1.0)
+		# 中点星闪随生命期收缩旋转（爆裂感，替代原「球」观感）
+		var flash: Sprite2D = bolt["flash"]
+		flash.rotation += p_raw_delta * 14.0
+		flash.scale = flash.scale * maxf(1.0 - progress * 5.0 * p_raw_delta, 0.1)
 
 
 func _get_bolt_patterns() -> Array[PackedFloat32Array]:
@@ -171,14 +190,23 @@ func _build_sparks() -> void:
 
 
 func _on_dot_fired(p_pos: Vector2) -> void:
-	for i in range(3):
+	# 跳伤瞬间：橙光晕一闪 + 4 粒放大火星上飘（用户反馈「燃烧特效没看见」→ 加量）
+	var glow: Dictionary = _glows[_glow_idx % GLOW_COUNT]
+	_glow_idx += 1
+	var gs: Sprite2D = glow["sprite"]
+	gs.position = p_pos
+	gs.visible = true
+	glow["left"] = GLOW_LIFE
+	gs.scale = Vector2.ONE * 0.5
+	gs.modulate.a = 0.5
+	for i in range(4):
 		var spark: Dictionary = _sparks[_spark_idx % SPARK_COUNT]
 		_spark_idx += 1
 		var sp: Sprite2D = spark["sprite"]
-		sp.position = p_pos + Vector2(randf_range(-6.0, 6.0), randf_range(-6.0, 2.0))
+		sp.position = p_pos + Vector2(randf_range(-7.0, 7.0), randf_range(-5.0, 3.0))
 		sp.visible = true
-		sp.scale = Vector2.ONE * randf_range(0.55, 0.9)
-		spark["vel"] = Vector2(randf_range(-70.0, 70.0), randf_range(-190.0, -110.0))
+		sp.scale = Vector2.ONE * randf_range(0.85, 1.4)
+		spark["vel"] = Vector2(randf_range(-80.0, 80.0), randf_range(-210.0, -120.0))
 		spark["left"] = SPARK_LIFE
 
 
@@ -299,3 +327,77 @@ func _tick_rings(p_raw_delta: float) -> void:
 			sp.visible = false
 			continue
 		_layout_ring(ring, 1.0 - left / RING_LIFE)
+
+
+# ── 电花碎屑（闪电落点迸溅——用户反馈「感电是个球」的去球化配套） ──
+func _build_zaps() -> void:
+	var zap_col := PopPalette.SHOCK.lerp(Color.WHITE, 0.4)
+	for i in range(ZAP_COUNT):
+		var sp := Sprite2D.new()
+		sp.name = "ZapBit%d" % i
+		sp.texture = TextureFactory.confetti_piece(0)   # 细长小矩形（电花碎屑观感）
+		sp.modulate = zap_col
+		sp.visible = false
+		add_child(sp)
+		_zaps.append({"sprite": sp, "vel": Vector2.ZERO, "rot_vel": 0.0, "left": 0.0})
+
+
+func _fire_zap(p_pos: Vector2) -> void:
+	var zap: Dictionary = _zaps[_zap_idx % ZAP_COUNT]
+	_zap_idx += 1
+	var sp: Sprite2D = zap["sprite"]
+	var ang := randf() * TAU
+	sp.position = p_pos
+	sp.rotation = ang
+	sp.visible = true
+	sp.scale = Vector2.ONE * randf_range(0.7, 1.2)
+	zap["vel"] = Vector2.from_angle(ang) * randf_range(130.0, 260.0)
+	zap["rot_vel"] = randf_range(-14.0, 14.0)
+	zap["left"] = ZAP_LIFE
+
+
+func _tick_zaps(p_raw_delta: float) -> void:
+	for zap: Dictionary in _zaps:
+		var left := float(zap["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		zap["left"] = left
+		var sp: Sprite2D = zap["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		var vel: Vector2 = zap["vel"]
+		vel *= maxf(1.0 - 6.0 * p_raw_delta, 0.0)   # 快出快停（迸溅阻尼）
+		zap["vel"] = vel
+		sp.position += vel * p_raw_delta
+		sp.rotation += float(zap["rot_vel"]) * p_raw_delta
+		sp.modulate.a = clampf(left / ZAP_LIFE * 1.4, 0.0, 1.0)
+
+
+# ── DOT 橙光晕（点燃跳伤瞬间体周一闪） ───────────────────────────
+func _build_glows() -> void:
+	for i in range(GLOW_COUNT):
+		var sp := Sprite2D.new()
+		sp.name = "DotGlow%d" % i
+		sp.texture = TextureFactory.soft_dot(64)
+		sp.modulate = Color(PopPalette.ENEMY.lerp(PopPalette.XP, 0.55), 0.5)
+		sp.visible = false
+		add_child(sp)
+		_glows.append({"sprite": sp, "left": 0.0})
+
+
+func _tick_glows(p_raw_delta: float) -> void:
+	for glow: Dictionary in _glows:
+		var left := float(glow["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		glow["left"] = left
+		var sp: Sprite2D = glow["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		var t := 1.0 - left / GLOW_LIFE
+		sp.scale = Vector2.ONE * lerpf(0.5, 1.15, t)   # 扩散
+		sp.modulate.a = 0.5 * (1.0 - t)                # 渐隐

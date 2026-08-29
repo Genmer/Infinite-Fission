@@ -95,11 +95,15 @@ func _setup_button(p_btn: Button, p_card: Dictionary) -> void:
 	kind_label.text = "%s · %s" % [KIND_NAMES[clampi(kind, 0, KIND_NAMES.size() - 1)],
 		PopPalette.rarity_name(rarity)]
 	kind_label.add_theme_color_override("font_color", rarity_color)
-	# 名称 + 描述
+	# 名称 + 描述（高稀有度数值强化 → 尾行品质倍率角标，配合描述内重写后的百分比）
 	var name_label: Label = face["name"]
 	name_label.text = String(p_card.get("display_name", ""))
 	var desc_label: Label = face["desc"]
-	desc_label.text = String(p_card.get("description", ""))
+	var desc_text := String(p_card.get("description", ""))
+	var value_scale := float(p_card.get("value_scale", 1.0))
+	if value_scale > 1.0:
+		desc_text += "\n%s强化 ×%.1f" % [PopPalette.rarity_name(rarity), value_scale]
+	desc_label.text = desc_text
 	# 层级圆点（rarity+1 枚稀有度色圆珠）
 	var dots: HBoxContainer = face["dots"]
 	for child_v: Variant in dots.get_children():

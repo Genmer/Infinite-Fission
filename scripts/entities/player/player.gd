@@ -272,6 +272,7 @@ func unlock_slot(p_slot: int) -> bool:
 
 func gain_xp(p_amount: float) -> void:
 	# 经验/等级：xp_gained → 升级（多级连升逐次广播，弹卡排队由 GameLoop 仲裁 E-16）
+	# 升级回满血（用户反馈 2026-08-29「升级还是回满血吧」：升级即奖励，血条拉满解压）
 	var amount := maxf(p_amount, 0.0)
 	xp += amount
 	EventBus.emit_xp_gained(amount)
@@ -279,6 +280,7 @@ func gain_xp(p_amount: float) -> void:
 		xp -= xp_need
 		level += 1
 		xp_need = _xp_need_for(level)
+		hp = max_hp
 		EventBus.emit_level_up(level)
 
 
