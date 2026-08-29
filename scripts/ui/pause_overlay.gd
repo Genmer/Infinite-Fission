@@ -34,6 +34,11 @@ func is_pause_visible() -> bool:
 	return _root != null and _root.visible
 
 
+func is_details_visible() -> bool:
+	# 测试观测口（构筑详情卡可见性）
+	return _details_card != null and _details_card.visible
+
+
 func open_details(p_player: Node) -> void:
 	# 构筑详情模式开启（GameLoop 暂停仲裁通过后调用；注入 player 供内容刷新）
 	_player_ref = p_player

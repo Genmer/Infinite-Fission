@@ -531,6 +531,7 @@ func _boot_build_presentation() -> void:
 	camera.make_current()
 	menu_screen = MenuScreen.new()
 	menu_screen.name = "MenuScreen"
+	menu_screen.registry = registry             # 图鉴全量清单（大厅面板，用户反馈 M4+M6）
 	add_child(menu_screen)
 	menu_screen.start_requested.connect(start_run)
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）

@@ -1,6 +1,7 @@
 ; Engine configuration file.
 ; Infinite Fission —— 集成包（架构 §1.4）
-; autoload 注册顺序即就绪顺序：EventBus → GameConfig → DebugStats（GameConfig._ready 依赖 EventBus 先注册）
+; autoload 注册顺序即就绪顺序：EventBus → GameConfig → DebugStats → Meta
+;（GameConfig._ready 依赖 EventBus 先注册；Meta 订阅 EventBus——必须晚于其注册）
 config_version=5
 
 [application]
@@ -14,6 +15,7 @@ config/features=PackedStringArray("4.3", "Forward Plus")
 EventBus="*res://autoload/event_bus.gd"
 GameConfig="*res://autoload/game_config.gd"
 DebugStats="*res://autoload/debug_stats.gd"
+Meta="*res://scripts/meta/meta_manager.gd"
 
 [display]
 

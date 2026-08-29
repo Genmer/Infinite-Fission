@@ -5,23 +5,37 @@
 # GameLoop 状态机（迁移矩阵冻结）MENU → PLAYING 唯一入口 start_run()——本屏仅申请：
 # start_requested 信号 → GameLoop.start_run（仲裁权在 GameLoop，E-16 同源）。
 # 可见性绑定 state_changed（仅 MENU 显示）。process_mode = ALWAYS（Q-14 口径）。
+# 大厅扩展（META_ROADMAP M4+M6 落地，用户反馈「大厅、图鉴、成就」）：出发按钮下方
+# 三入口（图鉴 / 成就 / 记录）→ 全屏详情面板（图鉴 = 怪物/武器/词条三页签，遇解锁口径）。
 class_name MenuScreen
 extends CanvasLayer
 
 signal start_requested()                      # → GameLoop.start_run()（MENU → PLAYING）
+
+var registry: DataRegistry = null             # GameLoop Boot 期注入（图鉴全量清单）
 
 var _root: Control = null
 var _start_btn: Button = null
 var _pulse_tween: Tween = null                # 出发按钮果冻脉动（隐藏时暂停）
 var _mascot: TextureRect = null
 var _bob_tween: Tween = null                  # 吉祥物漂浮 idle
+var _lobby_btns: Dictionary = {}              # 入口按钮（kind → Button，刷新计数角标）
+# 详情面板运行期
+var _panel_root: Control = null
+var _panel_title: Label = null
+var _panel_list: Control = null
+var _codex_tabs: Dictionary = {}              # 页签按钮（页名 → Button）
+var _codex_tab: String = "怪物"
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_ui()
+	_build_lobby()
+	_build_panel()
 	_root.visible = false
 	EventBus.state_changed.connect(_on_state_changed)
+	Meta.codex_changed.connect(_refresh_lobby_counts)
 
 
 func _on_state_changed(p_state: int) -> void:
@@ -161,3 +175,316 @@ func _on_start_pressed() -> void:
 func is_menu_visible() -> bool:
 	# 测试观测口
 	return _root != null and _root.visible
+
+
+# ── 大厅入口（图鉴 / 成就 / 记录） ────────────────────────────────
+func _build_lobby() -> void:
+	# 出发按钮下方三入口（按钮文案带完成度角标——图鉴 x/y、成就 x/y）
+	var defs := [
+		{"kind": "codex", "text": "图鉴", "pos": Vector2(44.0, 906.0)},
+		{"kind": "ach", "text": "成就", "pos": Vector2(265.0, 906.0)},
+		{"kind": "records", "text": "记录", "pos": Vector2(486.0, 906.0)},
+	]
+	for d in defs:
+		var btn := Button.new()
+		btn.name = "Lobby_%s" % String(d.kind)
+		btn.add_theme_font_size_override("font_size", 22)
+		btn.add_theme_font_override("font", StickerTheme.font_bold())
+		btn.position = d.pos
+		btn.size = Vector2(190.0, 74.0)
+		btn.pivot_offset = btn.size * 0.5
+		btn.pressed.connect(_on_lobby_pressed.bind(String(d.kind)))
+		btn.button_down.connect(func() -> void: StickerTheme.press_punch(btn))
+		_root.add_child(btn)
+		_lobby_btns[String(d.kind)] = btn
+	_refresh_lobby_counts()
+
+
+func _refresh_lobby_counts() -> void:
+	# 入口角标：图鉴解锁数 / 成就完成数（Meta 无档时显示 0）
+	if registry == null:
+		return
+	var codex_total := registry.enemies.size() + registry.weapons.size() + registry.traits.size()
+	var codex_got := Meta.codex_kills.size() + Meta.codex_weapons.size() + Meta.codex_traits.size()
+	var ach := Meta.achievement_count()
+	(_lobby_btns["codex"] as Button).text = "图鉴 %d/%d" % [codex_got, codex_total]
+	(_lobby_btns["ach"] as Button).text = "成就 %d/%d" % [ach.x, ach.y]
+	(_lobby_btns["records"] as Button).text = "记录"
+
+
+func _on_lobby_pressed(p_kind: String) -> void:
+	_panel_root.visible = true
+	_panel_title.text = {"codex": "图鉴", "ach": "成就", "records": "历史记录"}[p_kind]
+	for kind: String in _codex_tabs:
+		(_codex_tabs[kind] as Button).visible = p_kind == "codex"
+	match p_kind:
+		"codex":
+			_rebuild_codex()
+		"ach":
+			_rebuild_achievements()
+		"records":
+			_rebuild_records()
+	StickerTheme.squash_pop(_panel_root.get_node("LobbyPanel") as Control)
+
+
+# ── 全屏详情面板（三入口共用壳） ──────────────────────────────────
+func _build_panel() -> void:
+	_panel_root = Control.new()
+	_panel_root.name = "LobbyPanelRoot"
+	_panel_root.theme = StickerTheme.theme()
+	_panel_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_panel_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_panel_root.visible = false
+	_root.add_child(_panel_root)
+	var dim := ColorRect.new()
+	dim.color = PopPalette.BG                                  # 大厅内不透明白底（盖住 menu）
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_panel_root.add_child(dim)
+	var card := Panel.new()
+	card.name = "LobbyPanel"
+	card.add_theme_stylebox_override("panel", StickerTheme.panel_style(24.0, 4, true))
+	card.position = Vector2(36.0, 96.0)
+	card.size = Vector2(648.0, 1080.0)
+	card.pivot_offset = card.size * 0.5
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_panel_root.add_child(card)
+	_panel_title = Label.new()
+	StickerTheme.label_sticker(_panel_title, 32, PopPalette.INK, 0, Color.WHITE, true)
+	_panel_title.text = "图鉴"
+	_panel_title.position = Vector2(0.0, 28.0)
+	_panel_title.size = Vector2(648.0, 42.0)
+	_panel_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card.add_child(_panel_title)
+	# 图鉴页签（仅图鉴模式可见；行 = [页名, x]）
+	var tabs := [["怪物", 36.0], ["武器", 244.0], ["词条", 452.0]]
+	for t in tabs:
+		var tab := Button.new()
+		tab.name = "Tab_%s" % String(t[0])
+		tab.text = String(t[0])
+		tab.add_theme_font_size_override("font_size", 18)
+		tab.add_theme_font_override("font", StickerTheme.font_bold())
+		tab.position = Vector2(float(t[1]), 84.0)
+		tab.size = Vector2(160.0, 54.0)
+		tab.pivot_offset = tab.size * 0.5
+		tab.pressed.connect(_on_codex_tab.bind(String(t[0])))
+		card.add_child(tab)
+		_codex_tabs[String(t[0])] = tab
+	var scroll := ScrollContainer.new()
+	scroll.name = "LobbyScroll"
+	scroll.position = Vector2(28.0, 156.0)
+	scroll.size = Vector2(592.0, 812.0)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	card.add_child(scroll)
+	_panel_list = VBoxContainer.new()
+	_panel_list.name = "LobbyList"
+	_panel_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_panel_list.add_theme_constant_override("separation", 8)
+	scroll.add_child(_panel_list)
+	var close_btn := Button.new()
+	close_btn.name = "LobbyCloseButton"
+	close_btn.text = "返回大厅"
+	close_btn.add_theme_font_size_override("font_size", 20)
+	close_btn.add_theme_font_override("font", StickerTheme.font_bold())
+	close_btn.position = Vector2(211.0, 986.0)
+	close_btn.size = Vector2(226.0, 64.0)
+	close_btn.pivot_offset = close_btn.size * 0.5
+	close_btn.pressed.connect(_on_panel_close)
+	close_btn.button_down.connect(func() -> void: StickerTheme.press_punch(close_btn))
+	card.add_child(close_btn)
+
+
+func _on_panel_close() -> void:
+	_panel_root.visible = false
+	_refresh_lobby_counts()
+
+
+func _on_codex_tab(p_tab: String) -> void:
+	_codex_tab = p_tab
+	_rebuild_codex()
+
+
+# ── 图鉴内容（怪物击杀解锁 / 武器获得解锁 / 词条抽取解锁） ────────
+func _rebuild_codex() -> void:
+	for c in _panel_list.get_children():
+		(c as Node).queue_free()
+	if registry == null:
+		return
+	match _codex_tab:
+		"怪物":
+			for eid: Variant in registry.enemies:
+				var ed: EnemyData = registry.get_enemy(eid)
+				if ed == null:
+					continue
+				var kills := Meta.codex_kill_count(eid)
+				_panel_list.add_child(_make_codex_row(
+					_enemy_icon_tex(eid), kills > 0,
+					ed.display_name if kills > 0 else "？？？",
+					"累计击杀 %d · HP %d · 经验 %d" % [kills, int(ed.hp_base), int(ed.exp_base)]
+						if kills > 0 else "未解锁：击杀一只后展示详情"))
+		"武器":
+			for wid: Variant in registry.weapons:
+				var wd: WeaponData = registry.get_weapon(wid)
+				if wd == null:
+					continue
+				var got := Meta.is_weapon_unlocked(wid)
+				_panel_list.add_child(_make_codex_row(
+					TextureFactory.weapon_icon(wid), got,
+					wd.display_name if got else "？？？",
+					_form_stat_line(wd) if got else "未解锁：抽到「新武器」卡后展示详情"))
+		"词条":
+			for tid: Variant in registry.traits:
+				var td: TraitData = registry.get_trait(tid)
+				if td == null:
+					continue
+				var got := Meta.is_trait_unlocked(tid)
+				_panel_list.add_child(_make_codex_row(
+					TextureFactory.type_icon(1, int(td.pool)), got,
+					td.display_name if got else "？？？",
+					td.description if got else "未解锁：抽到该词条卡后展示详情"))
+	_sticker_active_tab()
+
+
+func _form_stat_line(p_wd: WeaponData) -> String:
+	# 武器条目副文案：形态 + Lv1 攻击（升级表首档）
+	var form_names := ["弹道", "激光", "自导", "近战"]
+	var atk := 0.0
+	if p_wd.upgrade_table.size() > 0:
+		atk = float(p_wd.upgrade_table[0].get("base_atk"))
+	return "%s形态 · Lv1 攻击 %.0f" % [form_names[clampi(int(p_wd.form), 0, 3)], atk]
+
+
+func _enemy_icon_tex(p_eid: Variant) -> ImageTexture:
+	# 怪物 id 前缀 → 分型贴图（enemy.gd _visual_kind 同映射的菜单侧轻副本）
+	var sid := String(p_eid)
+	if sid.begins_with("E6_boss2"):
+		return TextureFactory.enemy_tex(&"boss2")
+	if sid.begins_with("E6_boss3"):
+		return TextureFactory.enemy_tex(&"boss3")
+	if sid.begins_with("E6"):
+		return TextureFactory.enemy_tex(&"boss1")
+	if sid.begins_with("E2"):
+		return TextureFactory.enemy_tex(&"dart")
+	if sid.begins_with("E3"):
+		return TextureFactory.enemy_tex(&"bastion_core")
+	if sid.begins_with("E4"):
+		return TextureFactory.enemy_tex(&"volatile")
+	if sid.begins_with("E5"):
+		return TextureFactory.enemy_tex(&"elite")
+	if sid.begins_with("E7"):
+		return TextureFactory.enemy_tex(&"spitter")
+	return TextureFactory.enemy_tex(&"grunt")
+
+
+func _make_codex_row(p_tex: ImageTexture, p_unlocked: bool, p_name: String,
+		p_desc: String) -> Control:
+	# 图鉴行：章形图标 + 名称 + 副文案（未解锁 = 剪影灰 + 问号）
+	var row := Panel.new()
+	row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
+	row.custom_minimum_size = Vector2(576.0, 64.0)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var icon := TextureRect.new()
+	icon.texture = p_tex
+	icon.position = Vector2(12.0, 12.0)
+	icon.custom_minimum_size = Vector2(40.0, 40.0)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.modulate = Color.WHITE if p_unlocked else Color(0.25, 0.27, 0.4, 0.6)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(icon)
+	var name_l := Label.new()
+	StickerTheme.label_sticker(name_l, 17, PopPalette.INK if p_unlocked else PopPalette.INK_SOFT,
+		0, Color.WHITE, true)
+	name_l.text = p_name
+	name_l.position = Vector2(64.0, 10.0)
+	name_l.size = Vector2(490.0, 24.0)
+	name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(name_l)
+	var desc_l := Label.new()
+	StickerTheme.label_sticker(desc_l, 13, PopPalette.INK_SOFT)
+	desc_l.text = p_desc
+	desc_l.position = Vector2(64.0, 34.0)
+	desc_l.size = Vector2(500.0, 22.0)
+	desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(desc_l)
+	return row
+
+
+func _sticker_active_tab() -> void:
+	# 活动页签高亮（非活动降透明）
+	for kind: String in _codex_tabs:
+		(_codex_tabs[kind] as Button).modulate = Color.WHITE \
+			if kind == _codex_tab else Color(1.0, 1.0, 1.0, 0.55)
+
+
+# ── 成就内容 ──────────────────────────────────────────────────────
+func _rebuild_achievements() -> void:
+	for c in _panel_list.get_children():
+		(c as Node).queue_free()
+	for a in Meta.ACHIEVEMENTS:
+		var done := Meta.is_ach_done(a.id)
+		var row := Panel.new()
+		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
+		row.custom_minimum_size = Vector2(576.0, 60.0)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var mark := Label.new()
+		StickerTheme.label_sticker(mark, 24, PopPalette.SUCCESS if done else PopPalette.INK_SOFT,
+			0, Color.WHITE, true)
+		mark.text = "✓" if done else "·"
+		mark.position = Vector2(18.0, 14.0)
+		mark.size = Vector2(36.0, 32.0)
+		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(mark)
+		var name_l := Label.new()
+		StickerTheme.label_sticker(name_l, 17, PopPalette.INK if done else PopPalette.INK_SOFT,
+			0, Color.WHITE, true)
+		name_l.text = String(a.name)
+		name_l.position = Vector2(60.0, 8.0)
+		name_l.size = Vector2(480.0, 24.0)
+		name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(name_l)
+		var desc_l := Label.new()
+		StickerTheme.label_sticker(desc_l, 13, PopPalette.INK_SOFT)
+		desc_l.text = String(a.desc) + ("　已完成" if done else "")
+		desc_l.position = Vector2(60.0, 32.0)
+		desc_l.size = Vector2(500.0, 22.0)
+		desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(desc_l)
+		_panel_list.add_child(row)
+
+
+# ── 记录内容 ──────────────────────────────────────────────────────
+func _rebuild_records() -> void:
+	for c in _panel_list.get_children():
+		(c as Node).queue_free()
+	var lines := [
+		["历史最高波次", "%d" % int(Meta.records["best_wave"])],
+		["单局最高击杀", "%d" % int(Meta.records["best_kills"])],
+		["单局最高等级", "%d" % int(Meta.records["best_level"])],
+		["累计完成局数", "%d" % int(Meta.records["total_runs"])],
+		["累计击杀", "%d" % int(Meta.records["total_kills"])],
+	]
+	for l in lines:
+		var row := Panel.new()
+		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
+		row.custom_minimum_size = Vector2(576.0, 56.0)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var name_l := Label.new()
+		StickerTheme.label_sticker(name_l, 18, PopPalette.INK, 0, Color.WHITE, true)
+		name_l.text = String(l[0])
+		name_l.position = Vector2(24.0, 15.0)
+		name_l.size = Vector2(300.0, 26.0)
+		name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(name_l)
+		var val_l := Label.new()
+		StickerTheme.label_sticker(val_l, 22, PopPalette.PLAYER, 0, Color.WHITE, true)
+		val_l.text = String(l[1])
+		val_l.position = Vector2(400.0, 13.0)
+		val_l.size = Vector2(150.0, 30.0)
+		val_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		val_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(val_l)
+		_panel_list.add_child(row)
