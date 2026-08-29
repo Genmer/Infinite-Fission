@@ -24,6 +24,8 @@ var _phase: int = WavePhase.IDLE
 var _wave_elapsed: float = 0.0
 var _hard_cap_left: float = 0.0
 var _boss_wave: bool = false
+var _boss_ref: Node2D = null                  # 本波 Boss 实例（boss_spawned 记录；死亡即停伴随流水）
+var _boss_seen: bool = false                  # 本波 Boss 是否实际登场（false = Boss 数据缺失降级波）
 var _trickle_left: float = 0.0
 var _escort_interval: float = BOSS_TRICKLE_INTERVAL   # 本波伴随怪节奏（start_wave 解析）
 var _escort_cap: int = BOSS_TRICKLE_CAP
@@ -53,6 +55,7 @@ const ENDLESS_FALLBACK := {
 
 func _ready() -> void:
 	EventBus.enemy_killed.connect(_on_enemy_killed_event)
+	EventBus.boss_spawned.connect(_on_boss_spawned)
 
 
 func start_wave(p_wave: int) -> void:
@@ -60,6 +63,8 @@ func start_wave(p_wave: int) -> void:
 	current_wave = p_wave
 	wave_first_kill_done = false
 	_boss_wave = _is_boss_wave(p_wave)
+	_boss_ref = null
+	_boss_seen = false
 	var rhythm := _escort_rhythm(p_wave)
 	_escort_interval = float(rhythm["interval"])
 	_escort_cap = int(rhythm["cap"])
@@ -98,8 +103,10 @@ func tick(p_game_delta: float) -> void:
 			if window_left <= 0.0:
 				window_left = 0.0
 				_phase = WavePhase.CLEARING
-			# Boss 波伴随怪持续刷（Boss 存活期间流水；节奏/上限/敌种按波分波驱动，A3 §2.4）
-			if _boss_wave:
+			# Boss 波伴随怪流水（Boss 存活期间刷，A3 §2.4 语义；审查 Fix 3：此前无存活闸，
+			# Boss 死后仍刷满 12 只 → 清空判据永不可达 → wave_cleared 永不派发）。
+			# Boss 数据缺失的降级波（_boss_seen=false）保持旧流水口径（降级不崩溃）
+			if _boss_wave and _escort_gate_open():
 				_trickle_left -= p_game_delta
 				if _trickle_left <= 0.0 and spawner.active_count() < _escort_cap:
 					var companion := _next_companion()
@@ -142,6 +149,21 @@ func on_enemy_killed(p_enemy: Node2D) -> void:
 
 func _on_enemy_killed_event(p_enemy: Node2D) -> void:
 	on_enemy_killed(p_enemy)
+
+
+func _on_boss_spawned(p_enemy: Node2D) -> void:
+	# Boss 登场记录（伴随流水存活闸的真源；spawner 实际生成时派发）
+	if _boss_wave:
+		_boss_ref = p_enemy
+		_boss_seen = true
+
+
+func _escort_gate_open() -> bool:
+	# 伴随流水闸：Boss 未登场（数据缺失降级波）→ 保持旧流水口径；已登场 → Boss 存活才刷
+	#（dead 置位先于 enemy_killed 派发，同帧即关闸——Boss 死 → 停刷 → active 可清零）
+	if not _boss_seen:
+		return true
+	return is_instance_valid(_boss_ref) and not bool(_boss_ref.get("dead"))
 
 
 func _roll_composition(p_wave: int) -> Array[Dictionary]:

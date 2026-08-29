@@ -370,8 +370,15 @@ func _apply_elemental(p_target: Node2D, p_result: DamageResult, p_tctx: TraitCon
 
 
 func _apply_result_to(p_target: Node2D, p_result: DamageResult) -> void:
-	# Enemy.take_result（扣血/易伤标记/死亡广播——pipeline 步骤 9 之后由本侧应用）
-	if p_target != null and p_target.has_method(&"take_result"):
+	# Enemy.take_result（扣血/易伤标记/死亡广播——pipeline 步骤 9 之后由本侧应用）。
+	# 落血口径双轨（同 weapon_base.settle_aoe 审查修复）：真件 DamagePipeline 九步 9b
+	# 在 resolve 内部已 take_result 落血（_apply_to_target——killed 判定/死亡广播唯一
+	# 执行点），本侧再落血即直击伤害 ×2（主路径 _submit_hit / Homing 集束次级）；透传
+	# 桩 resolve 只算不落血，落血职责在调用方（pkg2/pkg3 桩用例锁定口径，保持不变）。
+	# 管线为 null（无管线防御零伤直通）非真件，仍走本侧落血（行为不变）。
+	if p_target == null or damage_pipeline is DamagePipeline:
+		return
+	if p_target.has_method(&"take_result"):
 		p_target.call(&"take_result", p_result)
 
 

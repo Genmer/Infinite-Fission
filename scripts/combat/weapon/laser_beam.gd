@@ -145,15 +145,18 @@ func request_refract(p_count: int) -> void:
 
 
 func _recycle() -> void:
-	# 统一收束：OnExpire 派发 → 状态清零 → 池归还（E-04 顺序）
+	# 统一收束：OnExpire 派发 → 状态清零 → 池归还（E-04 顺序）。
+	# 审查 Fix 1 清场连带修复：pool 引用须先于 _reset_state 捕获（_reset_state 契约清零
+	# pool——先清后读使 release 恒短路，光束归还失效 → 池名额永久占用，集成审查发现）
 	if not _live:
 		return
+	var pool_ref: ObjectPool = pool
 	_live = false
 	DebugStats.count(&"laser_beam_recycled")
 	_dispatch_event(GameConst.TraitEvent.ON_EXPIRE)
 	_reset_state()
-	if pool != null:
-		pool.release(self)
+	if pool_ref != null:
+		pool_ref.release(self)
 
 
 func _reset_state() -> void:
@@ -320,6 +323,12 @@ func _settle_one_tick(p_hit: Node2D) -> void:
 	if result != null:
 		if popup_due(ctx.target_uid):
 			popup_count += 1
+		# 落血口径双轨（同 weapon_base.settle_aoe 审查修复）：真件 DamagePipeline 九步
+		# 9b 在 resolve 内部已 take_result 落血（_apply_to_target——killed 判定/死亡广播
+		# 唯一执行点），本侧再落血即每跳伤害 ×2；透传桩 resolve 只算不落血，落血职责在
+		# 调用方（pkg2/pkg3 桩用例锁定口径，保持不变）。管线为 null 在方法头已短路。
+		if damage_pipeline is DamagePipeline:
+			return
 		if ctx.target.has_method(&"take_result"):
 			ctx.target.call(&"take_result", result)
 

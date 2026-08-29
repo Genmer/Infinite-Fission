@@ -47,6 +47,19 @@ func release(node: Node) -> void:
 	super.release(node)
 
 
+func release_active_all() -> void:
+	# 清场归还（GameLoop._reset_run_state 重开口径，审查 Fix 1）：全部活跃发射器归还。
+	# disconnect 必须携带 burst 期 bind 的同构 Callable（BoundCallable 按对象+方法+绑定参
+	# 比较相等），否则提前停播后的 finished 信号会在复播完成时触发二次归还（E-05 违例）
+	for e in _active_priorities.keys():
+		var emitter := e as GPUParticles2D
+		if emitter != null:
+			var bound: Callable = _on_emitter_finished.bind(emitter)
+			if emitter.finished.is_connected(bound):
+				emitter.finished.disconnect(bound)
+			release(emitter)
+
+
 func _on_emitter_finished(emitter: GPUParticles2D) -> void:
 	# 播放完成信号 → 自动归还
 	if emitter != null:

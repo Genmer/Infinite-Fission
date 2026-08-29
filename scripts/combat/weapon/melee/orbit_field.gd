@@ -83,7 +83,12 @@ func _orbit_hit(p_orb_index: int, p_target: Node2D, p_center: Vector2) -> void:
 	var result: DamageResult = null
 	if weapon.damage_pipeline != null:
 		result = weapon.damage_pipeline.call(&"resolve", ctx)
-	if result != null and p_target.has_method(&"take_result"):
+	# 落血口径双轨（同 weapon_base.settle_aoe 审查修复）：真件 DamagePipeline 九步 9b
+	# 在 resolve 内部已 take_result 落血（_apply_to_target——killed 判定/死亡广播唯一
+	# 执行点），本侧再落血即环绕体伤害 ×2；透传桩 resolve 只算不落血，落血职责在调用
+	# 方（pkg2/pkg3 桩用例锁定口径，保持不变）。管线为 null 时 result 为 null，本就不落血。
+	if result != null and not (weapon.damage_pipeline is DamagePipeline) \
+			and p_target.has_method(&"take_result"):
 		p_target.call(&"take_result", result)
 	_apply_knockback(p_target, p_center)
 	DebugStats.count(&"orbit_hit")

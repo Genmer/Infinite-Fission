@@ -30,8 +30,16 @@ var _chromatic_material: ShaderMaterial = null
 const EMITTER_SCENE_ID := &"burst_default"
 
 
+func early_bind() -> void:
+	# ★ enemy_killed 前置订阅（连接序 = 派发序，审查 Fix 2）：Boss 击杀打击感读取
+	#   enemy.tags 必须先于 EnemySpawner 死亡归还清零（tags=0）——GameLoop 在 spawner
+	#   入树/连接之前调用本方法；其余事件订阅仍在 setup（其派发序无 tags 读取依赖）
+	EventBus.enemy_killed.connect(on_enemy_killed)
+
+
 func setup(p_deps: Dictionary) -> void:
-	# 注入 config / particle_pool / 后处理宿主（CameraShake 内部构造）
+	# 注入 config / particle_pool / 后处理宿主（CameraShake 内部构造）。
+	# enemy_killed 订阅已拆出至 early_bind（Boot 期提前连接，见上）
 	feel_config = p_deps.get("config")
 	particles = p_deps.get("particles")
 	shake = CameraShake.new()
@@ -47,7 +55,6 @@ func setup(p_deps: Dictionary) -> void:
 	_setup_chromatic_rect(p_deps.get("chromatic_host"))
 	# 事件订阅（仅 Node 派生类可订阅，E-12；本类 extends Node ✓）
 	EventBus.damage_resolved.connect(on_damage_resolved)
-	EventBus.enemy_killed.connect(on_enemy_killed)
 	EventBus.reaction_triggered.connect(on_reaction_triggered)
 	EventBus.player_hit.connect(on_player_hit)
 

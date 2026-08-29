@@ -169,6 +169,7 @@ func settle_aoe(p_pos: Vector2, p_radius: float, p_atk: float, p_secondary: bool
 		p_exclude: Node2D = null) -> void:
 	# 圆查询逐敌独立结算（死亡新星/TH_SIZE_NOVA 冲击波/武器 AOE 通道；网格距离精判口径）。
 	# p_exclude：主结算目标排除（冲击波不重复结算本跳直击目标，同构 Homing._blast_secondaries）
+	# 落血口径双轨：真件管线 resolve 内部落血（9b）；透传桩由本方法落血（见循环内注释）
 	if enemy_grid == null or damage_pipeline == null:
 		return
 	var candidates: Array[Node2D] = []
@@ -187,7 +188,15 @@ func settle_aoe(p_pos: Vector2, p_radius: float, p_atk: float, p_secondary: bool
 			ctx.hit_flags |= GameConst.HIT_IS_AOE_SECONDARY
 		ctx.pos = (target as Node2D).global_position
 		var result: DamageResult = damage_pipeline.call(&"resolve", ctx)
-		if result != null and target.has_method(&"take_result"):
+		if result == null:
+			continue
+		# 落血口径双轨（审查修复 A）：真件 DamagePipeline 九步 9b 在 resolve 内部已
+		# take_result 落血（_apply_to_target——killed 判定/死亡广播唯一执行点），调用方
+		# 再落血即 AOE 范围伤害 ×2（TH_SIZE_NOVA/MEC_KILL_BLAST/遗物清屏冲击）；透传桩
+		# resolve 只算不落血，落血职责在调用方（pkg3 桩用例锁定口径，保持不变）。
+		if damage_pipeline is DamagePipeline:
+			continue
+		if target.has_method(&"take_result"):
 			target.call(&"take_result", result)
 
 

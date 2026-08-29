@@ -78,6 +78,20 @@ func dropped_count() -> int:
 	return _dropped_count
 
 
+func clear_all() -> void:
+	# 清场归还（GameLoop._reset_run_state 重开口径，审查 Fix 1）：全部活跃跳字归还池 +
+	# 注册表清空（防重开后残留跳字/合并窗指向已归还实例）
+	var idx := _active_list.size() - 1
+	while idx >= 0:
+		var popup := _active_list[idx]
+		_active_list.remove_at(idx)
+		if is_instance_valid(popup):
+			popup_pool.release(popup)
+		idx -= 1
+	_merge_registry.clear()
+	active_popups = 0
+
+
 func _retire(p_popup: DamagePopup, p_idx: int) -> void:
 	# 归还（池 release 前置钩子调 _reset_state）；注册表同步清除
 	var uid := p_popup.target_uid

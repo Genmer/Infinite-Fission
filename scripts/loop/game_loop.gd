@@ -378,6 +378,15 @@ func _boot_build_actors() -> void:
 	wave_director = WaveDirector.new()
 	wave_director.name = "WaveDirector"
 	add_child(wave_director)
+	# ★ GameFeel 前置组装 + enemy_killed 前置订阅（连接序 = 派发序，F-19 同纪律）：
+	#   Boss 击杀打击感读取 enemy.tags 必须先于 EnemySpawner 死亡归还的 tags 清零
+	#   （_reset_state 置 0）——审查 Fix 2：此前 GameFeel 在 presentation 段订阅，派发序
+	#   恒排在 spawner 之后（读 tags=0），Boss 击杀 120ms 顿帧永不触发。setup（其余职责）
+	#   仍在 _boot_build_presentation 完成
+	game_feel = GameFeelDirector.new()
+	game_feel.name = "GameFeelDirector"
+	add_child(game_feel)
+	game_feel.early_bind()
 	spawner = EnemySpawner.new()
 	spawner.name = "EnemySpawner"
 	add_child(spawner)
@@ -418,9 +427,8 @@ func _boot_build_presentation() -> void:
 	particles.setup(pools[&"particle"])
 	for emitter in (pools[&"particle"] as ParticlePool).get_children():
 		particles.apply_placeholder_material(emitter as GPUParticles2D)
-	game_feel = GameFeelDirector.new()
-	game_feel.name = "GameFeelDirector"
-	add_child(game_feel)
+	# GameFeel 实例已在 _boot_build_actors 前置组装并 early_bind（Fix 2）——
+	# 此处补全 setup 其余职责（config/shake/色差/其余事件订阅）
 	game_feel.setup({
 		"config": registry.get_game_feel(),
 		"particles": particles,
@@ -594,7 +602,10 @@ func _build_boot_error_screen() -> void:
 
 
 func _reset_run_state() -> void:
-	# 重开重置：玩家（复活含死亡短路清除/HP/经验/槽位解锁）/ HUD 统计 / 卡牌流 / 顿帧态
+	# 重开重置：★ 战场清场（敌/弹/光束/跳字/粒子——残留半血 Boss 原位冻结后会叠进
+	# 新波次 1、残留敌弹重生首帧秒杀，审查 Fix 1 Critical）→ 玩家（复活含死亡短路清除/
+	# HP/经验/槽位解锁）/ HUD 统计 / 卡牌流 / 顿帧态
+	_clear_battlefield()
 	player.respawn()
 	for i in range(player.weapon_slots.size()):
 		var w: WeaponBase = player.weapon_slots[i] if i < player.weapon_slots.size() else null
@@ -617,3 +628,27 @@ func _reset_run_state() -> void:
 	game_feel.hit_stop_left = 0.0
 	game_feel.hit_stop_active_ms = 0.0
 	set_time_scale(1.0, &"reset")
+
+
+func _clear_battlefield() -> void:
+	# 残留清场序（审查 Fix 1）：生成队列 → 在场敌（快照遍历归还 EnemyPool）→ 投射物
+	#（含敌弹）→ 活跃光束 → 跳字 → 粒子。敌/弹为静默回收：不经 enemy_killed / ON_EXPIRE——
+	# 防死亡新星/分裂请求在清场期再结算、防重复击杀计数（非战斗语义归还）；
+	# 光束经 _recycle 统一收束（ON_EXPIRE 仅词条派发，无次级结算通道，安全）。
+	if spawner != null:
+		spawner.spawn_queue.clear()
+		for enemy in spawner.active.duplicate():  # 快照遍历（on_enemy_killed 内部 erase active）
+			if is_instance_valid(enemy):
+				spawner.on_enemy_killed(enemy)    # 活跃表移除 + 元素宿主注销 + 池归还
+	for proj in _projectile_pool.active_projectiles().duplicate():
+		if is_instance_valid(proj):
+			_projectile_pool.release(proj)        # 直接归还（池侧 _reset_state 清零）
+	for child in (pools[&"laser"] as LaserBeamPool).get_children():
+		var beam := child as LaserBeam
+		if beam != null and beam.is_live():
+			if beam.weapon != null and is_instance_valid(beam.weapon):
+				beam.weapon.active_beams.erase(beam)   # 先摘宿主（防宿主 tick 已归还光束）
+			beam._recycle()                       # 统一收束：ON_EXPIRE → 清零 → 池归还
+	if popup_manager != null:
+		popup_manager.clear_all()
+	(pools[&"particle"] as ParticlePool).release_active_all()

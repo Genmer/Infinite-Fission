@@ -21,6 +21,15 @@ var owned_relics: Array[StringName] = []      # 每场已获遗物（unique 每�
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var fallback_uses: int = 0                    # 遥测：fallback 卡发放数（AC-16.4）
 
+const RNG_SEED: int = 42                      # 卡牌 roll 固定种子（与管线 set_rng_seed 同口径）
+
+
+func _init() -> void:
+	# 卡牌 roll 确定化（B_spec 固定种子口径：测试确定性 + 同种子可复现构筑——A3 §7
+	# 四套构筑可复现）；游戏运行时随机性由 spawner 出生点流（randomize）与管线暴击流
+	# 承担，卡牌流不引入额外随机源。
+	rng.seed = RNG_SEED
+
 # 类别权重静态表（A3 §6.3 原值；BalanceTables.category_weights 为同源镜像）
 const CATEGORY_WEIGHTS := {
 	"MASTERY": 12.0, "ADD": 40.0, "MULT": 18.0, "MECH": 14.0, "ELEM": 10.0, "RELIC": 6.0,

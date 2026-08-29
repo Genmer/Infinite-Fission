@@ -32,6 +32,9 @@ func run(p_tree: SceneTree) -> void:
 	_test_separation_force()                      # B.5
 	_test_duck_tightening()                       # B.8
 	_test_ac_core_subset()                        # AC 核心子集
+	_test_battlefield_reset()                     # 审查 Fix 1：重开清场 + 重生无敌回归
+	_test_boss_kill_feel_and_escort_gate()        # 审查 Fix 2/3：Boss 击杀顿帧 + 伴随怪存活闸
+	_test_crit_shard_and_validator()              # 审查 Fix 4：暴击弹片结算 + 悬空 threshold 剔除
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -255,6 +258,62 @@ func _test_real_pipeline_nine_step() -> void:
 	_check("AC-12.2：同乘区 ID 去重取最大 → 150",
 		r2 != null and is_equal_approx(r2.final_value, 150.0))
 	(_gl.pools[&"enemy"] as EnemyPool).release(t2)
+	# 修复 A 回归：settle_aoe 真件管线落血恰好一次（九步 9b 内部 take_result，调用方
+	# 不再二次落血——双重结算会让 AOE 范围伤害 ×2）。夹具同构 Fix4：真实 Enemy 入网格，
+	# 武器管线为 _deps 注入的真件；crit_chance 缺省 0 → 无暴击，零抗零易伤 → 恰扣 100。
+	var aoe_t := _make_stat_target()
+	aoe_t.position = Vector2(60.0, 60.0)
+	_gl.spawner.active.append(aoe_t)
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	var aoe_w: WeaponBase = _gl.player.weapon_slots[0]
+	aoe_w.settle_aoe(aoe_t.global_position, 100.0, 100.0, false)
+	_check("修复A：settle_aoe 真件落血恰好一次（1000000→999900，非 ×2 双扣）",
+		is_equal_approx(aoe_t.hp, 999900.0), "hp=%s" % str(aoe_t.hp))
+	_gl.spawner.active.erase(aoe_t)
+	(_gl.pools[&"enemy"] as EnemyPool).release(aoe_t)
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	# 修复 B 回归：投射物直击真件管线落血恰好一次（_submit_hit → resolve 九步 9b 内部
+	# take_result；_on_settled → _apply_result_to 不再二次落血——双重结算会让直击 ×2）。
+	# 夹具同构修复 A：真实 Enemy + 弹池真弹体注入 _gl 真件管线；面板 crit_rate=0 →
+	# 无暴击，零抗零易伤 → 恰扣 100。
+	var hit_t := _make_stat_target()
+	var proj: ProjectileBase = (_gl.pools[&"projectile"] as ProjectilePool).acquire()
+	proj.spawn({
+		"velocity": Vector2.ZERO,
+		"lifetime": 2.0,
+		"pierce": 1,
+		"hitbox_radius": 6.0,
+		"element": GameConst.Element.KIN,
+		"panel_snapshot": {"base_atk": 100.0, "crit_rate": 0.0,
+			"crit_mult": 2.0, "flat_bonus": 0.0, "add_entries": []},
+		"team": 0,
+	})
+	proj.damage_pipeline = _gl.pipeline
+	proj.pool = _gl.pools[&"projectile"]
+	proj._submit_hit(hit_t)
+	_check("修复B：投射物直击真件落血恰好一次（1000000→999900，非 ×2 双扣）",
+		is_equal_approx(hit_t.hp, 999900.0), "hp=%s" % str(hit_t.hp))
+	(_gl.pools[&"enemy"] as EnemyPool).release(hit_t)
+	# 修复 B 桩口径回归锚（行为不变）：透传桩 resolve 只算不落血 → 调用方
+	# _apply_result_to 落血一次。同夹具换桩管线，恰扣 100 一次（pkg2/pkg3 桩口径锁定）。
+	var stub_t := _make_stat_target()
+	var proj_stub: ProjectileBase = (_gl.pools[&"projectile"] as ProjectilePool).acquire()
+	proj_stub.spawn({
+		"velocity": Vector2.ZERO,
+		"lifetime": 2.0,
+		"pierce": 1,
+		"hitbox_radius": 6.0,
+		"element": GameConst.Element.KIN,
+		"panel_snapshot": {"base_atk": 100.0, "crit_rate": 0.0,
+			"crit_mult": 2.0, "flat_bonus": 0.0, "add_entries": []},
+		"team": 0,
+	})
+	proj_stub.damage_pipeline = DamagePipelineStub.new()
+	proj_stub.pool = _gl.pools[&"projectile"]
+	proj_stub._submit_hit(stub_t)
+	_check("修复B：桩口径投射物直击落血恰好一次（调用方落血行为不变 1000000→999900）",
+		is_equal_approx(stub_t.hp, 999900.0), "hp=%s" % str(stub_t.hp))
+	(_gl.pools[&"enemy"] as EnemyPool).release(stub_t)
 
 
 # ── R_rxn 反应独立告警线（B.6） ───────────────────────────────────
@@ -375,7 +434,11 @@ func _test_relic_handler() -> void:
 	_check("REL_WORDS_TIDE：wave_started → 重随申请 + 波内精英位重置",
 		h.consume_reroll() and not h.consume_reroll())
 	# REL_GAMBLER：四选一 + 末位诅咒
-	_check("REL_GAMBLER：激活", h.activate(&"REL_GAMBLER"))
+	# 幂等口径（修复 B 双保险）：卡牌流（冒烟选卡 / 本用例弹卡 choose）可能随机抽中
+	# RELIC——card_chosen 通道已自动激活，显式 activate 因「每场唯一」被拒属业务正确；
+	# 已持有即视同激活生效（效果断言保持原强度，语义不弱化）
+	_check("REL_GAMBLER：激活（卡牌流提前入场 → 已持有即生效）",
+		h.activate(&"REL_GAMBLER") or h.has_relic(&"REL_GAMBLER"))
 	_check("REL_GAMBLER：发牌数 4", h.deal_count() == 4 and h.curse_requested())
 	_gl.player.invuln_left = 0.0
 	EventBus.emit_level_up(2)                     # PLAYING → LEVEL_UP（发牌走遗物参数）
@@ -451,7 +514,9 @@ func _test_relic_handler() -> void:
 			break
 	_check("REL_ECHO：选卡后复制词条到随机武器", echoed)
 	# REL_BLACK_MARKET：w35 起每 10 波排程商店波（A3 §6.5 占位计数；w35/w45 排程、w36 不排程）
-	_check("REL_BLACK_MARKET：激活", h.activate(&"REL_BLACK_MARKET"))
+	# 幂等口径（修复 B 双保险）：同 GAMBLER——卡牌流提前抽中时已持有即生效
+	_check("REL_BLACK_MARKET：激活（卡牌流提前入场 → 已持有即生效）",
+		h.activate(&"REL_BLACK_MARKET") or h.has_relic(&"REL_BLACK_MARKET"))
 	EventBus.emit_wave_cleared(35)
 	EventBus.emit_wave_cleared(45)
 	EventBus.emit_wave_cleared(36)
@@ -684,6 +749,236 @@ func _test_ac_core_subset() -> void:
 
 
 # ── 支撑 ──────────────────────────────────────────────────────────
+func _ensure_playing() -> void:
+	# 前序用例残余状态收口：升级选卡队列逐张消费回 PLAYING + 顿帧/缩放残留清零
+	var guard := 0
+	while _gl.state == GameConst.GameStatus.LEVEL_UP and guard < 8:
+		_gl.card_select_ui.choose(0)
+		guard += 1
+	_gl.game_feel.hit_stop_left = 0.0
+	_gl.game_feel.hit_stop_active_ms = 0.0
+	_gl.set_time_scale(1.0, &"test")
+
+
+func _drive_safe(p_frames: int) -> void:
+	# 观测口径驱动：每帧回满血（排除残余敌人接触伤害致死干扰）+ 升级弹卡即选（不中断波次观测）
+	for i in range(p_frames):
+		_gl.player.hp = _gl.player.max_hp
+		_gl._physics_process(DT)
+		if _gl.state == GameConst.GameStatus.LEVEL_UP:
+			_gl.card_select_ui.choose(0)
+
+
+func _count_escorts() -> int:
+	# 场上伴随怪计数（排除 Boss）
+	var n := 0
+	for e in _gl.spawner.active:
+		var enemy := e as Enemy
+		if enemy != null and not enemy.is_boss():
+			n += 1
+	return n
+
+
+func _make_shard_trait_data() -> TraitData:
+	# 弹片词条定义（EF_CRIT_SHARD 挂载载体——单元路径与 pkg3 同构）
+	var d := TraitData.new()
+	d.id = &"TEST_CRIT_SHARD"
+	d.pool = GameConst.PoolClass.MECH
+	d.effect_id = &"EF_CRIT_SHARD"
+	d.stack_max = 1
+	d.proc_chance = 1.0
+	d.event_hooks.append(GameConst.TraitEvent.ON_HIT)
+	return d
+
+
+# ── 审查 Fix 1：重开清场 + 重生无敌（Critical 95 回归） ────────────
+func _test_battlefield_reset() -> void:
+	print("── 重开清场（审查 Fix 1） ──")
+	_ensure_playing()
+	_gl.player.hp = _gl.player.max_hp
+	_gl.wave_director.start_wave(1)
+	_drive(4)                                     # 敌人入场（清场对象：在场敌）
+	_check("清场前：在场敌 > 0（清场对象就位）", _gl.spawner.active_count() > 0,
+		"active=%d" % _gl.spawner.active_count())
+	# 清场对象：敌弹残留（team=1 直接入池，不 tick——只验清场归还）
+	var pool := _gl.pools[&"projectile"] as ProjectilePool
+	var bullet := pool.acquire() as ProjectileBase
+	bullet.pool = pool
+	bullet.spawn({"velocity": Vector2(10.0, 0.0), "lifetime": 10.0, "hitbox_radius": 5.0,
+		"team": 1, "panel_snapshot": {"base_atk": 1.0}})
+	# 清场对象：活跃光束（无宿主引用挂池——重开清场归还口径）
+	var laser_pool := _gl.pools[&"laser"] as LaserBeamPool
+	var beam := laser_pool.acquire() as LaserBeam
+	beam.pool = laser_pool
+	beam.spawn({"position": Vector2(360.0, 900.0), "dir": Vector2.UP, "team": 0,
+		"tick_atk": 1.0, "panel_snapshot": {}})
+	_check("清场前：投射物/光束池 live > 0",
+		int(pool.stats()["live"]) > 0 and int(laser_pool.stats()["live"]) > 0)
+	_gl.player.invuln_left = 0.0
+	_gl.player.take_contact_damage(999999.0)
+	_check("重开前：GAME_OVER（E-16）", _gl.state == GameConst.GameStatus.GAME_OVER)
+	_check("重开清场：restart 后在场敌 0 / 投射物 live 0 / 光束 live 0 / 波次 1 队列重建",
+		_gl.restart_run() and _gl.state == GameConst.GameStatus.PLAYING
+		and _gl.spawner.active_count() == 0
+		and int(pool.stats()["live"]) == 0 and int(laser_pool.stats()["live"]) == 0
+		and _gl.spawner.queue_count() > 0)
+	_check("重开保护：重生无敌帧激活（invuln_left > 0，1.5s 主控裁定）",
+		_gl.player.invuln_left > 0.0)
+
+
+# ── 审查 Fix 2/3：Boss 击杀顿帧 + 伴随怪 Boss 存活闸 ───────────────
+func _test_boss_kill_feel_and_escort_gate() -> void:
+	print("── Boss 击杀顿帧（Fix 2）+ 伴随怪存活闸（Fix 3） ──")
+	_ensure_playing()
+	_gl._reset_run_state()                        # 前序残余清场（波次观测从干净战场起步）
+	_gl.player.hp = _gl.player.max_hp
+	# wave_cleared 真实 EventBus 探针（Node 订阅者——E-12 口径，pkg2 探针同构）
+	var s := GDScript.new()
+	s.source_code = "extends Node\n" \
+		+ "var cleared: Array[int] = []\n" \
+		+ "func on_wave_cleared(w: int) -> void:\n\tcleared.append(w)\n"
+	s.reload()
+	var probe := Node.new()
+	probe.name = "Pkg5ClearedProbe"
+	probe.set_script(s)
+	tree.get_root().add_child(probe)
+	EventBus.wave_cleared.connect(Callable(probe, "on_wave_cleared"))
+	_gl.wave_director.start_wave(10)
+	_drive(8)                                     # Boss 队列 → 8 帧内入场
+	var bosses: Array[Enemy] = []
+	for e in _gl.spawner.active:
+		if e is Enemy and (e as Enemy).is_boss():
+			bosses.append(e)
+	_check("Fix3 前置：w10 Boss 登场", not bosses.is_empty())
+	_drive_safe(320)                              # 2.67s：跨过首个 2.5s 伴随节拍
+	var escorts_alive: int = _count_escorts()
+	_check("Fix3：Boss 存活 → 伴随怪流水照常（场上伴怪 > 0）", escorts_alive > 0,
+		"escorts=%d" % escorts_alive)
+	# Fix 2：EventBus 真实派发 Boss 击杀（非直调）→ 120ms 档顿帧
+	#（连接序回归：GameFeel 前置订阅先于 spawner 归还清零读 tags）
+	_gl.game_feel.hit_stop_left = 0.0
+	_gl.game_feel.hit_stop_active_ms = 0.0
+	for b in bosses:
+		if is_instance_valid(b):
+			b.apply_damage(999999999.0)
+	_check("Fix2：Boss 击杀经 EventBus 真实派发 → 120ms 顿帧申请（BOSS_DEATH 档）",
+		absf(_gl.game_feel.hit_stop_left - 0.12) <= 0.0001
+		and absf(_gl.game_feel.hit_stop_active_ms - 120.0) <= 0.0001,
+		"left=%s" % str(_gl.game_feel.hit_stop_left))
+	# Fix 3 反向：Boss 死 → 流水停（3.33s 逐帧观测：伴怪计数不得出现新增峰值——
+	# 既有伴怪被武器击杀属正常战斗，不计入违例）
+	var escorts_at_death: int = _count_escorts()
+	var max_seen: int = escorts_at_death
+	for i in range(400):
+		_gl.player.hp = _gl.player.max_hp
+		_gl._physics_process(DT)
+		if _gl.state == GameConst.GameStatus.LEVEL_UP:
+			_gl.card_select_ui.choose(0)
+		max_seen = maxi(max_seen, _count_escorts())
+	_check("Fix3：Boss 死亡 → 伴随怪流水停止（3.33s 零新增）",
+		max_seen <= escorts_at_death and escorts_at_death > 0,
+		"at_death=%d max=%d" % [escorts_at_death, max_seen])
+	# Fix 3：清场 → wave_cleared 真实派发（窗口归零强制 CLEARING；残余杀光后逐帧驱动
+	# 至探针捕获事件——字段可能已空，须保证窗口归零后至少一帧 tick）
+	_gl.wave_director.window_left = 0.0
+	var guard := 0
+	while guard < 600 and not (probe.get("cleared") as Array).has(10):
+		for e in _gl.spawner.active.duplicate():
+			if is_instance_valid(e):
+				(e as Enemy).apply_damage(999999.0)
+		_drive_safe(1)
+		guard += 1
+	var cleared: Array = probe.get("cleared")
+	_check("Fix3：清场完成 → wave_cleared(10) 真实派发",
+		cleared.has(10), "waves=%s" % str(cleared))
+	EventBus.wave_cleared.disconnect(Callable(probe, "on_wave_cleared"))
+	probe.free()
+
+
+# ── 审查 Fix 4：暴击弹片结算 + 校验器悬空 threshold 剔除 ───────────
+func _test_crit_shard_and_validator() -> void:
+	print("── 暴击弹片（Fix 4）+ 校验器剔除 ──")
+	_ensure_playing()
+	# 双镜像清单同步 + 注册武器 threshold 存活（EF_CRIT_SHARD 注册后不再是悬空项）
+	_check("Fix4：双镜像清单同步（TraitEffect.known_effect_ids / TECH_EFFECT_IDS ∋ EF_CRIT_SHARD）",
+		TraitEffect.known_effect_ids().has(&"EF_CRIT_SHARD")
+		and DataValidator.TECH_EFFECT_IDS.has(&"EF_CRIT_SHARD"))
+	var w: WeaponBase = _gl.player.weapon_slots[0]   # W1_pistol：.tres 声明 TH_CRIT_SHARD(0.6, ratio 0.5)
+	var th: Dictionary = w.get_threshold(&"TH_CRIT_SHARD")
+	_check("Fix4：注册武器 TH_CRIT_SHARD 存活（66 资源 0 rejected 口径不回归）",
+		not th.is_empty() and StringName(str(th.get("effect_id", ""))) == &"EF_CRIT_SHARD")
+	# 弹片结算（真件武器 threshold + 真实管线；主目标 1000000 血，邻近单体半径内/外各一）
+	var main: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	main.spawn(_make_enemy_data(&"E_SHARD_MAIN", 1000000.0), 1, 0)
+	main.position = Vector2(360.0, 400.0)
+	var near: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	near.spawn(_make_enemy_data(&"E_SHARD_NEAR", 1000000.0), 1, 0)
+	near.position = Vector2(380.0, 420.0)            # 弹片半径内
+	var far: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	far.spawn(_make_enemy_data(&"E_SHARD_FAR", 1000000.0), 1, 0)
+	far.position = Vector2(700.0, 1000.0)            # 弹片半径外
+	_gl.spawner.active.append(main)
+	_gl.spawner.active.append(near)
+	_gl.spawner.active.append(far)
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	var proj: ProjectileBase = (_gl.pools[&"projectile"] as ProjectilePool).acquire()
+	proj.spawn({"velocity": Vector2.ZERO, "lifetime": 10.0, "hitbox_radius": 6.0, "team": 0,
+		"panel_snapshot": {"base_atk": 100.0, "crit_rate": 0.65, "crit_mult": 2.0}})
+	proj.position = Vector2(360.0, 400.0)
+	var shard_tb := TraitBase.new()
+	shard_tb.setup(_make_shard_trait_data())
+	var ef := TraitEffect.resolve(&"EF_CRIT_SHARD")
+	var tctx := TraitContext.new()
+	tctx.event = GameConst.TraitEvent.ON_HIT
+	tctx.projectile = proj
+	tctx.weapon = w
+	tctx.target = main
+	var dctx := DamageContext.make()
+	dctx.target = main
+	dctx.base_atk = 100.0
+	dctx.crit_mult = 2.0
+	dctx.pos = proj.global_position
+	tctx.damage_ctx = dctx
+	# 阈下：暴击率 0.5 < 0.6 → 质变未激活
+	dctx.crit_chance = 0.5
+	ef.handle(shard_tb, tctx)
+	_check("Fix4：暴击率 0.5 < 0.6 阈下 → 弹片不结算", is_equal_approx(near.hp, 1000000.0),
+		"hp=%s" % str(near.hp))
+	# 阈上：暴击率堆过 0.6 → 弹片 = 0.5 × 暴伤 = base_atk × crit_mult × ratio = 100×2×0.5 = 100
+	dctx.crit_chance = 0.65
+	ef.handle(shard_tb, tctx)
+	_check("Fix4：暴击率堆过阈值 → 邻近单体弹片结算（0.5×暴伤 = 100）",
+		is_equal_approx(near.hp, 999900.0), "hp=%s" % str(near.hp))
+	_check("Fix4：主目标不重复结算 / 半径外不波及",
+		is_equal_approx(main.hp, 1000000.0) and is_equal_approx(far.hp, 1000000.0))
+	proj.nullify()
+	for e: Enemy in [main, near, far]:
+		_gl.spawner.active.erase(e)
+		(_gl.pools[&"enemy"] as EnemyPool).release(e)
+	# 校验器：悬空 effect_id threshold 剔除（宿主武器保留，AC-13.3 降级不崩溃）
+	var reg := DataRegistry.new()
+	var wdata := WeaponData.new()
+	wdata.id = &"W_SHARD_TEST"
+	wdata.threshold_traits = [{
+		"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+		"effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5},
+	}, {
+		"threshold_id": &"TH_DANGLE", "metric": "crit_rate", "threshold": 0.6,
+		"effect_id": &"EF_NO_WHERE", "params": {},
+	}]
+	reg.weapons[wdata.id] = wdata
+	var issues: Array = DataValidator.new().check_references(reg)
+	var stripped := 0
+	for issue in issues:
+		if String(issue.get("field", "")) == "threshold_traits.effect_id":
+			stripped += 1
+	_check("Fix4：悬空 effect_id threshold 被剔除 + 告警（宿主保留）",
+		stripped == 1 and wdata.threshold_traits.size() == 1
+		and StringName(str(wdata.threshold_traits[0].get("threshold_id", ""))) == &"TH_CRIT_SHARD"
+		and reg.weapons.has(&"W_SHARD_TEST"))
+
+
+# ── 支撑（原有） ──────────────────────────────────────────────────
 func _make_enemy_data(p_id: StringName, p_hp: float) -> EnemyData:
 	var data := EnemyData.new()
 	data.id = p_id

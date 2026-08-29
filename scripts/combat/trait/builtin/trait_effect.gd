@@ -6,7 +6,7 @@
 class_name TraitEffect
 extends RefCounted
 
-# effect_id → 处理器脚本路径（六家族；DataValidator.TECH_EFFECT_IDS 为其镜像注册表）
+# effect_id → 处理器脚本路径（七家族；DataValidator.TECH_EFFECT_IDS 为其镜像注册表）
 const _BUILTIN_PATHS: Dictionary = {
 	&"EF_STAT": "res://scripts/combat/trait/builtin/trait_effect_stat.gd",
 	&"EF_SIZE": "res://scripts/combat/trait/builtin/trait_effect_size.gd",
@@ -14,6 +14,7 @@ const _BUILTIN_PATHS: Dictionary = {
 	&"EF_BOUNCE": "res://scripts/combat/trait/builtin/trait_effect_bounce.gd",
 	&"EF_ELEMENTAL": "res://scripts/combat/trait/builtin/trait_effect_elemental.gd",
 	&"EF_MECH": "res://scripts/combat/trait/builtin/trait_effect_mech.gd",
+	&"EF_CRIT_SHARD": "res://scripts/combat/trait/builtin/trait_effect_crit_shard.gd",
 }
 
 static var _instances: Dictionary = {}        # effect_id -> TraitEffect（单例缓存）

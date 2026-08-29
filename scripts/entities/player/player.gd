@@ -28,6 +28,7 @@ var _sprite: Sprite2D = null
 var _deps: Dictionary = {}                     # setup 注入位（pipeline/pools/grid/registry——包 3/4 接线）
 
 const MAX_SLOTS := 5
+const RESPAWN_INVULN_S := 1.5                 # 重生无敌帧 s（B_spec 无数值 → 主控裁定，见 respawn 注释）
 const TEX_SIZE := 32
 static var _shared_texture: ImageTexture = null
 const BODY_COLOR := Color(0.35, 0.9, 1.0)
@@ -198,13 +199,15 @@ func gain_xp(p_amount: float) -> void:
 func respawn() -> void:
 	# 重开复活（GameLoop.restart_run → _reset_run_state 调用；集成包修复：死亡短路
 	# _dead 属一次性 E-16 仲裁标志，必须随局重置——否则重开后 take_contact_damage 永久无效）
+	# 重生无敌 1.5s（B_spec 无重生无敌数值 → 主控裁定；重开保护——防残留/新刷弹幕
+	# 重生首帧秒杀，配合 GameLoop._reset_run_state 战场清场序，审查 Fix 1）
 	_dead = false
 	hp = max_hp
 	level = 1
 	xp = 0.0
 	xp_need = _xp_need_for(1)
 	unlocked_slots = 1
-	invuln_left = 0.0
+	invuln_left = RESPAWN_INVULN_S
 	_drag_accum = Vector2.ZERO
 
 
