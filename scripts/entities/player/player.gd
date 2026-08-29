@@ -24,25 +24,31 @@ var hitbox_radius: float = 16.0               # 命中盒半径（敌弹距离�
 
 var _dead: bool = false
 var _drag_accum: Vector2 = Vector2.ZERO       # 相对拖动采样累计（E-15）
+var input_enabled: bool = true                 # 输入使能（暂停恢复 0.5s 防误触宽限期——GameLoop 驱动）
 var _pickup_area: Area2D = null
 var _pickup_shape: CollisionShape2D = null
 var _hit_shape: CollisionShape2D = null
 var _sprite: Sprite2D = null
-var _flame: Sprite2D = null                    # 喷气小尾巴（移动时点亮 + 抖动）
-var _flash: Sprite2D = null                    # 受击白闪剪影（叠在舰体上方）
+var _flame_l: Sprite2D = null                  # 左引擎喷焰（移动时点亮 + 抖动）
+var _flame_r: Sprite2D = null                  # 右引擎喷焰（与左反相抖动）
+var _flash: Sprite2D = null                    # 受击白闪剪影（叠在机体上方）
 var _flash_left: float = 0.0
 var _punch_left: float = 0.0                   # 受击 squash punch 剩余
 var _tilt: float = 0.0                         # 移动倾斜（横移 bank）
-var _anim_t: float = 0.0                       # 帧内动画时钟（尾焰抖动/无敌闪烁）
-var _visual_scale: float = 1.0                 # 舰体基础缩放（hitbox 口径换算）
+var _anim_t: float = 0.0                       # 帧内动画时钟（喷焰抖动/无敌闪烁/hover）
+var _visual_scale: float = 1.0                 # 机体基础缩放（hitbox 口径换算）
 var _deps: Dictionary = {}                     # setup 注入位（pipeline/pools/grid/registry——包 3/4 接线）
 
 const MAX_SLOTS := 5
 const RESPAWN_INVULN_S := 1.5                 # 重开无敌帧 s（B_spec 无数值 → 主控裁定，见 respawn 注释）
-const SHIP_TEX_R := 38.0                       # 舰体贴图本体半径 px（TextureFactory.ship 96 画布）
+const SHIP_TEX_R := 38.0                       # 机体贴图本体半径 px（TextureFactory.ship 96 画布）
 const VISUAL_MULT := 1.35                      # 视觉半径 / 命中盒（弹幕游戏惯例：盒小于形）
 const FLASH_TIME := 0.18                       # 受击白闪时长
 const PUNCH_TIME := 0.24                       # 受击 squash punch 时长
+const HOVER_AMP := 2.6                         # hover 待机浮动幅度 px（用户反馈：主角机体活起来）
+const HOVER_PERIOD := 2.6                      # hover 周期 rad/s 基频
+const POD_L := Vector2(-20.0, 34.0)            # 左引擎舱喷口（贴图坐标——随 _visual_scale 缩放）
+const POD_R := Vector2(20.0, 34.0)             # 右引擎舱喷口
 
 
 func _ready() -> void:
@@ -63,14 +69,21 @@ func _ready() -> void:
 	_pickup_shape.shape = pickup_circle
 	_pickup_area.add_child(_pickup_shape)
 	add_child(_pickup_area)
-	# 方向 C「哨兵-9」：天空蓝圆头小飞船（厚描边 + 白肚皮）+ 喷气小尾巴
+	# 方向 C「哨兵-9」拦截机（用户试玩反馈 2026-08-29 重设计）：三角翼小机甲战机
+	#（贴纸厚描边 + 座舱机器人驾驶员）+ 双引擎青蓝喷焰 + hover 待机浮动
 	_visual_scale = hitbox_radius * VISUAL_MULT / SHIP_TEX_R
-	_flame = Sprite2D.new()
-	_flame.name = "Flame"
-	_flame.texture = TextureFactory.ship_flame()
-	_flame.position = Vector2(0.0, 26.0)
-	_flame.visible = false
-	add_child(_flame)
+	_flame_l = Sprite2D.new()
+	_flame_l.name = "FlameL"
+	_flame_l.texture = TextureFactory.engine_flame()
+	_flame_l.position = POD_L * _visual_scale
+	_flame_l.visible = false
+	add_child(_flame_l)
+	_flame_r = Sprite2D.new()
+	_flame_r.name = "FlameR"
+	_flame_r.texture = TextureFactory.engine_flame()
+	_flame_r.position = POD_R * _visual_scale
+	_flame_r.visible = false
+	add_child(_flame_r)
 	_sprite = Sprite2D.new()
 	_sprite.name = "Visual"
 	_sprite.centered = true
@@ -109,7 +122,7 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 			invuln_left = 0.0
 	var total := p_move_delta
 	if total == Vector2.ZERO:
-		total = _drag_accum                 # GameLoop 未投递时消费自采样拖动
+		total = _drag_accum if input_enabled else Vector2.ZERO   # 宽限期吞掉自采样拖动（防误触）
 	_drag_accum = Vector2.ZERO
 	global_position += total
 	_clamp_to_playfield()
@@ -290,10 +303,13 @@ func _xp_need_for(p_level: int) -> float:
 	return base * pow(float(maxi(p_level, 1)), power)
 
 
-# ── 方向 C 表现层（贴纸舰体：倾斜 / 尾焰 / 受击白闪弹回 / 无敌闪烁） ──
+# ── 方向 C 表现层（贴纸机体：倾斜 / 双引擎喷焰 / hover 浮动 / 受击白闪弹回 / 无敌闪烁） ──
 func _tick_visual(p_game_delta: float, p_move: Vector2) -> void:
 	# 纯表现（game_delta 通道——顿帧自然冻结）；不触碰数值与碰撞
 	_anim_t += p_game_delta
+	# hover 待机浮动（正弦 bob——机体「悬停感」，叠加在倾斜/挤压之上）
+	var hover_y := sin(_anim_t * HOVER_PERIOD) * HOVER_AMP
+	_sprite.position = Vector2(0.0, hover_y)
 	# 移动倾斜（横移 bank）+ 移动拉伸
 	var target_tilt := clampf(-p_move.x * 0.05, -0.38, 0.38)
 	_tilt += (target_tilt - _tilt) * minf(p_game_delta * 16.0, 1.0)
@@ -307,18 +323,25 @@ func _tick_visual(p_game_delta: float, p_move: Vector2) -> void:
 	_sprite.rotation = _tilt
 	_sprite.scale = Vector2(_visual_scale * (1.0 - squash) * punch,
 		_visual_scale * (1.0 + squash) / punch)
-	# 尾焰：移动时点亮 + 频闪抖动
-	_flame.visible = moving and not _dead
-	if _flame.visible:
-		_flame.rotation = _tilt
-		_flame.position = Vector2(0.0, 26.0).rotated(_tilt)
-		var flicker := 0.9 + 0.25 * sin(_anim_t * 42.0)
-		_flame.scale = Vector2(_visual_scale * flicker, _visual_scale * (1.6 - flicker * 0.5))
+	# 双引擎喷焰：移动时点亮 + 左右反相频闪抖动（随倾斜旋转 + hover 同步浮动）
+	_flame_l.visible = moving and not _dead
+	_flame_r.visible = _flame_l.visible
+	if _flame_l.visible:
+		var hover_off := Vector2(0.0, hover_y)
+		_flame_l.rotation = _tilt
+		_flame_r.rotation = _tilt
+		_flame_l.position = (POD_L * _visual_scale).rotated(_tilt) + hover_off
+		_flame_r.position = (POD_R * _visual_scale).rotated(_tilt) + hover_off
+		var flick_l := 0.9 + 0.25 * sin(_anim_t * 42.0)
+		var flick_r := 0.9 + 0.25 * sin(_anim_t * 42.0 + PI)
+		_flame_l.scale = Vector2(_visual_scale * flick_l, _visual_scale * (1.7 - flick_l * 0.55))
+		_flame_r.scale = Vector2(_visual_scale * flick_r, _visual_scale * (1.7 - flick_r * 0.55))
 	# 受击白闪剪影
 	if _flash_left > 0.0:
 		_flash_left = maxf(_flash_left - p_game_delta, 0.0)
 		_flash.visible = true
 		_flash.rotation = _tilt
+		_flash.position = _sprite.position
 		_flash.modulate.a = clampf(_flash_left / FLASH_TIME, 0.0, 1.0)
 	else:
 		_flash.visible = false

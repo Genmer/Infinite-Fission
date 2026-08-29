@@ -80,6 +80,18 @@ var _dash_state: int = 0                      # E2 冲刺状态机（0 巡航/1 
 var _dash_left: float = 0.0                   # E2 当前阶段剩余
 var _dash_dir: Vector2 = Vector2.ZERO         # E2 冲刺锁定方向（蓄力期末采样）
 
+# 方向 C 元素状态表现层（用户反馈 2026-08-29「闪电/灼烧等特效」；只读 ElementalState，
+# 零数值/碰撞副作用，_reset_state 全复位，共享贴图 + 无逐敌 shader）：
+var _burn_flames: Array[Sprite2D] = []        # 点燃：顶部上飘火苗 ×3（循环重生）
+var _frost_shards: Array[Sprite2D] = []       # 寒滞/冻结：结霜菱形冰渣 ×3
+var _frost_ring: Sprite2D = null              # 冻结冰壳描边圈（白环）
+var _super_mist: Sprite2D = null              # 超导淡紫雾圈（半透明覆盖）
+var _shock_arc: Line2D = null                 # 感电锯齿小电弧（0.08s 即消）
+var _shock_arc_left: float = 0.0              # 电弧剩余显示时长
+var _shock_arc_cd: float = 0.0                # 下次电弧倒计时
+var _arc_pattern_idx: int = 0                 # 电弧顶点池轮换游标
+static var _arc_pattern_pool: Array[PackedVector2Array] = []   # 预生成电弧折线顶点池（全敌共享）
+
 # E2 疾冲冲刺周期（视觉+走位表现；数值真源 = 本块常量，用户裁定方向 C 敌人角色化：
 # 蓄力 0.3s telegraph（果冻压扁+微抖）→ 冲刺 0.35s×1.9 速（拉长 1.4×）→ 回弹 0.25s 半速）
 const DASH_CHARGE_TIME := 0.3               # 蓄力 telegraph 时长 s
@@ -98,6 +110,10 @@ const BOSS_TEX_R := 40.0                      # Boss 贴图本体半径 px（96 
 const BOSS_VISUAL_MULT := 1.9                 # Boss 视觉放大倍率（大型聚合体观感；碰撞盒不变）
 const WOBBLE_TIME := 0.22                     # 受击果冻抖动时长
 const HOVER_AMP := 6.0                        # E5 悬浮幅度 px
+const BURN_FLAME_COUNT := 3                   # 点燃火苗并发数（粒子预算按敌数封顶的口径）
+const FROST_SHARD_COUNT := 3                  # 结霜冰渣数
+const SHOCK_ARC_TIME := 0.08                  # 感电小电弧存活时长 s（任务口径）
+const SHOCK_ARC_PERIOD := 0.5                 # 电弧出现基础周期 s（±0.25 随机相位）
 static var _flash_shader: Shader = null
 
 
@@ -185,6 +201,7 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 		_sprite.position = Vector2.ZERO
 	modulate.a = 0.0                          # 入场渐显起点（前 0.12s 内完成）
 	_apply_flash(0.0)
+	_reset_status_fx()                        # 元素状态表现层复位（池复用安全）
 	visible = true
 	_sync_visual()
 
@@ -511,6 +528,7 @@ func _reset_state() -> void:
 	for i in range(_sparkles.size()):
 		_sparkles[i].visible = false
 		_sparkles[i].modulate.a = 1.0
+	_reset_status_fx()
 
 
 # ── 支撑 ──────────────────────────────────────────────────────────
@@ -753,6 +771,7 @@ func _tick_visual(p_game_delta: float) -> void:
 	_sprite.scale = Vector2(sx, sy)
 	_sprite.rotation = rot
 	_sprite.position = off
+	_tick_status_fx(p_game_delta)
 
 
 func _dart_rotation() -> float:
@@ -847,6 +866,195 @@ void fragment() {\n\
 	COLOR = vec4(mix(tex.rgb, vec3(1.0), flash_amount), tex.a);\n\
 }\n"
 	return _flash_shader
+
+
+# ── 元素状态表现层（方向 C：点燃/寒滞/冻结/感电/超导可视化；用户反馈 2026-08-29） ──
+# 只读 ElementalState（tick ⑤ 阶段已先行更新），game_delta 通道（顿帧/暂停自然冻结）。
+# 节点惰性创建（卫星球同模式）、随池实例存活；贴图 TextureFactory 惰性缓存共享；
+# 染色走 self_modulate（无逐敌 shader）；小电弧折线用预生成顶点池轮换（零逐帧随机顶点生成）。
+func _tick_status_fx(p_game_delta: float) -> void:
+	if elemental == null:
+		return
+	var burning: bool = elemental.burn_timer > 0.0
+	var chilled: bool = elemental.chill_timer > 0.0
+	var frozen: bool = elemental.freeze_timer > 0.0
+	var shocked: bool = elemental.gauges[GameConst.Element.LTG] > 0.0
+	var supercon: bool = elemental.superconduct_active
+	_tick_burn_flames(p_game_delta, burning)
+	_tick_frost(chilled, frozen)
+	if shocked:
+		_tick_shock_arc(p_game_delta)
+	elif _shock_arc != null:
+		_shock_arc.visible = false
+	if supercon:
+		_ensure_super_mist()
+		_super_mist.visible = true
+		_super_mist.position = Vector2.ZERO
+		_super_mist.scale = Vector2.ONE * (hitbox_r * 3.8 / 64.0)
+		_super_mist.modulate.a = 0.34 + 0.09 * sin(_anim_t * 3.1)
+	elif _super_mist != null:
+		_super_mist.visible = false
+	_tick_status_tint(burning, chilled, frozen, shocked)
+
+
+func _ensure_super_mist() -> void:
+	# 超导淡紫雾圈（半透明覆盖；柔边白点贴图 + SHOCK 染色，非冻结不复用）
+	if _super_mist == null:
+		_super_mist = Sprite2D.new()
+		_super_mist.name = "SuperMist"
+		_super_mist.texture = TextureFactory.soft_dot(64)
+		_super_mist.modulate = Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g,
+			PopPalette.SHOCK.b, 0.3)
+		add_child(_super_mist)
+
+
+func _reset_status_fx() -> void:
+	# spawn / 池归还双路复位（隐藏挂件 + 清计时 + 染色回白）
+	_shock_arc_left = 0.0
+	_shock_arc_cd = 0.0
+	_arc_pattern_idx = 0
+	for f in _burn_flames:
+		f.visible = false
+	for s in _frost_shards:
+		s.visible = false
+	if _frost_ring != null:
+		_frost_ring.visible = false
+	if _super_mist != null:
+		_super_mist.visible = false
+	if _shock_arc != null:
+		_shock_arc.visible = false
+	if _sprite != null:
+		_sprite.self_modulate = Color.WHITE
+
+
+func _tick_burn_flames(p_game_delta: float, p_burning: bool) -> void:
+	# 点燃：顶部 2~3 粒橙红火苗循环上飘（升起→淡出→重生；预算恒 = BURN_FLAME_COUNT）
+	if _burn_flames.is_empty():
+		if not p_burning:
+			return
+		for i in range(BURN_FLAME_COUNT):
+			var f := Sprite2D.new()
+			f.name = "BurnFlame%d" % i
+			f.texture = TextureFactory.flame_bit()
+			add_child(f)
+			_burn_flames.append(f)
+	if not p_burning:
+		for f in _burn_flames:
+			f.visible = false
+		return
+	var base := hitbox_r * _base_scale
+	for i in range(_burn_flames.size()):
+		var f := _burn_flames[i]
+		f.visible = true
+		var cyc := fmod(_anim_t * 1.35 + float(i) * 0.37, 1.0)     # 0→1 生命周期相位
+		var sway := sin(_anim_t * 7.0 + float(i) * 2.4) * base * 0.12
+		f.position = Vector2((float(i) - 1.0) * base * 0.5 + sway,
+			-hitbox_r * _base_scale * (0.75 + cyc * 0.85))
+		f.rotation = sway * 0.06
+		f.scale = Vector2.ONE * _base_scale * (0.58 + 0.5 * cyc)
+		f.modulate = Color(1.0, 1.0, 1.0, clampf(maxf(sin(cyc * PI) * 1.2, 0.32), 0.0, 1.0))
+		# 白（贴图本色：橙外焰+亮黄内芯）→ 橙红渐深（自带饱和度，避免淡黄洗白）
+		f.self_modulate = Color.WHITE.lerp(PopPalette.ENEMY, cyc * 0.7)
+
+
+func _tick_frost(p_chilled: bool, p_frozen: bool) -> void:
+	# 寒滞/冻结：本体结霜菱形冰渣（冻结更大更白）+ 冻结期白色冰壳描边圈
+	if _frost_shards.is_empty():
+		if not p_chilled and not p_frozen:
+			return
+		for i in range(FROST_SHARD_COUNT):
+			var s := Sprite2D.new()
+			s.name = "FrostShard%d" % i
+			s.texture = TextureFactory.ice_shard()
+			add_child(s)
+			_frost_shards.append(s)
+	for i in range(_frost_shards.size()):
+		var s := _frost_shards[i]
+		s.visible = p_chilled or p_frozen
+		if not s.visible:
+			continue
+		match i:
+			0:
+				s.position = Vector2(-0.52, -0.5) * hitbox_r
+			1:
+				s.position = Vector2(0.55, -0.3) * hitbox_r
+			_:
+				s.position = Vector2(0.05, 0.42) * hitbox_r
+		s.rotation = 0.6 * float(i) + 0.12 * sin(_anim_t * 2.2 + float(i))
+		s.scale = Vector2.ONE * _base_scale * (0.78 if p_frozen else 0.55)
+		s.self_modulate = Color.WHITE if p_frozen else Color(1.0, 1.0, 1.0, 0.85)
+	if p_frozen:
+		if _frost_ring == null:
+			_frost_ring = Sprite2D.new()
+			_frost_ring.name = "FrostRing"
+			_frost_ring.texture = TextureFactory.ring_tex(Color(1.0, 1.0, 1.0, 0.95), 48, 4.0)
+			add_child(_frost_ring)
+		_frost_ring.visible = true
+		_frost_ring.position = Vector2.ZERO
+		_frost_ring.scale = Vector2.ONE * (hitbox_r * 1.35 / 19.0)   # 贴图环半径 19px 口径
+		_frost_ring.modulate.a = 0.68 + 0.27 * sin(_anim_t * 5.2)
+	elif _frost_ring != null:
+		_frost_ring.visible = false
+
+
+func _tick_shock_arc(p_game_delta: float) -> void:
+	# 感电：绕体随机角度锯齿小电弧（3~4 段预生成折线轮换，0.08s 即消）
+	if _shock_arc == null:
+		_shock_arc = Line2D.new()
+		_shock_arc.name = "ShockArc"
+		_shock_arc.width = clampf(hitbox_r * 0.16, 2.5, 5.0)
+		_shock_arc.default_color = PopPalette.SHOCK
+		_shock_arc.joint_mode = Line2D.LINE_JOINT_ROUND
+		_shock_arc.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		_shock_arc.end_cap_mode = Line2D.LINE_CAP_ROUND
+		_shock_arc.visible = false
+		add_child(_shock_arc)
+	if _shock_arc_left > 0.0:
+		_shock_arc_left = maxf(_shock_arc_left - p_game_delta, 0.0)
+		if _shock_arc_left <= 0.0:
+			_shock_arc.visible = false
+	_shock_arc_cd -= p_game_delta
+	if _shock_arc_cd <= 0.0:
+		_shock_arc_cd = SHOCK_ARC_PERIOD + randf() * 0.25
+		var patterns := _get_arc_patterns()
+		_shock_arc.points = patterns[_arc_pattern_idx % patterns.size()]
+		_arc_pattern_idx += 1
+		_shock_arc.rotation = randf() * TAU
+		_shock_arc.scale = Vector2.ONE * hitbox_r * 1.25
+		_shock_arc.visible = true
+		_shock_arc_left = SHOCK_ARC_TIME
+
+
+static func _get_arc_patterns() -> Array[PackedVector2Array]:
+	# 预生成电弧折线顶点池（8 组 × 4 顶点，坐标 = hitbox_r 单位；全敌共享零逐帧生成）
+	if _arc_pattern_pool.is_empty():
+		for i in range(8):
+			var flip := 1.0 if i % 2 == 0 else -1.0
+			var amp := 0.30 + 0.06 * float(i % 3)
+			var pts := PackedVector2Array([
+				Vector2(-1.0, 0.0),
+				Vector2(-0.42, flip * amp),
+				Vector2(0.36, -flip * amp * 0.85),
+				Vector2(1.0, flip * amp * 0.3),
+			])
+			_arc_pattern_pool.append(pts)
+	return _arc_pattern_pool
+
+
+func _tick_status_tint(p_burning: bool, p_chilled: bool, p_frozen: bool, p_shocked: bool) -> void:
+	# 本体状态染色（self_modulate 乘色——零 shader 开销）：点燃橙红呼吸 / 寒滞蓝白 /
+	# 冻结更白 / 感电附着微频闪；取色全部 = PopPalette 表内 lerp 派生（单源纪律）
+	var tint := Color.WHITE
+	if p_burning:
+		var breath := 0.38 + 0.1 * sin(_anim_t * 6.2)
+		tint = tint.lerp(PopPalette.ENEMY.lerp(PopPalette.XP, 0.45), breath)   # 橙红呼吸
+	if p_chilled:
+		tint = tint.lerp(PopPalette.PLAYER.lerp(Color.WHITE, 0.62), 0.5)       # 寒滞蓝白
+	if p_frozen:
+		tint = tint.lerp(PopPalette.PLAYER.lerp(Color.WHITE, 0.84), 0.85)      # 冻结更白
+	if p_shocked:
+		tint = tint.lerp(Color.WHITE, maxf(sin(_anim_t * 46.0), 0.0) * 0.14)   # 微频闪
+	_sprite.self_modulate = tint
 
 
 # ── 爆虫警示圈（方向 C：虚线圈 + 进度环；半径 = VOLATILE_BLAST_RADIUS，A3 §2.2「警示圈」） ──

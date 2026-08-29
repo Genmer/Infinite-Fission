@@ -7,6 +7,8 @@
 class_name HUD
 extends CanvasLayer
 
+signal pause_requested()                      # 暂停按钮申请（→ GameLoop.request_pause 仲裁）
+
 var player: Node2D = null                     # 注入（数值源；Player 宽类型规避循环解析）
 var total_damage: float = 0.0                 # 造成的总伤害（damage_resolved 累计；结算屏数据源）
 
@@ -22,6 +24,7 @@ var _build_label: Label = null                # 词条栏（武器/词条计数�
 var _state_label: Label = null                # 状态提示（LEVEL_UP/PAUSED/GAME_OVER——测试锁定节点名）
 var _toast_label: Label = null                # 波次 toast（果冻 pop + lore 文案）
 var _toast_left: float = 0.0                  # toast 剩余展示时长（raw 通道）
+var _pause_btn: Button = null                 # 暂停按钮（▶⏸ 图形化贴纸；仅 PLAYING 态显示）
 
 var kills: int = 0
 var wave: int = 0
@@ -142,10 +145,17 @@ func _on_state_changed(p_state: int) -> void:
 			_state_label.visible = true
 		_:
 			_state_label.visible = false
+	_pause_btn.visible = p_state == GameConst.GameStatus.PLAYING   # 暂停按钮仅战斗态显示
 	if p_state != GameConst.GameStatus.PLAYING:
 		_toast_left = 0.0                     # 状态覆盖期收起波次 toast
 		_toast_label.visible = false
 	refresh_stats()
+
+
+func _on_pause_pressed() -> void:
+	# 暂停按钮回调（果冻 punch + 申请信号——仲裁权在 GameLoop）
+	StickerTheme.press_punch(_pause_btn)
+	pause_requested.emit()
 
 
 func _on_damage_resolved(p_result: DamageResult) -> void:
@@ -265,6 +275,27 @@ func _build_ui() -> void:
 	_build_label.position = Vector2(0.0, 7.0)
 	_build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	build_pill.add_child(_build_label)
+
+	# 暂停按钮（右上角贴纸图标：白底圆角 + 藏青 ⏸ 双竖条；仅 PLAYING 态显示——
+	# 用户反馈 2026-08-29「没有暂停的地方」；申请经信号 → GameLoop 仲裁）
+	_pause_btn = Button.new()
+	_pause_btn.name = "PauseButton"
+	for style_name in ["normal", "hover", "pressed", "focus", "disabled"]:
+		_pause_btn.add_theme_stylebox_override(style_name, StyleBoxEmpty.new())
+	_pause_btn.position = Vector2(514.0, 26.0)
+	_pause_btn.size = Vector2(66.0, 66.0)
+	_pause_btn.pivot_offset = _pause_btn.size * 0.5
+	_pause_btn.pressed.connect(_on_pause_pressed)
+	var pause_icon := TextureRect.new()
+	pause_icon.name = "PauseIcon"
+	pause_icon.texture = TextureFactory.ui_glyph(0)
+	pause_icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pause_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	pause_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pause_btn.add_child(pause_icon)
+	_pause_btn.visible = false                   # 初始 MENU 态隐藏（state_changed 驱动）
+	root.add_child(_pause_btn)
 
 	# 波次 toast（果冻 pop；居中，避开 Boss 条与状态提示行）
 	_toast_label = StickerTheme.label_sticker(Label.new(), 34, PopPalette.INK, 12, Color.WHITE, true)

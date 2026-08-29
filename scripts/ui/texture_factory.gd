@@ -25,30 +25,71 @@ static func bead(p_fill: Color, p_size: int = 64, p_highlight: bool = true) -> I
 
 
 static func ship(p_silhouette: bool = false) -> ImageTexture:
-	# 玩家「哨兵-9」圆舰：天空蓝厚描边圆舰 + 白肚皮 + 舷窗（克制无脸；96px 画布）
+	# 玩家「哨兵-9」拦截机（用户试玩反馈 2026-08-29：圆舰像救生艇 → 重设计有主角相的
+	# 小机甲战机，贴纸厚描边风）：锐利三角翼主体 + 双侧引擎舱 + 机头炮塔 + 座舱盖
+	#（白高光玻璃感，内嵌哨兵-9 机器人驾驶员剪影——圆头 + 天线，呼应菜单吉祥物）。
+	# 96px 画布；本体半径口径 38 不变（Player._ready 缩放换算零改动）。
 	var key := "ship_%s" % str(p_silhouette)
 	return _cached(key, func() -> ImageTexture:
 		if p_silhouette:
-			# 受击闪白剪影（白色圆轮廓，叠加在舰体上）
+			# 受击闪白剪影（白色战机轮廓，叠加在机体上）
 			return _render(96, 96, _shade([
-				{"sd": _circle_at(Vector2(0.0, -2.0), 38.0), "fill": Color.WHITE, "ow": 0.0},
+				{"sd": _poly_sd(_ship_body_pts()), "fill": Color.WHITE, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(-20.0, 26.0), Vector2(8.5, 11.0), 6.5, 0.0),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(20.0, 26.0), Vector2(8.5, 11.0), 6.5, 0.0),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _box_at(Vector2(0.0, -34.0), Vector2(2.4, 7.5), 1.4),
+					"fill": Color.WHITE, "ow": 0.0},
 			]))
-		var body := {"sd": _circle_at(Vector2(0.0, -2.0), 38.0), "fill": PopPalette.PLAYER, "ow": 7.0}
-		var belly := {"sd": _circle_at(Vector2(0.0, 15.0), 24.0), "fill": Color(1.0, 1.0, 1.0, 0.96), "ow": 3.0}
-		var window := {"sd": _circle_at(Vector2(0.0, -12.0), 10.0), "fill": Color(1.0, 1.0, 1.0, 0.95), "ow": 5.0}
-		var wing_l := {"sd": _circle_at(Vector2(-30.0, 10.0), 12.0), "fill": PopPalette.PLAYER, "ow": 6.0}
-		var wing_r := {"sd": _circle_at(Vector2(30.0, 10.0), 12.0), "fill": PopPalette.PLAYER, "ow": 6.0}
-		return _render(96, 96, _shade([body, wing_l, wing_r, belly, window])))
+		var deep := PopPalette.PLAYER.lerp(PopPalette.OUTLINE, 0.32)   # 派生深空蓝（引擎舱/炮塔）
+		var glass := Color(1.0, 1.0, 1.0, 0.96)
+		var body := {"sd": _poly_sd(_ship_body_pts()), "fill": PopPalette.PLAYER, "ow": 7.0}
+		var pod_l := {"sd": _box_rot_at(Vector2(-20.0, 26.0), Vector2(8.5, 11.0), 6.5, 0.0),
+			"fill": deep, "ow": 5.0}
+		var pod_r := {"sd": _box_rot_at(Vector2(20.0, 26.0), Vector2(8.5, 11.0), 6.5, 0.0),
+			"fill": deep, "ow": 5.0}
+		var stripe_l := {"sd": _box_rot_at(Vector2(-19.0, 13.0), Vector2(2.2, 6.0), 1.0, 0.62),
+			"fill": PopPalette.XP, "ow": 0.0}
+		var stripe_r := {"sd": _box_rot_at(Vector2(19.0, 13.0), Vector2(2.2, 6.0), 1.0, -0.62),
+			"fill": PopPalette.XP, "ow": 0.0}
+		var barrel := {"sd": _box_at(Vector2(0.0, -34.0), Vector2(2.4, 7.5), 1.4),
+			"fill": deep, "ow": 3.0}
+		var turret := {"sd": _circle_at(Vector2(0.0, -26.0), 6.5), "fill": deep, "ow": 4.0}
+		var canopy := {"sd": _box_at(Vector2(0.0, -6.0), Vector2(11.0, 13.0), 8.0),
+			"fill": glass, "ow": 3.5}
+		# 座舱驾驶员「哨兵-9」剪影：圆头 + 天线 + 珊瑚红天线珠（菜单吉祥物呼应）
+		var pilot_head := {"sd": _circle_at(Vector2(0.0, -9.0), 4.6), "fill": PopPalette.OUTLINE, "ow": 0.0}
+		var pilot_ant := {"sd": _box_at(Vector2(0.0, -17.0), Vector2(0.9, 3.4), 0.4),
+			"fill": PopPalette.OUTLINE, "ow": 0.0}
+		var pilot_tip := {"sd": _circle_at(Vector2(0.0, -21.2), 1.5), "fill": PopPalette.ENEMY, "ow": 0.0}
+		var glass_hi := {"sd": _circle_at(Vector2(-4.2, -13.0), 2.6), "fill": Color(1.0, 1.0, 1.0, 0.9), "ow": 0.0}
+		var tip_l := {"sd": _circle_at(Vector2(-29.5, 19.5), 2.2), "fill": Color.WHITE, "ow": 0.0}
+		var tip_r := {"sd": _circle_at(Vector2(29.5, 19.5), 2.2), "fill": Color.WHITE, "ow": 0.0}
+		return _render(96, 96, _shade([pod_l, pod_r, body, stripe_l, stripe_r, barrel, turret,
+			canopy, pilot_head, pilot_ant, pilot_tip, glass_hi, tip_l, tip_r])))
 
 
-static func ship_flame() -> ImageTexture:
-	# 喷气小尾巴（朝下的水滴；柠檬外焰 + 白内焰；挂舰体尾部，运行期只做缩放抖动）
-	var key := "ship_flame"
+static func _ship_body_pts() -> PackedVector2Array:
+	# 拦截机三角翼主体剪影（锐利机鼻 + 后掠翼尖 + 尾部内凹）
+	return PackedVector2Array([
+		Vector2(0.0, -38.0), Vector2(33.0, 24.0), Vector2(0.0, 14.0), Vector2(-33.0, 24.0),
+	])
+
+
+static func engine_flame() -> ImageTexture:
+	# 双引擎喷焰（朝下锥形；青蓝外焰 + 白内焰；挂两侧引擎舱，运行期只做缩放抖动）
+	var key := "engine_flame"
 	return _cached(key, func() -> ImageTexture:
-		var pts_outer := PackedVector2Array([Vector2(-11.0, -12.0), Vector2(11.0, -12.0), Vector2(0.0, 22.0)])
-		var pts_inner := PackedVector2Array([Vector2(-5.5, -10.0), Vector2(5.5, -10.0), Vector2(0.0, 10.0)])
-		return _render(44, 60, _shade([
-			{"sd": _poly_sd(pts_outer), "fill": PopPalette.XP, "ow": 5.0},
+		var cyan := PopPalette.PLAYER.lerp(PopPalette.SUCCESS, 0.38)   # 派生青蓝（表内 lerp 派生）
+		var pts_outer := PackedVector2Array([
+			Vector2(-10.0, -16.0), Vector2(10.0, -16.0), Vector2(0.0, 22.0),
+		])
+		var pts_inner := PackedVector2Array([
+			Vector2(-5.0, -13.0), Vector2(5.0, -13.0), Vector2(0.0, 12.0),
+		])
+		return _render(40, 56, _shade([
+			{"sd": _poly_sd(pts_outer), "fill": cyan, "ow": 4.0},
 			{"sd": _poly_sd(pts_inner), "fill": Color(1.0, 1.0, 1.0, 0.92), "ow": 0.0},
 		])))
 
@@ -407,6 +448,57 @@ static func ring_tex(p_fill: Color, p_size: int = 32, p_thickness: float = 4.5) 
 		return _render(p_size, p_size, _shade([
 			{"sd": _ring_at(r, p_thickness), "fill": p_fill, "ow": 0.0},
 		])))
+
+
+static func flame_bit() -> ImageTexture:
+	# 点燃小火苗（敌人顶部上飘火星/元素 DOT 火星共用）：橙红锥形火苗 + 亮黄内芯
+	#（取色 = 表内 ENEMY→XP lerp 派生橙；小尺寸薄描边——confetti 同口径，防描边反超本体）
+	var key := "flame_bit"
+	return _cached(key, func() -> ImageTexture:
+		var orange := PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)
+		var pts := PackedVector2Array([
+			Vector2(0.0, -10.0), Vector2(5.5, 3.0), Vector2(0.0, 9.0), Vector2(-5.5, 3.0),
+		])
+		var pts_inner := PackedVector2Array([
+			Vector2(0.0, -4.0), Vector2(2.6, 3.0), Vector2(0.0, 6.5), Vector2(-2.6, 3.0),
+		])
+		return _render(20, 26, _shade([
+			{"sd": _poly_sd(pts), "fill": orange, "ow": 2.6},
+			{"sd": _poly_sd(pts_inner), "fill": PopPalette.XP, "ow": 0.0},
+		])))
+
+
+static func ice_shard() -> ImageTexture:
+	# 结霜小晶体（菱形冰渣）：淡冰蓝菱形 + 白高光 + 藏青描边（贴纸风统一）
+	var key := "ice_shard"
+	return _cached(key, func() -> ImageTexture:
+		var ice := PopPalette.PLAYER.lerp(Color.WHITE, 0.62)           # 派生淡冰蓝
+		var pts := PackedVector2Array([
+			Vector2(0.0, -11.0), Vector2(7.0, 0.0), Vector2(0.0, 11.0), Vector2(-7.0, 0.0),
+		])
+		return _render(26, 26, _shade([
+			{"sd": _poly_sd(pts), "fill": ice, "ow": 3.2},
+			{"sd": _circle_at(Vector2(-1.8, -3.0), 1.8), "fill": Color.WHITE, "ow": 0.0},
+		])))
+
+
+static func ui_glyph(p_kind: int) -> ImageTexture:
+	# 暂停按钮贴纸图标（白底圆角方 + 藏青描边 + 藏青图形）：0=⏸ 双竖条 / 1=▶ 三角
+	var key := "ui_glyph_%d" % p_kind
+	return _cached(key, func() -> ImageTexture:
+		var layers: Array = [
+			{"sd": _box_at(Vector2.ZERO, Vector2(26.0, 26.0), 14.0), "fill": PopPalette.PANEL, "ow": 5.0},
+		]
+		if p_kind == 0:
+			layers.append({"sd": _box_at(Vector2(-8.0, 0.0), Vector2(4.5, 12.0), 2.0),
+				"fill": PopPalette.OUTLINE, "ow": 0.0})
+			layers.append({"sd": _box_at(Vector2(8.0, 0.0), Vector2(4.5, 12.0), 2.0),
+				"fill": PopPalette.OUTLINE, "ow": 0.0})
+		else:
+			layers.append({"sd": _poly_sd(PackedVector2Array([
+				Vector2(-7.0, -13.0), Vector2(14.0, 0.0), Vector2(-7.0, 13.0),
+			])), "fill": PopPalette.OUTLINE, "ow": 0.0})
+		return _render(64, 64, _shade(layers)))
 
 
 # ── 光栅化内核 ────────────────────────────────────────────────────

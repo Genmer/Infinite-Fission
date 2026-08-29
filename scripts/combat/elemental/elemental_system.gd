@@ -237,6 +237,7 @@ func _dot_tick(p_enemy: Node2D, p_state: ElementalState) -> void:
 		ctx.pos = (p_enemy as Node2D).global_position
 		if pipeline.has_method(&"resolve"):
 			pipeline.call(&"resolve", ctx)
+		EventBus.emit_elemental_dot_fired((p_enemy as Node2D).global_position)   # 表现层火星
 		DebugStats.count(&"elemental_dot_tick")
 
 
@@ -264,6 +265,9 @@ func _shock_chain(p_origin: Node2D, p_hit_damage: float, p_targets_per_hop: int)
 			for target in _nearest_targets(node, radius, dedup, p_targets_per_hop):
 				dedup[int(target.get("uid"))] = true
 				_settle_chain_jump(target, damage)
+				# 表现层专用广播（签名特效：主锯齿闪电；只读两端位置，零结算时序影响）
+				EventBus.emit_chain_lightning((node as Node2D).global_position,
+					(target as Node2D).global_position)
 				next_frontier.append(target)
 		if next_frontier.is_empty():
 			break

@@ -27,15 +27,19 @@ const SCENE_XP_SHARD := "res://scenes/combat/pickups/xp_shard.tscn"   # B.1 经�
 # 单轴单次推移 ≤4px 软钳——分离是观感修正而非物理约束，避免两帧内挤开 Boss 阵型）
 const SEPARATION_INTERVAL := 0.1              # 10Hz（架构 §2.11 敌间分离力口径）
 const SEPARATION_MAX_STEP := 4.0              # 单敌单次推移上限 px
+const RESUME_GRACE_S := 0.5                   # 暂停恢复输入忽略期 s（防误触，用户反馈 2026-08-29）
 
 # 状态机（复用 GameConst.GameStatus：BOOT/MENU/PLAYING/PAUSED/LEVEL_UP/GAME_OVER）
-# 合法迁移矩阵（冻结；非法迁移 change_state 拒绝 + 计数）
+# 合法迁移矩阵（冻结；非法迁移 change_state 拒绝 + 计数）。
+# ★ PAUSED → MENU 为暂停面板「回主菜单」新增合法迁移（用户反馈 2026-08-29；pkg4 非法
+#   迁移用例枚举 MENU→PAUSED / MENU→LEVEL_UP / GAME_OVER→PAUSED，不含本对——不破坏）
 const TRANSITIONS: Dictionary = {
 	GameConst.GameStatus.BOOT: [GameConst.GameStatus.MENU],
 	GameConst.GameStatus.MENU: [GameConst.GameStatus.PLAYING],
 	GameConst.GameStatus.PLAYING: [GameConst.GameStatus.PAUSED, GameConst.GameStatus.LEVEL_UP,
 		GameConst.GameStatus.GAME_OVER],
-	GameConst.GameStatus.PAUSED: [GameConst.GameStatus.PLAYING, GameConst.GameStatus.GAME_OVER],
+	GameConst.GameStatus.PAUSED: [GameConst.GameStatus.PLAYING, GameConst.GameStatus.GAME_OVER,
+		GameConst.GameStatus.MENU],
 	GameConst.GameStatus.LEVEL_UP: [GameConst.GameStatus.PLAYING, GameConst.GameStatus.GAME_OVER],
 	GameConst.GameStatus.GAME_OVER: [GameConst.GameStatus.MENU, GameConst.GameStatus.PLAYING],
 }
@@ -67,9 +71,12 @@ var card_generator: CardGenerator = null
 var card_select_ui: CardSelectUI = null
 var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处理器
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
+var pause_overlay: PauseOverlay = null        # 方向 C：暂停遮罩面板（PAUSED 态宿主）
+var elemental_fx: ElementalFxLayer = null     # 方向 C：元素签名特效层（连锁闪电/碎裂环/DOT 火星）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
 var confetti: ConfettiBurst = null            # 方向 C：Boss 死亡彩纸屑（actors 段前置订阅）
 var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp}
+var resume_grace_left: float = 0.0            # 恢复输入忽略剩余（raw 通道；测试观测）
 
 var frame_order: Array[StringName] = []       # 帧序探针（每帧重建；测试断言固定帧序）
 var current_candidates: Array[Dictionary] = []   # 当前货架（测试观测）
@@ -115,8 +122,12 @@ func _physics_process(p_raw_delta: float) -> void:
 			if stage_probe_enabled:
 				stage_probe_us.clear()
 			# ① 输入采样：相对拖动由 Player._unhandled_input 自采（E-15 单指针锁定），
-			#    GameLoop 本层透传零向量 = 玩家消费自采样（包 2 落地口径）
+			#    GameLoop 本层透传零向量 = 玩家消费自采样（包 2 落地口径）。
+			#    暂停恢复宽限期内吞掉拖动输入（防误触，raw 通道倒计时）
 			frame_order.append(&"input")
+			if resume_grace_left > 0.0:
+				resume_grace_left = maxf(resume_grace_left - p_raw_delta, 0.0)
+			player.input_enabled = resume_grace_left <= 0.0
 			# ② 玩家（移动/受击/拾取；内含武器冷却+开火调度——包 2 Player.tick 落地口径）
 			frame_order.append(&"player")
 			player.tick(gd, Vector2.ZERO)
@@ -160,6 +171,8 @@ func _physics_process(p_raw_delta: float) -> void:
 			frame_order.append(&"feel")
 			game_feel.tick(p_raw_delta)
 			set_time_scale(game_feel.desired_time_scale(), &"gamefeel")
+			if elemental_fx != null:
+				elemental_fx.tick(p_raw_delta)   # 元素签名特效层（连锁闪电/冲击环/火星）
 			# ⑧ UI（raw 通道：跳字/HUD/Boss 条——顿帧期间照常，Q-14）
 			frame_order.append(&"ui")
 			_tick_ui(p_raw_delta)
@@ -167,10 +180,12 @@ func _physics_process(p_raw_delta: float) -> void:
 				stage_probe_us[&"feel_ui"] = Time.get_ticks_usec() - _probe_t0
 		GameConst.GameStatus.LEVEL_UP, GameConst.GameStatus.PAUSED:
 			# tree.paused=true 冻结全部 PAUSABLE 子系统（AC-16.2 战斗完全冻结）；
-			# 仅 ⑦⑧ 以 raw 通道运行（架构帧序契约）
+			# 仅 ⑦⑧ 以 raw 通道运行（架构帧序契约）。
+			# 用户反馈 2026-08-29：PAUSED 期 GameFeel 计时（顿帧/震屏衰减）一并冻结——
+			# ⑦ 标签保留（帧序契约），以零时长驱动；LEVEL_UP 沿用 raw 通道原口径
 			frame_order.clear()
 			frame_order.append(&"feel")
-			game_feel.tick(p_raw_delta)
+			game_feel.tick(0.0 if state == GameConst.GameStatus.PAUSED else p_raw_delta)
 			set_time_scale(game_feel.desired_time_scale(), &"gamefeel")
 			frame_order.append(&"ui")
 			_tick_ui(p_raw_delta)
@@ -204,7 +219,15 @@ func request_pause() -> bool:
 
 
 func request_resume() -> bool:
-	return change_state(GameConst.GameStatus.PLAYING)
+	# 恢复申请：自 PAUSED 恢复时启动 0.5s 输入忽略期（防误触，用户反馈 2026-08-29）。
+	# input_enabled 即时同步（宽限自恢复瞬间生效）——写权仍归 ① 步每帧口径（§1.3 单写者：
+	# 本函数与 _reset_run_state 是仅有的两处帧外写点，均为"申请瞬间"语义）
+	var resumed := change_state(GameConst.GameStatus.PLAYING)
+	if resumed:
+		if resume_grace_left <= 0.0:
+			resume_grace_left = RESUME_GRACE_S
+		player.input_enabled = false
+	return resumed
 
 
 func start_run() -> bool:
@@ -216,13 +239,23 @@ func start_run() -> bool:
 
 
 func restart_run() -> bool:
-	# GAME_OVER → PLAYING（重开）：数值重置 + 波次 1 重开
-	if state != GameConst.GameStatus.GAME_OVER:
+	# GAME_OVER → PLAYING（结算重开）/ PAUSED → PLAYING（暂停面板「重新开始」，
+	# 用户反馈 2026-08-29；PAUSED→PLAYING 为既有合法迁移）：数值重置 + 波次 1 重开
+	if state != GameConst.GameStatus.GAME_OVER and state != GameConst.GameStatus.PAUSED:
 		return false
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
 	_reset_run_state()
 	wave_director.start_wave(1)
+	return true
+
+
+func quit_to_menu() -> bool:
+	# PAUSED → MENU（暂停面板「回主菜单」；新增合法迁移）：回菜单前静默清场 +
+	# 数值复位（等同 restart 口径——防残留敌/弹在下次 start_run 时叠进波次 1）
+	if not change_state(GameConst.GameStatus.MENU):
+		return false
+	_reset_run_state()
 	return true
 
 
@@ -449,11 +482,22 @@ func _boot_build_presentation() -> void:
 	popup_manager.name = "PopupManager"
 	add_child(popup_manager)
 	popup_manager.setup(pools[&"popup"])
+	# 方向 C 元素签名特效层（连锁闪电/碎裂冲击环/DOT 火星；事件订阅在其 _ready 自挂）
+	elemental_fx = ElementalFxLayer.new()
+	elemental_fx.name = "ElementalFxLayer"
+	add_child(elemental_fx)
 	hud = HUD.new()
 	hud.name = "HUD"
 	add_child(hud)
 	hud.setup(player)
 	hud.bind_events()
+	hud.pause_requested.connect(request_pause)   # 暂停按钮申请（仲裁权在 GameLoop）
+	pause_overlay = PauseOverlay.new()
+	pause_overlay.name = "PauseOverlay"
+	add_child(pause_overlay)
+	pause_overlay.resume_requested.connect(request_resume)
+	pause_overlay.restart_requested.connect(restart_run)
+	pause_overlay.menu_requested.connect(quit_to_menu)
 	boss_bar = BossBar.new()
 	boss_bar.name = "BossBar"
 	add_child(boss_bar)
@@ -513,12 +557,38 @@ func _tick_ui(p_raw_delta: float) -> void:
 
 
 func _apply_camera_shake() -> void:
-	# 集成包 A：CameraShake 纯计算输出 → 相机 transform（headless 无相机也安全）
+	# 集成包 A：CameraShake 纯计算输出 → 相机 transform（headless 无相机也安全）。
+	# PAUSED：震屏冻结（用户反馈 2026-08-29——暂停期画面完全静止）
 	if camera == null or game_feel == null or game_feel.shake == null:
+		return
+	if state == GameConst.GameStatus.PAUSED:
+		camera.offset = Vector2.ZERO
+		camera.rotation = 0.0
 		return
 	var v := game_feel.shake.offset_and_rotation()
 	camera.offset = Vector2(v.x, v.y)
 	camera.rotation = v.z
+
+
+func _unhandled_input(p_event: InputEvent) -> void:
+	# 桌面键盘暂停（用户反馈 2026-08-29）：Esc / P 在 PLAYING⇄PAUSED 间切换——
+	# 仅真实输入事件触发（headless 手动驱动 _physics_process 的测试零影响）；
+	# 本节点 PROCESS_MODE_ALWAYS（tree.paused 期仍收输入，Q-14 同口径）
+	if not (p_event is InputEventKey) or not (p_event as InputEventKey).pressed \
+			or (p_event as InputEventKey).echo:
+		return
+	var key := (p_event as InputEventKey).keycode
+	if key != KEY_ESCAPE and key != KEY_P:
+		return
+	match state:
+		GameConst.GameStatus.PLAYING:
+			request_pause()
+			get_viewport().set_input_as_handled()
+		GameConst.GameStatus.PAUSED:
+			request_resume()
+			get_viewport().set_input_as_handled()
+		_:
+			pass                                  # 其余状态：键盘暂停不介入
 
 
 # ── 经验链路（集成包 B.1：击杀掉落 → 磁吸 → 经验 → 升级仲裁 E-16） ──
@@ -636,6 +706,8 @@ func _reset_run_state() -> void:
 	active_shards.clear()
 	_separation_left = SEPARATION_INTERVAL
 	pending_level_ups = 0
+	resume_grace_left = 0.0
+	player.input_enabled = true
 	game_feel.hit_stop_left = 0.0
 	game_feel.hit_stop_active_ms = 0.0
 	set_time_scale(1.0, &"reset")

@@ -29,6 +29,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_hud_binding()                           # 要点 6
 	_test_popup_pool()                            # 要点 7
 	_test_card_flow()                             # 要点 8
+	_test_pause_system()                          # 要点 11（用户反馈 2026-08-29：暂停系统）
 	_teardown_game_loop()
 	_test_volatile_bug()                          # 要点 9（脱离 GameLoop 的独立环境）
 	_test_boss_escort()                           # 要点 10
@@ -406,6 +407,55 @@ func _test_card_flow() -> void:
 
 func _on_card_chosen(p_id: StringName, p_kind: int) -> void:
 	_card_chosen_log.append([p_id, p_kind])
+
+
+# ── 要点 11：暂停系统（用户反馈 2026-08-29：按钮/面板/回主菜单/暂停重开/恢复宽限） ──
+func _test_pause_system() -> void:
+	print("── 暂停系统 ──")
+	var hud := _gl.hud
+	var overlay := _gl.pause_overlay
+	_check("组装：暂停遮罩面板就绪", overlay != null)
+	# 暂停按钮可见性（仅 PLAYING 态显示；LEVEL_UP/GAME_OVER 同口径隐藏）
+	_check("暂停按钮：PLAYING 显示", hud._pause_btn.visible)
+	_gl.request_pause()
+	_check("暂停按钮：PAUSED 隐藏 + 面板显示",
+		not hud._pause_btn.visible and overlay.is_pause_visible())
+	# GameFeel 计时冻结（顿帧/震屏衰减暂停期不走）
+	_gl.game_feel.shake.trauma = 0.5
+	_gl._physics_process(DT)
+	_check("暂停冻结：trauma 不衰减（GameFeel 计时冻结）",
+		absf(_gl.game_feel.shake.trauma - 0.5) <= 0.0001)
+	_gl.game_feel.shake.trauma = 0.0
+	# 按钮信号链：hud.pause_requested → request_pause（已在 PAUSED → 非法迁移拒绝计数）
+	var rej0: int = _gl.rejected_transitions
+	hud.pause_requested.emit()
+	_check("暂停按钮信号：仲裁接通（重复暂停被拒）", _gl.state == GameConst.GameStatus.PAUSED
+		and _gl.rejected_transitions == rej0 + 1)
+	# 面板「继续」信号链 + 恢复输入宽限期
+	overlay.resume_requested.emit()
+	_check("暂停面板：继续 → PLAYING + 面板收起 + 宽限期置位",
+		_gl.state == GameConst.GameStatus.PLAYING and not overlay.is_pause_visible()
+		and _gl.resume_grace_left > 0.0 and not _gl.player.input_enabled)
+	_gl.player.hp = _gl.player.max_hp
+	_gl.player.invuln_left = 99.0                 # 宽限驱动期防接触伤害（观测隔离）
+	for i in range(120):
+		_gl._physics_process(DT)
+	_check("恢复宽限：0.5s 后输入使能恢复", _gl.resume_grace_left == 0.0
+		and _gl.player.input_enabled)
+	_gl.player.invuln_left = 0.0
+	# 暂停中重开（restart_run 自 PAUSED 放行；PAUSED→PLAYING 为既有合法迁移）
+	_gl.request_pause()
+	_check("暂停中重开：restart_run 自 PAUSED 放行（波次重开）", _gl.restart_run()
+		and _gl.state == GameConst.GameStatus.PLAYING
+		and _gl.wave_director.current_wave == 1)
+	# 回主菜单（新增合法迁移 PAUSED→MENU；清场 + 面板收起 + 菜单屏显示）
+	_gl.request_pause()
+	overlay.menu_requested.emit()
+	_check("回主菜单：PAUSED→MENU 合法迁移 + 面板收起 + 战场清空",
+		_gl.state == GameConst.GameStatus.MENU and not overlay.is_pause_visible()
+		and _gl.spawner.active_count() == 0 and _gl.menu_screen.is_menu_visible())
+	_check("非法迁移回归：MENU→PAUSED 仍拒绝（矩阵不回归）",
+		not _gl.change_state(GameConst.GameStatus.PAUSED))
 
 
 # ── 要点 9：爆虫自爆（引爆时序 / 警示圈 / 击退打断 / 半径判定） ────

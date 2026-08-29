@@ -26,6 +26,8 @@ signal wave_started(wave: int)
 signal wave_cleared(wave: int)
 signal slot_unlocked(slot: int)                            # 武器槽解锁（HUD 提示）
 signal reaction_triggered(rxn: int, pos: Vector2, target_uid: int)
+signal chain_lightning(from_pos: Vector2, to_pos: Vector2)  # 感电连锁主闪电（表现层专用广播，方向 C）
+signal elemental_dot_fired(pos: Vector2)                    # 点燃 DOT 跳伤结算（表现层火星专用广播）
 signal pool_exhausted(pool_id: StringName)                 # 池满降级计数（DebugStats）
 signal chain_fused(depth: int, trait_id: StringName)       # 链式/分叉深度熔断遥测
 signal card_chosen(card_id: StringName, target_kind: int)  # 选卡应用完成（遗物回响等）
@@ -127,6 +129,16 @@ func emit_slot_unlocked(slot: int) -> void:
 func emit_reaction_triggered(rxn: int, pos: Vector2, target_uid: int) -> void:
 	_track_dispatch(&"reaction_triggered")
 	reaction_triggered.emit(rxn, pos, target_uid)
+
+
+func emit_chain_lightning(from_pos: Vector2, to_pos: Vector2) -> void:
+	_track_dispatch(&"chain_lightning")
+	chain_lightning.emit(from_pos, to_pos)
+
+
+func emit_elemental_dot_fired(pos: Vector2) -> void:
+	_track_dispatch(&"elemental_dot_fired")
+	elemental_dot_fired.emit(pos)
 
 
 func emit_pool_exhausted(pool_id: StringName) -> void:
