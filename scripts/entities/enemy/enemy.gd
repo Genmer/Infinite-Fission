@@ -125,6 +125,8 @@ const SHOCK_ARC_PERIOD := 0.26                # 电弧出现基础周期 s（双
 const SHOCK_BOLT_TIME := 0.12                 # 垂直落雷存活时长 s
 const SHOCK_BOLT_PERIOD := 0.9                # 落雷基础周期 s（±0.2 随机）
 const GAUGE_DISCHARGE_FULL := 95.0            # 死亡释放满档判定（≥95% 槽 → 双残弧）
+const BOG_SPLASH_RADIUS := 110.0              # 毒泡史莱姆死亡毒爆半径 px（E12 专属）
+const BOG_SPLASH_RATIO := 0.6                 # 毒爆伤害 = contact_dmg × 0.6            # 死亡释放满档判定（≥95% 槽 → 双残弧）
 static var _flash_shader: Shader = null
 
 
@@ -236,7 +238,7 @@ func tick(p_game_delta: float) -> void:
 	match behavior:
 		GameConst.EnemyBehavior.CHASE:
 			if player != null:
-				if _kind == &"dart" or _kind == &"woodbird":
+				if _kind == &"dart" or _kind == &"woodbird" or _kind == &"bogleaper":
 					_tick_dart_chase(p_game_delta, player, sf)
 				else:
 					var dir := (player.global_position - global_position).normalized()
@@ -418,8 +420,24 @@ func is_elite() -> bool:
 func _on_died() -> void:
 	# 一次性死亡：置 dead → EventBus.emit_enemy_killed → 池归还（EnemySpawner 订阅承担）
 	dead = true
+	_death_poison_splash()
 	_death_element_discharge()
 	EventBus.emit_enemy_killed(self)
+
+
+func _death_poison_splash() -> void:
+	# 毒泡史莱姆（E12）死亡毒爆（用户反馈「沼泽怪物毒相关」）：半径 110 内玩家吃
+	# contact_dmg × 60% + 绿色毒环残效（一次性表现件挂父层自消——死亡瞬发低频可接受）
+	if data == null or not String(data.id).begins_with("E12"):
+		return
+	var player := _player()
+	if player != null and is_instance_valid(player) \
+			and global_position.distance_to(player.global_position) <= BOG_SPLASH_RADIUS:
+		(player as Player).take_contact_damage(contact_dmg * BOG_SPLASH_RATIO)
+	var splash := PoisonSplash.new()
+	splash.position = global_position
+	splash.radius = BOG_SPLASH_RADIUS * 0.7
+	get_parent().add_child(splash)
 
 
 func _death_element_discharge() -> void:
@@ -649,6 +667,16 @@ func _visual_kind() -> StringName:
 		return &"woodbird"
 	if sid.begins_with("E11"):
 		return &"aquasquirt"
+	if sid.begins_with("E12"):
+		return &"bogslime"
+	if sid.begins_with("E13"):
+		return &"bogspitter"
+	if sid.begins_with("E14"):
+		return &"boguard"
+	if sid.begins_with("E15"):
+		return &"bogleaper"
+	if sid.begins_with("E16"):
+		return &"marshmaw"
 	return &"grunt"
 
 
@@ -1203,6 +1231,28 @@ func _tick_status_tint(p_burning: bool, p_chilled: bool, p_frozen: bool, p_shock
 	if p_shocked:
 		tint = tint.lerp(Color.WHITE, maxf(sin(_anim_t * 46.0), 0.0) * 0.14)   # 微频闪
 	_sprite.self_modulate = tint
+
+
+# ── 毒爆残效（E12 死亡毒环；一次性自消表现件——警示圈同款程序化绘制） ──
+class PoisonSplash:
+	extends Node2D
+
+	var radius: float = 77.0
+	var _life: float = 0.38
+
+	func _process(p_delta: float) -> void:
+		_life -= p_delta
+		if _life <= 0.0:
+			queue_free()
+			return
+		queue_redraw()
+
+	func _draw() -> void:
+		var t := clampf(_life / 0.38, 0.0, 1.0)
+		var poison := PopPalette.SUCCESS.lerp(PopPalette.XP, 0.35)
+		draw_circle(Vector2.ZERO, radius * (1.15 - 0.15 * t), Color(poison.r, poison.g, poison.b, 0.16 * t))
+		draw_arc(Vector2.ZERO, radius * (1.15 - 0.15 * t), 0.0, TAU, 40,
+			Color(poison.r, poison.g, poison.b, 0.7 * t), 4.0, true)
 
 
 # ── 爆虫警示圈（方向 C：虚线圈 + 进度环；半径 = VOLATILE_BLAST_RADIUS，A3 §2.2「警示圈」） ──

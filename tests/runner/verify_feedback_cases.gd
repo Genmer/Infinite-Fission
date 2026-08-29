@@ -38,6 +38,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_docs()
 	_test_meta_systems()
 	_test_maps_systems()
+	_test_swamp_eco()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -425,8 +426,8 @@ func _test_meta_systems() -> void:
 	_check("大厅：成就面板打开（条目 = 定义数 %d）" % Meta.ACHIEVEMENTS.size(),
 		_live_children(menu._panel_list) == Meta.ACHIEVEMENTS.size())
 	menu._on_lobby_pressed("records")
-	_check("大厅：记录面板打开（全局 5 + 分图 6 = 11 行）",
-		_live_children(menu._panel_list) == 11)
+	_check("大厅：记录面板打开（全局 5 + 分图标题 1 + 5 图 + 进度 1 = 12 行）",
+		_live_children(menu._panel_list) == 12)
 	menu._on_panel_close()
 	_check("大厅：返回关闭面板", not menu._panel_root.visible)
 	# 恢复既有存档（测试隔离）
@@ -442,7 +443,7 @@ func _test_meta_systems() -> void:
 # ── ⑯ 多地图 / 新怪 / 通关解锁链（M2 落地验收） ──────────────────
 func _test_maps_systems() -> void:
 	print("── 多地图与新怪 ──")
-	_check("MapTable：4 张地图", MapTable.count() == 4)
+	_check("MapTable：5 张地图（含翠毒沼泽）", MapTable.count() == 5)
 	_check("MapTable：首关加载注册表主表（30 波）",
 		MapTable.load_table(&"world_grass", _gl.registry).entries.size() == 30)
 	var frost_table := MapTable.load_table(&"world_frost", _gl.registry)
@@ -495,9 +496,50 @@ func _test_maps_systems() -> void:
 	# 大厅：选关面板 4 行
 	_gl.state = GameConst.GameStatus.MENU
 	_gl.menu_screen._open_map_select()
-	_check("大厅：选关面板 4 张地图卡",
+	_check("大厅：选关面板 5 张地图卡",
 		_live_children(_gl.menu_screen._panel_list) == MapTable.count())
 	_gl.menu_screen._on_panel_close()
+
+
+# ── ⑰ 翠毒沼泽生态（沼泽毒系新图 + 五新怪验收） ──────────────────
+func _test_swamp_eco() -> void:
+	print("── 翠毒沼泽生态 ──")
+	_check("MapTable：5 张地图（沼泽殿后）", MapTable.count() == 5
+		and MapTable.MAPS[4].id == &"world_swamp")
+	var swamp_table := MapTable.load_table(&"world_swamp", _gl.registry)
+	_check("沼泽波表（20 波 + id=swamp）", swamp_table != null
+		and swamp_table.entries.size() == 20)
+	for pair: Array in [[&"E12_bogslime", GameConst.EnemyBehavior.CHASE],
+			[&"E14_boguard", GameConst.EnemyBehavior.CHASE],
+			[&"E16_marshmaw", GameConst.EnemyBehavior.CHASE],
+			[&"E13_bogspitter", GameConst.EnemyBehavior.RANGED]]:
+		var ed: EnemyData = _gl.registry.get_enemy(pair[0])
+		_check("新怪注册：%s（behavior=%d）" % [String(pair[0]), int(pair[1])],
+			ed != null and int(ed.behavior) == int(pair[1]))
+	var guard: EnemyData = _gl.registry.get_enemy(&"E14_boguard")
+	_check("沼泽卫士：全抗 40%（护盾装甲口径）",
+		absf(guard.resist[0] - 0.4) <= 0.001 and absf(guard.resist[1] - 0.4) <= 0.001
+		and absf(guard.resist[2] - 0.4) <= 0.001)
+	# 毒爆：E12 死亡 → 半径内玩家掉血（contact×0.6）
+	var p2d: Node2D = _gl.player
+	var slime := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	slime.spawn(_gl.registry.get_enemy(&"E12_bogslime"), 1, 0)
+	slime.position = p2d.global_position + Vector2(50.0, 0.0)   # 50 < 110 毒爆半径
+	var hp0: float = float(p2d.get("hp"))
+	slime.call(&"_death_poison_splash")
+	_check("毒爆：半径内玩家掉血（contact ×0.6）", float(p2d.get("hp")) < hp0)
+	_gl.pools[&"enemy"].release(slime)
+	var hp1: float = float(p2d.get("hp"))
+	p2d.set("hp", hp1)
+	# 远程可见性回归：主波表 w6/8/14/17 均含 E7（用户反馈「远程见不到」→ 密度提升验证）
+	var main_txt := FileAccess.get_file_as_string("res://resources/waves/wave_table_main.tres")
+	var spitter_waves := main_txt.count("E7_spitter")
+	_check("主表远程密度（E7 出场波次 ≥6）", spitter_waves >= 6)
+	# 沼泽解锁链：树海通关 → 沼泽解锁
+	Meta.maps_cleared = {}
+	Meta.mark_map_cleared(&"world_grove")
+	_check("解锁链：树海通关 → 沼泽解锁", Meta.is_map_unlocked(&"world_swamp"))
+	Meta.maps_cleared = {}
 
 
 func _live_children(p_node: Node) -> int:

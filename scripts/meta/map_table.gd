@@ -29,6 +29,11 @@ const MAPS: Array[Dictionary] = [
 		"table_path": "res://resources/maps/wave_table_grove.tres",
 		"tint": Color(0.74, 1.0, 0.82, 1.0), "final_wave": 20,
 	},
+	{
+		"id": &"world_swamp", "name": "翠毒沼泽", "desc": "毒泡史莱姆与沼泽巨口 · 毒爆/装甲/触手生态",
+		"table_path": "res://resources/maps/wave_table_swamp.tres",
+		"tint": Color(0.6, 0.9, 0.58, 1.0), "final_wave": 20,
+	},
 ]
 
 const FIRST_MAP_ID := &"world_grass"

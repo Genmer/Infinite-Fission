@@ -388,6 +388,115 @@ static func _enemy_layers(p_kind: StringName, p_angry: bool) -> Array:
 				{"sd": _circle_at(Vector2(10.2, 1.2), 3.0), "fill": PopPalette.OUTLINE, "ow": 0.0},
 				{"sd": _circle_at(Vector2(-5.0, -12.0), 2.2), "fill": Color(1.0, 1.0, 1.0, 0.8), "ow": 0.0},
 			]
+		&"bogslime":
+			# E12 毒泡史莱姆：深绿半团 + 顶部毒泡 ×3 + 下垂滴液 + 呆滞双点眼
+			var blob := PopPalette.SUCCESS.lerp(PopPalette.OUTLINE, 0.42)
+			return [
+				{"sd": _circle_at(Vector2(0.0, 6.0), 24.0), "fill": blob, "ow": 6.0},
+				{"sd": _circle_at(Vector2(-13.0, 20.0), 7.0), "fill": blob, "ow": 4.0},
+				{"sd": _circle_at(Vector2(12.0, 21.0), 5.5), "fill": blob, "ow": 4.0},
+				{"sd": _circle_at(Vector2(-9.0, -12.0), 5.0), "fill": PopPalette.SUCCESS.lerp(Color.WHITE, 0.5), "ow": 2.4},
+				{"sd": _circle_at(Vector2(3.0, -16.0), 6.2), "fill": PopPalette.SUCCESS.lerp(Color.WHITE, 0.5), "ow": 2.4},
+				{"sd": _circle_at(Vector2(13.0, -10.0), 3.8), "fill": PopPalette.SUCCESS.lerp(Color.WHITE, 0.5), "ow": 2.4},
+				{"sd": _circle_at(Vector2(-7.0, 2.0), 2.4), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(7.0, 2.0), 2.4), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(4.0, -17.0), 2.0), "fill": Color(1.0, 1.0, 1.0, 0.85), "ow": 0.0},
+			]
+		&"bogspitter":
+			# E13 毒沼喷手：沼泽绿喷口怪——大管嘴 + 三叶喷冠 + 滴毒
+			var leaf_l2 := PackedVector2Array([
+				Vector2(-4.0, -24.0), Vector2(-20.0, -34.0), Vector2(-8.0, -16.0),
+			])
+			var leaf_r2 := PackedVector2Array([
+				Vector2(4.0, -24.0), Vector2(20.0, -34.0), Vector2(8.0, -16.0),
+			])
+			var leaf_c2 := PackedVector2Array([
+				Vector2(0.0, -26.0), Vector2(-4.5, -40.0), Vector2(4.5, -40.0),
+			])
+			var bog := PopPalette.SUCCESS.lerp(PopPalette.OUTLINE, 0.3)
+			return [
+				{"sd": _circle_at(Vector2(0.0, 4.0), 25.0), "fill": bog, "ow": 6.5},
+				{"sd": _poly_sd(leaf_l2), "fill": PopPalette.SUCCESS.lerp(PopPalette.ENEMY, 0.2), "ow": 3.0},
+				{"sd": _poly_sd(leaf_r2), "fill": PopPalette.SUCCESS.lerp(PopPalette.ENEMY, 0.2), "ow": 3.0},
+				{"sd": _poly_sd(leaf_c2), "fill": PopPalette.SUCCESS, "ow": 3.0},
+				{"sd": _circle_at(Vector2(0.0, 10.0), 11.0), "fill": PopPalette.OUTLINE, "ow": 3.0},
+				{"sd": _circle_at(Vector2(0.0, 8.0), 6.0), "fill": PopPalette.SUCCESS.lerp(Color.WHITE, 0.55), "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(-10.0, -6.0), Vector2(6.4, 1.9), 1.0, -0.38),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(10.0, -6.0), Vector2(6.4, 1.9), 1.0, 0.38),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-12.5, -4.6), 1.7), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(12.5, -4.6), 1.7), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(3.5, 16.5), 2.0), "fill": PopPalette.SUCCESS.lerp(Color.WHITE, 0.5), "ow": 0.0},
+			]
+		&"boguard":
+			# E14 沼泽卫士：泥绿重体 + 正面厚盾板（铆钉×3）+ 盔沿 + 不爽眼系
+			var shield_plate := PackedVector2Array([
+				Vector2(-16.0, -18.0), Vector2(16.0, -18.0), Vector2(19.0, 16.0), Vector2(-19.0, 16.0),
+			])
+			var mud := PopPalette.SUCCESS.lerp(PopPalette.OUTLINE, 0.5)
+			return [
+				{"sd": _circle_at(Vector2(0.0, 2.0), 26.0), "fill": mud, "ow": 6.5},
+				{"sd": _poly_sd(shield_plate), "fill": mud.lerp(Color.WHITE, 0.28), "ow": 4.0},
+				{"sd": _circle_at(Vector2(-8.0, -8.0), 2.2), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(8.0, -8.0), 2.2), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(0.0, 4.0), 2.2), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _box_at(Vector2(0.0, -22.0), Vector2(14.0, 3.0), 1.5),
+					"fill": mud.lerp(Color.WHITE, 0.2), "ow": 2.6},
+				{"sd": _box_rot_at(Vector2(-11.0, 0.0), Vector2(4.6, 1.7), 0.9, -0.32),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(11.0, 0.0), Vector2(4.6, 1.7), 0.9, 0.32),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-13.4, 2.4), 1.6), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(13.4, 2.4), 1.6), "fill": PopPalette.OUTLINE, "ow": 0.0},
+			]
+		&"bogleaper":
+			# E15 毒跳蛙：宽嘴蛙身 + 前撑腿 + 大眼顶置 + 喉囊（突击型）
+			var leg_l := PackedVector2Array([
+				Vector2(-14.0, 12.0), Vector2(-30.0, 26.0), Vector2(-10.0, 22.0),
+			])
+			var leg_r := PackedVector2Array([
+				Vector2(14.0, 12.0), Vector2(30.0, 26.0), Vector2(10.0, 22.0),
+			])
+			var leap := PopPalette.SUCCESS.lerp(PopPalette.XP, 0.3)
+			return [
+				{"sd": _poly_sd(leg_l), "fill": leap.lerp(PopPalette.OUTLINE, 0.3), "ow": 3.0},
+				{"sd": _poly_sd(leg_r), "fill": leap.lerp(PopPalette.OUTLINE, 0.3), "ow": 3.0},
+				{"sd": _circle_at(Vector2(0.0, 6.0), 22.0), "fill": leap, "ow": 6.5},
+				{"sd": _circle_at(Vector2(-8.0, -14.0), 5.6), "fill": Color.WHITE, "ow": 2.2},
+				{"sd": _circle_at(Vector2(8.0, -14.0), 5.6), "fill": Color.WHITE, "ow": 2.2},
+				{"sd": _circle_at(Vector2(-7.2, -12.8), 2.5), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(8.8, -12.8), 2.5), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _poly_sd(PackedVector2Array([
+					Vector2(-12.0, 8.0), Vector2(12.0, 8.0), Vector2(0.0, 16.0),
+				])), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(0.0, 14.0), 3.4), "fill": PopPalette.SUCCESS.lerp(Color.WHITE, 0.5), "ow": 0.0},
+			]
+		&"marshmaw":
+			# E16 沼泽巨口：暗绿巨口球 + 环体触手 ×5 + 独眼 + 尖牙圈（触手坦克）
+			var maw := PopPalette.SUCCESS.lerp(PopPalette.OUTLINE, 0.55)
+			var layers_m: Array = []
+			for i in range(5):
+				var ang := -PI * 0.5 + TAU * float(i) / 5.0 + 0.3
+				var tip := Vector2(cos(ang), sin(ang)) * 34.0
+				var mid := Vector2(cos(ang), sin(ang)) * 20.0
+				layers_m.append({"sd": _poly_sd(PackedVector2Array([
+					Vector2(mid.x + cos(ang + PI * 0.5) * 5.0, mid.y + sin(ang + PI * 0.5) * 5.0),
+					tip,
+					Vector2(mid.x - cos(ang + PI * 0.5) * 5.0, mid.y - sin(ang + PI * 0.5) * 5.0),
+				])), "fill": maw.lerp(Color.WHITE, 0.18), "ow": 3.0})
+			layers_m.append({"sd": _circle_at(Vector2(0.0, 0.0), 26.0), "fill": maw, "ow": 6.5})
+			layers_m.append({"sd": _circle_at(Vector2(0.0, -4.0), 14.0), "fill": PopPalette.OUTLINE, "ow": 3.0})
+			layers_m.append({"sd": _circle_at(Vector2(0.0, -4.0), 5.5), "fill": PopPalette.XP, "ow": 0.0})
+			layers_m.append({"sd": _circle_at(Vector2(0.0, -4.0), 2.4), "fill": PopPalette.OUTLINE, "ow": 0.0})
+			for i in range(6):
+				var ta := TAU * float(i) / 6.0
+				layers_m.append({"sd": _poly_sd(PackedVector2Array([
+					Vector2(cos(ta - 0.16) * 13.0, -4.0 + sin(ta - 0.16) * 13.0),
+					Vector2(cos(ta) * 16.0, -4.0 + sin(ta) * 16.0),
+					Vector2(cos(ta + 0.16) * 13.0, -4.0 + sin(ta + 0.16) * 13.0),
+				])), "fill": Color.WHITE, "ow": 0.0})
+			return layers_m
 		_:
 			# grunt（E1 杂兵）：珊瑚圆球 + 好奇眼睛 + 腮红小嘴 + 顶呆毛（气球结剪影）
 			return _grunt_face(blush, 26.0)

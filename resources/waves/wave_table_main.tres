@@ -46,8 +46,8 @@ events = [&"SHOP"]
 [sub_resource type="Resource" id="WaveEntryData_w6"]
 script = ExtResource("2_wed")
 index = 6
-composition = [{"enemy_id": &"E1_grunt", "count": 17}, {"enemy_id": &"E2_runner", "count": 7}, {"enemy_id": &"E3_bastion", "count": 2}, {"enemy_id": &"E7_spitter", "count": 2}]
-tp_override = 36.6
+composition = [{"enemy_id": &"E1_grunt", "count": 17}, {"enemy_id": &"E2_runner", "count": 7}, {"enemy_id": &"E3_bastion", "count": 2}, {"enemy_id": &"E7_spitter", "count": 2}, {"enemy_id": &"E7_spitter", "count": 1}]
+tp_override = 38.4
 window = 20.4
 events = []
 
@@ -62,8 +62,8 @@ events = [&"UNLOCK_SLOT_3"]
 [sub_resource type="Resource" id="WaveEntryData_w8"]
 script = ExtResource("2_wed")
 index = 8
-composition = [{"enemy_id": &"E1_grunt", "count": 17}, {"enemy_id": &"E2_runner", "count": 7}, {"enemy_id": &"E3_bastion", "count": 2}, {"enemy_id": &"E5_elite", "count": 1}]
-tp_override = 49.4
+composition = [{"enemy_id": &"E1_grunt", "count": 17}, {"enemy_id": &"E2_runner", "count": 7}, {"enemy_id": &"E3_bastion", "count": 2}, {"enemy_id": &"E5_elite", "count": 1}, {"enemy_id": &"E7_spitter", "count": 2}]
+tp_override = 53.0
 window = 21.2
 events = []
 
@@ -110,8 +110,8 @@ events = []
 [sub_resource type="Resource" id="WaveEntryData_w14"]
 script = ExtResource("2_wed")
 index = 14
-composition = [{"enemy_id": &"E1_grunt", "count": 22}, {"enemy_id": &"E2_runner", "count": 12}, {"enemy_id": &"E3_bastion", "count": 4}]
-tp_override = 52.4
+composition = [{"enemy_id": &"E1_grunt", "count": 22}, {"enemy_id": &"E2_runner", "count": 12}, {"enemy_id": &"E3_bastion", "count": 4}, {"enemy_id": &"E7_spitter", "count": 3}]
+tp_override = 57.8
 window = 23.6
 events = []
 
@@ -134,8 +134,8 @@ events = []
 [sub_resource type="Resource" id="WaveEntryData_w17"]
 script = ExtResource("2_wed")
 index = 17
-composition = [{"enemy_id": &"E1_grunt", "count": 30}, {"enemy_id": &"E2_runner", "count": 13}, {"enemy_id": &"E4_volatile", "count": 10}]
-tp_override = 60.6
+composition = [{"enemy_id": &"E1_grunt", "count": 30}, {"enemy_id": &"E2_runner", "count": 13}, {"enemy_id": &"E4_volatile", "count": 10}, {"enemy_id": &"E7_spitter", "count": 3}]
+tp_override = 66.0
 window = 24.8
 events = []
 

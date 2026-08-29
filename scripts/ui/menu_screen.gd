@@ -444,6 +444,16 @@ func _enemy_icon_tex(p_eid: Variant) -> ImageTexture:
 		return TextureFactory.enemy_tex(&"woodbird")
 	if sid.begins_with("E11"):
 		return TextureFactory.enemy_tex(&"aquasquirt")
+	if sid.begins_with("E12"):
+		return TextureFactory.enemy_tex(&"bogslime")
+	if sid.begins_with("E13"):
+		return TextureFactory.enemy_tex(&"bogspitter")
+	if sid.begins_with("E14"):
+		return TextureFactory.enemy_tex(&"boguard")
+	if sid.begins_with("E15"):
+		return TextureFactory.enemy_tex(&"bogleaper")
+	if sid.begins_with("E16"):
+		return TextureFactory.enemy_tex(&"marshmaw")
 	return TextureFactory.enemy_tex(&"grunt")
 
 
