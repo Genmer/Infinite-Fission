@@ -102,7 +102,7 @@ func _setup_button(p_btn: Button, p_card: Dictionary) -> void:
 	var desc_text := String(p_card.get("description", ""))
 	var value_scale := float(p_card.get("value_scale", 1.0))
 	if value_scale > 1.0:
-		desc_text += "\n%s品质：效果数值 ×%.1f" % [PopPalette.rarity_name(rarity), value_scale]
+		desc_text += "\n品质加成：该词条效果 ×%.1f（已计入上行数字）" % value_scale
 	desc_label.text = desc_text
 	# 层级圆点（rarity+1 枚稀有度色圆珠）
 	var dots: HBoxContainer = face["dots"]

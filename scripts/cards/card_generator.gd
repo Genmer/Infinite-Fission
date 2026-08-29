@@ -131,8 +131,12 @@ func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
 				var target := mini(lv + boosts, WeaponBase.MAX_LEVEL)
 				var wdata: WeaponData = weapon.get("data")
 				var wname := wdata.display_name if wdata != null else "?"
-				card["display_name"] = "精通：%s +%d" % [wname, target]
-				card["description"] = ("武器等级 +%d（终值表口径）" % (target - lv)) \
+				# 文案统一（用户反馈「紫色精通+3 但效果是+2」矛盾）：名称显示等级区间，
+				# 描述说明提升量与连升来源
+				card["display_name"] = "精通：%s Lv%d→Lv%d" % [wname, lv, target]
+				var boost_txt := "（%s品质连升 ×2）" % PopPalette.rarity_name(rarity) \
+					if boosts > 1 else ""
+				card["description"] = ("武器等级 +%d%s（终值表口径）" % [target - lv, boost_txt]) \
 					if target > lv else "已满级（终值表口径）"
 
 
@@ -169,10 +173,12 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 				for i in range(maxi(int(p_card.get("level_boosts", 1)), 1)):
 					weapon.call(&"level_up")     # WeaponBase.level_up：level+1 → 面板失效 → leveled 信号
 		CardKind.WEAPON:
-			# 新武器装配（用户反馈 2026-08-29「怎么只有手枪」——原版无获取途径）
+			# 新武器装配（用户反馈 2026-08-29「怎么只有手枪」——原版无获取途径）。
+			# 入口 = add_weapon 形态工厂（实例化 + setup + 装槽）；equip_weapon 收窄
+			# WeaponBase 实例签名，传数据会污染槽位（用户实测「选了霰弹枪没出现」根因）
 			var wdata: WeaponData = p_card.get("data")
-			if wdata != null and p_player != null and p_player.has_method(&"equip_weapon"):
-				p_player.call(&"equip_weapon", wdata)
+			if wdata != null and p_player != null and p_player.has_method(&"add_weapon"):
+				p_player.call(&"add_weapon", wdata)
 		CardKind.TRAIT, CardKind.FALLBACK:
 			var data: TraitData = p_card.get("data")
 			if data != null:

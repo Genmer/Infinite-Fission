@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"AFF_AREA"
 display_name = "扩大印刻"
-description = "体积 +15%，可叠 3 层（A3 §4.2）"
+description = "弹丸体积与碰撞半径 +15%（弹丸更大更容易命中），可叠 3 层"
 pool = 0
 pool_id = &"add_size"
 effect_id = &"EF_SIZE"

@@ -8,6 +8,7 @@ class_name HUD
 extends CanvasLayer
 
 signal pause_requested()                      # 暂停按钮申请（→ GameLoop.request_pause 仲裁）
+signal build_details_requested()              # 左下角构筑面板点击（→ 暂停 + buff 详情，用户反馈）
 
 var player: Node2D = null                     # 注入（数值源；Player 宽类型规避循环解析）
 var total_damage: float = 0.0                 # 造成的总伤害（damage_resolved 累计；结算屏数据源）
@@ -176,6 +177,13 @@ func _on_pause_pressed() -> void:
 	# 暂停按钮回调（果冻 punch + 申请信号——仲裁权在 GameLoop）
 	StickerTheme.press_punch(_pause_btn)
 	pause_requested.emit()
+
+
+func _on_build_gui_input(p_ev: InputEvent) -> void:
+	# 左下角构筑面板点击（左键按下即发——详情申请，GameLoop 仲裁暂停 + 详情模式）
+	if p_ev is InputEventMouseButton and (p_ev as InputEventMouseButton).pressed \
+			and (p_ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		build_details_requested.emit()
 
 
 func _on_damage_resolved(p_result: DamageResult) -> void:
@@ -386,20 +394,23 @@ func _build_ui() -> void:
 	_time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	time_pill.add_child(_time_label)
 
-	# 构筑面板（左下角，避开弹幕主区——用户反馈 2026-08-29：当前持有武器+词条要展示）
+	# 构筑面板（左下角，避开弹幕主区——用户反馈 2026-08-29：当前持有武器+词条要展示；
+	# 二轮反馈「点击左下角，可以看 buff 详情」→ 面板可点击 → 暂停 + 构筑详情卡）
 	var build_root := Control.new()
 	build_root.name = "BuildPanel"
 	build_root.position = Vector2(24.0, 1124.0)
 	build_root.size = Vector2(252.0, 132.0)
-	build_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	build_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	build_root.gui_input.connect(_on_build_gui_input)
 	root.add_child(build_root)
 	_build_panel = build_root
 	var build_bg := _sticker_panel(build_root, Vector2.ZERO, Vector2(252.0, 132.0), 16.0)
 	build_bg.name = "BuildBg"
 	build_bg.modulate.a = 0.92
+	build_bg.mouse_filter = Control.MOUSE_FILTER_PASS               # 点击穿透到 BuildPanel
 	_build_label = StickerTheme.label_sticker(Label.new(), 14, PopPalette.INK_SOFT)
 	_build_label.name = "BuildText"
-	_build_label.text = "构筑 -"
+	_build_label.text = "构筑 · 点击查看详情"
 	_build_label.size = Vector2(252.0, 18.0)
 	_build_label.position = Vector2(0.0, 110.0)
 	_build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

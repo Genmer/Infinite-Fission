@@ -218,6 +218,16 @@ func request_pause() -> bool:
 	return change_state(GameConst.GameStatus.PAUSED)
 
 
+func _on_build_details() -> void:
+	# 左下角构筑面板点击（用户反馈「点击左下角，可以看 buff 详情」）：战斗中 → 申请暂停
+	# 并进详情卡；已暂停 → 暂停卡/详情卡切换；LEVEL_UP/GAME_OVER 等态不响应
+	if state == GameConst.GameStatus.PLAYING:
+		if request_pause():
+			pause_overlay.open_details(player)
+	elif state == GameConst.GameStatus.PAUSED:
+		pause_overlay.toggle_details()
+
+
 func request_resume() -> bool:
 	# 恢复申请：自 PAUSED 恢复时启动 0.5s 输入忽略期（防误触，用户反馈 2026-08-29）。
 	# input_enabled 即时同步（宽限自恢复瞬间生效）——写权仍归 ① 步每帧口径（§1.3 单写者：
@@ -492,6 +502,7 @@ func _boot_build_presentation() -> void:
 	hud.setup(player)
 	hud.bind_events()
 	hud.pause_requested.connect(request_pause)   # 暂停按钮申请（仲裁权在 GameLoop）
+	hud.build_details_requested.connect(_on_build_details)   # 左下角 → buff 详情（用户反馈）
 	pause_overlay = PauseOverlay.new()
 	pause_overlay.name = "PauseOverlay"
 	add_child(pause_overlay)

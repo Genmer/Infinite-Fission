@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"MEC_ORBIT_LINK"
 display_name = "谐振轨道"
-description = "环绕体 +1（仅装备 W8 时生效），可叠 3 层（A3 §4.4）"
+description = "环绕力场武器的浮游球 +1（需持有『环绕力场』武器），可叠 3 层"
 pool = 3
 pool_id = &""
 effect_id = &"EF_MECH"
