@@ -49,6 +49,12 @@ func fail_count() -> int:
 func _ensure_autoloads() -> void:
 	_check("autoload 就绪（EventBus/GameConfig/DebugStats）",
 		EventBus != null and GameConfig != null and DebugStats != null)
+	# Meta 测试隔离（角色/养成落地后）：重置局外状态——pkg 字面量断言（HP 60 等）假定全新档案
+	if Meta != null:
+		Meta.upgrades = {}
+		Meta.crystals = 0
+		Meta.character_id = &"sentinel"
+		Meta.maps_cleared = {}
 	_check("GameConfig 非致命（balance 加载）", not GameConfig.is_fatal() and GameConfig.balance != null)
 
 

@@ -18,6 +18,7 @@ var data: WeaponData = null                    # 形态参数（M-14 注入）
 var uid: int = 0
 var level: int = 1                             # L1~L5（升级表终值口径）
 var player: Node2D = null                      # 宿主注入（Player；宽类型规避循环解析）
+var meta_atk_pct: float = 0.0                 # 局外养成攻击 + 角色攻击修正（Player 注入）
 var trait_stack: TraitStack = null             # 武器级词条（常驻面板聚合 + OnHit 注入源）
 var target_strategy: int = GameConst.TargetStrategy.NEAREST
 var cooldown_left: float = 0.0
@@ -121,7 +122,7 @@ func build_panel_snapshot() -> Dictionary:
 	if GameConfig.balance != null:
 		crit_cap = GameConfig.balance.cap_crit_rate
 	var snapshot := {
-		"base_atk": get_current_atk(),
+		"base_atk": get_current_atk() * (1.0 + meta_atk_pct),   # 局外养成/角色修正入面板
 		"crit_rate": clampf(crit_rate + float(aggregate.get("add_crit", 0.0)), 0.0, crit_cap),
 		"crit_mult": crit_dmg + float(aggregate.get("add_critdmg", 0.0)),
 		"flat_bonus": 0.0,
@@ -250,9 +251,12 @@ func _fire_interval() -> float:
 	# 节拍间隔：BALLISTIC = 1/rof（子类覆写射速口径）；其余形态 = cd × (1−ΣCDR)
 	if data == null:
 		return 1.0
+	var rof_mult := 1.0
+	if player != null and is_instance_valid(player):
+		rof_mult = maxf(float(player.get("rof_mult")), 0.1)   # 过载咆哮（角色技能）
 	if data.form == GameConst.WeaponForm.BALLISTIC:
 		var rof := clampf(get_stat(&"rof"), 0.1, _cap_rof())
-		return 1.0 / rof
+		return 1.0 / (rof * rof_mult)
 	var cd := maxf(get_stat(&"cd"), 0.01)
 	var cdr := 0.0
 	var cap_cdr := 0.6
@@ -261,7 +265,10 @@ func _fire_interval() -> float:
 	if GameConfig.balance != null:
 		cap_cdr = GameConfig.balance.cap_cdr_sum
 	cdr = clampf(cdr, 0.0, cap_cdr)
-	return cd * (1.0 - cdr)
+	var rof_mult2 := 1.0
+	if player != null and is_instance_valid(player):
+		rof_mult2 = maxf(float(player.get("rof_mult")), 0.1)
+	return cd * (1.0 - cdr) / rof_mult2
 
 
 func _cap_rof() -> float:

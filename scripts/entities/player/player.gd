@@ -14,6 +14,14 @@ var max_hp: float = 60.0                       # 声明值与 cfg 同口径（_r
 var hp: float = 60.0
 var move_speed: float = 280.0                 # 移速（相对拖动 1:1 口径下的调试/键盘备用参数）
 var pickup_radius: float = 120.0              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
+# 角色系统（用户反馈「不同的角色有不同的技能」）：选择经 Meta 持久化，开局 set_character 应用
+var character_id: StringName = &"sentinel"
+var character_atk_pct: float = 0.0            # 角色攻击修正（武器面板经 meta_atk_pct 合成）
+var rof_mult: float = 1.0                     # 过载咆哮射速倍率（WeaponBase._fire_interval 消费）
+var skill_cd_base: float = 30.0
+var skill_cd_left: float = 0.0
+var skill_active_left: float = 0.0            # 增益型技能剩余时长（过载）
+var _skill_shield_left: float = 0.0           # 紧急护盾剩余（表现走护盾泡）
 var invuln_left: float = 0.0                  # 受击无敌帧（contact_tick=0.6s 口径）
 var weapon_slots: Array[WeaponBase] = []      # ≤5（集成包 B.8 第二批收紧：pkg2 用例已迁移 WeaponBase 真件）
 var unlocked_slots: int = 1                   # w3→2 / w7→3 / Boss1→4 / Boss2 或 w21→5（F-19）
@@ -136,6 +144,13 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 		invuln_left -= p_game_delta
 		if invuln_left < 0.0:
 			invuln_left = 0.0
+	# 角色技能节拍（冷却 + 增益型剩余）
+	if skill_cd_left > 0.0:
+		skill_cd_left = maxf(skill_cd_left - p_game_delta, 0.0)
+	if skill_active_left > 0.0:
+		skill_active_left = maxf(skill_active_left - p_game_delta, 0.0)
+		if skill_active_left <= 0.0:
+			rof_mult = 1.0
 	# 格挡力场充能（MEC_SHIELD：非就绪期走表，充满置位；未持有词条时 interval=0 短路）
 	if shield_interval > 0.0 and not shield_ready:
 		shield_timer = maxf(shield_timer - p_game_delta, 0.0)
@@ -231,6 +246,7 @@ func add_weapon(p_data: WeaponData) -> WeaponBase:
 	if weapon == null:
 		return null
 	weapon.setup(p_data, self, _deps)        # 注入包：pipeline/pools/grid/laser_pool/elemental
+	weapon.meta_atk_pct = Meta.atk_pct() + character_atk_pct   # 局外养成 + 角色修正（M8/角色系统）
 	weapon_slots[slot] = weapon
 	if weapon.get_parent() == null:
 		add_child(weapon)
@@ -270,6 +286,67 @@ func unlock_slot(p_slot: int) -> bool:
 	return false
 
 
+func set_character(p_id: StringName) -> void:
+	# 应用角色（大厅选人 → GameLoop.start_run/respawn 调用；含局外养成加成——M8）
+	character_id = p_id
+	var def := CharacterTable.get_character(p_id)
+	max_hp = float(def.get("hp", 60.0)) + Meta.hp_bonus()
+	hp = max_hp
+	pickup_radius = 120.0 * (1.0 + Meta.magnet_pct())
+	character_atk_pct = float(def.get("atk_pct", 0.0))
+	skill_cd_base = float(def.get("cd", 30.0)) * (1.0 - Meta.skill_cdr_pct())
+	skill_cd_left = 0.0
+	rof_mult = 1.0
+	# 攻击修正动态注入（真修：武器面板若只在实例化期定格，大厅买养成/选角后开局不生效）
+	for w in weapon_slots:
+		if w is WeaponBase and is_instance_valid(w):
+			(w as WeaponBase).meta_atk_pct = Meta.atk_pct() + character_atk_pct
+			(w as WeaponBase).call(&"_invalidate_panel")
+
+
+func skill_ready() -> bool:
+	return skill_cd_left <= 0.0 and not _dead
+
+
+func activate_skill() -> bool:
+	# 角色主动技能（HUD 技能键调用；冷却中 false）
+	if not skill_ready():
+		return false
+	skill_cd_left = skill_cd_base
+	match character_id:
+		&"sentinel":
+			invuln_left = maxf(invuln_left, 3.0)
+			_skill_shield_left = 3.0
+		&"veles":
+			rof_mult = 2.0
+			skill_active_left = 4.0
+		&"bulwark":
+			_skill_stomp()
+	DebugStats.count(&"skill_used")
+	return true
+
+
+func _skill_stomp() -> void:
+	# 震荡践踏：220px 内敌人击退 + 260px 内敌方弹清除（复用 NULLIFIED 统一收束）
+	var grid: Variant = _deps.get("enemy_grid")
+	if grid != null:
+		for e in (grid as SpaceGrid).query_circle(global_position, 220.0):
+			if e == null or bool(e.get("dead")):
+				continue
+			if e.has_method(&"knockback"):
+				e.call(&"knockback", ((e as Node2D).global_position - global_position).normalized() * 280.0)
+	var bgrid: Variant = _deps.get("enemy_bullet_grid")
+	if bgrid != null:
+		var cleared := 0
+		for b in (bgrid as SpaceGrid).query_circle(global_position, 260.0):
+			if b is ProjectileBase and (b as ProjectileBase).team == 1:
+				EventBus.emit_bullet_nullified((b as Node2D).global_position)
+				(b as ProjectileBase).nullify()
+				cleared += 1
+			if cleared >= 24:
+				break
+
+
 func gain_xp(p_amount: float) -> void:
 	# 经验/等级：xp_gained → 升级（多级连升逐次广播，弹卡排队由 GameLoop 仲裁 E-16）
 	# 升级回满血（用户反馈 2026-08-29「升级还是回满血吧」：升级即奖励，血条拉满解压）
@@ -302,6 +379,10 @@ func respawn() -> void:
 	shield_ready = false
 	_shield_pulse_left = 0.0
 	_drag_accum = Vector2.ZERO
+	skill_cd_left = 0.0
+	skill_active_left = 0.0
+	rof_mult = 1.0
+	set_character(Meta.character_id)          # 重开按当前角色+养成重置（M8/角色系统）
 	_flash_left = 0.0                            # 表现态复位（方向 C）
 	_punch_left = 0.0
 	_tilt = 0.0
@@ -404,6 +485,14 @@ func _tick_visual(p_game_delta: float, p_move: Vector2) -> void:
 			_shield_ring.scale = Vector2.ONE * (_visual_scale * SHIELD_RING_R / 24.0
 				* (1.0 + 0.55 * bt))
 			_shield_ring.modulate.a = (1.0 - bt) * 0.9
+		elif _skill_shield_left > 0.0:
+			_skill_shield_left = maxf(_skill_shield_left - p_game_delta, 0.0)
+			_shield_ring.visible = true
+			_shield_ring.rotation = _anim_t * 2.4
+			_shield_ring.position = _sprite.position
+			_shield_ring.scale = Vector2.ONE * (_visual_scale * SHIELD_RING_R / 24.0
+				* (1.0 + 0.06 * sin(_anim_t * 9.0)))
+			_shield_ring.modulate.a = 0.55 + 0.2 * sin(_anim_t * 8.0)
 		elif shield_interval > 0.0 and shield_ready:
 			_shield_ring.visible = true
 			_shield_ring.rotation = _anim_t * 0.9

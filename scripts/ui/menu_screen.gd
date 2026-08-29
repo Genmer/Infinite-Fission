@@ -244,9 +244,11 @@ func is_menu_visible() -> bool:
 func _build_lobby() -> void:
 	# 出发按钮下方三入口（按钮文案带完成度角标——图鉴 x/y、成就 x/y）
 	var defs := [
-		{"kind": "codex", "text": "图鉴", "pos": Vector2(44.0, 906.0)},
-		{"kind": "ach", "text": "成就", "pos": Vector2(265.0, 906.0)},
-		{"kind": "records", "text": "记录", "pos": Vector2(486.0, 906.0)},
+		{"kind": "codex", "text": "图鉴", "pos": Vector2(44.0, 900.0)},
+		{"kind": "ach", "text": "成就", "pos": Vector2(265.0, 900.0)},
+		{"kind": "records", "text": "记录", "pos": Vector2(486.0, 900.0)},
+		{"kind": "char", "text": "角色", "pos": Vector2(155.0, 988.0)},
+		{"kind": "upgrade", "text": "养成", "pos": Vector2(375.0, 988.0)},
 	]
 	for d in defs:
 		var btn := Button.new()
@@ -273,11 +275,15 @@ func _refresh_lobby_counts() -> void:
 	(_lobby_btns["codex"] as Button).text = "图鉴 %d/%d" % [codex_got, codex_total]
 	(_lobby_btns["ach"] as Button).text = "成就 %d/%d" % [ach.x, ach.y]
 	(_lobby_btns["records"] as Button).text = "记录"
+	(_lobby_btns["char"] as Button).text = "角色"
+	(_lobby_btns["upgrade"] as Button).text = "养成 %d💎" % Meta.crystals
 
 
 func _on_lobby_pressed(p_kind: String) -> void:
 	_panel_root.visible = true
-	_panel_title.text = {"codex": "图鉴", "ach": "成就", "records": "历史记录"}[p_kind]
+	var titles := {"codex": "图鉴", "ach": "成就", "records": "历史记录",
+		"char": "选择角色", "upgrade": "局外养成"}
+	_panel_title.text = String(titles.get(p_kind, ""))
 	for kind: String in _codex_tabs:
 		(_codex_tabs[kind] as Button).visible = p_kind == "codex"
 	match p_kind:
@@ -287,6 +293,12 @@ func _on_lobby_pressed(p_kind: String) -> void:
 			_rebuild_achievements()
 		"records":
 			_rebuild_records()
+		"char":
+			_panel_title.text = "选择角色"
+			_rebuild_char_select()
+		"upgrade":
+			_panel_title.text = "局外养成"
+			_rebuild_upgrades()
 	StickerTheme.squash_pop(_panel_root.get_node("LobbyPanel") as Control)
 
 
@@ -534,6 +546,123 @@ func _rebuild_achievements() -> void:
 		desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(desc_l)
 		_panel_list.add_child(row)
+
+
+# ── 角色选择 ──────────────────────────────────────────────────────
+func _rebuild_char_select() -> void:
+	for c in _panel_list.get_children():
+		(c as Node).queue_free()
+	for i in range(CharacterTable.count()):
+		var def := CharacterTable.CHARACTERS[i]
+		var picked: bool = Meta.character_id == def.id
+		var row := Panel.new()
+		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(14.0, 3, false))
+		row.custom_minimum_size = Vector2(576.0, 118.0)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var name_l := Label.new()
+		StickerTheme.label_sticker(name_l, 20, PopPalette.PLAYER if picked else PopPalette.INK,
+			0, Color.WHITE, true)
+		name_l.text = String(def.name) + ("　✓ 当前" if picked else "")
+		name_l.position = Vector2(20.0, 12.0)
+		name_l.size = Vector2(400.0, 28.0)
+		name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(name_l)
+		var stat_l := Label.new()
+		StickerTheme.label_sticker(stat_l, 14, PopPalette.INK_SOFT)
+		stat_l.text = "生命 %d　攻击 %s%.0f%%" % [int(def.hp),
+			"+" if float(def.atk_pct) >= 0.0 else "", float(def.atk_pct) * 100.0]
+		stat_l.position = Vector2(20.0, 46.0)
+		stat_l.size = Vector2(400.0, 20.0)
+		stat_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(stat_l)
+		var skill_l := Label.new()
+		StickerTheme.label_sticker(skill_l, 14, PopPalette.ENEMY)
+		skill_l.text = "技能【%s】%s（CD %.0fs）" % [String(def.skill_name),
+			String(def.skill_desc), float(def.cd)]
+		skill_l.position = Vector2(20.0, 72.0)
+		skill_l.size = Vector2(540.0, 20.0)
+		skill_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(skill_l)
+		if not picked:
+			var pick_btn := Button.new()
+			pick_btn.text = "选用"
+			pick_btn.add_theme_font_size_override("font_size", 16)
+			pick_btn.add_theme_font_override("font", StickerTheme.font_bold())
+			pick_btn.position = Vector2(478.0, 38.0)
+			pick_btn.size = Vector2(84.0, 44.0)
+			pick_btn.focus_mode = Control.FOCUS_NONE
+			pick_btn.pressed.connect(_on_char_pick.bind(def.id))
+			pick_btn.button_down.connect(func() -> void: StickerTheme.press_punch(pick_btn))
+			row.add_child(pick_btn)
+		_panel_list.add_child(row)
+
+
+func _on_char_pick(p_id: StringName) -> void:
+	Meta.set_character_id(p_id)
+	_rebuild_char_select()
+	_refresh_lobby_counts()
+
+
+# ── 局外养成（结晶 + 永久升级） ──────────────────────────────────
+func _rebuild_upgrades() -> void:
+	for c in _panel_list.get_children():
+		(c as Node).queue_free()
+	var head := Label.new()
+	StickerTheme.label_sticker(head, 20, PopPalette.XP, 0, Color.WHITE, true)
+	head.text = "裂变结晶：%d（每局结算产出：波次 + 击杀）" % Meta.crystals
+	head.custom_minimum_size = Vector2(576.0, 36.0)
+	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_panel_list.add_child(head)
+	for u in Meta.UPGRADES:
+		var lv := Meta.upgrade_level(u.id)
+		var maxed := lv >= int(u.max_lv)
+		var cost := Meta.upgrade_cost(u.id)
+		var row := Panel.new()
+		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
+		row.custom_minimum_size = Vector2(576.0, 68.0)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var name_l := Label.new()
+		StickerTheme.label_sticker(name_l, 17, PopPalette.INK, 0, Color.WHITE, true)
+		name_l.text = "%s  Lv%d/%d" % [String(u.name), lv, int(u.max_lv)]
+		name_l.position = Vector2(18.0, 8.0)
+		name_l.size = Vector2(320.0, 26.0)
+		name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(name_l)
+		var desc_l := Label.new()
+		StickerTheme.label_sticker(desc_l, 13, PopPalette.INK_SOFT)
+		desc_l.text = String(u.desc)
+		desc_l.position = Vector2(18.0, 36.0)
+		desc_l.size = Vector2(340.0, 20.0)
+		desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(desc_l)
+		var buy := Button.new()
+		buy.text = "已满级" if maxed else "升级 (%d💎)" % cost
+		buy.add_theme_font_size_override("font_size", 15)
+		buy.add_theme_font_override("font", StickerTheme.font_bold())
+		buy.position = Vector2(420.0, 14.0)
+		buy.size = Vector2(140.0, 42.0)
+		buy.focus_mode = Control.FOCUS_NONE
+		buy.disabled = maxed or Meta.crystals < cost
+		buy.pressed.connect(_on_buy_upgrade.bind(u.id))
+		buy.button_down.connect(func() -> void: StickerTheme.press_punch(buy))
+		row.add_child(buy)
+		_panel_list.add_child(row)
+	var note := Label.new()
+	StickerTheme.label_sticker(note, 13, PopPalette.INK_SOFT)
+	note.text = "养成永久生效：开局自动应用（生命/攻击/磁吸/技能冷却）"
+	note.custom_minimum_size = Vector2(576.0, 24.0)
+	note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_panel_list.add_child(note)
+
+
+func _on_buy_upgrade(p_id: StringName) -> void:
+	if Meta.buy_upgrade(p_id):
+		_rebuild_upgrades()
+		_refresh_lobby_counts()
 
 
 # ── 记录内容 ──────────────────────────────────────────────────────

@@ -49,6 +49,67 @@ var _run_weapons_drawn: int = 0
 var _run_traits_drawn: int = 0
 var _run_boss_slain: int = 0
 var _run_map: StringName = MapTable.FIRST_MAP_ID   # 当前局地图（GameLoop.start_run 注入）
+# 局外养成（META_ROADMAP M8 落地，用户反馈「局外养成」）：裂变结晶 + 永久升级
+var crystals: int = 0                         # 裂变结晶（每局结算产出）
+var upgrades: Dictionary = {}                 # upgrade_id(String) → 等级
+var character_id: StringName = &"sentinel"    # 当前选用角色（大厅选人）
+
+# 永久升级定义表（cost = base_cost × (当前级+1)）
+const UPGRADES: Array[Dictionary] = [
+	{"id": &"life", "name": "装甲强化", "desc": "生命上限 +10/级", "max_lv": 5, "base_cost": 20},
+	{"id": &"atk", "name": "火力校准", "desc": "全武器攻击 +4%/级", "max_lv": 5, "base_cost": 30},
+	{"id": &"magnet", "name": "磁力线圈", "desc": "拾取半径 +15%/级", "max_lv": 3, "base_cost": 25},
+	{"id": &"cdr", "name": "技能超频", "desc": "角色技能冷却 -8%/级", "max_lv": 3, "base_cost": 35},
+]
+
+
+func upgrade_level(p_id: StringName) -> int:
+	return int(upgrades.get(String(p_id), 0))
+
+
+func upgrade_cost(p_id: StringName) -> int:
+	for u in UPGRADES:
+		if u.id == p_id:
+			return int(u.base_cost) * (upgrade_level(p_id) + 1)
+	return 1 << 30
+
+
+func buy_upgrade(p_id: StringName) -> bool:
+	# 购买永久升级（ crystals 不足 / 已满级 → false，大厅按钮置灰口径）
+	var max_lv := 0
+	for u in UPGRADES:
+		if u.id == p_id:
+			max_lv = int(u.max_lv)
+	if upgrade_level(p_id) >= max_lv:
+		return false
+	var cost := upgrade_cost(p_id)
+	if crystals < cost:
+		return false
+	crystals -= cost
+	upgrades[String(p_id)] = upgrade_level(p_id) + 1
+	_save()
+	return true
+
+
+func hp_bonus() -> float:
+	return float(upgrade_level(&"life")) * 10.0
+
+
+func atk_pct() -> float:
+	return float(upgrade_level(&"atk")) * 0.04
+
+
+func magnet_pct() -> float:
+	return float(upgrade_level(&"magnet")) * 0.15
+
+
+func skill_cdr_pct() -> float:
+	return float(upgrade_level(&"cdr")) * 0.08
+
+
+func set_character_id(p_id: StringName) -> void:
+	character_id = p_id
+	_save()
 
 
 func _ready() -> void:
@@ -170,6 +231,7 @@ func _on_state_changed(p_state: int) -> void:
 	records["best_kills"] = maxi(int(records["best_kills"]), _run_kills)
 	records["best_level"] = maxi(int(records["best_level"]), _run_max_level)
 	records["total_runs"] = int(records["total_runs"]) + 1
+	crystals += int(ceil(_run_max_wave * 1.5 + _run_kills / 25.0))   # 局外养成产出（波次+击杀）
 	var mkey := String(_run_map)
 	if not map_records.has(mkey):
 		map_records[mkey] = {"best_wave": 0, "best_kills": 0, "best_level": 1}
@@ -218,6 +280,9 @@ func _save() -> void:
 		cfg.set_value("records", key, records[key])
 	cfg.set_value("maps", "cleared", maps_cleared.keys())
 	cfg.set_value("maps", "records", map_records)
+	cfg.set_value("meta", "crystals", crystals)
+	cfg.set_value("meta", "upgrades", upgrades)
+	cfg.set_value("meta", "character", String(character_id))
 	cfg.save(SAVE_PATH)
 
 
@@ -241,3 +306,8 @@ func _load() -> void:
 	var mrecords: Variant = cfg.get_value("maps", "records", {})
 	if mrecords is Dictionary:
 		map_records = mrecords
+	crystals = int(cfg.get_value("meta", "crystals", 0))
+	var ups: Variant = cfg.get_value("meta", "upgrades", {})
+	if ups is Dictionary:
+		upgrades = ups
+	character_id = StringName(String(cfg.get_value("meta", "character", "sentinel")))

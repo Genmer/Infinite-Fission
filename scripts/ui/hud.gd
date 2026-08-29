@@ -20,6 +20,7 @@ var _xp_fill: Panel = null                    # 经验条填充
 var _level_label: Label = null
 var _wave_label: Label = null
 var map_name: String = ""                  # 当前地图名（M2 多地图，HUD 波次前缀）
+var _skill_btn: Button = null              # 角色技能键（右下角；冷却中置灰倒计时）
 var _kill_label: Label = null
 var _time_label: Label = null
 var _build_label: Label = null                # 构筑统计行（面板底行计数，延续原词条栏）
@@ -97,6 +98,11 @@ func refresh_stats() -> void:
 			_refresh_build()
 	_wave_label.text = ("%s · 第 %d 波" % [map_name, wave]) if map_name != "" \
 		else "第 %d 波" % wave
+	if _skill_btn != null and player != null and is_instance_valid(player):
+		var ready_now: bool = bool(player.call(&"skill_ready"))
+		_skill_btn.disabled = not ready_now
+		_skill_btn.modulate.a = 1.0 if ready_now else 0.55
+		_skill_btn.text = "技能" if ready_now else "%ds" % ceili(float(player.get("skill_cd_left")))
 	_kill_label.text = "击杀 %d" % kills
 	_time_label.text = "%d:%02d" % [int(run_elapsed) / 60, int(run_elapsed) % 60]
 
@@ -168,7 +174,9 @@ func _on_state_changed(p_state: int) -> void:
 			_state_label.visible = true
 		_:
 			_state_label.visible = false
-	_pause_btn.visible = p_state == GameConst.GameStatus.PLAYING   # 暂停按钮仅战斗态显示
+	_pause_btn.visible = p_state == GameConst.GameStatus.PLAYING
+	if _skill_btn != null:
+		_skill_btn.visible = p_state == GameConst.GameStatus.PLAYING   # 暂停按钮仅战斗态显示
 	if p_state != GameConst.GameStatus.PLAYING:
 		_toast_left = 0.0                     # 状态覆盖期收起波次 toast
 		_toast_label.visible = false
@@ -184,6 +192,12 @@ func _on_pause_pressed() -> void:
 	# 暂停按钮回调（果冻 punch + 申请信号——仲裁权在 GameLoop）
 	StickerTheme.press_punch(_pause_btn)
 	pause_requested.emit()
+
+
+func _on_skill_pressed() -> void:
+	# 角色技能键（仲裁在 player.skill_ready；PLAYING 态才生效）
+	if player != null and is_instance_valid(player) and bool(player.call(&"skill_ready")):
+		player.call(&"activate_skill")
 
 
 func _on_build_gui_input(p_ev: InputEvent) -> void:
@@ -401,7 +415,20 @@ func _build_ui() -> void:
 	_time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	time_pill.add_child(_time_label)
 
-	# 构筑面板（左下角，避开弹幕主区——用户反馈 2026-08-29：当前持有武器+词条要展示；
+	# 角色技能键（右下角——用户反馈「不同的角色有不同的技能」）：冷却中置灰倒计时
+	var skill_btn := Button.new()
+	skill_btn.name = "SkillButton"
+	skill_btn.text = "技能"
+	skill_btn.add_theme_font_size_override("font_size", 20)
+	skill_btn.add_theme_font_override("font", StickerTheme.font_bold())
+	skill_btn.position = Vector2(610.0, 1112.0)
+	skill_btn.size = Vector2(86.0, 86.0)
+	skill_btn.pivot_offset = skill_btn.size * 0.5
+	skill_btn.pressed.connect(_on_skill_pressed)
+	skill_btn.button_down.connect(func() -> void: StickerTheme.press_punch(skill_btn))
+	root.add_child(skill_btn)
+	_skill_btn = skill_btn
+		# 构筑面板（左下角，避开弹幕主区——用户反馈 2026-08-29：当前持有武器+词条要展示；
 	# 二轮反馈「点击左下角，可以看 buff 详情」→ 面板可点击 → 暂停 + 构筑详情卡）
 	var build_root := Control.new()
 	build_root.name = "BuildPanel"

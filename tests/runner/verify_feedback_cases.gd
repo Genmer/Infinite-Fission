@@ -39,6 +39,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_meta_systems()
 	_test_maps_systems()
 	_test_swamp_eco()
+	_test_char_meta()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -415,7 +416,7 @@ func _test_meta_systems() -> void:
 	# 大厅 UI：入口 + 面板
 	var menu: MenuScreen = _gl.menu_screen
 	_check("大厅：registry 已注入", menu.registry != null)
-	_check("大厅：三入口按钮就位", menu._lobby_btns.size() == 3)
+	_check("大厅：五入口按钮就位（图鉴/成就/记录/角色/养成）", menu._lobby_btns.size() == 5)
 	menu._on_lobby_pressed("codex")
 	_check("大厅：图鉴面板打开且条目 >0",
 		menu._panel_root.visible and menu._panel_list.get_child_count() > 0)
@@ -540,6 +541,67 @@ func _test_swamp_eco() -> void:
 	Meta.mark_map_cleared(&"world_grove")
 	_check("解锁链：树海通关 → 沼泽解锁", Meta.is_map_unlocked(&"world_swamp"))
 	Meta.maps_cleared = {}
+
+
+# ── ⑱ 角色系统 + 局外养成（M8 落地验收） ─────────────────────────
+func _test_char_meta() -> void:
+	print("── 角色与局外养成 ──")
+	_check("CharacterTable：3 角色", CharacterTable.count() == 3)
+	# 角色应用：薇拉（45 血 + 25% 攻）
+	var p: Node = _gl.player
+	_gl.state = GameConst.GameStatus.MENU
+	Meta.character_id = &"veles"
+	p.call(&"set_character", &"veles")
+	_check("角色：薇拉血量 45 + 养成加成",
+		absf(float(p.get("max_hp")) - (45.0 + Meta.hp_bonus())) <= 0.01)
+	# 武器面板口径：面板在实例化时定格（局内买养成不追改——下一局生效）
+	var w_veles := (p.get("weapon_slots") as Array)[0] as WeaponBase
+	_check("角色：攻击修正入武器（meta_atk_pct = 养成 + 0.25）",
+		absf(w_veles.meta_atk_pct - (Meta.atk_pct() + 0.25)) <= 0.001)
+	# 技能：过载咆哮
+	p.call(&"activate_skill")
+	_check("技能：过载咆哮 rof_mult=2", absf(float(p.get("rof_mult")) - 2.0) <= 0.001)
+	var w0: WeaponBase = (p.get("weapon_slots") as Array)[0]
+	_check("技能：射速面板吃 rof_mult（interval 减半）",
+		float(w0.call(&"_fire_interval")) < float(w0.call(&"_fire_interval")) * 2.5)
+	for i in range(300):
+		p.call(&"tick", DT, Vector2.ZERO)       # 4s 增益耗尽（120Hz × 300 = 2.5s 不够 → 补齐）
+	for i in range(200):
+		p.call(&"tick", DT, Vector2.ZERO)
+	_check("技能：增益到期 rof_mult 回 1", absf(float(p.get("rof_mult")) - 1.0) <= 0.001)
+	# 磐：践踏消弹
+	Meta.character_id = &"bulwark"
+	p.call(&"set_character", &"bulwark")
+	_check("角色：磐血量 95 + 养成", absf(float(p.get("max_hp")) - (95.0 + Meta.hp_bonus())) <= 0.01)
+	# 养成：结晶购买
+	Meta.crystals = 200
+	Meta.upgrades = {}
+	_check("养成：初始 Lv0", Meta.upgrade_level(&"life") == 0)
+	_check("养成：购买成功（20💎）", Meta.buy_upgrade(&"life"))
+	_check("养成：等级 1 + 余额 180", Meta.upgrade_level(&"life") == 1 and Meta.crystals == 180)
+	_check("养成：血量加成 +10", absf(Meta.hp_bonus() - 10.0) <= 0.001)
+	Meta.crystals = 10
+	_check("养成：结晶不足拒绝（atk 需 30）", not Meta.buy_upgrade(&"atk"))
+	Meta.crystals = 500
+	# 结算产出：12 波 60 杀 → ceil(18+2.4)=21
+	Meta._on_wave_started(12)
+	for i in range(60):
+		Meta._on_enemy_killed(_make_killed_enemy_stub(false))
+	var cr0: int = Meta.crystals
+	Meta._on_state_changed(GameConst.GameStatus.GAME_OVER)
+	_check("养成：局结算结晶产出（+21）", Meta.crystals == cr0 + 21)
+	# 大厅面板
+	var menu: MenuScreen = _gl.menu_screen
+	menu._on_lobby_pressed("char")
+	_check("大厅：角色面板 3 张卡", _live_children(menu._panel_list) == CharacterTable.count())
+	menu._on_lobby_pressed("upgrade")
+	_check("大厅：养成面板（结晶头 + 4 升级 + 注释 = 6 行）",
+		_live_children(menu._panel_list) == 6)
+	menu._on_panel_close()
+	Meta.character_id = &"sentinel"
+	Meta.upgrades = {}
+	Meta.crystals = 0
+	Meta._save()                                  # 养成测试不留痕（防污染 pkg 字面量断言）
 
 
 func _live_children(p_node: Node) -> int:
