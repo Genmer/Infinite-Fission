@@ -17,6 +17,6 @@ immune_mask = 0
 tags = 0
 hitbox_r = 14.0
 ranged = {}
-elite_mult = {}
+elite_mult = {"hp": 3.2, "spd": 1.0, "dmg": 1.3, "exp": 8.0}
 boss = {}
 gold_drop = {"chance": 0.1, "min": 10, "max": 10}

@@ -33,6 +33,7 @@ const HIT_NO_CRIT := 24             # 掩码：HIT_IS_REACTION | HIT_IS_DOT
 # Enemy tags / immune_mask 位标志
 const TAG_ELITE := 1
 const TAG_BOSS := 2
+const TAG_FINAL_BOSS := 4      # 最终 Boss（地图最终波巨 Boss——1/3 屏，用户反馈）
 const IMMUNE_FREEZE := 1            # 定身免疫（Boss 默认置位，F-17）
 const IMMUNE_CHILL := 2
 const IMMUNE_BURN := 4

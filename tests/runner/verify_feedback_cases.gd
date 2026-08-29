@@ -338,7 +338,16 @@ func _test_status_fx_nodes() -> void:
 # ── ⑫ 数据调优落位 ───────────────────────────────────────────────
 func _test_data_tuning() -> void:
 	print("── 数值/数据调优 ──")
-	_check("Boss 巨大化（视觉倍率 2.3）", absf(Enemy.BOSS_VISUAL_MULT - 2.3) <= 0.001)
+	_check("Boss 巨大化（视觉倍率 3.8 ≈ 1/4 屏）", absf(Enemy.BOSS_VISUAL_MULT - 3.8) <= 0.001)
+	_check("最终 Boss（视觉倍率 5.0 ≈ 1/3 屏 + TAG_FINAL_BOSS）",
+		absf(Enemy.FINAL_BOSS_VISUAL_MULT - 5.0) <= 0.001
+		and GameConst.TAG_FINAL_BOSS == 4)
+	_check("精英巨大化（视觉倍率 1.55 + E2 精英倍率就位）",
+		absf(Enemy.ELITE_VISUAL_MULT - 1.55) <= 0.001
+		and not _gl.registry.get_enemy(&"E2_runner").elite_mult.is_empty())
+	var frost_txt := FileAccess.get_file_as_string("res://resources/maps/wave_table_frost.tres")
+	_check("冰原 w12 编入冰霜仔精英（tags=1）", '"tags": 1' in frost_txt)
+	_check("冰原 w20 最终 Boss 标签（tags=6）", '"tags": 6' in frost_txt)
 	var boss1: EnemyData = _gl.registry.get_enemy(&"E6_boss1")
 	_check("Boss1 弹幕密度（count 14 / 4.6s）",
 		int(boss1.boss.get("bullet_patterns", {}).get("count", 0)) == 14)

@@ -93,8 +93,8 @@ events = []
 [sub_resource type="Resource" id="WaveEntryData_w12"]
 script = ExtResource("2_wed")
 index = 12
-composition = [{"enemy_id": &"E1_grunt", "count": 22}, {"enemy_id": &"E10_woodbird", "count": 5}, {"enemy_id": &"E2_runner", "count": 6}, {"enemy_id": &"E3_bastion", "count": 1}]
-tp_override = 39.7
+composition = [{"enemy_id": &"E1_grunt", "count": 22}, {"enemy_id": &"E10_woodbird", "count": 5}, {"enemy_id": &"E2_runner", "count": 6}, {"enemy_id": &"E3_bastion", "count": 1}, {"enemy_id": &"E10_woodbird", "count": 2, "tags": 1}]
+tp_override = 42.7
 window = 22.8
 events = []
 
@@ -125,8 +125,8 @@ events = []
 [sub_resource type="Resource" id="WaveEntryData_w16"]
 script = ExtResource("2_wed")
 index = 16
-composition = [{"enemy_id": &"E1_grunt", "count": 26}, {"enemy_id": &"E10_woodbird", "count": 6}, {"enemy_id": &"E2_runner", "count": 7}, {"enemy_id": &"E3_bastion", "count": 2}]
-tp_override = 49.4
+composition = [{"enemy_id": &"E1_grunt", "count": 26}, {"enemy_id": &"E10_woodbird", "count": 6}, {"enemy_id": &"E2_runner", "count": 7}, {"enemy_id": &"E3_bastion", "count": 2}, {"enemy_id": &"E3_bastion", "count": 1, "tags": 1}]
+tp_override = 52.4
 window = 24.4
 events = []
 
@@ -157,7 +157,7 @@ events = []
 [sub_resource type="Resource" id="WaveEntryData_w20"]
 script = ExtResource("2_wed")
 index = 20
-composition = [{"enemy_id": &"E6_boss3", "count": 1}]
+composition = [{"enemy_id": &"E6_boss3", "count": 1, "tags": 6}]
 tp_override = 1.0
 window = 26.0
 events = [&"BOSS"]

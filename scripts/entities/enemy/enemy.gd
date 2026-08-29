@@ -113,7 +113,9 @@ const SPAWN_TIME := 0.35                     # 出生弹入时长（easeOutBack 
 const FADE_IN_TIME := 0.12                    # 入场透明渐显（主体弹入由 SPAWN_TIME 承担）
 const TEX_SIZE := 64                          # 敌人贴图画布边长（逻辑半径 32 = hitbox 口径）
 const BOSS_TEX_R := 40.0                      # Boss 贴图本体半径 px（96 画布聚合体）
-const BOSS_VISUAL_MULT := 2.3                 # Boss 视觉放大倍率（巨大聚合体，用户反馈二轮；碰撞盒不变）
+const BOSS_VISUAL_MULT := 3.8                 # Boss 视觉放大倍率（≈1/4 屏，用户反馈三轮；碰撞盒不变）
+const FINAL_BOSS_VISUAL_MULT := 5.0           # 最终 Boss 视觉放大倍率（≈1/3 屏，TAG_FINAL_BOSS）
+const ELITE_VISUAL_MULT := 1.55               # 种族精英视觉放大倍率（「很大的」大怪，用户反馈三轮）
 const WOBBLE_TIME := 0.22                     # 受击果冻抖动时长
 const HOVER_AMP := 6.0                        # E5 悬浮幅度 px
 const BURN_FLAME_COUNT := 4                   # 点燃火苗并发数（用户反馈「燃烧看不见」→ 加量放大）
@@ -581,8 +583,11 @@ func _sync_visual() -> void:
 	var r := hitbox_r
 	var is_boss_kind := String(_kind).begins_with("boss")
 	if is_boss_kind:
-		_base_scale = r * BOSS_VISUAL_MULT / BOSS_TEX_R
+		var boss_mult := FINAL_BOSS_VISUAL_MULT 			if (tags & GameConst.TAG_FINAL_BOSS) != 0 else BOSS_VISUAL_MULT
+		_base_scale = r * boss_mult / BOSS_TEX_R
 		_sprite.texture = TextureFactory.enemy_tex(_kind, false)
+	elif is_elite():
+		_base_scale = r * ELITE_VISUAL_MULT / (TEX_SIZE * 0.5)
 	else:
 		_base_scale = r / (TEX_SIZE * 0.5)
 		match _kind:
