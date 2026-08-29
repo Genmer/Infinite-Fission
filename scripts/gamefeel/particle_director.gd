@@ -30,7 +30,7 @@ func setup(p_pool: ParticlePool) -> void:
 	_shared_material.gravity = Vector3(0, 240, 0)
 	_shared_material.scale_min = 0.5
 	_shared_material.scale_max = 1.4
-	_shared_material.color = Color(1.0, 0.85, 0.4)
+	_shared_material.color = Palette.AMBER       # 方向 B：磷光琥珀火花
 
 
 func burst(p_scene_id: StringName, p_pos: Vector2, p_priority: int) -> void:
@@ -47,16 +47,8 @@ func burst(p_scene_id: StringName, p_pos: Vector2, p_priority: int) -> void:
 
 
 func apply_placeholder_material(p_emitter: GPUParticles2D) -> void:
-	# 池预热后为发射器配置程序化占位材质（Boot 期一次性）
+	# 池预热后为发射器配置程序化材质（Boot 期一次性；方向 B 磷光辉光点）
 	if p_emitter != null and _shared_material != null:
 		p_emitter.process_material = _shared_material
 		if p_emitter.texture == null:
-			# 占位粒子贴图：4×4 白点（程序化；美术后续替换）
-			p_emitter.texture = _placeholder_texture()
-
-
-static func _placeholder_texture() -> ImageTexture:
-	# 共享静态占位贴图（程序化生成）
-	var img := Image.create(4, 4, false, Image.FORMAT_RGBA8)
-	img.fill(Color(1.0, 0.9, 0.6, 1.0))
-	return ImageTexture.create_from_image(img)
+			p_emitter.texture = TextureFactory.glow_dot()

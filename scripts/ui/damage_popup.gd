@@ -19,22 +19,24 @@ const LIFE_TIME := 0.6                        # 单段展示时长（s）
 const RISE_PX := 42.0                         # 上浮距离 px
 const MERGE_LIFE_RESET := 0.35                # 合并后重置的展示时长（短于新起，观感收敛）
 
-# 样式占位配色（程序化美术；正式样式后续迭代）
+# 样式分级配色（方向 B 终端色：等宽字体 + 磷光亮度分级；CRIT 琥珀 / REACTION 白热）
 const STYLE_COLORS := {
-	GameConst.PopupStyle.NORMAL: Color(0.95, 0.95, 0.95),
-	GameConst.PopupStyle.CRIT: Color(1.0, 0.82, 0.2),
-	GameConst.PopupStyle.REACTION: Color(0.55, 0.85, 1.0),
-	GameConst.PopupStyle.DOT: Color(0.7, 0.85, 0.4),
-	GameConst.PopupStyle.HEAL: Color(0.4, 1.0, 0.5),
-	GameConst.PopupStyle.XP: Color(0.6, 0.6, 0.7),
+	GameConst.PopupStyle.NORMAL: Color("A8FFB0"),
+	GameConst.PopupStyle.CRIT: Color("FFB000"),
+	GameConst.PopupStyle.REACTION: Color("FFFFFF"),
+	GameConst.PopupStyle.DOT: Color("86D88C"),
+	GameConst.PopupStyle.HEAL: Color("7CFF6B"),
+	GameConst.PopupStyle.XP: Color("6FA877"),
 }
 
 
 func _ready() -> void:
-	# 池化实例化期组装：Label 子节点（程序化占位，无字体资源——默认主题字体）
+	# 池化实例化期组装：Label 子节点（终端等宽字体——防御终端跳字）
 	_label = Label.new()
 	_label.name = "Value"
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_label.add_theme_font_override("font", TerminalTheme.mono_font())
+	_label.add_theme_font_size_override("font_size", 16)
 	add_child(_label)
 	visible = false
 

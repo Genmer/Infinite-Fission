@@ -50,35 +50,29 @@ var _fuse_ring: FuseRing = null               # 警示圈（程序化绘制）
 # ── 内部运行时 ─────────────────────────────────────────────────
 var _hit_area: Area2D = null                  # 接触伤害判定（低频通道）
 var _hit_shape: CollisionShape2D = null
-var _sprite: Sprite2D = null                  # 占位渲染（共享受击闪白 shader）
-var _material: ShaderMaterial = null
+var _glyph: WireGlyph = null                  # 矢量线框本体（方向 B：亮描边+暗填充+磷光辉光）
+var _ring_a: WireGlyph = null                 # Boss 外旋环 A（六边，惰性创建）
+var _ring_b: WireGlyph = null                 # Boss 外旋环 B（四边，逆向）
+var _trail: EchoTrail = null                  # E2 残影拖尾（惰性创建；世界坐标 top_level）
+var _anim_t: float = 0.0                      # 视觉动画时钟（game_delta 通道）
 var _flash_left: float = 0.0
 var _fade_left: float = 0.0
 var _player_cache: Node2D = null
 
 const FLASH_TIME := 0.12                     # 受击闪白时长
 const FADE_IN_TIME := 0.3                     # 入场渐显时长
-const TEX_SIZE := 64                          # 占位圆形纹理边长
-static var _shared_texture: ImageTexture = null
-static var _flash_shader: Shader = null
-const BODY_COLORS := {
-	"boss": Color(0.9, 0.25, 0.3),
-	"elite": Color(1.0, 0.6, 0.15),
-	"ranged": Color(0.7, 0.5, 0.9),
-	"default": Color(0.5, 0.65, 0.8),
-}
+# 敌型线框参数（按 .tres id 前缀分型；派发单 §实体：E1 三角/E2 镖形/E3 双层六边/E4 脉动圆/E5 刻度环）
+const PULSE_HZ := 7.0                         # E4 脉动频率
+const PULSE_AMP := 0.09                       # E4 脉动幅度（比例）
+const BOSS_RING_SPIN_A := 0.7                 # Boss 环 A 角速度 rad/s
+const BOSS_RING_SPIN_B := -1.05               # Boss 环 B 角速度（逆向）
 
 
 func _ready() -> void:
 	# 池化实例化期组装（代码组装为主，.tscn 仅做容器，§1.4）
-	_sprite = Sprite2D.new()
-	_sprite.name = "Visual"
-	_sprite.centered = true
-	_sprite.texture = _get_placeholder_texture()
-	_material = ShaderMaterial.new()
-	_material.shader = _get_flash_shader()
-	_sprite.material = _material
-	add_child(_sprite)
+	_glyph = WireGlyph.new()
+	_glyph.name = "Visual"
+	add_child(_glyph)
 	_hit_area = Area2D.new()
 	_hit_area.name = "HitArea"
 	_hit_shape = CollisionShape2D.new()
@@ -151,6 +145,7 @@ func tick(p_game_delta: float) -> void:
 	if _flash_left > 0.0:
 		_flash_left -= p_game_delta
 		_apply_flash(clampf(_flash_left / FLASH_TIME, 0.0, 1.0))
+	_tick_visual(p_game_delta)
 	# 状态效果速度因子（寒滞 0.6 / 冻结 0.0——包 3 收紧为 ElementalState 直调；无容器时 1.0）
 	var sf := 1.0
 	if elemental != null:
@@ -370,8 +365,13 @@ func _reset_state() -> void:
 		_fuse_ring.progress = 0.0
 	_flash_left = 0.0
 	_fade_left = 0.0
+	_anim_t = 0.0
+	if _glyph != null:
+		_glyph.scale = Vector2.ONE
+		_apply_flash(0.0)
+	if _trail != null:
+		_trail.clear_ghosts()
 	modulate.a = 1.0
-	_apply_flash(0.0)
 
 
 # ── 支撑 ──────────────────────────────────────────────────────────
@@ -386,74 +386,215 @@ func _player() -> Node2D:
 
 
 func _sync_visual() -> void:
-	# 占位渲染同步：半径等比缩放 + 染色（按 tag/行为）
-	if _sprite == null or data == null:
+	# 矢量线框构形（方向 B）：按 .tres id 前缀分型，半径 = hitbox_r；精英/Boss 换色
+	if _glyph == null or data == null:
 		return
 	var r := hitbox_r
-	var scale_f := r / (TEX_SIZE * 0.5)
-	_sprite.scale = Vector2(scale_f, scale_f)
-	_sprite.self_modulate = _body_color()
+	var sid := String(data.id)
+	_glyph.stroke_width = 1.6
+	_glyph.scale = Vector2.ONE
+	_glyph.rotation = 0.0
+	_glyph.extra_lines = []
+	_glyph.glow = true
+	_trail = _ensure_trail(sid.begins_with("E2"))
+	if sid.begins_with("E1"):
+		_glyph.points = WireGlyph.regular(3, r, -PI * 0.5)
+		_glyph.stroke = Palette.STROKE_ENEMY
+		_glyph.fill = Palette.FILL_ENEMY
+	elif sid.begins_with("E2"):
+		_glyph.points = WireGlyph.dart(r)
+		_glyph.stroke = Palette.STROKE_ENEMY
+		_glyph.fill = Palette.FILL_ENEMY
+	elif sid.begins_with("E3"):
+		# 双层六边形装甲（内层反转 30°）
+		_glyph.points = WireGlyph.regular(6, r)
+		_glyph.stroke = Palette.STROKE_ENEMY
+		_glyph.fill = Palette.FILL_ENEMY
+		_glyph.extra_lines = [WireGlyph.regular(6, r * 0.62, PI / 6.0)]
+		_glyph.extra_color = Color(Palette.HOT_RED.r, Palette.HOT_RED.g, Palette.HOT_RED.b, 0.55)
+	elif sid.begins_with("E4"):
+		# 脉动圆 + 辐射刻度线（_tick_visual 驱动脉动）
+		_glyph.points = WireGlyph.regular(14, r)
+		_glyph.stroke = Palette.STROKE_ENEMY
+		_glyph.fill = Palette.FILL_ENEMY
+		_glyph.extra_lines = WireGlyph.radial_ticks(r * 0.72, r * 0.94, 8)
+		_glyph.extra_color = Color(Palette.HOT_RED.r, Palette.HOT_RED.g, Palette.HOT_RED.b, 0.5)
+	elif sid.begins_with("E5"):
+		# 线框 + 外圈刻度环（精英模板：琥珀警示族）
+		_glyph.points = WireGlyph.regular(5, r, -PI * 0.5)
+		_glyph.stroke = Palette.STROKE_ELITE
+		_glyph.fill = Palette.FILL_ELITE
+		_glyph.extra_lines = WireGlyph.radial_ticks(r * 1.18, r * 1.42, 12)
+		_glyph.extra_color = Color(Palette.AMBER.r, Palette.AMBER.g, Palette.AMBER.b, 0.55)
+	elif is_boss():
+		# 大型多层旋转线框聚合体（本体八边 + 双旋环；白热→红随 HP 位移）
+		_glyph.points = WireGlyph.regular(8, r, PI / 8.0)
+		_glyph.stroke = Palette.STROKE_BOSS
+		_glyph.fill = Palette.FILL_BOSS
+		_ensure_boss_rings(r)
+	else:
+		_glyph.points = WireGlyph.regular(4, r, PI / 4.0)
+		_glyph.stroke = Palette.STROKE_ENEMY
+		_glyph.fill = Palette.FILL_ENEMY
+	_glyph.redraw()
 	if _hit_shape != null:
 		var shape := CircleShape2D.new()
 		shape.radius = r
 		_hit_shape.shape = shape
 
 
-func _body_color() -> Color:
+func _ensure_boss_rings(p_r: float) -> void:
+	# Boss 旋环惰性创建（池复用：仅 Boss 波可见）
+	if _ring_a == null:
+		_ring_a = WireGlyph.new()
+		_ring_a.name = "BossRingA"
+		_ring_a.fill = Color(0, 0, 0, 0)
+		add_child(_ring_a)
+		_ring_b = WireGlyph.new()
+		_ring_b.name = "BossRingB"
+		_ring_b.fill = Color(0, 0, 0, 0)
+		add_child(_ring_b)
+	_ring_a.points = WireGlyph.regular(6, p_r * 1.42)
+	_ring_b.points = WireGlyph.regular(4, p_r * 1.78, PI / 4.0)
+	_ring_a.stroke = Palette.STROKE_BOSS
+	_ring_b.stroke = Color(Palette.HOT_RED.r, Palette.HOT_RED.g, Palette.HOT_RED.b, 0.8)
+	_ring_a.stroke_width = 1.3
+	_ring_b.stroke_width = 1.3
+	_ring_a.rotation = 0.0
+	_ring_b.rotation = 0.0
+	_ring_a.redraw()
+	_ring_b.redraw()
+
+
+func _ensure_trail(p_enable: bool) -> EchoTrail:
+	# E2 残影拖尾（世界坐标 top_level；惰性创建，池复用显隐）
+	if not p_enable:
+		if _trail != null:
+			_trail.visible = false
+		return _trail
+	if _trail == null:
+		_trail = EchoTrail.new()
+		_trail.name = "EchoTrail"
+		_trail.top_level = true
+		_trail.ghost_shape = WireGlyph.dart(10.0)
+		add_child(_trail)
+	_trail.visible = true
+	return _trail
+
+
+func _tick_visual(p_game_delta: float) -> void:
+	# 视觉动画（game_delta 通道；死亡短路自然冻结）：E4 脉动 / Boss 旋环+白热变色 / E2 残影
+	if _glyph == null:
+		return
+	_anim_t += p_game_delta
+	if data != null and data.id == VOLATILE_ID:
+		var pulse := 1.0 + PULSE_AMP * sin(_anim_t * PULSE_HZ * TAU)
+		_glyph.scale = Vector2(pulse, pulse)
 	if is_boss():
-		return BODY_COLORS["boss"]
-	if is_elite():
-		return BODY_COLORS["elite"]
-	if behavior == GameConst.EnemyBehavior.RANGED:
-		return BODY_COLORS["ranged"]
-	return BODY_COLORS["default"]
+		if _ring_a != null:
+			_ring_a.rotation += BOSS_RING_SPIN_A * p_game_delta
+			_ring_b.rotation += BOSS_RING_SPIN_B * p_game_delta
+			# 白热 → 红（随 HP 位移；满血白热，残血红）
+			var heat := clampf(hp / max_hp, 0.0, 1.0)
+			var c := Palette.HOT_RED.lerp(Palette.STROKE_BOSS, heat)
+			_glyph.stroke = c
+			_ring_a.stroke = c
+			_glyph.redraw()
+			_ring_a.redraw()
+			_ring_b.redraw()
+	elif _trail != null and _trail.visible:
+		_trail.push_ghost(global_position)
 
 
 func _apply_flash(p_amount: float) -> void:
-	# 受击闪白（shader 占位：flash_amount 0→1 白色混合）
-	if _material != null:
-		_material.set_shader_parameter(&"flash_amount", p_amount)
+	# 受击闪白（矢量线框：描边/填充向白热插值，WireGlyph.flash）
+	if _glyph != null:
+		_glyph.flash = p_amount
+		_glyph.redraw()
+	if _ring_a != null:
+		_ring_a.flash = p_amount
+		_ring_a.redraw()
+		_ring_b.flash = p_amount
+		_ring_b.redraw()
 
 
-static func _get_placeholder_texture() -> ImageTexture:
-	# 共享静态占位圆形纹理（程序化生成；美术后续替换）
-	if _shared_texture == null:
-		var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
-		var c := float(TEX_SIZE) * 0.5 - 0.5
-		for y in range(TEX_SIZE):
-			for x in range(TEX_SIZE):
-				var dx := float(x) - c
-				var dy := float(y) - c
-				if dx * dx + dy * dy <= c * c:
-					img.set_pixel(x, y, Color.WHITE)
-		_shared_texture = ImageTexture.create_from_image(img)
-	return _shared_texture
-
-
-static func _get_flash_shader() -> Shader:
-	# 受击闪白 shader 占位（共享 shader；材质按实例持有，flash_amount 独立）
-	if _flash_shader == null:
-		_flash_shader = Shader.new()
-		_flash_shader.code = "\
-shader_type canvas_item;\n\
-uniform float flash_amount : hint_range(0.0, 1.0) = 0.0;\n\
-void fragment() {\n\
-	vec4 tex = texture(TEXTURE, UV);\n\
-	COLOR = vec4(mix(tex.rgb, vec3(1.0), flash_amount), tex.a);\n\
-}\n"
-	return _flash_shader
-
-
-# ── 爆虫警示圈（程序化占位绘制；半径 = VOLATILE_BLAST_RADIUS，A3 §2.2「警示圈」） ──
+# ── 爆虫警示圈（线框化改版；半径 = VOLATILE_BLAST_RADIUS，A3 §2.2「警示圈」） ──
 class FuseRing:
 	extends Node2D
 
 	var radius: float = 110.0
-	var progress: float = 0.0                   # 引导进度 0~1（圈色渐亮渐红）
+	var progress: float = 0.0                   # 引导进度 0~1（进度弧渐亮）
+	var _t: float = 0.0                         # 闪烁时钟（自驱 _process；仅可见期跑）
+
+	func _process(p_delta: float) -> void:
+		# 闪烁琥珀警示（警告色语义）；不可见期零成本短路
+		if not visible:
+			return
+		_t += p_delta
+		queue_redraw()
 
 	func _draw() -> void:
-		# 外圈描边 + 内域淡填充（进度越深越醒目；程序化占位美术）
-		var edge := Color(1.0, 0.25, 0.2, 0.35 + 0.45 * progress)
-		var fill := Color(1.0, 0.2, 0.15, 0.06 + 0.12 * progress)
-		draw_circle(Vector2.ZERO, radius, fill)
-		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, edge, 3.0, true)
+		# 线框警示圈：虚线外圈（闪烁琥珀）+ 引导进度弧（越深越亮）+ 十字刻度
+		var blink := 0.55 + 0.45 * sin(_t * 14.0)
+		var edge := Color(Palette.AMBER.r, Palette.AMBER.g, Palette.AMBER.b,
+			(0.30 + 0.40 * progress) * blink)
+		var hot := Color(Palette.HOT_RED.r, Palette.HOT_RED.g, Palette.HOT_RED.b,
+			0.35 + 0.60 * progress)
+		var segs := 24
+		var step := TAU / float(segs)
+		for i in range(segs):
+			if i % 2 == 0:
+				draw_arc(Vector2.ZERO, radius, float(i) * step, float(i) * step + step * 0.55,
+					6, edge, 2.0, true)
+		if progress > 0.004:
+			draw_arc(Vector2.ZERO, radius, -PI * 0.5, -PI * 0.5 + TAU * progress, 40, hot, 2.5, true)
+		for k in range(4):
+			var a := float(k) * PI * 0.5
+			var seg := PackedVector2Array([
+				Vector2(cos(a), sin(a)) * radius * 0.84,
+				Vector2(cos(a), sin(a)) * radius * 0.98,
+			])
+			draw_polyline(seg, edge, 1.6, true)
+
+
+# ── E2 残影拖尾（世界坐标 top_level；镖形幽灵渐隐） ───────────────
+class EchoTrail:
+	extends Node2D
+
+	var ghost_shape: PackedVector2Array = PackedVector2Array()
+	var stroke := Palette.HOT_RED
+	const MAX_GHOSTS := 5                       # 残影上限（拖尾密度克制）
+	const MIN_STEP_PX := 7.0                    # 采样最小间距（防原地堆影）
+
+	var _ghosts: Array[Vector2] = []            # 世界坐标（旧→新）
+
+	func push_ghost(p_pos: Vector2) -> void:
+		if not _ghosts.is_empty() \
+				and (_ghosts[_ghosts.size() - 1].distance_to(p_pos) < MIN_STEP_PX):
+			return
+		_ghosts.append(p_pos)
+		while _ghosts.size() > MAX_GHOSTS:
+			_ghosts.remove_at(0)
+		queue_redraw()
+
+	func clear_ghosts() -> void:
+		if _ghosts.is_empty():
+			return
+		_ghosts.clear()
+		queue_redraw()
+
+	func _draw() -> void:
+		# 幽灵镖形渐隐（无填充、无辉光——密度克制不干扰弹幕判读）
+		var n := _ghosts.size()
+		for i in range(n):
+			var a := 0.22 * float(i + 1) / float(n)
+			var xf := Transform2D(0.0, _ghosts[i])
+			draw_set_transform_matrix(xf)
+			draw_polyline(_closed(ghost_shape), Color(stroke.r, stroke.g, stroke.b, a), 1.1, true)
+		draw_set_transform_matrix(Transform2D())
+
+	func _closed(p_points: PackedVector2Array) -> PackedVector2Array:
+		var loop := p_points.duplicate()
+		if loop.size() > 0:
+			loop.append(loop[0])
+		return loop

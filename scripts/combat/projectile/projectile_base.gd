@@ -50,23 +50,18 @@ var _screen := Vector2(720.0, 1280.0)        # 逻辑分辨率缓存（spawn 期
 var _sprite: Sprite2D = null                  # 占位渲染子节点（美术后续替换）
 
 const OFFSCREEN_MARGIN := 96.0                # 出界回收余量（半径 + 边距）
-const TEX_SIZE := 32                          # 占位圆形纹理边长（共享静态）
-static var _shared_texture: ImageTexture = null
-const ELEMENT_COLORS: Array[Color] = [
-	Color(0.92, 0.92, 0.92),                 # KIN
-	Color(1.0, 0.45, 0.2),                    # FIR
-	Color(0.4, 0.8, 1.0),                     # ICE
-	Color(0.75, 0.5, 1.0),                    # LTG
-]
-const ENEMY_TEAM_TINT := Color(1.0, 0.35, 0.45)   # 敌弹统一染色（敌我识别）
+# 方向 B 矢量弹视觉参数（TextureFactory 惰性贴图：玩家弹短亮线段 / 敌弹辉光红点）
+const SEGMENT_SCALE_REF := 5.0                # 线段贴图长度基准（半径比；20px 模 × scale）
+const DOT_SCALE_REF := 2.5                    # 敌弹辉光点基准（14px 模 × scale）
+const FLICKER_STEP := 3                       # 敌弹闪烁步长（帧；~10Hz @60fps）
 
 
 func _ready() -> void:
-	# 池化实例化期组装占位渲染（代码组装为主；.tscn 仅做容器，§1.4）
+	# 池化实例化期组装矢量弹渲染（代码组装为主；.tscn 仅做容器，§1.4）
 	_sprite = Sprite2D.new()
 	_sprite.name = "Visual"
 	_sprite.centered = true
-	_sprite.texture = _get_placeholder_texture()
+	_sprite.texture = TextureFactory.bullet_segment()
 	add_child(_sprite)
 	visible = false                            # 池内不可见（取出 spawn 后激活）
 
@@ -580,17 +575,27 @@ func _reset_state() -> void:
 
 # ── 支撑 ──────────────────────────────────────────────────────────
 func _sync_visual() -> void:
-	# 占位渲染同步：半径等比缩放 + 元素染色（敌弹统一敌我识别色）
+	# 矢量弹渲染同步（方向 B）：玩家弹 = 短亮线段（朝向速度 + 元素磷光染色）；
+	# 敌弹 = 热红辉光点 + 帧步闪烁（敌我识别 + 密度可判读）
 	if _sprite == null:
 		return
-	var scale_f := effective_radius() / (TEX_SIZE * 0.5)
-	_sprite.scale = Vector2(scale_f, scale_f)
-	var color: Color = ELEMENT_COLORS[0]
-	if element >= 0 and element < ELEMENT_COLORS.size():
-		color = ELEMENT_COLORS[element]
+	var r := maxf(effective_radius(), 1.0)
 	if team == 1:
-		color = ENEMY_TEAM_TINT
-	_sprite.self_modulate = color
+		var dot: Texture2D = TextureFactory.glow_dot()
+		if _sprite.texture != dot:
+			_sprite.texture = dot
+		_sprite.rotation = 0.0
+		_sprite.scale = Vector2.ONE * (r / DOT_SCALE_REF)
+		var blink := 1.0 if ((GameConfig.frame_stamp / FLICKER_STEP + uid) % 2) == 0 else 0.45
+		_sprite.self_modulate = Color(Palette.ENEMY_BULLET.r, Palette.ENEMY_BULLET.g,
+			Palette.ENEMY_BULLET.b, blink)
+	else:
+		var seg: Texture2D = TextureFactory.bullet_segment()
+		if _sprite.texture != seg:
+			_sprite.texture = seg
+		_sprite.rotation = velocity.angle() if velocity != Vector2.ZERO else 0.0
+		_sprite.scale = Vector2.ONE * clampf(r / SEGMENT_SCALE_REF, 0.8, 4.0)
+		_sprite.self_modulate = Palette.element_tint(element)
 
 
 func _find_player() -> Node2D:
@@ -609,18 +614,3 @@ func _player_hp_pct() -> float:
 	if player != null and player.has_method(&"get_hp_pct"):
 		return float(player.call(&"get_hp_pct"))
 	return 1.0
-
-
-static func _get_placeholder_texture() -> ImageTexture:
-	# 共享静态占位圆形纹理（程序化生成；美术后续替换）
-	if _shared_texture == null:
-		var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
-		var c := float(TEX_SIZE) * 0.5 - 0.5
-		for y in range(TEX_SIZE):
-			for x in range(TEX_SIZE):
-				var dx := float(x) - c
-				var dy := float(y) - c
-				if dx * dx + dy * dy <= c * c:
-					img.set_pixel(x, y, Color.WHITE)
-		_shared_texture = ImageTexture.create_from_image(img)
-	return _shared_texture

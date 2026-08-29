@@ -24,14 +24,14 @@ var _drag_accum: Vector2 = Vector2.ZERO       # 相对拖动采样累计（E-15�
 var _pickup_area: Area2D = null
 var _pickup_shape: CollisionShape2D = null
 var _hit_shape: CollisionShape2D = null
-var _sprite: Sprite2D = null
+var _glyph: WireGlyph = null                  # 矢量箭形本体（方向 B：磷光线框）
+var _thrusting: bool = false                  # 推进喷焰显隐（移动时）
+var _anim_t: float = 0.0                      # 喷焰闪烁时钟
 var _deps: Dictionary = {}                     # setup 注入位（pipeline/pools/grid/registry——包 3/4 接线）
 
 const MAX_SLOTS := 5
 const RESPAWN_INVULN_S := 1.5                 # 重生无敌帧 s（B_spec 无数值 → 主控裁定，见 respawn 注释）
-const TEX_SIZE := 32
-static var _shared_texture: ImageTexture = null
-const BODY_COLOR := Color(0.35, 0.9, 1.0)
+const THRUST_FLICKER_HZ := 34.0               # 喷焰线段闪烁频率
 
 
 func _ready() -> void:
@@ -52,14 +52,13 @@ func _ready() -> void:
 	_pickup_shape.shape = pickup_circle
 	_pickup_area.add_child(_pickup_shape)
 	add_child(_pickup_area)
-	_sprite = Sprite2D.new()
-	_sprite.name = "Visual"
-	_sprite.centered = true
-	_sprite.texture = _get_placeholder_texture()
-	var scale_f := hitbox_radius / (TEX_SIZE * 0.5)
-	_sprite.scale = Vector2(scale_f, scale_f)
-	_sprite.self_modulate = BODY_COLOR
-	add_child(_sprite)
+	_glyph = WireGlyph.new()
+	_glyph.name = "Visual"
+	_glyph.points = WireGlyph.arrow(hitbox_radius)
+	_glyph.stroke = Palette.STROKE_PLAYER
+	_glyph.fill = Palette.FILL_PLAYER
+	_glyph.stroke_width = 1.8
+	add_child(_glyph)
 	weapon_slots.resize(MAX_SLOTS)
 	EventBus.slot_unlocked.connect(_on_slot_unlocked_event)
 	var bal := GameConfig.balance
@@ -89,6 +88,7 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 	_drag_accum = Vector2.ZERO
 	global_position += total
 	_clamp_to_playfield()
+	_tick_visual(total, p_game_delta)
 	# 武器自动开火调度（每帧 tick；集成包 B.8 第二批收紧：weapon_slots 已收窄 WeaponBase——直调）
 	for weapon in weapon_slots:
 		if weapon != null:
@@ -239,6 +239,39 @@ func _clamp_to_playfield() -> void:
 	global_position.y = clampf(global_position.y, size.y * 0.6, size.y - hitbox_radius)
 
 
+func _tick_visual(p_move: Vector2, p_game_delta: float) -> void:
+	# 方向 B 表现层：箭形朝向移动方向 + 推进线段喷焰（琥珀线段闪烁，静止不喷）
+	if _glyph == null:
+		return
+	_anim_t += p_game_delta
+	var moving := p_move != Vector2.ZERO
+	if moving:
+		_glyph.rotation = p_move.angle() + PI * 0.5   # 箭形尖端朝 -Y → 转向移动方向
+	if moving != _thrusting or moving:
+		_thrusting = moving
+		if moving:
+			_glyph.extra_lines = _thrust_segments()
+		else:
+			var empty: Array[PackedVector2Array] = []
+			_glyph.extra_lines = empty
+		_glyph.redraw()
+
+
+func _thrust_segments() -> Array[PackedVector2Array]:
+	# 推进喷焰：尾部 3 根线段（长随闪烁抖动；局部坐标，尖端 -Y → 喷焰在 +Y）
+	var r := hitbox_radius
+	var flicker := 0.72 + 0.28 * sin(_anim_t * THRUST_FLICKER_HZ * TAU)
+	var segs: Array[PackedVector2Array] = []
+	for ox in [-0.34, 0.0, 0.34]:
+		var x := r * float(ox)
+		var length := r * (0.95 - absf(float(ox))) * flicker
+		var seg := PackedVector2Array()
+		seg.append(Vector2(x, r * 0.66))
+		seg.append(Vector2(x, r * 0.66 + length))
+		segs.append(seg)
+	return segs
+
+
 func _xp_need_for(p_level: int) -> float:
 	# 14 × lv^1.4（balance.xp_curve 真源；lv → lv+1 升级所需）
 	var base := 14.0
@@ -247,18 +280,3 @@ func _xp_need_for(p_level: int) -> float:
 		base = float(GameConfig.balance.xp_curve.get("base", 14.0))
 		power = float(GameConfig.balance.xp_curve.get("power", 1.4))
 	return base * pow(float(maxi(p_level, 1)), power)
-
-
-static func _get_placeholder_texture() -> ImageTexture:
-	# 共享静态占位圆形纹理（程序化生成；美术后续替换）
-	if _shared_texture == null:
-		var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
-		var c := float(TEX_SIZE) * 0.5 - 0.5
-		for y in range(TEX_SIZE):
-			for x in range(TEX_SIZE):
-				var dx := float(x) - c
-				var dy := float(y) - c
-				if dx * dx + dy * dy <= c * c:
-					img.set_pixel(x, y, Color.WHITE)
-		_shared_texture = ImageTexture.create_from_image(img)
-	return _shared_texture

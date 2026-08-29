@@ -68,6 +68,7 @@ var card_select_ui: CardSelectUI = null
 var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处理器
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
+var crt_overlay: CRTOverlay = null            # 方向 B：CRT 全局氛围层（单 pass 全屏 shader）
 var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp}
 
 var frame_order: Array[StringName] = []       # 帧序探针（每帧重建；测试断言固定帧序）
@@ -421,6 +422,8 @@ func _boot_build_actors() -> void:
 
 func _boot_build_presentation() -> void:
 	# 表现层组装：粒子导演 → GameFeel → 跳字 → HUD/Boss 条/结算屏 → 卡牌流
+	# 方向 B：屏底近黑（磷光 CRT 屏色，Palette 单源）
+	RenderingServer.set_default_clear_color(Palette.BG)
 	var particles := ParticleDirector.new()
 	particles.name = "ParticleDirector"
 	add_child(particles)
@@ -467,6 +470,11 @@ func _boot_build_presentation() -> void:
 	menu_screen.name = "MenuScreen"
 	add_child(menu_screen)
 	menu_screen.start_requested.connect(start_run)
+	# 方向 B：CRT 氛围层（扫描线+色差+暗角+开机淡入单 pass；Boss 死亡 glitch / 波次刷新线
+	# 由层内 EventBus 订阅自驱——表现层，不进帧序）
+	crt_overlay = CRTOverlay.new()
+	crt_overlay.name = "CRTOverlay"
+	add_child(crt_overlay)
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）
 	EventBus.player_died.connect(_on_player_died)
 	EventBus.level_up.connect(_on_level_up)
