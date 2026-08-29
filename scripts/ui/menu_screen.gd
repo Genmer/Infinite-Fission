@@ -10,7 +10,8 @@
 class_name MenuScreen
 extends CanvasLayer
 
-signal start_requested()                      # → GameLoop.start_run()（MENU → PLAYING）
+signal start_requested()                      # → GameLoop.start_run()（MENU → PLAYING，兼容口）
+signal start_map_requested(map_id: StringName)   # 选图启动（M2 多地图 → GameLoop._on_menu_start）
 
 var registry: DataRegistry = null             # GameLoop Boot 期注入（图鉴全量清单）
 
@@ -169,7 +170,69 @@ func _build_ui() -> void:
 
 
 func _on_start_pressed() -> void:
-	start_requested.emit()
+	_open_map_select()                        # 出发 → 选关面板（M2 多地图，用户反馈）
+
+
+# ── 选关面板（出发按钮打开；通关链解锁——用户反馈「第一大关通关后打后面的」） ──
+func _open_map_select() -> void:
+	_panel_root.visible = true
+	_panel_title.text = "选择关卡"
+	for kind: String in _codex_tabs:
+		(_codex_tabs[kind] as Button).visible = false
+	for c in _panel_list.get_children():
+		(c as Node).queue_free()
+	for i in range(MapTable.count()):
+		var def := MapTable.MAPS[i]
+		var mid: StringName = def.id
+		var unlocked := Meta.is_map_unlocked(mid)
+		var cleared := Meta.is_map_cleared(mid)
+		var status := ("已通关 ★" if cleared else "可挑战") if unlocked else "🔒 通关上一关解锁"
+		var row := Panel.new()
+		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(14.0, 3, false))
+		row.custom_minimum_size = Vector2(576.0, 96.0)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var idx_l := Label.new()
+		StickerTheme.label_sticker(idx_l, 24, PopPalette.PLAYER if unlocked else PopPalette.INK_SOFT,
+			0, Color.WHITE, true)
+		idx_l.text = "%d" % (i + 1)
+		idx_l.position = Vector2(18.0, 32.0)
+		idx_l.size = Vector2(40.0, 34.0)
+		idx_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(idx_l)
+		var name_l := Label.new()
+		StickerTheme.label_sticker(name_l, 19, PopPalette.INK if unlocked else PopPalette.INK_SOFT,
+			0, Color.WHITE, true)
+		name_l.text = "%s（%d 波 · %s）" % [String(def.name), int(def.final_wave), status]
+		name_l.position = Vector2(64.0, 14.0)
+		name_l.size = Vector2(500.0, 26.0)
+		name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(name_l)
+		var desc_l := Label.new()
+		StickerTheme.label_sticker(desc_l, 13, PopPalette.INK_SOFT)
+		desc_l.text = String(def.desc)
+		desc_l.position = Vector2(64.0, 44.0)
+		desc_l.size = Vector2(500.0, 22.0)
+		desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(desc_l)
+		if unlocked:
+			var play_btn := Button.new()
+			play_btn.text = "出发"
+			play_btn.add_theme_font_size_override("font_size", 15)
+			play_btn.add_theme_font_override("font", StickerTheme.font_bold())
+			play_btn.position = Vector2(486.0, 28.0)
+			play_btn.size = Vector2(76.0, 40.0)
+			play_btn.focus_mode = Control.FOCUS_NONE
+			play_btn.pressed.connect(_on_map_pick.bind(mid))
+			play_btn.button_down.connect(func() -> void: StickerTheme.press_punch(play_btn))
+			row.add_child(play_btn)
+		_panel_list.add_child(row)
+	StickerTheme.squash_pop(_panel_root.get_node("LobbyPanel") as Control)
+
+
+func _on_map_pick(p_map_id: StringName) -> void:
+	_panel_root.visible = false
+	start_map_requested.emit(p_map_id)
 
 
 func is_menu_visible() -> bool:
@@ -373,6 +436,14 @@ func _enemy_icon_tex(p_eid: Variant) -> ImageTexture:
 		return TextureFactory.enemy_tex(&"elite")
 	if sid.begins_with("E7"):
 		return TextureFactory.enemy_tex(&"spitter")
+	if sid.begins_with("E8"):
+		return TextureFactory.enemy_tex(&"imp")
+	if sid.begins_with("E9"):
+		return TextureFactory.enemy_tex(&"frostling")
+	if sid.begins_with("E10"):
+		return TextureFactory.enemy_tex(&"woodbird")
+	if sid.begins_with("E11"):
+		return TextureFactory.enemy_tex(&"aquasquirt")
 	return TextureFactory.enemy_tex(&"grunt")
 
 
@@ -460,12 +531,19 @@ func _rebuild_records() -> void:
 	for c in _panel_list.get_children():
 		(c as Node).queue_free()
 	var lines := [
-		["历史最高波次", "%d" % int(Meta.records["best_wave"])],
+		["历史最高波次（全图）", "%d" % int(Meta.records["best_wave"])],
 		["单局最高击杀", "%d" % int(Meta.records["best_kills"])],
 		["单局最高等级", "%d" % int(Meta.records["best_level"])],
 		["累计完成局数", "%d" % int(Meta.records["total_runs"])],
 		["累计击杀", "%d" % int(Meta.records["total_kills"])],
+		["· 分图最佳 ·", ""],
 	]
+	for i in range(MapTable.count()):
+		var def := MapTable.MAPS[i]
+		var mr: Dictionary = Meta.map_records.get(String(def.id), {})
+		lines.append(["%s 最高波次" % String(def.name),
+			"%d%s" % [int(mr.get("best_wave", 0)), " ★" if Meta.is_map_cleared(def.id) else ""]])
+	lines.append(["通关进度", "%d/%d 图" % [Meta.cleared_count(), MapTable.count()]])
 	for l in lines:
 		var row := Panel.new()
 		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))

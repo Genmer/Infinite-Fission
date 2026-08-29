@@ -234,7 +234,7 @@ func tick(p_game_delta: float) -> void:
 	match behavior:
 		GameConst.EnemyBehavior.CHASE:
 			if player != null:
-				if _kind == &"dart":
+				if _kind == &"dart" or _kind == &"woodbird":
 					_tick_dart_chase(p_game_delta, player, sf)
 				else:
 					var dir := (player.global_position - global_position).normalized()
@@ -636,6 +636,14 @@ func _visual_kind() -> StringName:
 		return &"volatile"
 	if sid.begins_with("E7"):
 		return &"spitter"
+	if sid.begins_with("E8"):
+		return &"imp"
+	if sid.begins_with("E9"):
+		return &"frostling"
+	if sid.begins_with("E10"):
+		return &"woodbird"
+	if sid.begins_with("E11"):
+		return &"aquasquirt"
 	return &"grunt"
 
 

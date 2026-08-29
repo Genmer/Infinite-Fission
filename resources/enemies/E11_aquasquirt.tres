@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/enemy_data.gd" id="1_ed"]
+
+[resource]
+script = ExtResource("1_ed")
+id = &"E11_aquasquirt"
+display_name = "水泡怪"
+behavior = 1
+hp_base = 75.0
+spd_base = 60.0
+dmg_base = 13.0
+exp_base = 11.0
+tp_cost = 1.8
+resist = [0.0, 0.0, 0.0, 0.0]
+immune_mask = 0
+tags = 0
+hitbox_r = 15.0
+ranged = {"bullet_speed": 220.0, "fire_cd": 2.8, "bullet_atk_ratio": 0.7, "spread": 12.0, "fire_range": 340.0}
+elite_mult = {"hp": 3.6, "spd": 0.9, "dmg": 1.4, "exp": 8.0}
+boss = {}
+gold_drop = {"chance": 0.08, "min": 10, "max": 16}

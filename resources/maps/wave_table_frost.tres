@@ -1,0 +1,168 @@
+[gd_resource type="Resource" script_class="WaveTableData" load_steps=22 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/wave_table_data.gd" id="1_wtd"]
+[ext_resource type="Script" path="res://scripts/core/data/resources/wave_entry_data.gd" id="2_wed"]
+[sub_resource type="Resource" id="WaveEntryData_w1"]
+script = ExtResource("2_wed")
+index = 1
+composition = [{"enemy_id": &"E1_grunt", "count": 15}]
+tp_override = 15.0
+window = 18.4
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w2"]
+script = ExtResource("2_wed")
+index = 2
+composition = [{"enemy_id": &"E1_grunt", "count": 16}]
+tp_override = 16.0
+window = 18.8
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w3"]
+script = ExtResource("2_wed")
+index = 3
+composition = [{"enemy_id": &"E1_grunt", "count": 17}, {"enemy_id": &"E9_frostling", "count": 1}]
+tp_override = 19.2
+window = 19.2
+events = [&"UNLOCK_SLOT_2"]
+
+[sub_resource type="Resource" id="WaveEntryData_w4"]
+script = ExtResource("2_wed")
+index = 4
+composition = [{"enemy_id": &"E1_grunt", "count": 18}, {"enemy_id": &"E9_frostling", "count": 2}]
+tp_override = 22.4
+window = 19.6
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w5"]
+script = ExtResource("2_wed")
+index = 5
+composition = [{"enemy_id": &"E1_grunt", "count": 19}, {"enemy_id": &"E9_frostling", "count": 2}, {"enemy_id": &"E11_aquasquirt", "count": 2}]
+tp_override = 27.0
+window = 20.0
+events = [&"SHOP"]
+
+[sub_resource type="Resource" id="WaveEntryData_w6"]
+script = ExtResource("2_wed")
+index = 6
+composition = [{"enemy_id": &"E1_grunt", "count": 20}, {"enemy_id": &"E9_frostling", "count": 2}, {"enemy_id": &"E11_aquasquirt", "count": 2}]
+tp_override = 28.0
+window = 20.4
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w7"]
+script = ExtResource("2_wed")
+index = 7
+composition = [{"enemy_id": &"E1_grunt", "count": 21}, {"enemy_id": &"E9_frostling", "count": 2}, {"enemy_id": &"E11_aquasquirt", "count": 2}]
+tp_override = 29.0
+window = 20.8
+events = [&"UNLOCK_SLOT_3"]
+
+[sub_resource type="Resource" id="WaveEntryData_w8"]
+script = ExtResource("2_wed")
+index = 8
+composition = [{"enemy_id": &"E1_grunt", "count": 22}, {"enemy_id": &"E9_frostling", "count": 3}, {"enemy_id": &"E11_aquasquirt", "count": 2}, {"enemy_id": &"E4_volatile", "count": 2}]
+tp_override = 35.2
+window = 21.2
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w9"]
+script = ExtResource("2_wed")
+index = 9
+composition = [{"enemy_id": &"E1_grunt", "count": 23}, {"enemy_id": &"E9_frostling", "count": 3}, {"enemy_id": &"E11_aquasquirt", "count": 2}, {"enemy_id": &"E4_volatile", "count": 2}]
+tp_override = 36.2
+window = 21.6
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w10"]
+script = ExtResource("2_wed")
+index = 10
+composition = [{"enemy_id": &"E6_boss1", "count": 1}]
+tp_override = 1.0
+window = 22.0
+events = [&"BOSS", &"UNLOCK_SLOT_4"]
+
+[sub_resource type="Resource" id="WaveEntryData_w11"]
+script = ExtResource("2_wed")
+index = 11
+composition = [{"enemy_id": &"E1_grunt", "count": 25}, {"enemy_id": &"E9_frostling", "count": 3}, {"enemy_id": &"E11_aquasquirt", "count": 3}, {"enemy_id": &"E4_volatile", "count": 2}]
+tp_override = 40.0
+window = 22.4
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w12"]
+script = ExtResource("2_wed")
+index = 12
+composition = [{"enemy_id": &"E1_grunt", "count": 26}, {"enemy_id": &"E9_frostling", "count": 4}, {"enemy_id": &"E11_aquasquirt", "count": 3}, {"enemy_id": &"E4_volatile", "count": 3}]
+tp_override = 44.7
+window = 22.8
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w13"]
+script = ExtResource("2_wed")
+index = 13
+composition = [{"enemy_id": &"E1_grunt", "count": 27}, {"enemy_id": &"E9_frostling", "count": 4}, {"enemy_id": &"E11_aquasquirt", "count": 3}, {"enemy_id": &"E4_volatile", "count": 3}]
+tp_override = 45.7
+window = 23.2
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w14"]
+script = ExtResource("2_wed")
+index = 14
+composition = [{"enemy_id": &"E1_grunt", "count": 28}, {"enemy_id": &"E9_frostling", "count": 4}, {"enemy_id": &"E11_aquasquirt", "count": 3}, {"enemy_id": &"E4_volatile", "count": 3}]
+tp_override = 46.7
+window = 23.6
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w15"]
+script = ExtResource("2_wed")
+index = 15
+composition = [{"enemy_id": &"E1_grunt", "count": 29}, {"enemy_id": &"E9_frostling", "count": 4}, {"enemy_id": &"E11_aquasquirt", "count": 4}, {"enemy_id": &"E4_volatile", "count": 3}]
+tp_override = 49.5
+window = 24.0
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w16"]
+script = ExtResource("2_wed")
+index = 16
+composition = [{"enemy_id": &"E1_grunt", "count": 30}, {"enemy_id": &"E9_frostling", "count": 5}, {"enemy_id": &"E11_aquasquirt", "count": 4}, {"enemy_id": &"E4_volatile", "count": 4}]
+tp_override = 54.2
+window = 24.4
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w17"]
+script = ExtResource("2_wed")
+index = 17
+composition = [{"enemy_id": &"E1_grunt", "count": 31}, {"enemy_id": &"E9_frostling", "count": 5}, {"enemy_id": &"E11_aquasquirt", "count": 4}, {"enemy_id": &"E4_volatile", "count": 4}]
+tp_override = 55.2
+window = 24.8
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w18"]
+script = ExtResource("2_wed")
+index = 18
+composition = [{"enemy_id": &"E1_grunt", "count": 32}, {"enemy_id": &"E9_frostling", "count": 5}, {"enemy_id": &"E11_aquasquirt", "count": 4}, {"enemy_id": &"E4_volatile", "count": 4}]
+tp_override = 56.2
+window = 25.2
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w19"]
+script = ExtResource("2_wed")
+index = 19
+composition = [{"enemy_id": &"E1_grunt", "count": 33}, {"enemy_id": &"E9_frostling", "count": 5}, {"enemy_id": &"E11_aquasquirt", "count": 4}, {"enemy_id": &"E4_volatile", "count": 4}]
+tp_override = 57.2
+window = 25.6
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_w20"]
+script = ExtResource("2_wed")
+index = 20
+composition = [{"enemy_id": &"E6_boss2", "count": 1}]
+tp_override = 1.0
+window = 26.0
+events = [&"BOSS"]
+
+[resource]
+script = ExtResource("1_wtd")
+id = &"frost"
+entries = [SubResource("WaveEntryData_w1"), SubResource("WaveEntryData_w2"), SubResource("WaveEntryData_w3"), SubResource("WaveEntryData_w4"), SubResource("WaveEntryData_w5"), SubResource("WaveEntryData_w6"), SubResource("WaveEntryData_w7"), SubResource("WaveEntryData_w8"), SubResource("WaveEntryData_w9"), SubResource("WaveEntryData_w10"), SubResource("WaveEntryData_w11"), SubResource("WaveEntryData_w12"), SubResource("WaveEntryData_w13"), SubResource("WaveEntryData_w14"), SubResource("WaveEntryData_w15"), SubResource("WaveEntryData_w16"), SubResource("WaveEntryData_w17"), SubResource("WaveEntryData_w18"), SubResource("WaveEntryData_w19"), SubResource("WaveEntryData_w20")]

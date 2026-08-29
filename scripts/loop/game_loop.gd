@@ -59,6 +59,8 @@ var enemy_grid: SpaceGrid                     # 敌人格（弹-敌碰撞主路�
 var enemy_bullet_grid: SpaceGrid              # 敌弹格（消弹查询）
 var player: Player = null
 var wave_director: WaveDirector = null
+var current_map_id: StringName = MapTable.FIRST_MAP_ID   # 当前地图（M2 多地图，用户反馈）
+var _backdrop: CloudBackdrop = null                       # 云层主题色宿主（分图换色）
 var spawner: EnemySpawner = null
 var elemental: ElementalSystem = null
 var game_feel: GameFeelDirector = null
@@ -241,11 +243,26 @@ func request_resume() -> bool:
 
 
 func start_run() -> bool:
-	# MENU → PLAYING：波次 1 开局
+	# MENU → PLAYING：波次 1 开局（当前地图波表 + 主题色 + Meta 记图——M2 多地图）
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
+	wave_director.wave_table = MapTable.load_table(current_map_id, registry)
+	Meta.set_run_map(current_map_id)
+	var map_def := MapTable.get_map(current_map_id)
+	if _backdrop != null:
+		_backdrop.modulate = map_def.get("tint", Color.WHITE)   # 分图云层主题色
+	hud.set_map_name(String(map_def.get("name", "")))
 	wave_director.start_wave(1)
 	return true
+
+
+func _on_menu_start(p_map_id: StringName) -> void:
+	# 选图启动（大厅出发/地图卡；未解锁拒绝——解锁判据 = 上一关已通关）
+	if not Meta.is_map_unlocked(p_map_id):
+		push_warning("[GameLoop] 地图未解锁（%s）——拒绝启动" % String(p_map_id))
+		return
+	current_map_id = p_map_id
+	start_run()
 
 
 func restart_run() -> bool:
@@ -474,6 +491,7 @@ func _boot_build_presentation() -> void:
 	# （方向 C：淡云蓝白底 z=-20——纯视觉层，零事件依赖；彩纸屑已在 actors 段前置订阅）
 	var backdrop := CloudBackdrop.new()
 	backdrop.name = "CloudBackdrop"
+	_backdrop = backdrop
 	add_child(backdrop)
 	var particles := ParticleDirector.new()
 	particles.name = "ParticleDirector"
@@ -533,7 +551,8 @@ func _boot_build_presentation() -> void:
 	menu_screen.name = "MenuScreen"
 	menu_screen.registry = registry             # 图鉴全量清单（大厅面板，用户反馈 M4+M6）
 	add_child(menu_screen)
-	menu_screen.start_requested.connect(start_run)
+	menu_screen.start_requested.connect(func() -> void: _on_menu_start(MapTable.FIRST_MAP_ID))
+	menu_screen.start_map_requested.connect(_on_menu_start)   # 选图启动（M2 多地图）
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）
 	EventBus.player_died.connect(_on_player_died)
 	EventBus.level_up.connect(_on_level_up)

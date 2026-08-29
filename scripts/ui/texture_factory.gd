@@ -281,6 +281,113 @@ static func _enemy_layers(p_kind: StringName, p_angry: bool) -> Array:
 				{"sd": _circle_at(Vector2(-18.0, 8.0), 3.4), "fill": blush, "ow": 0.0},
 				{"sd": _circle_at(Vector2(18.0, 8.0), 3.4), "fill": blush, "ow": 0.0},
 			]
+		&"imp":
+			# E8 恶魔小鬼（紫晶魔域）：葡萄紫圆身 + 双弯角 + 蝙蝠小翼 + 尖尾 + 獠牙坏笑
+			var horn_l := PackedVector2Array([
+				Vector2(-11.0, -20.0), Vector2(-19.0, -38.0), Vector2(-4.0, -25.0),
+			])
+			var horn_r := PackedVector2Array([
+				Vector2(11.0, -20.0), Vector2(19.0, -38.0), Vector2(4.0, -25.0),
+			])
+			var wing_l := PackedVector2Array([
+				Vector2(-24.0, 2.0), Vector2(-38.0, -8.0), Vector2(-34.0, 12.0), Vector2(-24.0, 12.0),
+			])
+			var wing_r := PackedVector2Array([
+				Vector2(24.0, 2.0), Vector2(38.0, -8.0), Vector2(34.0, 12.0), Vector2(24.0, 12.0),
+			])
+			var demon := PopPalette.SHOCK.lerp(PopPalette.ENEMY, 0.25)
+			return [
+				{"sd": _poly_sd(wing_l), "fill": demon.lerp(PopPalette.OUTLINE, 0.35), "ow": 3.0},
+				{"sd": _poly_sd(wing_r), "fill": demon.lerp(PopPalette.OUTLINE, 0.35), "ow": 3.0},
+				{"sd": _circle_at(Vector2(0.0, 2.0), 25.0), "fill": demon, "ow": 6.5},
+				{"sd": _poly_sd(horn_l), "fill": demon.lerp(PopPalette.OUTLINE, 0.45), "ow": 3.4},
+				{"sd": _poly_sd(horn_r), "fill": demon.lerp(PopPalette.OUTLINE, 0.45), "ow": 3.4},
+				{"sd": _box_rot_at(Vector2(-9.0, -4.0), Vector2(6.6, 2.2), 1.2, -0.42),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(9.0, -4.0), Vector2(6.6, 2.2), 1.2, 0.42),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-11.2, -2.2), 2.0), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(11.2, -2.2), 2.0), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _poly_sd(PackedVector2Array([
+					Vector2(-9.0, 10.0), Vector2(9.0, 10.0), Vector2(0.0, 17.0),
+				])), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _poly_sd(PackedVector2Array([
+					Vector2(-5.5, 10.5), Vector2(-2.5, 10.5), Vector2(-4.0, 13.5),
+				])), "fill": Color.WHITE, "ow": 0.0},
+				{"sd": _poly_sd(PackedVector2Array([
+					Vector2(2.5, 10.5), Vector2(5.5, 10.5), Vector2(4.0, 13.5),
+				])), "fill": Color.WHITE, "ow": 0.0},
+			]
+		&"frostling":
+			# E9 冰霜仔（寒霜冰原）：冰蓝圆身 + 顶部三根冰晶柱 + 眉霜 + 冻僵小嘴
+			var spike_l := PackedVector2Array([
+				Vector2(-13.0, -18.0), Vector2(-19.0, -36.0), Vector2(-7.0, -22.0),
+			])
+			var spike_c := PackedVector2Array([
+				Vector2(0.0, -22.0), Vector2(0.0, -42.0), Vector2(7.0, -20.0),
+			])
+			var spike_r := PackedVector2Array([
+				Vector2(13.0, -18.0), Vector2(19.0, -36.0), Vector2(7.0, -22.0),
+			])
+			var ice := PopPalette.PLAYER.lerp(Color.WHITE, 0.45)
+			return [
+				{"sd": _circle_at(Vector2(0.0, 4.0), 25.0), "fill": ice, "ow": 6.5},
+				{"sd": _poly_sd(spike_l), "fill": PopPalette.PLAYER.lerp(Color.WHITE, 0.62), "ow": 3.2},
+				{"sd": _poly_sd(spike_c), "fill": PopPalette.PLAYER.lerp(Color.WHITE, 0.78), "ow": 3.2},
+				{"sd": _poly_sd(spike_r), "fill": PopPalette.PLAYER.lerp(Color.WHITE, 0.62), "ow": 3.2},
+				{"sd": _box_rot_at(Vector2(-10.0, -4.0), Vector2(6.0, 2.6), 1.0, 0.0),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(10.0, -4.0), Vector2(6.0, 2.6), 1.0, 0.0),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-10.0, -2.0), 2.1), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(10.0, -2.0), 2.1), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _box_at(Vector2(0.0, 10.0), Vector2(3.0, 1.4), 1.0), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-17.0, 8.0), 3.0), "fill": Color(1.0, 1.0, 1.0, 0.7), "ow": 0.0},
+				{"sd": _circle_at(Vector2(17.0, 8.0), 3.0), "fill": Color(1.0, 1.0, 1.0, 0.7), "ow": 0.0},
+			]
+		&"woodbird":
+			# E10 林间飞雀（翡翠树海）：薄荷绿鸟身 + 黄喙 + 叶形头冠 + 收拢翅 + 圆眼
+			var crest := PackedVector2Array([
+				Vector2(0.0, -26.0), Vector2(10.0, -40.0), Vector2(-2.0, -36.0),
+			])
+			var wing := PackedVector2Array([
+				Vector2(-8.0, 4.0), Vector2(-26.0, 14.0), Vector2(-10.0, 20.0),
+			])
+			var beak := PackedVector2Array([
+				Vector2(6.0, 4.0), Vector2(22.0, 8.0), Vector2(6.0, 13.0),
+			])
+			return [
+				{"sd": _poly_sd(wing), "fill": PopPalette.SUCCESS.lerp(PopPalette.OUTLINE, 0.3), "ow": 3.0},
+				{"sd": _circle_at(Vector2(0.0, 4.0), 24.0), "fill": PopPalette.SUCCESS, "ow": 6.5},
+				{"sd": _poly_sd(crest), "fill": PopPalette.SUCCESS.lerp(PopPalette.XP, 0.35), "ow": 3.0},
+				{"sd": _poly_sd(beak), "fill": PopPalette.XP, "ow": 3.0},
+				{"sd": _circle_at(Vector2(-4.0, -4.0), 5.4), "fill": Color.WHITE, "ow": 2.0},
+				{"sd": _circle_at(Vector2(-3.2, -3.2), 2.4), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(14.0, 10.0), 2.8), "fill": PopPalette.ENEMY.lerp(Color.WHITE, 0.45), "ow": 0.0},
+			]
+		&"aquasquirt":
+			# E11 水泡怪（寒霜冰原·水域）：青蓝水滴身 + 侧鳍 + 顶水花 + 泡泡大眼
+			var fin_l := PackedVector2Array([
+				Vector2(-22.0, 8.0), Vector2(-36.0, 2.0), Vector2(-24.0, 18.0),
+			])
+			var fin_r := PackedVector2Array([
+				Vector2(22.0, 8.0), Vector2(36.0, 2.0), Vector2(24.0, 18.0),
+			])
+			var splash := PackedVector2Array([
+				Vector2(-6.0, -22.0), Vector2(0.0, -36.0), Vector2(6.0, -22.0),
+			])
+			var aqua := PopPalette.PLAYER.lerp(PopPalette.SUCCESS, 0.45)
+			return [
+				{"sd": _poly_sd(fin_l), "fill": aqua.lerp(PopPalette.OUTLINE, 0.3), "ow": 3.0},
+				{"sd": _poly_sd(fin_r), "fill": aqua.lerp(PopPalette.OUTLINE, 0.3), "ow": 3.0},
+				{"sd": _circle_at(Vector2(0.0, 4.0), 25.0), "fill": aqua, "ow": 6.5},
+				{"sd": _poly_sd(splash), "fill": aqua.lerp(Color.WHITE, 0.4), "ow": 3.0},
+				{"sd": _circle_at(Vector2(-9.0, 0.0), 7.0), "fill": Color.WHITE, "ow": 2.2},
+				{"sd": _circle_at(Vector2(9.0, 0.0), 7.0), "fill": Color.WHITE, "ow": 2.2},
+				{"sd": _circle_at(Vector2(-7.8, 1.2), 3.0), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(10.2, 1.2), 3.0), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-5.0, -12.0), 2.2), "fill": Color(1.0, 1.0, 1.0, 0.8), "ow": 0.0},
+			]
 		_:
 			# grunt（E1 杂兵）：珊瑚圆球 + 好奇眼睛 + 腮红小嘴 + 顶呆毛（气球结剪影）
 			return _grunt_face(blush, 26.0)

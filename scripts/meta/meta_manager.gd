@@ -39,6 +39,8 @@ var records: Dictionary = {
 	"best_wave": 0, "best_kills": 0, "best_level": 1,
 	"total_runs": 0, "total_kills": 0,
 }
+var maps_cleared: Dictionary = {}             # map_id(String) → true（通关解锁链，M2）
+var map_records: Dictionary = {}              # map_id(String) → {best_wave, best_kills, best_level}
 # 单局计数（GAME_OVER 结算后清零）
 var _run_kills: int = 0
 var _run_max_wave: int = 0
@@ -46,6 +48,7 @@ var _run_max_level: int = 1
 var _run_weapons_drawn: int = 0
 var _run_traits_drawn: int = 0
 var _run_boss_slain: int = 0
+var _run_map: StringName = MapTable.FIRST_MAP_ID   # 当前局地图（GameLoop.start_run 注入）
 
 
 func _ready() -> void:
@@ -54,7 +57,42 @@ func _ready() -> void:
 	EventBus.card_chosen.connect(_on_card_chosen)
 	EventBus.wave_started.connect(_on_wave_started)
 	EventBus.level_up.connect(_on_level_up)
+	EventBus.wave_cleared.connect(_on_wave_cleared)
 	EventBus.state_changed.connect(_on_state_changed)
+
+
+func _on_wave_cleared(p_wave: int) -> void:
+	# 地图通关判定（M2）：清场波次 ≥ 当前地图最终波 → 标记通关（解锁下一关，用户反馈）
+	var final_wave := int(MapTable.get_map(_run_map).get("final_wave", 1 << 30))
+	if p_wave >= final_wave:
+		mark_map_cleared(_run_map)
+
+
+# ── 地图进度（M2 多地图，用户反馈「第一大关通关后打后面的」） ──────
+func set_run_map(p_map_id: StringName) -> void:
+	_run_map = p_map_id
+
+
+func is_map_cleared(p_map_id: StringName) -> bool:
+	return maps_cleared.has(String(p_map_id))
+
+
+func is_map_unlocked(p_map_id: StringName) -> bool:
+	# 第一关恒解锁；其余 = 上一关已通关
+	var idx := MapTable.get_map_index(p_map_id)
+	if idx <= 0:
+		return true
+	return is_map_cleared(MapTable.MAPS[idx - 1].id)
+
+
+func mark_map_cleared(p_map_id: StringName) -> void:
+	if not maps_cleared.has(String(p_map_id)):
+		maps_cleared[String(p_map_id)] = true
+		_save()
+
+
+func cleared_count() -> int:
+	return maps_cleared.size()
 
 
 # ── 查询口（大厅 UI） ─────────────────────────────────────────────
@@ -127,11 +165,18 @@ func _on_level_up(p_level: int) -> void:
 func _on_state_changed(p_state: int) -> void:
 	if p_state != GameConst.GameStatus.GAME_OVER:
 		return
-	# 局结算：最高记录 + 局数 + 成就 + 落盘 + 单局计数复位
+	# 局结算：最高记录（全局 + 分图）+ 局数 + 成就 + 落盘 + 单局计数复位
 	records["best_wave"] = maxi(int(records["best_wave"]), _run_max_wave)
 	records["best_kills"] = maxi(int(records["best_kills"]), _run_kills)
 	records["best_level"] = maxi(int(records["best_level"]), _run_max_level)
 	records["total_runs"] = int(records["total_runs"]) + 1
+	var mkey := String(_run_map)
+	if not map_records.has(mkey):
+		map_records[mkey] = {"best_wave": 0, "best_kills": 0, "best_level": 1}
+	var mr: Dictionary = map_records[mkey]
+	mr["best_wave"] = maxi(int(mr["best_wave"]), _run_max_wave)
+	mr["best_kills"] = maxi(int(mr["best_kills"]), _run_kills)
+	mr["best_level"] = maxi(int(mr["best_level"]), _run_max_level)
 	_check_achievements()
 	_save()
 	_run_kills = 0
@@ -171,6 +216,8 @@ func _save() -> void:
 	cfg.set_value("achievements", "done", achievements_done.keys())
 	for key in records:
 		cfg.set_value("records", key, records[key])
+	cfg.set_value("maps", "cleared", maps_cleared.keys())
+	cfg.set_value("maps", "records", map_records)
 	cfg.save(SAVE_PATH)
 
 
@@ -189,3 +236,8 @@ func _load() -> void:
 		achievements_done[String(aid)] = true
 	for key in records:
 		records[key] = int(cfg.get_value("records", key, records[key]))
+	for mid in cfg.get_value("maps", "cleared", []):
+		maps_cleared[String(mid)] = true
+	var mrecords: Variant = cfg.get_value("maps", "records", {})
+	if mrecords is Dictionary:
+		map_records = mrecords

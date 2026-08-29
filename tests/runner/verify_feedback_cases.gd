@@ -37,6 +37,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_data_tuning()
 	_test_docs()
 	_test_meta_systems()
+	_test_maps_systems()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -415,7 +416,8 @@ func _test_meta_systems() -> void:
 	_check("大厅：成就面板打开（条目 = 定义数 %d）" % Meta.ACHIEVEMENTS.size(),
 		_live_children(menu._panel_list) == Meta.ACHIEVEMENTS.size())
 	menu._on_lobby_pressed("records")
-	_check("大厅：记录面板打开（5 行）", _live_children(menu._panel_list) == 5)
+	_check("大厅：记录面板打开（全局 5 + 分图 6 = 11 行）",
+		_live_children(menu._panel_list) == 11)
 	menu._on_panel_close()
 	_check("大厅：返回关闭面板", not menu._panel_root.visible)
 	# 恢复既有存档（测试隔离）
@@ -426,6 +428,67 @@ func _test_meta_systems() -> void:
 		f.close()
 	else:
 		DirAccess.remove_absolute("user://meta_save.cfg")
+
+
+# ── ⑯ 多地图 / 新怪 / 通关解锁链（M2 落地验收） ──────────────────
+func _test_maps_systems() -> void:
+	print("── 多地图与新怪 ──")
+	_check("MapTable：4 张地图", MapTable.count() == 4)
+	_check("MapTable：首关加载注册表主表（30 波）",
+		MapTable.load_table(&"world_grass", _gl.registry).entries.size() == 30)
+	var frost_table := MapTable.load_table(&"world_frost", _gl.registry)
+	_check("MapTable：寒霜冰原旁路波表（20 波）", frost_table != null
+		and frost_table.entries.size() == 20 and frost_table.id == &"frost")
+	_check("新怪：E8 恶魔小鬼（CHASE 追击）",
+		_gl.registry.get_enemy(&"E8_imp") != null
+		and int(_gl.registry.get_enemy(&"E8_imp").behavior) == GameConst.EnemyBehavior.CHASE)
+	var frost_e: EnemyData = _gl.registry.get_enemy(&"E9_frostling")
+	_check("新怪：E9 冰霜仔（ICE 抗 60% + 冻结免疫）",
+		frost_e != null and absf(frost_e.resist[2] - 0.6) <= 0.001
+		and int(frost_e.immune_mask & GameConst.IMMUNE_FREEZE) != 0)
+	_check("新怪：E10 林间飞雀（疾冲走位分型）",
+		_gl.registry.get_enemy(&"E10_woodbird") != null)
+	var aqua: EnemyData = _gl.registry.get_enemy(&"E11_aquasquirt")
+	_check("新怪：E11 水泡怪（RANGED 远程）",
+		aqua != null and int(aqua.behavior) == GameConst.EnemyBehavior.RANGED
+		and not aqua.ranged.is_empty())
+	# 解锁链：首关恒解锁 → 未解锁拒绝启动 → 通关后解锁并启动
+	Meta.maps_cleared = {}
+	Meta.map_records = {}
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.current_map_id = MapTable.FIRST_MAP_ID
+	_gl._on_menu_start(&"world_frost")
+	_check("选图：未解锁拒绝启动（仍 MENU）", _gl.state == GameConst.GameStatus.MENU)
+	_check("解锁链：首关恒解锁", Meta.is_map_unlocked(&"world_grass"))
+	_check("解锁链：第二关初始锁定", not Meta.is_map_unlocked(&"world_frost"))
+	Meta.mark_map_cleared(&"world_grass")
+	_check("解锁链：通关首关 → 第二关解锁", Meta.is_map_unlocked(&"world_frost"))
+	_check("解锁链：next_map_id（grass→frost）",
+		MapTable.next_map_id(&"world_grass") == &"world_frost")
+	_gl._on_menu_start(&"world_frost")
+	_check("选图：启动进入 PLAYING", _gl.state == GameConst.GameStatus.PLAYING)
+	_check("选图：当前地图 = 寒霜冰原", _gl.current_map_id == &"world_frost")
+	_check("选图：波表已切换（id=frost）", _gl.wave_director.wave_table.id == &"frost")
+	_check("主题：HUD 图名注入", _gl.hud.map_name == "寒霜冰原")
+	_check("主题：云层色调 = 冰原淡青", _gl._backdrop.modulate
+		== (MapTable.get_map(&"world_frost").tint as Color))
+	# 分图记录：模拟 12 波/9 级/3 杀 → GAME_OVER 结算入 world_frost 桶
+	Meta._on_wave_started(12)
+	Meta._on_level_up(9)
+	for i in range(3):
+		Meta._on_enemy_killed(_make_killed_enemy_stub(false))
+	Meta._on_state_changed(GameConst.GameStatus.GAME_OVER)
+	var mr: Dictionary = Meta.map_records.get("world_frost", {})
+	_check("分图记录：world_frost best_wave=12", int(mr.get("best_wave", 0)) == 12)
+	Meta._on_wave_cleared(20)
+	_check("通关标记：wave_cleared(20) → 冰原通关", Meta.is_map_cleared(&"world_frost"))
+	_check("解锁链：第三关（魔域）随之解锁", Meta.is_map_unlocked(&"world_demon"))
+	# 大厅：选关面板 4 行
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.menu_screen._open_map_select()
+	_check("大厅：选关面板 4 张地图卡",
+		_live_children(_gl.menu_screen._panel_list) == MapTable.count())
+	_gl.menu_screen._on_panel_close()
 
 
 func _live_children(p_node: Node) -> int:

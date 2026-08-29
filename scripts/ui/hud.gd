@@ -19,6 +19,7 @@ var _hp_label: Label = null
 var _xp_fill: Panel = null                    # 经验条填充
 var _level_label: Label = null
 var _wave_label: Label = null
+var map_name: String = ""                  # 当前地图名（M2 多地图，HUD 波次前缀）
 var _kill_label: Label = null
 var _time_label: Label = null
 var _build_label: Label = null                # 构筑统计行（面板底行计数，延续原词条栏）
@@ -94,7 +95,8 @@ func refresh_stats() -> void:
 		if sig != _build_sig:
 			_build_sig = sig
 			_refresh_build()
-	_wave_label.text = "第 %d 波" % wave
+	_wave_label.text = ("%s · 第 %d 波" % [map_name, wave]) if map_name != "" \
+		else "第 %d 波" % wave
 	_kill_label.text = "击杀 %d" % kills
 	_time_label.text = "%d:%02d" % [int(run_elapsed) / 60, int(run_elapsed) % 60]
 
@@ -171,6 +173,11 @@ func _on_state_changed(p_state: int) -> void:
 		_toast_left = 0.0                     # 状态覆盖期收起波次 toast
 		_toast_label.visible = false
 	refresh_stats()
+
+
+func set_map_name(p_name: String) -> void:
+	# 地图名注入（GameLoop.start_run → HUD 波次前缀，M2 多地图）
+	map_name = p_name
 
 
 func _on_pause_pressed() -> void:
