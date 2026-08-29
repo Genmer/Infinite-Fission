@@ -12,6 +12,7 @@ const SPAWN_OFFSCREEN := 40.0                # 出生点屏外余量（配合入
 var pool: EnemyPool = null                    # 注入
 var registry: DataRegistry = null             # 注入（data_id → EnemyData 解析）
 var projectile_pool: ProjectilePool = null    # 注入（RANGED 敌人敌弹池——ballistic 场景）
+var map_mods: Dictionary = {}                 # 地图词缀（GameLoop.start_run 注入；M2 二期）
 var enemy_grid: SpaceGrid = null              # 最近一次 tick 的网格（E-10 分离力/查询预留）
 var elemental_system: ElementalSystem = null  # 注入（包 4 帧序⑤：出生 register_host 挂状态容器）
 var spawn_queue: Array[Dictionary] = []      # 待生成队列 {data_id, wave, tags, pos}
@@ -56,6 +57,7 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 			break                             # 池满：留在队首等待下帧（不丢弃）
 		spawn_queue.pop_front()
 		enemy.spawn(data, int(entry.get("wave", 1)), int(entry.get("tags", 0)))
+		_apply_map_mods(enemy)
 		enemy.projectile_pool = projectile_pool
 		enemy.enemy_grid = enemy_grid
 		if elemental_system != null:
@@ -69,6 +71,21 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		if enemy.is_boss():
 			EventBus.emit_boss_spawned(enemy)   # Boss 登场事件（HUD 血条/GameFeel）
 		spawned += 1
+
+
+func _apply_map_mods(p_enemy: Enemy) -> void:
+	# 地图词缀（M2 二期）：出生后差分修正——冰抗/移速/生命
+	if map_mods.is_empty():
+		return
+	if map_mods.has("ice_resist"):
+		var r: Array = p_enemy.resist
+		if r.size() > 2:
+			r[2] = clampf(float(r[2]) + float(map_mods["ice_resist"]), -0.8, 0.8)
+	if map_mods.has("spd_mult"):
+		p_enemy.speed = p_enemy.speed * float(map_mods["spd_mult"])
+	if map_mods.has("hp_mult"):
+		p_enemy.max_hp = p_enemy.max_hp * float(map_mods["hp_mult"])
+		p_enemy.hp = p_enemy.max_hp
 
 
 func on_enemy_killed(p_enemy: Node2D) -> void:

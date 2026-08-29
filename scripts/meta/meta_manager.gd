@@ -17,17 +17,17 @@ const SAVE_PATH := "user://meta_save.cfg"
 # 成就定义表（id → {name, desc, type, target}；type: total_kills/run_wave/run_level/
 # run_weapons_drawn/run_traits_drawn/boss_slain/total_runs）
 const ACHIEVEMENTS: Array[Dictionary] = [
-	{"id": &"first_blood", "name": "初次裂变", "desc": "累计击杀 1 只敌人", "type": "total_kills", "target": 1},
-	{"id": &"kill_500", "name": "弹幕清道夫", "desc": "累计击杀 500 只敌人", "type": "total_kills", "target": 500},
-	{"id": &"kill_2000", "name": "裂变风暴", "desc": "累计击杀 2000 只敌人", "type": "total_kills", "target": 2000},
-	{"id": &"wave_10", "name": "站稳脚跟", "desc": "单局抵达第 10 波", "type": "run_wave", "target": 10},
-	{"id": &"wave_20", "name": "深入敌阵", "desc": "单局抵达第 20 波", "type": "run_wave", "target": 20},
-	{"id": &"wave_30", "name": "无尽之门", "desc": "单局抵达第 30 波", "type": "run_wave", "target": 30},
-	{"id": &"level_15", "name": "成长曲线", "desc": "单局等级达到 15 级", "type": "run_level", "target": 15},
-	{"id": &"weapons_3", "name": "军火大亨", "desc": "单局获得 2 把新武器（共持 3 把）", "type": "run_weapons_drawn", "target": 2},
-	{"id": &"traits_8", "name": "词条收藏家", "desc": "单局获得 8 张词条卡", "type": "run_traits_drawn", "target": 8},
-	{"id": &"boss_slay", "name": "屠戮聚合体", "desc": "击败首个 Boss", "type": "boss_slain", "target": 1},
-	{"id": &"runs_10", "name": "不屈哨兵", "desc": "完成 10 局", "type": "total_runs", "target": 10},
+	{"id": &"first_blood", "reward": 10, "name": "初次裂变", "desc": "累计击杀 1 只敌人", "type": "total_kills", "target": 1},
+	{"id": &"kill_500", "reward": 25, "name": "弹幕清道夫", "desc": "累计击杀 500 只敌人", "type": "total_kills", "target": 500},
+	{"id": &"kill_2000", "reward": 60, "name": "裂变风暴", "desc": "累计击杀 2000 只敌人", "type": "total_kills", "target": 2000},
+	{"id": &"wave_10", "reward": 20, "name": "站稳脚跟", "desc": "单局抵达第 10 波", "type": "run_wave", "target": 10},
+	{"id": &"wave_20", "reward": 40, "name": "深入敌阵", "desc": "单局抵达第 20 波", "type": "run_wave", "target": 20},
+	{"id": &"wave_30", "reward": 80, "name": "无尽之门", "desc": "单局抵达第 30 波", "type": "run_wave", "target": 30},
+	{"id": &"level_15", "reward": 30, "name": "成长曲线", "desc": "单局等级达到 15 级", "type": "run_level", "target": 15},
+	{"id": &"weapons_3", "reward": 25, "name": "军火大亨", "desc": "单局获得 2 把新武器（共持 3 把）", "type": "run_weapons_drawn", "target": 2},
+	{"id": &"traits_8", "reward": 25, "name": "词条收藏家", "desc": "单局获得 8 张词条卡", "type": "run_traits_drawn", "target": 8},
+	{"id": &"boss_slay", "reward": 30, "name": "屠戮聚合体", "desc": "击败首个 Boss", "type": "boss_slain", "target": 1},
+	{"id": &"runs_10", "reward": 50, "name": "不屈哨兵", "desc": "完成 10 局", "type": "total_runs", "target": 10},
 ]
 
 # 运行期状态（存档落盘口径）
@@ -62,6 +62,7 @@ const UPGRADES: Array[Dictionary] = [
 	{"id": &"cdr", "name": "技能超频", "desc": "角色技能冷却 -8%/级", "max_lv": 3, "base_cost": 35},
 	{"id": &"xp_gain", "name": "经验萃取", "desc": "经验获取 +8%/级", "max_lv": 3, "base_cost": 30},
 	{"id": &"start_gold", "name": "初始资金", "desc": "开局金币 +20/级", "max_lv": 3, "base_cost": 25},
+	{"id": &"revive", "name": "应急协议", "desc": "每局可复活 1 次/级（满血复活 + 2s 无敌）", "max_lv": 2, "base_cost": 80},
 ]
 
 
@@ -115,6 +116,10 @@ func xp_pct() -> float:
 
 func start_gold() -> int:
 	return int(upgrade_level(&"start_gold")) * 20
+
+
+func revive_charges() -> int:
+	return int(upgrade_level(&"revive"))
 
 
 func set_character_id(p_id: StringName) -> void:
@@ -275,6 +280,7 @@ func _check_achievements() -> void:
 			continue
 		if int(counters.get(String(a.type), 0)) >= int(a.target):
 			achievements_done[aid] = true
+			crystals += int(a.get("reward", 10))     # 成就奖励结晶（打通养成闭环，M8）
 			achievements_changed.emit(a.id)
 			_save()
 

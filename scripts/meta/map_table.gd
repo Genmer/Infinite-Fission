@@ -13,26 +13,31 @@ const MAPS: Array[Dictionary] = [
 		"id": &"world_grass", "name": "晴空草原", "desc": "初启之地 · 杂兵与精英的新兵场",
 		"table_path": "",                                   # 空 = 注册表主表（30 波）
 		"tint": Color(1.0, 1.0, 1.0, 1.0), "final_wave": 30,
+		"mod_name": "", "mod_id": &"",
 	},
 	{
 		"id": &"world_frost", "name": "寒霜冰原", "desc": "冰霜仔与水泡怪出没 · 冰抗敌人需火炻或迸裂破阵",
 		"table_path": "res://resources/maps/wave_table_frost.tres",
 		"tint": Color(0.72, 0.88, 1.0, 1.0), "final_wave": 20,
+		"mod_name": "霜冻之地：敌人冰抗 +20%", "mod_id": &"ice_resist",
 	},
 	{
 		"id": &"world_demon", "name": "紫晶魔域", "desc": "恶魔小鬼成群 · 高速贴脸考验爆发",
 		"table_path": "res://resources/maps/wave_table_demon.tres",
 		"tint": Color(0.82, 0.72, 1.0, 1.0), "final_wave": 20,
+		"mod_name": "魔血狂暴：敌人移速 +10%", "mod_id": &"spd_mult",
 	},
 	{
 		"id": &"world_grove", "name": "翡翠树海", "desc": "林间飞雀与疾行者 · 速攻流走位试炼",
 		"table_path": "res://resources/maps/wave_table_grove.tres",
 		"tint": Color(0.74, 1.0, 0.82, 1.0), "final_wave": 20,
+		"mod_name": "迅捷之风：经验获取 +10%", "mod_id": &"xp_mult",
 	},
 	{
 		"id": &"world_swamp", "name": "翠毒沼泽", "desc": "毒泡史莱姆与沼泽巨口 · 毒爆/装甲/触手生态",
 		"table_path": "res://resources/maps/wave_table_swamp.tres",
 		"tint": Color(0.6, 0.9, 0.58, 1.0), "final_wave": 20,
+		"mod_name": "毒性弥漫：敌人生命 +8%", "mod_id": &"hp_mult",
 	},
 ]
 

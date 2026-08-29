@@ -210,7 +210,8 @@ func _open_map_select() -> void:
 		row.add_child(name_l)
 		var desc_l := Label.new()
 		StickerTheme.label_sticker(desc_l, 13, PopPalette.INK_SOFT)
-		desc_l.text = String(def.desc)
+		var mod_line := String(def.get("mod_name", ""))
+		desc_l.text = (String(def.desc) + "｜" + mod_line) if mod_line != "" else String(def.desc)
 		desc_l.position = Vector2(64.0, 44.0)
 		desc_l.size = Vector2(500.0, 22.0)
 		desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -260,6 +260,15 @@ func start_run() -> bool:
 	Meta.set_run_map(current_map_id)
 	player.set_character(Meta.character_id)   # 角色应用（含养成加成——M8/角色系统）
 	var map_def := MapTable.get_map(current_map_id)
+	spawner.map_mods = {}
+	match String(map_def.get("mod_id", "")):
+		"ice_resist":
+			spawner.map_mods = {"ice_resist": 0.2}
+		"spd_mult":
+			spawner.map_mods = {"spd_mult": 1.10}
+		"hp_mult":
+			spawner.map_mods = {"hp_mult": 1.08}
+	player.map_xp_mult = 1.10 if String(map_def.get("mod_id", "")) == "xp_mult" else 1.0
 	if _backdrop != null:
 		_backdrop.modulate = map_def.get("tint", Color.WHITE)   # 分图云层主题色
 	hud.set_map_name(String(map_def.get("name", "")))

@@ -15,7 +15,9 @@ var hp: float = 60.0
 var move_speed: float = 280.0                 # 移速（相对拖动 1:1 口径下的调试/键盘备用参数）
 var pickup_radius: float = 120.0
 var gold: int = 0                             # 金币（击杀 gold_drop 掉账；战地黑市货币，M7）
-var _last_move_dir: Vector2 = Vector2.UP      # 最近移动方向（游侠闪现取向）              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
+var _last_move_dir: Vector2 = Vector2.UP      # 最近移动方向（游侠闪现取向）
+var revives_left: int = 0                     # 应急协议剩余复活（局外养成，每局重置）
+var map_xp_mult: float = 1.0                  # 地图词缀·经验倍率（GameLoop.start_run 注入）              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
 # 角色系统（用户反馈「不同的角色有不同的技能」）：选择经 Meta 持久化，开局 set_character 应用
 var character_id: StringName = &"sentinel"
 var character_atk_pct: float = 0.0            # 角色攻击修正（武器面板经 meta_atk_pct 合成）
@@ -202,6 +204,8 @@ func take_contact_damage(p_dmg: float) -> void:
 	_punch_left = PUNCH_TIME
 	EventBus.emit_player_hit(dmg, 0)
 	if hp <= 0.0:
+		if _try_revive():
+			return                             # 复活成功：满血 + 无敌，不掉死亡仲裁
 		hp = 0.0
 		_on_died()
 
@@ -298,6 +302,7 @@ func set_character(p_id: StringName) -> void:
 	hp = max_hp
 	pickup_radius = 120.0 * (1.0 + Meta.magnet_pct())
 	gold = 30 + Meta.start_gold()                # 开局资金（养成·初始资金，M8 二期）
+	revives_left = Meta.revive_charges()         # 应急协议（每局重置）
 	character_atk_pct = float(def.get("atk_pct", 0.0))
 	skill_cd_base = float(def.get("cd", 30.0)) * (1.0 - Meta.skill_cdr_pct())
 	skill_cd_left = 0.0
@@ -366,7 +371,7 @@ func _skill_stomp() -> void:
 func gain_xp(p_amount: float) -> void:
 	# 经验/等级：xp_gained → 升级（多级连升逐次广播，弹卡排队由 GameLoop 仲裁 E-16）
 	# 升级回满血（用户反馈 2026-08-29「升级还是回满血吧」：升级即奖励，血条拉满解压）
-	var amount := maxf(p_amount, 0.0) * (1.0 + Meta.xp_pct())   # 局外养成·经验萃取（M8 二期）
+	var amount := maxf(p_amount, 0.0) * (1.0 + Meta.xp_pct()) * map_xp_mult   # 养成萃取 + 地图词缀
 	xp += amount
 	EventBus.emit_xp_gained(amount)
 	while xp >= xp_need:
@@ -421,6 +426,16 @@ func _on_died() -> void:
 		return
 	_dead = true
 	EventBus.emit_player_died()
+
+
+func _try_revive() -> bool:
+	# 应急协议（局外养成·复活）：满血复活 + 2s 无敌（每局次数 = 养成等级）
+	if revives_left <= 0:
+		return false
+	revives_left -= 1
+	hp = max_hp
+	invuln_left = 2.0
+	return true
 
 
 func _on_slot_unlocked_event(p_slot: int) -> void:

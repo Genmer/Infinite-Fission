@@ -62,6 +62,7 @@ func bind_events() -> void:
 	EventBus.state_changed.connect(_on_state_changed)
 	EventBus.damage_resolved.connect(_on_damage_resolved)
 	EventBus.boss_spawned.connect(_on_boss_banner)
+	EventBus.achievements_changed.connect(_on_achievement_toast)
 	EventBus.card_chosen.connect(_on_card_chosen_build)
 
 
@@ -203,6 +204,29 @@ func _on_skill_pressed() -> void:
 	# 角色技能键（仲裁在 player.skill_ready；PLAYING 态才生效）
 	if player != null and is_instance_valid(player) and bool(player.call(&"skill_ready")):
 		player.call(&"activate_skill")
+
+
+func _on_achievement_toast(p_ach_id: StringName) -> void:
+	# 成就达成 toast（右上滑入：名称 + 结晶奖励——养成闭环反馈，M8）
+	var reward := 10
+	var aname := String(p_ach_id)
+	for a in Meta.ACHIEVEMENTS:
+		if a.id == p_ach_id:
+			reward = int(a.get("reward", 10))
+			aname = String(a.name)
+			break
+	var toast := StickerTheme.label_sticker(Label.new(), 17, PopPalette.GOLD, 4, Color.WHITE, true)
+	toast.text = "🏆 成就达成：%s（+%d💎）" % [aname, reward]
+	toast.position = Vector2(150.0, 300.0)
+	toast.size = Vector2(420.0, 30.0)
+	toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(toast)                               # HUD 自身即 CanvasLayer 宿主
+	var tw := toast.create_tween()
+	tw.tween_property(toast, "position:y", 260.0, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.9)
+	tw.tween_property(toast, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(toast.queue_free)
 
 
 func _on_boss_banner(p_boss: Node2D) -> void:

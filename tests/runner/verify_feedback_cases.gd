@@ -41,6 +41,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_swamp_eco()
 	_test_char_meta()
 	_test_economy()
+	_test_polish()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -595,9 +596,12 @@ func _test_char_meta() -> void:
 	var menu: MenuScreen = _gl.menu_screen
 	menu._on_lobby_pressed("char")
 	_check("大厅：角色面板 3 张卡", _live_children(menu._panel_list) == CharacterTable.count())
+	for c in menu._panel_list.get_children():
+		c.free()                                  # 立即清（queue_free 无帧迭代不清真——计数口径）
 	menu._on_lobby_pressed("upgrade")
-	_check("大厅：养成面板（结晶头 + 6 升级 + 注释 = 8 行）",
-		_live_children(menu._panel_list) == 8)
+	_check("大厅：养成面板（结晶头 + 7 升级 + 注释 = 9 行）",
+		_live_children(menu._panel_list) == 9,
+		"live=%d" % _live_children(menu._panel_list))
 	menu._on_panel_close()
 	Meta.character_id = &"sentinel"
 	Meta.upgrades = {}
@@ -659,6 +663,52 @@ func _test_economy() -> void:
 	_check("音效：8 种程序化音色就绪", SfxBank.I != null and SfxBank.I._streams.size() >= 9)
 	SfxBank.I.play(&"kill")
 	SfxBank.I.play(&"level")
+
+
+# ── ⑳ 成就奖励 / 复活 / 地图词缀 ─────────────────────────────────
+func _test_polish() -> void:
+	print("── 成就奖励/复活/词缀 ──")
+	# 成就奖励结晶：wave_30 达成 → +80（选未达成项——wave_10 已在早前用例解锁）
+	Meta._run_max_wave = 30
+	var cr0: int = Meta.crystals
+	Meta._check_achievements()
+	# 同一轮 wave_20（+40）会一并解锁 → 合计 +120
+	_check("成就奖励：wave_30 达成（+80，连带 wave_20 +40）",
+		Meta.is_ach_done(&"wave_30") and Meta.crystals == cr0 + 120,
+		"cr=%d/%d" % [Meta.crystals, cr0 + 120])
+	# 复活：应急协议 1 级 → 致死一击满血复活
+	Meta.upgrades = {"revive": 1}
+	var p: Node = _gl.player
+	p.call(&"set_character", &"sentinel")
+	_check("复活：充能就位（1 次）", int(p.get("revives_left")) == 1)
+	p.set("invuln_left", 0.0)                     # 清无敌（接触伤害有无敌帧护栏）
+	p.set("hp", 1.0)
+	p.call(&"take_contact_damage", 50.0)
+	_check("复活：致死伤害 → 满血存活 + 2s 无敌",
+		absf(float(p.get("hp")) - float(p.get("max_hp"))) <= 0.01
+		and float(p.get("invuln_left")) >= 1.5 and int(p.get("revives_left")) == 0)
+	p.set("invuln_left", 0.0)
+	p.call(&"take_contact_damage", 99999.0)
+	_check("复活：耗尽后正常死亡仲裁（E-16 不受扰）", bool(p.get("_dead")))
+	p.call(&"respawn")
+	# 地图词缀：定义完整 + spawner 应用
+	for mid: Array in [[&"world_grass", ""], [&"world_frost", "ice_resist"],
+			[&"world_demon", "spd_mult"], [&"world_grove", "xp_mult"],
+			[&"world_swamp", "hp_mult"]]:
+		var def := MapTable.get_map(mid[0])
+		_check("词缀：%s → %s" % [String(mid[0]), String(mid[1]) if String(mid[1]) != "" else "无词缀"],
+			String(def.get("mod_id", "")) == String(mid[1]))
+	var frost_def := MapTable.get_map(&"world_frost")
+	_check("词缀文案：霜冻之地", String(frost_def.get("mod_name", "")).contains("冰抗"))
+	# spawner 词缀应用（spd_mult 实测）
+	_gl.spawner.map_mods = {"spd_mult": 1.10}
+	var se := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	se.spawn(_fixture_enemy(&"E_MOD", 10.0), 1, 0)
+	var spd0: float = se.speed
+	_gl.spawner._apply_map_mods(se)
+	_check("词缀：spawner 应用移速 +10%", absf(se.speed - spd0 * 1.10) <= 0.01)
+	_gl.spawner.map_mods = {}
+	_gl.pools[&"enemy"].release(se)
 
 
 func _live_children(p_node: Node) -> int:
