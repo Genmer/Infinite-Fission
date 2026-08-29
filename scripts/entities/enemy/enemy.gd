@@ -60,21 +60,44 @@ var _flash_left: float = 0.0
 var _fade_left: float = 0.0
 var _player_cache: Node2D = null
 
-# 方向 C 表现层（贴纸分型：厚描边 + 眼睛脸 + 果冻感）
+# 方向 C 表现层（敌人角色化 2026-08-29：分型剪影/表情/动画状态机）
 var _base_scale: float = 1.0                  # hitbox 口径基础缩放（果冻/充能缩放的乘算基准）
+var _kind: StringName = &"grunt"              # 分型缓存（spawn 期判定一次——tick 零字符串开销）
 var _crown: Sprite2D = null                   # 精英金色皇冠挂件（TAG_ELITE）
 var _satellites: Array[Sprite2D] = []         # Boss 漂浮小卫星球（聚合体多层）
+var _shadow: Sprite2D = null                  # 底影（E5 悬浮 / Boss；贴地椭圆）
+var _sparkles: Array[Sprite2D] = []           # E5 精英微光粒（金色小珠）
+var _armor_sprite: Sprite2D = null            # E3 外甲板（与内芯分层错位）
+var _armor_cracked: bool = false              # E3 外甲裂纹态（HP≤50% 换裂纹贴图）
+var _armor_jiggle_left: float = 0.0           # E3 受击甲板错位抖动剩余
 var _wobble_left: float = 0.0                 # 受击果冻抖动剩余
-var _angry: bool = false                      # E4 充能变脸（红脸贴图切换）
+var _face_state: int = 0                      # E4 脸状态（0 平静/1 惊恐/2 引爆）
 var _anim_t: float = 0.0                      # 表现时钟（卫星公转/抖动相位）
 var _boss_orbit: float = 0.0                  # 卫星公转角
+var _boss_angry: bool = false                 # Boss 二阶段变脸贴图标志
+var _spawn_left: float = 0.0                  # 出生弹入剩余（0→1 带 overshoot）
+var _dash_state: int = 0                      # E2 冲刺状态机（0 巡航/1 蓄力/2 冲刺/3 回弹）
+var _dash_left: float = 0.0                   # E2 当前阶段剩余
+var _dash_dir: Vector2 = Vector2.ZERO         # E2 冲刺锁定方向（蓄力期末采样）
 
-const FLASH_TIME := 0.12                     # 受击闪白时长
-const FADE_IN_TIME := 0.3                     # 入场渐显时长
+# E2 疾冲冲刺周期（视觉+走位表现；数值真源 = 本块常量，用户裁定方向 C 敌人角色化：
+# 蓄力 0.3s telegraph（果冻压扁+微抖）→ 冲刺 0.35s×1.9 速（拉长 1.4×）→ 回弹 0.25s 半速）
+const DASH_CHARGE_TIME := 0.3               # 蓄力 telegraph 时长 s
+const DASH_GO_TIME := 0.35                  # 冲刺时长 s
+const DASH_RECOVER_TIME := 0.25             # 回弹恢复时长 s
+const DASH_CRUISE_TIME := 0.9               # 巡航时长 s
+const DASH_SPEED_MULT := 1.9                # 冲刺速度倍率
+const DASH_STRETCH := 1.4                   # 冲刺拉长倍率（朝向轴）
+const DASH_CHARGE_SQUASH := 0.78            # 蓄力压扁比例
+
+const FLASH_TIME := 0.06                     # 受击闪白时长（用户裁定：0.06s 更脆）
+const SPAWN_TIME := 0.35                     # 出生弹入时长（easeOutBack overshoot）
+const FADE_IN_TIME := 0.12                    # 入场透明渐显（主体弹入由 SPAWN_TIME 承担）
 const TEX_SIZE := 64                          # 敌人贴图画布边长（逻辑半径 32 = hitbox 口径）
 const BOSS_TEX_R := 40.0                      # Boss 贴图本体半径 px（96 画布聚合体）
 const BOSS_VISUAL_MULT := 1.9                 # Boss 视觉放大倍率（大型聚合体观感；碰撞盒不变）
 const WOBBLE_TIME := 0.22                     # 受击果冻抖动时长
+const HOVER_AMP := 6.0                        # E5 悬浮幅度 px
 static var _flash_shader: Shader = null
 
 
@@ -145,9 +168,22 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	_flash_left = 0.0
 	_fade_left = FADE_IN_TIME
 	_wobble_left = 0.0
-	_angry = false
+	_face_state = 0
 	_anim_t = 0.0
-	modulate.a = 0.0                          # 入场渐显起点
+	_boss_orbit = 0.0
+	_boss_angry = false
+	_spawn_left = SPAWN_TIME                  # 出生弹入（0→1 带 overshoot）
+	_dash_state = 0
+	_dash_left = 0.0
+	_dash_dir = Vector2.ZERO
+	_armor_cracked = false
+	_armor_jiggle_left = 0.0
+	if _armor_sprite != null:
+		_armor_sprite.position = Vector2.ZERO
+		_armor_sprite.rotation = 0.0
+	if _sprite != null:
+		_sprite.position = Vector2.ZERO
+	modulate.a = 0.0                          # 入场渐显起点（前 0.12s 内完成）
 	_apply_flash(0.0)
 	visible = true
 	_sync_visual()
@@ -172,11 +208,14 @@ func tick(p_game_delta: float) -> void:
 	match behavior:
 		GameConst.EnemyBehavior.CHASE:
 			if player != null:
-				var dir := (player.global_position - global_position).normalized()
-				var spd := speed * sf
-				if _fuse_armed:
-					spd = VOLATILE_CHARGE_SPEED    # 警报后冲刺（A3 §2.2 E4 行；自爆冲刺不受寒滞减速修正口径）
-				global_position += dir * spd * p_game_delta
+				if _kind == &"dart":
+					_tick_dart_chase(p_game_delta, player, sf)
+				else:
+					var dir := (player.global_position - global_position).normalized()
+					var spd := speed * sf
+					if _fuse_armed:
+						spd = VOLATILE_CHARGE_SPEED    # 警报后冲刺（A3 §2.2 E4 行；自爆冲刺不受寒滞减速修正口径）
+					global_position += dir * spd * p_game_delta
 				_tick_volatile_fuse(p_game_delta, player)
 		GameConst.EnemyBehavior.RANGED:
 			_tick_ranged(p_game_delta, player, sf)
@@ -197,6 +236,8 @@ func take_result(p_result: DamageResult) -> void:
 	if not dead:
 		_flash_left = FLASH_TIME
 		_wobble_left = WOBBLE_TIME           # 方向 C：果冻抖动（squash & stretch）
+		if _kind == &"bastion":
+			_armor_jiggle_left = 0.18        # E3：甲板错位咔咔抖动
 		_apply_flash(1.0)
 
 
@@ -236,6 +277,58 @@ func knockback(p_force: Vector2) -> void:
 func is_volatile() -> bool:
 	# 爆虫种类判定（EnemyData schema 无自爆字段——包 4 裁定按 .tres id 约定，见常量块注释）
 	return data != null and data.id == VOLATILE_ID
+
+
+func _tick_dart_chase(p_game_delta: float, p_player: Node2D, p_speed_factor: float) -> void:
+	# E2 疾冲状态机（CHASE 分支内）：巡航 → 蓄力 telegraph（0.3s 原地压扁微抖）→
+	# 冲刺（0.35s×1.9 速锁定方向，撞界/贴身回弹）→ 回弹（0.25s 半速后撤）。game_delta 通道。
+	_dash_left -= p_game_delta
+	if _dash_left <= 0.0:
+		match _dash_state:
+			0:
+				_dash_state = 1                       # 巡航毕 → 蓄力 telegraph
+				_dash_left = DASH_CHARGE_TIME
+			1:
+				_dash_dir = (p_player.global_position - global_position).normalized()
+				_dash_state = 2
+				_dash_left = DASH_GO_TIME
+			2:
+				_dash_state = 3
+				_dash_left = DASH_RECOVER_TIME
+			_:
+				_dash_state = 0
+				_dash_left = DASH_CRUISE_TIME
+	match _dash_state:
+		0:
+			# 巡航：正常追击（受状态效果减速）
+			var dir := (p_player.global_position - global_position).normalized()
+			global_position += dir * speed * p_speed_factor * p_game_delta
+		1:
+			pass                                    # 蓄力：原地 telegraph（压扁微抖在表现层）
+		2:
+			# 冲刺：锁定方向 1.9×（不吃寒滞修正口径——与 E4 自爆冲刺同理）
+			global_position += _dash_dir * speed * DASH_SPEED_MULT * p_game_delta
+			# 撞界回弹：钳出界即反弹方向并提前收势
+			var size := Vector2(720.0, 1280.0)
+			if GameConfig.balance != null:
+				size = Vector2(GameConfig.balance.res_logic)
+			var p := global_position
+			if p.x <= hitbox_r or p.x >= size.x - hitbox_r:
+				_dash_dir = Vector2(-_dash_dir.x, _dash_dir.y)
+				_dash_state = 3
+				_dash_left = DASH_RECOVER_TIME
+			elif p.y <= hitbox_r or p.y >= size.y - hitbox_r:
+				_dash_dir = Vector2(_dash_dir.x, -_dash_dir.y)
+				_dash_state = 3
+				_dash_left = DASH_RECOVER_TIME
+			elif global_position.distance_to(p_player.global_position) <= hitbox_r + 20.0:
+				# 命中回弹：贴身即收势（接触伤害由 Area2D 低频通道承担）
+				_dash_state = 3
+				_dash_left = DASH_RECOVER_TIME
+		3:
+			# 回弹：半速后撤（吃寒滞修正）
+			var away := (global_position - p_player.global_position).normalized()
+			global_position += away * speed * 0.5 * p_speed_factor * p_game_delta
 
 
 # ── 爆虫自爆引导（包 3 转包 4 遗留；数值真源见常量块注释） ──────────
@@ -385,13 +478,39 @@ func _reset_state() -> void:
 	_flash_left = 0.0
 	_fade_left = 0.0
 	_wobble_left = 0.0
-	_angry = false
+	_face_state = 0
 	_anim_t = 0.0
+	_boss_orbit = 0.0
+	_boss_angry = false
+	_spawn_left = 0.0
+	_dash_state = 0
+	_dash_left = 0.0
+	_dash_dir = Vector2.ZERO
+	_armor_cracked = false
+	_armor_jiggle_left = 0.0
+	_kind = &"grunt"
 	modulate.a = 1.0
 	_apply_flash(0.0)
 	if _sprite != null:
 		_sprite.rotation = 0.0
+		_sprite.position = Vector2.ZERO
 		_sprite.scale = Vector2(_base_scale, _base_scale)
+		_sprite.texture = TextureFactory.enemy_tex(&"grunt")
+	if _armor_sprite != null:
+		_armor_sprite.visible = false
+		_armor_sprite.position = Vector2.ZERO
+		_armor_sprite.rotation = 0.0
+		_armor_sprite.texture = TextureFactory.enemy_tex(&"bastion_armor")
+	if _shadow != null:
+		_shadow.visible = false
+		_shadow.modulate.a = 1.0
+	if _crown != null:
+		_crown.visible = false
+	for i in range(_satellites.size()):
+		_satellites[i].visible = false
+	for i in range(_sparkles.size()):
+		_sparkles[i].visible = false
+		_sparkles[i].modulate.a = 1.0
 
 
 # ── 支撑 ──────────────────────────────────────────────────────────
@@ -406,24 +525,40 @@ func _player() -> Node2D:
 
 
 func _sync_visual() -> void:
-	# 方向 C 分型渲染同步：贴图按种类切换 + 半径等比缩放（Boss 视觉放大；碰撞盒不变）
+	# 方向 C 分型渲染同步：贴图按种类切换 + 半径等比缩放（Boss 视觉放大；碰撞盒不变）。
+	# 分型判定只在 spawn 期做一次（_kind 缓存——tick 表现层零字符串开销）。
 	if _sprite == null or data == null:
 		return
+	_kind = _visual_kind()
 	var r := hitbox_r
-	var kind := _visual_kind()
-	if kind == &"boss":
+	var is_boss_kind := String(_kind).begins_with("boss")
+	if is_boss_kind:
 		_base_scale = r * BOSS_VISUAL_MULT / BOSS_TEX_R
-		_sprite.texture = TextureFactory.enemy_tex(&"boss")
+		_sprite.texture = TextureFactory.enemy_tex(_kind, false)
 	else:
 		_base_scale = r / (TEX_SIZE * 0.5)
-		if kind == &"volatile":
-			_sprite.texture = TextureFactory.enemy_tex(&"volatile", _angry)
-		else:
-			_sprite.texture = TextureFactory.enemy_tex(kind)
+		match _kind:
+			&"volatile":
+				_sprite.texture = TextureFactory.enemy_tex(&"volatile", false)
+			&"elite":
+				_sprite.texture = TextureFactory.enemy_tex(&"elite")
+			&"bastion":
+				_sprite.texture = TextureFactory.enemy_tex(&"bastion_core")
+			_:
+				_sprite.texture = TextureFactory.enemy_tex(_kind)
 	_sprite.scale = Vector2(_base_scale, _base_scale)
 	_sprite.rotation = 0.0
-	_ensure_crown(kind)
-	_ensure_satellites(kind)
+	_ensure_armor(_kind)
+	_ensure_crown(_kind)
+	_ensure_shadow(_kind)
+	_ensure_sparkles(_kind)
+	_ensure_satellites(_kind)
+	# 绘制序（同 z 树序，禁 z_index 负值——会压到世界背景之下）：底影 < 外甲板 < 本体
+	# （后 move 的排 index 0：先甲板后底影 → 最终序 底影(0) < 甲板(1) < 本体）
+	if _armor_sprite != null:
+		move_child(_armor_sprite, 0)
+	if _shadow != null:
+		move_child(_shadow, 0)
 	if _hit_shape != null:
 		var shape := CircleShape2D.new()
 		shape.radius = r
@@ -431,9 +566,17 @@ func _sync_visual() -> void:
 
 
 func _visual_kind() -> StringName:
-	# 分型判定（.tres id 约定 + tag 优先级：Boss > E1~E5 前缀；E5 精英 = grunt 基底 + 皇冠）
-	if is_boss():
-		return &"boss"
+	# 分型判定（tag 优先级 Boss > 精英 > E1~E5 id 前缀约定）：
+	# boss1/2/3 三套剪影互异的大型聚合体；E5 精英 = 金腹徽基底（引擎侧加皇冠/悬浮/微光）
+	if is_boss() and data != null:
+		var bid := String(data.id)
+		if bid.begins_with("E6_boss2"):
+			return &"boss2"
+		if bid.begins_with("E6_boss3"):
+			return &"boss3"
+		return &"boss1"
+	if is_elite():
+		return &"elite"
 	if data == null:
 		return &"grunt"
 	var sid := String(data.id)
@@ -446,9 +589,24 @@ func _visual_kind() -> StringName:
 	return &"grunt"
 
 
+func _ensure_armor(p_kind: StringName) -> void:
+	# E3 重甲外甲板（双层甲板分层：外甲贴图叠在内芯上方，运行期错位摆动）；
+	# 非 E3 复用时仅隐藏（节点随池实例存活，跨复用零实例化）
+	var want := p_kind == &"bastion"
+	if want and _armor_sprite == null:
+		_armor_sprite = Sprite2D.new()
+		_armor_sprite.name = "ArmorPlate"
+		_armor_sprite.texture = TextureFactory.enemy_tex(&"bastion_armor")
+		add_child(_armor_sprite)
+	if _armor_sprite != null:
+		_armor_sprite.visible = want
+		if want:
+			_armor_sprite.scale = Vector2(_base_scale, _base_scale)
+
+
 func _ensure_crown(p_kind: StringName) -> void:
 	# 精英金色皇冠小标（E5 基底 + 皇冠；非精英回收挂件）
-	var want := is_elite() and p_kind != &"boss"
+	var want := is_elite() and not String(p_kind).begins_with("boss")
 	if want and _crown == null:
 		_crown = Sprite2D.new()
 		_crown.name = "Crown"
@@ -461,12 +619,48 @@ func _ensure_crown(p_kind: StringName) -> void:
 			_crown.position = Vector2(0.0, -(hitbox_r * 1.18))
 
 
-func _ensure_satellites(p_kind: StringName) -> void:
-	# Boss 漂浮小卫星球（聚合体多层；两颗白珠公转，运行期只更新位置）
-	# 非 Boss 复用时仅隐藏（节点随池实例存活，跨复用零实例化）
-	var want := p_kind == &"boss"
-	if want and _satellites.is_empty():
+func _ensure_shadow(p_kind: StringName) -> void:
+	# 底影（E5 悬浮 / Boss 大型体；贴地椭圆，悬浮高度驱动缩放——「离地感」）
+	# 绘制序用树序（_sync_visual 末尾 move_child 置底），不用 z_index 负值——
+	# 负 z 会排到世界背景之下被盖住
+	var want := String(p_kind).begins_with("boss") or p_kind == &"elite"
+	if want and _shadow == null:
+		_shadow = Sprite2D.new()
+		_shadow.name = "GroundShadow"
+		_shadow.texture = TextureFactory.shadow_ellipse()
+		add_child(_shadow)
+	if _shadow != null:
+		_shadow.visible = want
+		if want:
+			var w := hitbox_r * 2.6 if String(p_kind).begins_with("boss") else hitbox_r * 1.7
+			_shadow.scale = Vector2(w / 64.0 * 2.0, w / 64.0 * 0.62)
+			_shadow.position = Vector2(0.0, hitbox_r * 1.05)
+
+
+func _ensure_sparkles(p_kind: StringName) -> void:
+	# E5 精英微光粒（两颗金色小珠缓浮闪烁——「一眼精英」第三件套：皇冠/阴影/微光）
+	var want := p_kind == &"elite"
+	if want and _sparkles.is_empty():
 		for i in range(2):
+			var sp := Sprite2D.new()
+			sp.name = "Sparkle%d" % i
+			sp.texture = TextureFactory.bead(PopPalette.GOLD, 16, false)
+			add_child(sp)
+			_sparkles.append(sp)
+	for i in range(_sparkles.size()):
+		var sp := _sparkles[i]
+		sp.visible = want
+		if want:
+			sp.scale = Vector2(_base_scale * 0.22, _base_scale * 0.22)
+
+
+func _ensure_satellites(p_kind: StringName) -> void:
+	# Boss 漂浮小卫星球（boss1=2 颗 / boss2/3=3 颗；白珠公转，运行期只更新位置）
+	# 非 Boss 复用时仅隐藏（节点随池实例存活，跨复用零实例化）
+	var want := String(p_kind).begins_with("boss")
+	var count := 3 if _kind == &"boss2" or _kind == &"boss3" else 2
+	if want and _satellites.is_empty():
+		for i in range(3):
 			var orb := Sprite2D.new()
 			orb.name = "Satellite%d" % i
 			orb.texture = TextureFactory.bead(PopPalette.PANEL, 32, false)
@@ -474,51 +668,165 @@ func _ensure_satellites(p_kind: StringName) -> void:
 			_satellites.append(orb)
 	for i in range(_satellites.size()):
 		var orb := _satellites[i]
-		orb.visible = want
-		if want:
+		orb.visible = want and i < count
+		if orb.visible:
 			orb.scale = Vector2(_base_scale, _base_scale) * 0.42
 
 
 func _tick_visual(p_game_delta: float) -> void:
-	# 方向 C 表现层（game_delta 通道——顿帧自然冻结）：果冻抖动 / E2 朝向 / E4 充能变脸
-	# 越滚越大 / Boss 卫星公转。零碰撞、零数值副作用。
+	# 表现层状态机（game_delta 通道——顿帧自然冻结；零碰撞、零数值副作用）：
+	# 出生弹入 / 受击果冻 / 分型动画（E1 摇摆呼吸 / E2 冲刺形变 / E3 甲板错位 /
+	# E4 充能三段变脸 / E5 悬浮微光 / Boss 公转 + 二阶段变脸）。
 	_anim_t += p_game_delta
-	var kind := _visual_kind()
-	# 受击果冻抖动（squash & stretch 弹性衰减）
+	var sx := _base_scale
+	var sy := _base_scale
+	var rot := 0.0
+	var off := Vector2.ZERO
+	match _kind:
+		&"dart":
+			rot = _dart_rotation()
+			match _dash_state:
+				1:                                      # 蓄力 telegraph：压扁 + 高频微抖
+					sx = _base_scale * DASH_CHARGE_SQUASH
+					sy = _base_scale * (2.0 - DASH_CHARGE_SQUASH)
+					off = Vector2(sin(_anim_t * 84.0), cos(_anim_t * 67.0)) * 1.3 * _base_scale
+				2:                                      # 冲刺：沿朝向拉长 1.4×
+					sx = _base_scale * 0.75
+					sy = _base_scale * DASH_STRETCH
+				3:                                      # 回弹：反向压缩
+					sx = _base_scale * 1.12
+					sy = _base_scale * 0.9
+				_:
+					sx = _base_scale * 0.92
+					sy = _base_scale * 1.08
+		&"bastion":
+			var breathe_b := 1.0 + 0.02 * sin(_anim_t * 3.4 + float(uid % 32))
+			sx = _base_scale * breathe_b
+			sy = _base_scale * (2.0 - breathe_b)
+			_tick_bastion_armor(p_game_delta)
+		&"volatile":
+			rot = 0.05 * sin(_anim_t * 3.0 + float(uid % 32))
+			var grow := 1.0
+			if _fuse_armed:
+				var prog := 1.0 - clampf(_fuse_left / VOLATILE_FUSE_TIME, 0.0, 1.0)
+				grow = 1.0 + 0.5 * prog * prog          # 越滚越大（二次缓动）
+				if _fuse_left <= VOLATILE_FUSE_TIME * 0.25:
+					grow = 1.5                          # 引爆前 0.3s：鼓到最大 + 高频抖动
+					off = Vector2(sin(_anim_t * 92.0), cos(_anim_t * 76.0)) * 1.6 * _base_scale
+				_set_volatile_face(2 if _fuse_left <= VOLATILE_FUSE_TIME * 0.25 else 1)
+			else:
+				_set_volatile_face(0)
+			sx = _base_scale * grow
+			sy = _base_scale * grow
+		&"elite":
+			var hover := (1.0 - cos(_anim_t * 2.2)) * 0.5
+			off.y = -hover * HOVER_AMP
+			var breathe_e := 1.0 + 0.03 * sin(_anim_t * 4.6 + float(uid % 32))
+			sx = _base_scale * breathe_e
+			sy = _base_scale * (2.0 - breathe_e)
+			_tick_elite_extras(hover)
+		&"boss1", &"boss2", &"boss3":
+			off.y = sin(_anim_t * 1.6) * 4.0 * _base_scale
+			_tick_boss(p_game_delta)
+		_:
+			# grunt（E1）：idle 摇摆 + 呼吸（果冻感基调）
+			rot = 0.06 * sin(_anim_t * 3.1 + float(uid % 32))
+			var breathe_g := 1.0 + 0.035 * sin(_anim_t * 5.0 + float(uid % 32))
+			sx = _base_scale * breathe_g
+			sy = _base_scale * (2.0 - breathe_g)
+	# 受击果冻抖动（squash & stretch 弹性衰减）——覆盖分型形变
 	if _wobble_left > 0.0:
 		_wobble_left = maxf(_wobble_left - p_game_delta, 0.0)
 		var bt := 1.0 - _wobble_left / WOBBLE_TIME
 		var s := 1.0 + 0.22 * exp(-4.5 * bt) * sin(bt * 22.0)
-		_sprite.scale = Vector2(_base_scale * s, _base_scale * (2.0 - s))
-	elif kind == &"volatile" and _fuse_armed:
-		# E4 充气：越滚越大（引导进度 → 1.5×）+ 变脸红脸（警示升级）
-		var grow := 1.0 + 0.5 * (1.0 - clampf(_fuse_left / VOLATILE_FUSE_TIME, 0.0, 1.0))
-		_sprite.scale = Vector2(_base_scale * grow, _base_scale * grow)
-		if not _angry:
-			_angry = true
+		sx = _base_scale * s
+		sy = _base_scale * (2.0 - s)
+	# 出生弹入（easeOutBack：0→1 带 overshoot）
+	if _spawn_left > 0.0:
+		_spawn_left = maxf(_spawn_left - p_game_delta, 0.0)
+		var bt_spawn := 1.0 - _spawn_left / SPAWN_TIME
+		var c1 := 1.70158
+		var c3 := c1 + 1.0
+		var f := 1.0 + c3 * pow(bt_spawn - 1.0, 3.0) + c1 * pow(bt_spawn - 1.0, 2.0)
+		sx *= f
+		sy *= f
+	_sprite.scale = Vector2(sx, sy)
+	_sprite.rotation = rot
+	_sprite.position = off
+
+
+func _dart_rotation() -> float:
+	# E2 贴图朝上 → 旋转对齐玩家方向
+	var player := _player()
+	if player != null and is_instance_valid(player):
+		var dir := (player.global_position - global_position).normalized()
+		return dir.angle() + PI * 0.5
+	return PI * 0.5
+
+
+func _set_volatile_face(p_state: int) -> void:
+	# E4 三段变脸（0 平静好奇 / 1 惊恐瞪眼 / 2 闭眼引爆）——仅状态跃迁时换贴图
+	if _face_state == p_state:
+		return
+	_face_state = p_state
+	if _sprite == null:
+		return
+	match p_state:
+		2:
 			_sprite.texture = TextureFactory.enemy_tex(&"volatile", true)
-	elif kind == &"dart":
-		# E2 尖头飞镖：朝玩家方向旋转 + 飞行拉长挤压
-		var player := _player()
-		if player != null and is_instance_valid(player):
-			var dir := (player.global_position - global_position).normalized()
-			_sprite.rotation = dir.angle() + PI * 0.5   # 贴图朝上 → 旋转对齐
-			_sprite.scale = Vector2(_base_scale * 0.82, _base_scale * 1.18)
-	elif kind == &"grunt" or kind == &"bastion":
-		# 平时轻微呼吸（果冻感基调；E4 未充能态同享）
-		var breathe := 1.0 + 0.035 * sin(_anim_t * 5.0 + float(uid % 32))
-		_sprite.scale = Vector2(_base_scale * breathe, _base_scale * (2.0 - breathe))
-	# E4 变脸回常态（引爆打断/取消引导后）
-	if kind == &"volatile" and _angry and not _fuse_armed:
-		_angry = false
-		_sprite.texture = TextureFactory.enemy_tex(&"volatile", false)
-	# Boss 卫星公转
-	if kind == &"boss" and not _satellites.is_empty():
-		_boss_orbit += p_game_delta * 2.1
+		1:
+			_sprite.texture = TextureFactory.enemy_tex(&"volatile_scared")
+		_:
+			_sprite.texture = TextureFactory.enemy_tex(&"volatile", false)
+
+
+func _tick_bastion_armor(p_game_delta: float) -> void:
+	# E3 外甲板「咔咔」错位：低频相位摆 + 受击抖动加强；HP≤50% 换裂纹板
+	if _armor_sprite == null or not _armor_sprite.visible:
+		return
+	if not _armor_cracked and max_hp > 0.0 and hp <= max_hp * 0.5:
+		_armor_cracked = true
+		_armor_sprite.texture = TextureFactory.enemy_tex(&"bastion_armor_cracked")
+	var sway := sin(_anim_t * 6.3) * 1.6 * _base_scale
+	if _armor_jiggle_left > 0.0:
+		_armor_jiggle_left = maxf(_armor_jiggle_left - p_game_delta, 0.0)
+		sway += sin(_armor_jiggle_left * 90.0) * 2.6 * _base_scale
+	_armor_sprite.position = Vector2(sway, 0.0)
+	_armor_sprite.rotation = 0.02 * sin(_anim_t * 5.1)
+
+
+func _tick_elite_extras(p_hover: float) -> void:
+	# E5「一眼精英」三件套联动：皇冠随悬浮升降 / 底影随高度缩放变淡 / 微光粒缓浮闪烁
+	if _crown != null and _crown.visible:
+		_crown.position = Vector2(0.0, -(hitbox_r * 1.18) - p_hover * HOVER_AMP)
+	if _shadow != null and _shadow.visible:
+		var w := hitbox_r * 1.7 * (1.0 - 0.25 * p_hover)
+		_shadow.scale = Vector2(w / 64.0 * 2.0, w / 64.0 * 0.62)
+		_shadow.modulate.a = 1.0 - 0.35 * p_hover
+	for i in range(_sparkles.size()):
+		var sp := _sparkles[i]
+		if not sp.visible:
+			continue
+		var ang := _anim_t * 1.7 + PI * float(i)
+		var rr := hitbox_r * 1.25
+		sp.position = Vector2(cos(ang) * rr, sin(ang) * rr * 0.6 - hitbox_r * 0.2)
+		sp.modulate.a = 0.45 + 0.4 * sin(_anim_t * 3.3 + float(i) * 2.1)
+
+
+func _tick_boss(p_game_delta: float) -> void:
+	# Boss：二阶段变脸（HP<50% → boss_phase=2 时怒相贴图 + 公转提速）；卫星公转；底影随浮
+	if boss_phase >= 2 and not _boss_angry:
+		_boss_angry = true
+		_sprite.texture = TextureFactory.enemy_tex(_kind, true)
+	if not _satellites.is_empty():
+		_boss_orbit += p_game_delta * (3.6 if _boss_angry else 2.1)
 		var orbit_r := hitbox_r * BOSS_VISUAL_MULT * 1.18
+		var count := 2 if _kind == &"boss1" else 3
 		for i in range(_satellites.size()):
-			var ang := _boss_orbit + PI * float(i)
+			var ang := _boss_orbit + TAU * float(i) / float(count)
 			_satellites[i].position = Vector2(cos(ang), sin(ang)) * orbit_r
+	if _shadow != null and _shadow.visible:
+		_shadow.modulate.a = 0.85 + 0.15 * sin(_anim_t * 1.6)
 
 
 func _apply_flash(p_amount: float) -> void:

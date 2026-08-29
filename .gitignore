@@ -3,3 +3,5 @@
 /android/
 .DS_Store
 *.tmp
+# 方向 C 截图自检产物（本地自检用，不入库）
+screens/

@@ -20,17 +20,27 @@ var _shared_material: ParticleProcessMaterial = null   # 程序化占位材质�
 
 
 func setup(p_pool: ParticlePool) -> void:
-	# 注入池 + 程序化占位材质准备（一次性）
+	# 注入池 + 程序化占位材质准备（一次性）。
+	# 碎片配色（用户裁定敌人角色化 2026-08-29）：白闪 → 珊瑚红（PopPalette.ENEMY）→
+	# 透明渐隐 + 角速度翻滚——死亡「同色碎片 pop」/受击火花共用本材质（战斗通道全部敌向）。
 	particle_pool = p_pool
 	_shared_material = ParticleProcessMaterial.new()
 	_shared_material.direction = Vector3(0, -1, 0)
 	_shared_material.spread = 180.0
-	_shared_material.initial_velocity_min = 40.0
-	_shared_material.initial_velocity_max = 160.0
+	_shared_material.initial_velocity_min = 90.0
+	_shared_material.initial_velocity_max = 220.0
 	_shared_material.gravity = Vector3(0, 240, 0)
 	_shared_material.scale_min = 0.5
 	_shared_material.scale_max = 1.4
-	_shared_material.color = Color(1.0, 0.85, 0.4)
+	_shared_material.angular_velocity_min = -540.0
+	_shared_material.angular_velocity_max = 540.0
+	var gradient := Gradient.new()
+	gradient.set_color(0, Color(1.0, 1.0, 1.0, 1.0))
+	gradient.set_color(1, Color(PopPalette.ENEMY.r, PopPalette.ENEMY.g, PopPalette.ENEMY.b, 0.0))
+	gradient.add_point(0.22, Color(PopPalette.ENEMY.r, PopPalette.ENEMY.g, PopPalette.ENEMY.b, 1.0))
+	var ramp := GradientTexture1D.new()
+	ramp.gradient = gradient
+	_shared_material.color_ramp = ramp
 
 
 func burst(p_scene_id: StringName, p_pos: Vector2, p_priority: int) -> void:

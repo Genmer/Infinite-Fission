@@ -54,79 +54,248 @@ static func ship_flame() -> ImageTexture:
 
 
 static func enemy_tex(p_kind: StringName, p_angry: bool = false) -> ImageTexture:
-	# 敌人分型贴图（64px 画布，逻辑半径 32 = hitbox 口径；E3 画布内方胖块）：
-	# grunt=E1 珊瑚圆球怪（好奇眼睛）/ dart=E2 尖头飞镖（朝上，引擎侧旋转）/
-	# bastion=E3 方胖装甲块（描边特厚）/ volatile=E4 爆虫（angry=充能红脸）/
-	# boss=大型圆滚滚聚合体（多层身体 + 大眼睛）；elite=E5 复用 grunt 基底 + 皇冠挂件。
+	# 敌人分型贴图（64px 画布，逻辑半径 32 = hitbox 口径；Boss 96px 画布）。
+	# 「晴空糖果」敌人角色化套装（美术深化 2026-08-29）：厚描边 + 圆润填充 + 分型剪影/表情：
+	#   grunt=E1 杂兵（珊瑚圆球 + 好奇眼睛 + 腮红 + 呆毛）/ dart=E2 疾冲（尖头飞镖 + 怒目缝眼）/
+	#   bastion=E3 重甲（内芯脸板 / 外甲板 / 裂纹外甲板 三张贴，引擎侧双层错位）/
+	#   volatile=E4 爆虫（calm 好奇 → scared 惊恐 → detonate 闭眼引爆 三段脸）/
+	#   elite=E5 精英（基底 + 金腹徽 + 呆毛，引擎侧加皇冠/悬浮阴影/微光）/
+	#   boss1/2/3=大型聚合体（剪影互异：黏菌冠 / 裂变核独眼 / 多眼裂母；angry=二阶段变脸）。
 	# （图层装配拆至 _enemy_layers——lambda 体不以 match 臂收尾，规避 Godot 4.3 解析器限制）
 	var key := "enemy_%s_%s" % [String(p_kind), str(p_angry)]
 	return _cached(key, func() -> ImageTexture:
-		var canvas := 96 if p_kind == &"boss" else 64
+		var canvas := 96 if String(p_kind).begins_with("boss") else 64
 		return _render(canvas, canvas, _shade(_enemy_layers(p_kind, p_angry))))
 
 
 static func _enemy_layers(p_kind: StringName, p_angry: bool) -> Array:
-	# 分型图层装配（普通函数体内的 match，无解析器歧义）
+	# 分型图层装配（普通函数体内的 match，无解析器歧义）。取色只经 PopPalette（允许
+	# 表内常量的 lerp 派生——单源不变）。腮红/软色 = 珊瑚红向白插值的派生浅珊瑚。
+	var blush := PopPalette.ENEMY.lerp(Color.WHITE, 0.45)
 	match p_kind:
 		&"dart":
-			var pts := PackedVector2Array([Vector2(0.0, -28.0), Vector2(24.0, 22.0), Vector2(-24.0, 22.0)])
-			return [
-				{"sd": _poly_sd(pts), "fill": PopPalette.ENEMY, "ow": 6.5},
-				{"sd": _circle_at(Vector2(-6.0, 4.0), 4.2), "fill": Color.WHITE, "ow": 2.2},
-				{"sd": _circle_at(Vector2(6.0, 4.0), 4.2), "fill": Color.WHITE, "ow": 2.2},
-			]
-		&"bastion":
-			var layers: Array = [
-				{"sd": _box_at(Vector2.ZERO, Vector2(22.0, 22.0), 9.0), "fill": PopPalette.ENEMY, "ow": 8.5},
-			]
-			for corner in [Vector2(-12.0, -12.0), Vector2(12.0, -12.0), Vector2(-12.0, 12.0), Vector2(12.0, 12.0)]:
-				layers.append({"sd": _circle_at(corner, 2.6), "fill": PopPalette.OUTLINE, "ow": 0.0})
-			return layers
-		&"volatile":
-			if p_angry:
-				# 充能态：深红脸 + 斜眉 + 大嘴（越滚越大由引擎侧缩放承担）
-				return [
-					{"sd": _circle_at(Vector2.ZERO, 25.0), "fill": PopPalette.ENEMY_DEEP, "ow": 6.5},
-					{"sd": _box_rot_at(Vector2(-8.5, -12.0), Vector2(6.0, 1.6), 1.2, -0.5), "fill": PopPalette.OUTLINE, "ow": 0.0},
-					{"sd": _box_rot_at(Vector2(8.5, -12.0), Vector2(6.0, 1.6), 1.2, 0.5), "fill": PopPalette.OUTLINE, "ow": 0.0},
-					{"sd": _circle_at(Vector2(-8.0, -4.0), 5.4), "fill": Color.WHITE, "ow": 2.2},
-					{"sd": _circle_at(Vector2(8.0, -4.0), 5.4), "fill": Color.WHITE, "ow": 2.2},
-					{"sd": _circle_at(Vector2(-8.0, -3.0), 2.2), "fill": PopPalette.OUTLINE, "ow": 0.0},
-					{"sd": _circle_at(Vector2(8.0, -3.0), 2.2), "fill": PopPalette.OUTLINE, "ow": 0.0},
-					{"sd": _circle_at(Vector2(0.0, 10.0), 5.0), "fill": PopPalette.OUTLINE, "ow": 0.0},
-				]
-			return [
-				{"sd": _circle_at(Vector2.ZERO, 25.0), "fill": PopPalette.ENEMY, "ow": 6.5},
-				{"sd": _circle_at(Vector2(-8.0, -4.0), 5.8), "fill": Color.WHITE, "ow": 2.4},
-				{"sd": _circle_at(Vector2(8.0, -4.0), 5.8), "fill": Color.WHITE, "ow": 2.4},
-				{"sd": _circle_at(Vector2(-8.0, -3.5), 2.2), "fill": PopPalette.OUTLINE, "ow": 0.0},
-				{"sd": _circle_at(Vector2(8.0, -3.5), 2.2), "fill": PopPalette.OUTLINE, "ow": 0.0},
-				{"sd": _circle_at(Vector2(0.0, 9.0), 3.4), "fill": PopPalette.OUTLINE, "ow": 0.0},
-			]
-		&"boss":
-			# 聚合体：中央大球 + 两侧鼓包 union；大眼 + 张嘴 + 腮红
-			var body_sd := _multi_circle_min([
-				[Vector2(0.0, 0.0), 40.0], [Vector2(-30.0, 14.0), 17.0], [Vector2(30.0, 14.0), 17.0],
+			# E2 疾冲者：尖头飞镖（朝上，引擎侧旋转）——尖吻 + 后掠翼 + 怒目缝眼
+			var body := PackedVector2Array([
+				Vector2(0.0, -30.0), Vector2(11.0, -6.0), Vector2(26.0, 16.0),
+				Vector2(0.0, 10.0), Vector2(-26.0, 16.0), Vector2(-11.0, -6.0),
+			])
+			var fin_l := PackedVector2Array([
+				Vector2(-26.0, 16.0), Vector2(-9.0, 3.0), Vector2(-9.0, 20.0),
+			])
+			var fin_r := PackedVector2Array([
+				Vector2(26.0, 16.0), Vector2(9.0, 3.0), Vector2(9.0, 20.0),
 			])
 			return [
-				{"sd": body_sd, "fill": PopPalette.ENEMY, "ow": 8.0},
-				{"sd": _circle_at(Vector2(-13.0, -8.0), 8.6), "fill": Color.WHITE, "ow": 3.6},
-				{"sd": _circle_at(Vector2(13.0, -8.0), 8.6), "fill": Color.WHITE, "ow": 3.6},
-				{"sd": _circle_at(Vector2(-12.0, -7.0), 4.0), "fill": PopPalette.OUTLINE, "ow": 0.0},
-				{"sd": _circle_at(Vector2(14.0, -7.0), 4.0), "fill": PopPalette.OUTLINE, "ow": 0.0},
-				{"sd": _circle_at(Vector2(0.0, 16.0), 6.0), "fill": PopPalette.OUTLINE, "ow": 0.0},
-				{"sd": _circle_at(Vector2(-24.0, 10.0), 4.6), "fill": Color(1.0, 1.0, 1.0, 0.45), "ow": 0.0},
-				{"sd": _circle_at(Vector2(24.0, 10.0), 4.6), "fill": Color(1.0, 1.0, 1.0, 0.45), "ow": 0.0},
+				{"sd": _poly_sd(body), "fill": PopPalette.ENEMY, "ow": 6.5},
+				{"sd": _poly_sd(fin_l), "fill": PopPalette.ENEMY_DEEP, "ow": 3.0},
+				{"sd": _poly_sd(fin_r), "fill": PopPalette.ENEMY_DEEP, "ow": 3.0},
+				{"sd": _box_rot_at(Vector2(0.0, -14.0), Vector2(1.6, 10.0), 1.4, 0.0),
+					"fill": PopPalette.ENEMY_DEEP, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(-6.5, -2.0), Vector2(5.4, 2.1), 1.0, -0.42),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(6.5, -2.0), Vector2(5.4, 2.1), 1.0, 0.42),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-4.4, -3.0), 1.4), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(4.4, -3.0), 1.4), "fill": PopPalette.OUTLINE, "ow": 0.0},
 			]
+		&"bastion_core":
+			# E3 重甲内芯：红脸方芯（引擎侧与外甲板分层错位摆动）
+			var layers: Array = [
+				{"sd": _box_at(Vector2.ZERO, Vector2(13.0, 13.0), 6.0), "fill": PopPalette.ENEMY, "ow": 5.5},
+				{"sd": _circle_at(Vector2(-5.0, -2.0), 3.8), "fill": Color.WHITE, "ow": 2.0},
+				{"sd": _circle_at(Vector2(5.0, -2.0), 3.8), "fill": Color.WHITE, "ow": 2.0},
+				{"sd": _circle_at(Vector2(-4.4, -1.4), 1.8), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(5.6, -1.4), 1.8), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _box_at(Vector2(0.0, 6.5), Vector2(3.4, 1.1), 1.0), "fill": PopPalette.OUTLINE, "ow": 0.0},
+			]
+			return layers
+		&"bastion_armor":
+			# E3 外甲板：深红厚板 + 四铆钉（完整态）
+			return _bastion_armor_layers(false)
+		&"bastion_armor_cracked":
+			# E3 外甲板（受击裂纹态）：裂纹细线 + 缺口崩边
+			return _bastion_armor_layers(true)
+		&"volatile_scared":
+			# E4 爆虫·惊恐态：瞪圆眼 + 张嘴 + 汗滴（引导前期）
+			var scared: Array = _volatile_body(false)
+			scared.append({"sd": _circle_at(Vector2(-8.0, -4.0), 7.6), "fill": Color.WHITE, "ow": 2.4})
+			scared.append({"sd": _circle_at(Vector2(8.0, -4.0), 7.6), "fill": Color.WHITE, "ow": 2.4})
+			scared.append({"sd": _circle_at(Vector2(-6.8, -2.4), 1.8), "fill": PopPalette.OUTLINE, "ow": 0.0})
+			scared.append({"sd": _circle_at(Vector2(9.2, -2.4), 1.8), "fill": PopPalette.OUTLINE, "ow": 0.0})
+			scared.append({"sd": _circle_at(Vector2(0.0, 9.5), 4.4), "fill": PopPalette.OUTLINE, "ow": 0.0})
+			scared.append({"sd": _circle_at(Vector2(0.5, 8.0), 1.6), "fill": Color.WHITE, "ow": 0.0})
+			scared.append({"sd": _circle_at(Vector2(-16.0, -16.0), 2.4), "fill": Color(1.0, 1.0, 1.0, 0.85), "ow": 0.0})
+			return scared
+		&"volatile":
+			if p_angry:
+				# E4 爆虫·引爆态：深红 + 闭眼线 + 张大嘴（最后 0.3s；越滚越大由引擎侧缩放承担）
+				var boom: Array = _volatile_body(true)
+				boom.append({"sd": _box_rot_at(Vector2(-8.0, -5.0), Vector2(4.6, 1.3), 0.6, -0.30),
+					"fill": Color.WHITE, "ow": 0.0})
+				boom.append({"sd": _box_rot_at(Vector2(8.0, -5.0), Vector2(4.6, 1.3), 0.6, 0.30),
+					"fill": Color.WHITE, "ow": 0.0})
+				boom.append({"sd": _circle_at(Vector2(0.0, 8.0), 6.0), "fill": PopPalette.OUTLINE, "ow": 0.0})
+				boom.append({"sd": _circle_at(Vector2(0.0, 6.6), 2.2), "fill": PopPalette.ENEMY_DEEP, "ow": 0.0})
+				return boom
+			# E4 爆虫·平静态：好奇眼 + 顶部引信小火花（甜甜弹外表）
+			var calm: Array = _volatile_body(false)
+			calm.append({"sd": _circle_at(Vector2(-8.0, -4.0), 5.8), "fill": Color.WHITE, "ow": 2.4})
+			calm.append({"sd": _circle_at(Vector2(8.0, -4.0), 5.8), "fill": Color.WHITE, "ow": 2.4})
+			calm.append({"sd": _circle_at(Vector2(-7.0, -3.0), 2.2), "fill": PopPalette.OUTLINE, "ow": 0.0})
+			calm.append({"sd": _circle_at(Vector2(9.0, -3.0), 2.2), "fill": PopPalette.OUTLINE, "ow": 0.0})
+			calm.append({"sd": _circle_at(Vector2(0.0, 9.0), 3.2), "fill": PopPalette.OUTLINE, "ow": 0.0})
+			return calm
+		&"elite":
+			# E5 精英：杂兵基底 + 金腹徽（引擎侧再叠皇冠/悬浮阴影/微光粒）
+			var g: Array = _grunt_face(blush, 26.0)
+			g.append({"sd": _circle_at(Vector2(0.0, 11.0), 8.5), "fill": PopPalette.GOLD, "ow": 2.6})
+			g.append({"sd": _poly_sd(_star_pts(3.4, 1.5)), "fill": Color.WHITE, "ow": 0.0})
+			return g
+		&"boss1":
+			# Boss1 聚合体：黏菌冠大球（顶部三鼓包 union）+ 大眼 + 龅牙嘴 + 腮红
+			var bumps: Array = [
+				[Vector2(0.0, 2.0), 38.0], [Vector2(-28.0, 16.0), 16.0], [Vector2(28.0, 16.0), 16.0],
+				[Vector2(-15.0, -28.0), 11.0], [Vector2(0.0, -34.0), 12.0], [Vector2(15.0, -28.0), 11.0],
+			]
+			return _boss_face(_multi_circle_min(bumps), blush, p_angry)
+		&"boss2":
+			# Boss2 裂变之核：深红六钝刺核 + 独眼 + 辉光环（angry=瞳孔变红刺变利）
+			var layers2: Array = []
+			var spike_color := PopPalette.ENEMY if p_angry else PopPalette.ENEMY_DEEP
+			for i in range(6):
+				var ang := -PI * 0.5 + TAU * float(i) / 6.0
+				var pos := Vector2(cos(ang), sin(ang)) * 30.0
+				layers2.append({"sd": _box_rot_at(pos, Vector2(7.0, 10.5), 4.0, ang + PI * 0.5),
+					"fill": spike_color, "ow": 5.0})
+			layers2.append({"sd": _circle_at(Vector2.ZERO, 30.0), "fill": PopPalette.ENEMY_DEEP, "ow": 7.0})
+			layers2.append({"sd": _ring_at(19.0, 2.2), "fill": Color(1.0, 1.0, 1.0, 0.35), "ow": 0.0})
+			if p_angry:
+				layers2.append({"sd": _box_rot_at(Vector2(-9.0, -12.0), Vector2(7.0, 2.0), 1.0, -0.5),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+				layers2.append({"sd": _box_rot_at(Vector2(9.0, -12.0), Vector2(7.0, 2.0), 1.0, 0.5),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+			layers2.append({"sd": _circle_at(Vector2(0.0, -2.0), 10.5), "fill": Color.WHITE, "ow": 3.4})
+			layers2.append({"sd": _circle_at(Vector2(1.5, -0.5), 4.6),
+				"fill": PopPalette.ENEMY_DEEP if p_angry else PopPalette.OUTLINE, "ow": 0.0})
+			layers2.append({"sd": _circle_at(Vector2(-8.0, 12.0), 3.2), "fill": Color(1.0, 1.0, 1.0, 0.45), "ow": 0.0})
+			return layers2
+		&"boss3":
+			# Boss3 无穷裂母：多 lob 簇团 + 三眼 + 宽牙嘴（angry=眼色变红 + 怒眉）
+			var cluster := _multi_circle_min([
+				[Vector2(0.0, 4.0), 22.0], [Vector2(-20.0, -8.0), 14.0], [Vector2(20.0, -8.0), 14.0],
+				[Vector2(-13.0, 18.0), 12.0], [Vector2(13.0, 18.0), 12.0], [Vector2(0.0, -24.0), 12.0],
+			])
+			var layers3: Array = [{"sd": cluster, "fill": PopPalette.ENEMY, "ow": 7.5}]
+			var eye_col := PopPalette.ENEMY_DEEP if p_angry else PopPalette.OUTLINE
+			if p_angry:
+				layers3.append({"sd": _box_rot_at(Vector2(-13.0, -16.0), Vector2(6.0, 1.8), 0.9, -0.45),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+				layers3.append({"sd": _box_rot_at(Vector2(13.0, -16.0), Vector2(6.0, 1.8), 0.9, 0.45),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+			# 主眼 ×2 + lob 上的三只小眼（「裂母」多眼辨识点）
+			layers3.append({"sd": _circle_at(Vector2(-11.0, -4.0), 7.0), "fill": Color.WHITE, "ow": 2.8})
+			layers3.append({"sd": _circle_at(Vector2(11.0, -4.0), 7.0), "fill": Color.WHITE, "ow": 2.8})
+			layers3.append({"sd": _circle_at(Vector2(-9.5, -2.5), 3.2), "fill": eye_col, "ow": 0.0})
+			layers3.append({"sd": _circle_at(Vector2(12.5, -2.5), 3.2), "fill": eye_col, "ow": 0.0})
+			layers3.append({"sd": _circle_at(Vector2(-26.0, -14.0), 3.0), "fill": Color.WHITE, "ow": 1.6})
+			layers3.append({"sd": _circle_at(Vector2(-25.0, -13.2), 1.4), "fill": eye_col, "ow": 0.0})
+			layers3.append({"sd": _circle_at(Vector2(26.0, -14.0), 3.0), "fill": Color.WHITE, "ow": 1.6})
+			layers3.append({"sd": _circle_at(Vector2(27.0, -13.2), 1.4), "fill": eye_col, "ow": 0.0})
+			layers3.append({"sd": _circle_at(Vector2(0.0, -30.0), 2.6), "fill": Color.WHITE, "ow": 1.5})
+			layers3.append({"sd": _circle_at(Vector2(0.0, -29.4), 1.2), "fill": eye_col, "ow": 0.0})
+			# 宽嘴 + 双牙
+			layers3.append({"sd": _box_at(Vector2(0.0, 12.0), Vector2(10.0, 4.5), 4.0),
+				"fill": PopPalette.OUTLINE, "ow": 0.0})
+			layers3.append({"sd": _poly_sd(PackedVector2Array([
+				Vector2(-5.0, 8.5), Vector2(-1.5, 8.5), Vector2(-3.2, 13.5),
+			])), "fill": Color.WHITE, "ow": 0.0})
+			layers3.append({"sd": _poly_sd(PackedVector2Array([
+				Vector2(1.5, 8.5), Vector2(5.0, 8.5), Vector2(3.2, 13.5),
+			])), "fill": Color.WHITE, "ow": 0.0})
+			return layers3
 		_:
-			# grunt（E1 基底 / E5 精英基底）：珊瑚圆球怪 + 两只好奇眼睛
-			return [
-				{"sd": _circle_at(Vector2.ZERO, 26.0), "fill": PopPalette.ENEMY, "ow": 6.5},
-				{"sd": _circle_at(Vector2(-8.5, -4.0), 6.0), "fill": Color.WHITE, "ow": 2.6},
-				{"sd": _circle_at(Vector2(8.5, -4.0), 6.0), "fill": Color.WHITE, "ow": 2.6},
-				{"sd": _circle_at(Vector2(-7.5, -3.0), 2.6), "fill": PopPalette.OUTLINE, "ow": 0.0},
-				{"sd": _circle_at(Vector2(9.5, -3.0), 2.6), "fill": PopPalette.OUTLINE, "ow": 0.0},
-			]
+			# grunt（E1 杂兵）：珊瑚圆球 + 好奇眼睛 + 腮红小嘴 + 顶呆毛（气球结剪影）
+			return _grunt_face(blush, 26.0)
+
+
+static func _grunt_face(p_blush: Color, p_r: float) -> Array:
+	# E1 杂兵脸（E5 精英复用基底）：球体 + 双好奇眼 + 腮红 + 小嘴 + 呆毛
+	return [
+		{"sd": _circle_at(Vector2(0.0, -p_r - 3.0), 3.4), "fill": PopPalette.ENEMY, "ow": 4.0},
+		{"sd": _circle_at(Vector2.ZERO, p_r), "fill": PopPalette.ENEMY, "ow": 6.5},
+		{"sd": _circle_at(Vector2(-8.5, -4.0), 6.0), "fill": Color.WHITE, "ow": 2.6},
+		{"sd": _circle_at(Vector2(8.5, -4.0), 6.0), "fill": Color.WHITE, "ow": 2.6},
+		{"sd": _circle_at(Vector2(-7.5, -3.0), 2.6), "fill": PopPalette.OUTLINE, "ow": 0.0},
+		{"sd": _circle_at(Vector2(9.5, -3.0), 2.6), "fill": PopPalette.OUTLINE, "ow": 0.0},
+		{"sd": _circle_at(Vector2(-16.0, 6.0), 3.4), "fill": p_blush, "ow": 0.0},
+		{"sd": _circle_at(Vector2(16.0, 6.0), 3.4), "fill": p_blush, "ow": 0.0},
+		{"sd": _box_at(Vector2(0.5, 8.0), Vector2(2.4, 1.2), 1.1), "fill": PopPalette.OUTLINE, "ow": 0.0},
+	]
+
+
+static func _volatile_body(p_charged: bool) -> Array:
+	# E4 爆虫躯体（三态共享）：球体 + 顶部引信 + 双小脚；charged=深红充能色
+	var body_col := PopPalette.ENEMY_DEEP if p_charged else PopPalette.ENEMY
+	return [
+		{"sd": _box_rot_at(Vector2(2.0, -25.0), Vector2(1.2, 4.5), 0.6, 0.4),
+			"fill": PopPalette.OUTLINE, "ow": 0.0},
+		{"sd": _circle_at(Vector2(4.5, -28.0), 2.6), "fill": PopPalette.XP, "ow": 1.8},
+		{"sd": _circle_at(Vector2.ZERO, 25.0), "fill": body_col, "ow": 6.5},
+		{"sd": _circle_at(Vector2(-8.0, 23.0), 3.6), "fill": body_col, "ow": 4.0},
+		{"sd": _circle_at(Vector2(8.0, 23.0), 3.6), "fill": body_col, "ow": 4.0},
+	]
+
+
+static func _bastion_armor_layers(p_cracked: bool) -> Array:
+	# E3 外甲板（完整/裂纹双态）：深红厚板 + 四铆钉；裂纹态加折线裂缝 + 崩边缺口
+	var layers: Array = [
+		{"sd": _box_at(Vector2.ZERO, Vector2(23.0, 23.0), 9.0), "fill": PopPalette.ENEMY_DEEP, "ow": 8.0},
+		{"sd": _circle_at(Vector2(-15.0, -15.0), 2.8), "fill": PopPalette.PANEL, "ow": 1.4},
+		{"sd": _circle_at(Vector2(15.0, -15.0), 2.8), "fill": PopPalette.PANEL, "ow": 1.4},
+		{"sd": _circle_at(Vector2(-15.0, 15.0), 2.8), "fill": PopPalette.PANEL, "ow": 1.4},
+		{"sd": _circle_at(Vector2(15.0, 15.0), 2.8), "fill": PopPalette.PANEL, "ow": 1.4},
+	]
+	if p_cracked:
+		layers.append({"sd": _box_rot_at(Vector2(-10.0, -4.0), Vector2(9.0, 1.1), 0.4, 0.5),
+			"fill": PopPalette.OUTLINE, "ow": 0.0})
+		layers.append({"sd": _box_rot_at(Vector2(2.0, 4.0), Vector2(8.0, 1.1), 0.4, -0.7),
+			"fill": PopPalette.OUTLINE, "ow": 0.0})
+		layers.append({"sd": _box_rot_at(Vector2(8.0, -10.0), Vector2(6.0, 1.1), 0.4, 0.25),
+			"fill": PopPalette.OUTLINE, "ow": 0.0})
+		layers.append({"sd": _poly_sd(PackedVector2Array([
+			Vector2(23.0, -6.0), Vector2(14.0, -2.0), Vector2(23.0, 3.0),
+		])), "fill": PopPalette.BG, "ow": 2.0})
+	return layers
+
+
+static func _boss_face(p_body_sd: Callable, p_blush: Color, p_angry: bool) -> Array:
+	# Boss1 聚合体脸（普通/二阶段变脸共用装配）：大眼 + 嘴 + 腮红；angry=怒眉红瞳龇牙
+	var layers: Array = [{"sd": p_body_sd, "fill": PopPalette.ENEMY, "ow": 8.0}]
+	if p_angry:
+		layers.append({"sd": _box_rot_at(Vector2(-14.0, -18.0), Vector2(8.0, 2.2), 1.1, -0.5),
+			"fill": PopPalette.OUTLINE, "ow": 0.0})
+		layers.append({"sd": _box_rot_at(Vector2(14.0, -18.0), Vector2(8.0, 2.2), 1.1, 0.5),
+			"fill": PopPalette.OUTLINE, "ow": 0.0})
+	layers.append({"sd": _circle_at(Vector2(-13.0, -8.0), 8.6), "fill": Color.WHITE, "ow": 3.6})
+	layers.append({"sd": _circle_at(Vector2(13.0, -8.0), 8.6), "fill": Color.WHITE, "ow": 3.6})
+	layers.append({"sd": _circle_at(Vector2(-12.0, -7.0), 4.0),
+		"fill": PopPalette.ENEMY_DEEP if p_angry else PopPalette.OUTLINE, "ow": 0.0})
+	layers.append({"sd": _circle_at(Vector2(14.0, -7.0), 4.0),
+		"fill": PopPalette.ENEMY_DEEP if p_angry else PopPalette.OUTLINE, "ow": 0.0})
+	if p_angry:
+		layers.append({"sd": _box_at(Vector2(0.0, 15.0), Vector2(9.0, 5.0), 4.0),
+			"fill": PopPalette.OUTLINE, "ow": 0.0})
+		layers.append({"sd": _poly_sd(PackedVector2Array([
+			Vector2(-6.0, 10.5), Vector2(-2.0, 10.5), Vector2(-4.0, 16.5),
+		])), "fill": Color.WHITE, "ow": 0.0})
+		layers.append({"sd": _poly_sd(PackedVector2Array([
+			Vector2(2.0, 10.5), Vector2(6.0, 10.5), Vector2(4.0, 16.5),
+		])), "fill": Color.WHITE, "ow": 0.0})
+	else:
+		layers.append({"sd": _circle_at(Vector2(0.0, 16.0), 6.0), "fill": PopPalette.OUTLINE, "ow": 0.0})
+	layers.append({"sd": _circle_at(Vector2(-24.0, 10.0), 4.6), "fill": p_blush, "ow": 0.0})
+	layers.append({"sd": _circle_at(Vector2(24.0, 10.0), 4.6), "fill": p_blush, "ow": 0.0})
+	return layers
 
 
 static func crown() -> ImageTexture:
@@ -150,6 +319,22 @@ static func star(p_size: int = 44, p_fill: Color = PopPalette.XP) -> ImageTextur
 		return _render(p_size, p_size, _shade([
 			{"sd": _poly_sd(_star_pts(outer, outer * 0.46)), "fill": p_fill, "ow": outer * 0.3},
 		])))
+
+
+static func shadow_ellipse(p_w: int = 64, p_h: int = 20) -> ImageTexture:
+	# 柔边椭圆底影（E5 精英悬浮 / Boss 底影；深藏青低透明，引擎侧只做缩放）
+	var key := "shadow_%d_%d" % [p_w, p_h]
+	return _cached(key, func() -> ImageTexture:
+		var img := Image.create(p_w, p_h, false, Image.FORMAT_RGBA8)
+		var cx := float(p_w) * 0.5
+		var cy := float(p_h) * 0.5
+		for y in range(p_h):
+			for x in range(p_w):
+				var d := Vector2((float(x) + 0.5 - cx) / cx, (float(y) + 0.5 - cy) / cy).length()
+				var a := clampf(1.0 - d, 0.0, 1.0)
+				img.set_pixel(x, y, Color(PopPalette.OUTLINE.r, PopPalette.OUTLINE.g,
+					PopPalette.OUTLINE.b, 0.30 * a * a))
+		return ImageTexture.create_from_image(img))
 
 
 static func cloud(p_w: int = 190, p_h: int = 110) -> ImageTexture:

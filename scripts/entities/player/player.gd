@@ -7,8 +7,18 @@
 class_name Player
 extends Area2D
 
-var max_hp: float = 100.0
-var hp: float = 100.0
+# ── 死亡张力调校（用户实测反馈 2026-08-29 裁定） ───────────────────
+# 初始 HP 由 100 下调至 60：原值被围数分钟不死（实测口径——E1 接触 8 伤 × contact_tick
+# 0.6s 无敌帧 = 13.3 dps 持续贴脸 7.5s 才死；真实游玩走位/武器清怪使接触断续，有效压力
+# 远低于此 → 无张力）。取 60（裁定带 50±10 上缘）：贴脸 4.5s 死、E1 一次磨血 13.3%、
+# E4 爆炸 33%、Boss 接触 33~58%——「杂兵磨血、精英/Boss 杀人」梯度成立，
+# 且 REL_HARVEST 0.4% 回血不致被满血钳死。张力口径真源 = 本常量（代码侧；cfg
+# player_base_hp=100 为 A3 历史口径，被 pkg0「cfg 常量：player_base_hp = 100」断言锁定，
+# 按测试纪律不动断言与 cfg）。
+const DEATH_TENSION_MAX_HP := 60.0
+
+var max_hp: float = DEATH_TENSION_MAX_HP
+var hp: float = DEATH_TENSION_MAX_HP
 var move_speed: float = 280.0                 # 移速（相对拖动 1:1 口径下的调试/键盘备用参数）
 var pickup_radius: float = 120.0              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
 var invuln_left: float = 0.0                  # 受击无敌帧（contact_tick=0.6s 口径）
@@ -84,7 +94,9 @@ func _ready() -> void:
 	EventBus.slot_unlocked.connect(_on_slot_unlocked_event)
 	var bal := GameConfig.balance
 	if bal != null:
-		max_hp = GameConfig.get_constant(&"player_base_hp", 100.0)   # player_base_hp 真源 cfg（A3 §0.1）
+		# 死亡张力调校（用户实测反馈 2026-08-29 裁定）：初始 HP 取代码侧张力常量 60，
+		# 不再直读 cfg player_base_hp=100（历史口径，pkg0 断言锁定；见常量块注释）
+		max_hp = DEATH_TENSION_MAX_HP
 		hp = max_hp
 		pickup_radius = bal.pickup_radius
 		xp_need = _xp_need_for(level)
