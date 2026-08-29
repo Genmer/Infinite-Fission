@@ -28,6 +28,8 @@ func open(p_candidates: Array[Dictionary]) -> void:
 	for i in range(_buttons.size()):
 		var card: Dictionary = _cards[i] if i < _cards.size() else {}
 		_setup_button(_buttons[i], card)
+		# REL_GAMBLER 四选一：按钮 4 仅在货架 ≥4 张时可见（三选一时隐藏占位）
+		_buttons[i].visible = i < _cards.size()
 	_root.visible = true
 	is_open = true
 
@@ -87,12 +89,13 @@ func _build_ui() -> void:
 	_title.position = Vector2(0.0, 300.0)
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_root.add_child(_title)
-	for i in range(3):
+	# 4 卡槽位（REL_GAMBLER 四选一上限；open() 按货架数显隐——三选一时第 4 槽隐藏）
+	for i in range(4):
 		var btn := Button.new()
 		btn.name = "Card%d" % i
 		btn.add_theme_font_size_override("font_size", 16)
-		btn.position = Vector2(60.0, 380.0 + 200.0 * float(i))
-		btn.size = Vector2(600.0, 176.0)
+		btn.position = Vector2(60.0, 300.0 + 180.0 * float(i))
+		btn.size = Vector2(600.0, 160.0)
 		btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		btn.pressed.connect(_on_pressed.bind(i))
 		_root.add_child(btn)

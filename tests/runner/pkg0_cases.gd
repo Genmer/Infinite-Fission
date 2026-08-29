@@ -353,9 +353,11 @@ func _test_object_pool() -> void:
 
 
 # ── 6. ProjectilePool（软/硬闸门） ─────────────────────────────────
+# 集成包 B.8 用例迁移：夹具 dummy_pooled.tscn → 真实弹体场景（acquire() 已收紧 ProjectileBase）；
+# 断言意图不变（闸门语义/FORCED 路径/meta 传递），仅夹具与类型标注升级。
 func _test_projectile_pool() -> void:
 	print("── ProjectilePool ──")
-	var scene: PackedScene = load("res://tests/fixtures/dummy_pooled.tscn")
+	var scene: PackedScene = load("res://scenes/combat/projectiles/ballistic_projectile.tscn")
 	# 硬上限路径：容量=硬上限=2，软上限 10
 	var pp := ProjectilePool.new()
 	pp.name = "TestProjectilePool"
@@ -363,10 +365,12 @@ func _test_projectile_pool() -> void:
 	pp.setup(&"projectile", scene, 2)
 	pp.soft_limit = 10
 	pp.hard_limit = 2
-	var p1: Node2D = pp.acquire()
-	var p2: Node2D = pp.acquire()
-	_check("硬闸门池：取出 2 弹（懒增长）", p1 != null and p2 != null and pp.total_active() == 2)
-	var p3: Node2D = pp.acquire()
+	var p1: ProjectileBase = pp.acquire()
+	var p2: ProjectileBase = pp.acquire()
+	_check("硬闸门池：取出 2 弹（懒增长）",
+		p1 != null and p2 != null and p1 is ProjectileBase and p2 is ProjectileBase
+		and pp.total_active() == 2)
+	var p3: ProjectileBase = pp.acquire()
 	_check("硬上限触达：FORCED 回收最老（取回 p1）", p3 == p1 and pp.forced_recycle_count == 1 and pp.total_active() == 2)
 	_check("FORCED 回收原因经 meta 传递", int(p1.get_meta(&"_recycle_reason", -1)) == GameConst.RecycleReason.FORCED)
 	pp.free()
@@ -377,27 +381,31 @@ func _test_projectile_pool() -> void:
 	pp2.setup(&"projectile_soft", scene, 4)
 	pp2.soft_limit = 1
 	pp2.hard_limit = 4
-	var s1: Node2D = pp2.acquire()
-	var s2: Node2D = pp2.acquire()
+	var s1: ProjectileBase = pp2.acquire()
+	var s2: ProjectileBase = pp2.acquire()
 	_check("软上限：第 2 发请求被丢弃（null+计数）", s1 != null and s2 == null and (pp2.stats()["misses"] == 1))
 	pp2.release(s1)
-	var s3: Node2D = pp2.acquire()
+	var s3: ProjectileBase = pp2.acquire()
 	_check("释放后可再取", s3 == s1 and pp2.total_active() == 1)
 	pp2.free()
 
 
 # ── 7. 其余特化池（类型收窄 + 往返） ──────────────────────────────
+# 集成包 B.8 用例迁移：EnemyPool 夹具 dummy_pooled.tscn → enemy.tscn、XPPool 夹具
+# dummy_xp.tscn → xp_shard.tscn（acquire() 已分别收紧 Enemy / XpShard）；
+# PopupPool / LaserBeamPool 未在本批收紧授权内，维持 dummy 夹具与 Node2D 占位断言。
 func _test_other_pools() -> void:
 	print("── 特化池 ──")
 	var scene: PackedScene = load("res://tests/fixtures/dummy_pooled.tscn")
-	var xp_scene: PackedScene = load("res://tests/fixtures/dummy_xp.tscn")
+	var enemy_scene: PackedScene = load("res://scenes/combat/enemies/enemy.tscn")
+	var xp_scene: PackedScene = load("res://scenes/combat/pickups/xp_shard.tscn")
 	# EnemyPool
 	var ep := EnemyPool.new()
 	tree.get_root().add_child(ep)
-	ep.setup(&"enemy", scene, 2)
+	ep.setup(&"enemy", enemy_scene, 2)
 	ep.prewarm(1)
-	var enemy: Node2D = ep.acquire()
-	_check("EnemyPool.acquire → Node2D（Enemy 占位类型）", enemy != null and enemy is Node2D)
+	var enemy: Enemy = ep.acquire()
+	_check("EnemyPool.acquire → Enemy（真件收紧）", enemy != null and enemy is Enemy)
 	ep.release(enemy)
 	_check("EnemyPool 归还往返", (ep.stats() as Dictionary)["free"] == 1)
 	ep.free()
@@ -419,13 +427,13 @@ func _test_other_pools() -> void:
 	_check("LaserBeamPool.acquire → Node2D（LaserBeam 占位类型）", beam != null and beam is Node2D)
 	lp.release(beam)
 	lp.free()
-	# XPPool（Area2D——架构 §1.4 pickup.gd XpShard）
+	# XPPool（XpShard 真件——架构 §1.4 pickup.gd）
 	var xp := XPPool.new()
 	tree.get_root().add_child(xp)
 	xp.setup(&"xp", xp_scene, 2)
 	xp.prewarm(1)
-	var shard: Area2D = xp.acquire()
-	_check("XPPool.acquire → Area2D（XpShard 占位类型）", shard != null and shard is Area2D)
+	var shard: XpShard = xp.acquire()
+	_check("XPPool.acquire → XpShard（真件收紧）", shard != null and shard is XpShard)
 	xp.release(shard)
 	xp.free()
 

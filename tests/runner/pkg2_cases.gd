@@ -687,25 +687,26 @@ func _test_player() -> void:
 	_check("死亡后不再受击/重复广播", int(_probe.get("player_died_hits")) == died0 + 1 and is_equal_approx(player.hp, 0.0))
 	_check("get_hp_pct：死亡 → 0", is_equal_approx(player.get_hp_pct(), 0.0))
 	player.free()
-	# 武器槽（5 槽，槽 1 解锁初始）+ duck-typing 武器 tick + 槽位事件解锁
+	# 武器槽（5 槽，槽 1 解锁初始）+ WeaponBase 真件武器 tick 直调 + 槽位事件解锁
+	# （集成包 B.8 用例迁移：夹具纯 Node duck 脚本 → extends WeaponBase 真件派生——
+	#   equip_weapon/weapon_slots/tick 已收紧；断言意图「槽位仲裁+开火调度」不变）
 	var player2: Player = player_scene.instantiate()
 	player2.position = Vector2(360, 1000)
 	tree.get_root().add_child(player2)
 	await tree.process_frame
 	var ws := GDScript.new()
-	ws.source_code = "extends Node\nvar ticks: int = 0\nfunc tick(_d: float) -> void:\n\tticks += 1\n"
+	ws.source_code = "extends WeaponBase\nvar ticks: int = 0\nfunc tick(_d: float) -> void:\n\tticks += 1\n"
 	ws.reload()
-	var weapons: Array[Node] = []
+	var weapons: Array[WeaponBase] = []
 	for i in range(6):
-		var w: Node = Node.new()
-		w.set_script(ws)
+		var w: WeaponBase = ws.new()
 		weapons.append(w)
 	_check("武器槽：槽 1 可装备", player2.equip_weapon(weapons[0]))
 	_check("武器槽：槽 2 未解锁拒绝", not player2.equip_weapon(weapons[1]))
 	player2.unlock_slot(3)
 	_check("武器槽：解锁至 3 后可装 2 把", player2.equip_weapon(weapons[1]) and player2.equip_weapon(weapons[2]))
 	player2.tick(DT, Vector2.ZERO)
-	_check("自动开火调度：武器 duck-typing tick 被调用",
+	_check("自动开火调度：武器 tick 被调用（WeaponBase 真件直调）",
 		int(weapons[0].get("ticks")) == 1 and int(weapons[1].get("ticks")) == 1 and int(weapons[2].get("ticks")) == 1)
 	var slots0: int = int(_probe.get("slot_unlocked_hits"))
 	EventBus.emit_slot_unlocked(5)

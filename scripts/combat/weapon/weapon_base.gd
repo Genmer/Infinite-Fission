@@ -26,6 +26,8 @@ var projectile_pool: ProjectilePool = null      # 注入（ballistic 场景池�
 var enemy_grid: SpaceGrid = null               # 注入（索敌）
 var laser_pool: LaserBeamPool = null           # 注入（LASER 形态）
 var elemental: ElementalSystem = null          # 注入（元素附着通道）
+var relic_handler: RelicHandler = null         # 注入（集成包 B.2：遗物命中乘区问询）
+var wave_director: WaveDirector = null         # 注入（集成包 B.4：SYN_FIRST_STRIKE 波首命中位）
 
 var _panel_cache: Dictionary = {}              # 面板快照缓存（词条挂载/升级时失效）
 
@@ -41,6 +43,8 @@ func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
 	enemy_grid = p_deps.get("enemy_grid")
 	laser_pool = p_deps.get("laser_pool")
 	elemental = p_deps.get("elemental")
+	relic_handler = p_deps.get("relic_handler")
+	wave_director = p_deps.get("wave_director")
 	cooldown_left = 0.0
 	level = 1
 	_invalidate_panel()
@@ -133,10 +137,12 @@ func build_damage_context(p_target: Node2D) -> DamageContext:
 		for entry in entries:
 			ctx.add_entries.append(entry)
 	ctx.element = GameConst.Element.KIN
+	ctx.is_first_hit_of_wave = is_wave_first_hit()   # B.4：波首命中位（SYN_FIRST_STRIKE）
 	if p_target != null:
 		ctx.pos = p_target.global_position
 		ctx.target_resist = _read_resist(p_target)
 	inject_vuln_pool(ctx, p_target)
+	inject_relic_pools(ctx, p_target)                # B.2：遗物命中时点独立乘区（TROPHY/MOMENTUM）
 	return ctx
 
 
@@ -146,6 +152,7 @@ func collect_context_mults(p_ctx: DamageContext, p_tctx: TraitContext) -> void:
 		for pool in trait_stack.collect_mult_pools(p_tctx):
 			p_ctx.mult_pools.append(pool)
 	inject_vuln_pool(p_ctx, p_tctx.target)
+	inject_relic_pools(p_ctx, p_tctx.target)         # B.2：同 ctx 二次注入由 has_mult_pool 去重
 
 
 func get_threshold(p_threshold_id: StringName) -> Dictionary:
@@ -261,8 +268,10 @@ func _read_resist(p_target: Node2D) -> float:
 
 
 func inject_vuln_pool(p_ctx: DamageContext, p_target: Node2D) -> void:
-	# 目标侧易伤乘区注入（A2 §1.8：vuln 池在⑤入池——冰冻易伤 ×1.25 正式路径）
-	if p_target == null:
+	# 目标侧易伤乘区注入（A2 §1.8：vuln 池在⑤入池——冰冻易伤 ×1.25 正式路径）。
+	# 集成包 B.7 去重：build_damage_context 与 collect_context_mults 双入口共用本方法，
+	# 同一 ctx 已含 vuln 池时跳过（管线防御层虽可 max 合并，注入侧去重保名额/审计干净）。
+	if p_target == null or has_mult_pool(p_ctx, &"vuln"):
 		return
 	var state: Variant = p_target.get("elemental")
 	if state is ElementalState:
@@ -275,3 +284,26 @@ func inject_vuln_pool(p_ctx: DamageContext, p_target: Node2D) -> void:
 				"cap_pool": factor - 1.0,
 				"priority": 0,
 			})
+
+
+func inject_relic_pools(p_ctx: DamageContext, p_target: Node2D) -> void:
+	# 遗物命中时点独立乘区（集成包 B.2：REL_BOSS_TROPHY / REL_MOMENTUM——
+	# 数值/池名/目标 tag 全部由 RelicData.params 数据驱动，问询 RelicHandler）
+	if relic_handler != null:
+		relic_handler.inject_hit_mult_pools(p_ctx, p_target)
+
+
+func is_wave_first_hit() -> bool:
+	# 波首命中位（B.4 接线：SYN_FIRST_STRIKE「本波首杀前」条件——
+	# WaveDirector.wave_first_kill_done 置位前均为 true；无导演引用（测试环境）→ false 安全）
+	return wave_director != null and not wave_director.wave_first_kill_done
+
+
+static func has_mult_pool(p_ctx: DamageContext, p_pool_id: StringName) -> bool:
+	# ctx 乘区池去重判据（B.7 易伤去重 / 遗物乘区幂等注入共用）
+	if p_ctx == null:
+		return false
+	for pool in p_ctx.mult_pools:
+		if StringName(String(pool.get("pool_id", ""))) == p_pool_id:
+			return true
+	return false

@@ -6,9 +6,9 @@ extends RefCounted
 
 var source_uid: int = 0                       # 来源实例 UID（投射物/光束/武器/反应源）
 var target_uid: int = 0
-# 架构类型为 Enemy（M-03，白名单 §1.3-3 窄接口载荷）；Enemy 类属包 2，
-# 包 0 阶段以 Node2D 占位（Enemy extends Node2D，架构 §2.11），包 2 合入后收紧。
-var target: Node2D = null
+# 架构类型为 Enemy（M-03，白名单 §1.3-3 窄接口载荷）；包 0 曾以 Node2D 占位——
+# 集成包 B.8 第二批收紧为 Enemy（pkg1 目标夹具已迁移真实实体版本）。
+var target: Enemy = null
 var frame_stamp: int = 0                      # 幂等键第三元
 var rng_stream_id: int = 0
 # 面板段

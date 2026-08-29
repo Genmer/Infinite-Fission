@@ -19,6 +19,7 @@ var _rng_streams: Dictionary = {}             # stream_id -> RandomNumberGenerat
 var _stats: Dictionary = {}                   # {settles, reaction_settles, dropped_*, alarms, ...}
 
 var _alarm_emitted: bool = false              # R_alarm 广播闸（一局一次；后续触发仅记审计+计数）
+var _rxn_alarm_emitted: bool = false          # R_rxn 反应通道广播闸（集成包 B.6：独立双闸，同语义）
 var _default_rng_seed: int = 0                # 未绑定流的确定性默认种子（保证同输入同输出）
 var _last_flush: Dictionary = {}              # end_frame 增量基线（累计计数 → 帧增量落 DebugStats）
 var _balance_fallback: BalanceTables = null   # GameConfig 未就绪兜底（schema 默认值即合法值）
@@ -28,6 +29,7 @@ func _init() -> void:
 	_stats = {
 		"settles": 0, "reaction_settles": 0, "dropped_dupe": 0,
 		"dropped_dead": 0, "dropped_invalid": 0, "sanitized_negative": 0, "alarms": 0,
+		"rxn_alarms": 0,
 	}
 
 
@@ -98,16 +100,20 @@ func resolve_reaction(snapshot_atk: float, coefficient: float, p_ctx: DamageCont
 	_populate_result(p_ctx, stack, false, result)   # 空聚合占位（元数据/表现级派生）
 	result.panel_snapshot = snapshot_atk             # 快照口径：覆盖 ctx 面板字段（含加算池的终值）
 	var d := coefficient * snapshot_atk
-	var alarm_ratio := _balance().r_alarm_ratio
+	var alarm_ratio := _balance().r_rxn_ratio      # R_rxn 反应独立告警线（集成包 B.6 落字段，原 ×500 兜底）
 	result.final_value = clampf(d, 0.0, maxf(snapshot_atk * alarm_ratio, 0.0))
 	if not is_finite(result.final_value):
 		result.final_value = 0.0                     # NaN 兜底（±Inf 已被 clamp 正确钳制）
 	stack.audit.ratio = coefficient if snapshot_atk > 0.0 else 0.0
 	if snapshot_atk > 0.0 and coefficient > alarm_ratio:
 		stack.audit.alarm = true
-		_stats["alarms"] += 1
+		_stats["rxn_alarms"] += 1
 	result.killed = _apply_to_target(p_ctx, result)  # 9b killed 判定（死亡只执行一次）
 	_broadcast(result)
+	if stack.audit.alarm and not _rxn_alarm_emitted:
+		# R_rxn 双闸（同 R_alarm 语义：一局一次广播，后续仅记审计+计数）
+		_rxn_alarm_emitted = true
+		EventBus.emit_damage_alarm(result)
 	EventBus.emit_reaction_triggered(int(p_ctx.element), p_ctx.pos, p_ctx.target_uid)
 	_cache_result(p_ctx, result)
 	_stats["reaction_settles"] += 1

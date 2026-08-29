@@ -245,8 +245,11 @@ func _submit_hit(p_target: Node2D) -> void:
 func _prepare_hit_traits(p_ctx: DamageContext, p_target: Node2D) -> TraitContext:
 	# 包 3 收口（§4.4 ②③）：乘区预聚合（collect_mult_pools 条件自评注入 mult_pools）
 	# + 易伤乘区（vuln 池）+ ON_HIT 派发（TraitStack 真件通道 / 直挂数组兼容通道）
+	# + 集成包 B.2：遗物命中时点独立乘区（经 weapon_ref 的 RelicHandler 通道）
 	var tctx := _build_trait_ctx(GameConst.TraitEvent.ON_HIT,
 		{"target": p_target, "damage_ctx": p_ctx})
+	if weapon_ref != null and is_instance_valid(weapon_ref):
+		(weapon_ref as WeaponBase).inject_relic_pools(p_ctx, p_target)
 	if trait_stack is TraitStack:
 		for pool in (trait_stack as TraitStack).collect_mult_pools(tctx):
 			p_ctx.mult_pools.append(pool)
@@ -260,7 +263,10 @@ func _prepare_hit_traits(p_ctx: DamageContext, p_target: Node2D) -> TraitContext
 
 
 func _inject_vuln_pool(p_ctx: DamageContext, p_target: Node2D) -> void:
-	# 包 3 收口：目标侧易伤乘区注入（冰冻易伤 ×1.25——vuln 池在管线步骤⑤入池，A2 §1.8）
+	# 包 3 收口：目标侧易伤乘区注入（冰冻易伤 ×1.25——vuln 池在管线步骤⑤入池，A2 §1.8）。
+	# 集成包 B.7 去重：同 ctx 已含 vuln 池（如来源武器已注入）时跳过。
+	if p_target == null or WeaponBase.has_mult_pool(p_ctx, &"vuln"):
+		return
 	var state: Variant = p_target.get("elemental")
 	if state is ElementalState:
 		var factor := (state as ElementalState).get_vuln_factor()
@@ -296,10 +302,19 @@ func _build_damage_ctx(p_target: Node2D) -> DamageContext:
 	ctx.bounce_count = _bounces_done
 	ctx.pierce_index = _pierce_hits + 1
 	ctx.generation = generation
-	# is_first_hit_of_wave：波次首杀全局位属 WaveDirector（包 4 集成期接线，当前 false 安全）
+	# is_first_hit_of_wave：波首命中位（集成包 B.4 接线——WaveDirector.wave_first_kill_done
+	# 置位前为 true，SYN_FIRST_STRIKE「本波首杀前」条件真源；无来源武器引用 → false 安全）
+	ctx.is_first_hit_of_wave = _wave_first_hit()
 	ctx.player_hp_pct = _player_hp_pct()
 	ctx.pos = global_position
 	return ctx
+
+
+func _wave_first_hit() -> bool:
+	# 经来源武器查询波首命中位（weapon_ref 为空 = 无宿主通道 → false 安全，pkg2 口径不变）
+	if weapon_ref != null and is_instance_valid(weapon_ref):
+		return (weapon_ref as WeaponBase).is_wave_first_hit()
+	return false
 
 
 func _hit_flags() -> int:

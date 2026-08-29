@@ -54,6 +54,11 @@ extends Resource
 	"RXN_ICE_LTG": {"resist_delta": -0.3, "duration": 6.0},
 }
 @export var event_storm_threshold: int = 128                 # §六.4
+# R_rxn 反应通道独立告警线（集成包 B.6 落字段——管线 resolve_reaction 原用 r_alarm_ratio=500
+# 兜底）。真源推导：A3 §2.4 反应系数上限 χ=2.0（碎裂）× φ=1.8（ELE_REACTION_VOID）= 3.6，
+# 快照面板 S_snap ≤ S×(1+add 池钳 2.0+flat 0.5)=3.5S ⇒ D ≤ 12.6×S；取 ×50 留 ~4× 余量，
+# 与 R_alarm=×500 同为「双闸保险」语义（超线 → 审计 alarm + 一局一次广播 + 计数）。
+@export var r_rxn_ratio: float = 50.0                        # >0；反应结算上界 D ≤ S_snap × 本值
 @export var data_version: int = 1                            # 与 version.cfg 不匹配 → 告警（AC-13.5）
 # §5.3 弹幕渲染升级路径预留位：0 = Sprite2D 池模式（默认），1 = MultiMesh 同步模式（M2 实验开关）
 @export var projectile_render_mode: int = 0

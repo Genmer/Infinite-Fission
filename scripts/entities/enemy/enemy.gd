@@ -350,7 +350,10 @@ func _reset_state() -> void:
 	resist = [0.0, 0.0, 0.0, 0.0]
 	immune_mask = 0
 	elemental = null
-	dead = false
+	dead = true                               # 池内 = 不存在（死亡态短路）：同帧网格快照仍含
+	                                          # 已归还节点，二次命中经 apply_damage 走 dead 短路
+	                                          # /管线 dropped_dead 丢弃——否则会二次死亡广播 +
+	                                          # 重复归还被拒（集成包压力场景实测 91 次，已修）
 	boss_phase = 0
 	fire_cd_left = 0.0
 	projectile_pool = null

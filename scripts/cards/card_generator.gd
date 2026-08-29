@@ -42,11 +42,20 @@ func setup(p_registry: DataRegistry) -> void:
 func generate_candidates(p_context: Dictionary) -> Array[Dictionary]:
 	# ★ 三选一：稀有度 roll → 类别 roll → 过滤 → 不足补 fallback（AC-16.4 界面永不空）
 	# context: {player: Player, wave: int}
+	# 集成包 B.2 增量键（全部可选，缺省 = 原 pkg4 冻结行为）：
+	#   deal_count        → REL_GAMBLER 四选一（发牌数，钳 [3,8]）
+	#   min_rarity_floor  → REL_OVERCLOCK 稀有度保底（应用于首张——A3 §5「下一张卡」口径）
+	#   fixed_rarities    → REL_WORDS_TIDE 重随保序（逐位覆盖稀有度 roll，保留原 roll 序列）
+	#   curse_last        → REL_GAMBLER 末位卡必带诅咒（A3 §9.3-10 净化占位）
 	var player: Node = p_context.get("player")
 	var wave := int(p_context.get("wave", 1))
+	var deal := clampi(int(p_context.get("deal_count", CANDIDATE_COUNT)),
+		CANDIDATE_COUNT, 8)
+	var floor_rarity := int(p_context.get("min_rarity_floor", -1))
+	var fixed_rarities: Variant = p_context.get("fixed_rarities", [])
 	var out: Array[Dictionary] = []
 	var picked_ids: Array[StringName] = []       # 同批去重（同 ID 不重复上货架）
-	for i in range(CANDIDATE_COUNT):
+	for i in range(deal):
 		var card := _roll_one(player, wave, picked_ids)
 		if card.is_empty():
 			card = _fallback_stat_card()
@@ -56,6 +65,17 @@ func generate_candidates(p_context: Dictionary) -> Array[Dictionary]:
 	# 不足 3 → fallback 补（类目全空 / 全部被过滤时兜底）
 	while out.size() < CANDIDATE_COUNT:
 		out.append(_fallback_stat_card())
+	# REL_OVERCLOCK：稀有度保底应用于首张（A3 §5「本波下一张卡稀有度保底紫+」）
+	if floor_rarity >= 0 and not out.is_empty():
+		out[0]["rarity"] = maxi(int(out[0].get("rarity", 0)), floor_rarity)
+	# REL_WORDS_TIDE：重随保序（逐位覆盖稀有度；deal 与保底消费顺序由调用方 GameLoop 保证）
+	if fixed_rarities is Array:
+		var fixed := fixed_rarities as Array
+		for i in range(mini(out.size(), fixed.size())):
+			out[i]["rarity"] = int(fixed[i])
+	# REL_GAMBLER：第 4 张必带诅咒（apply_choice 侧附加 ATK −10% 诅咒词条）
+	if bool(p_context.get("curse_last", false)) and out.size() >= 4:
+		out[3]["cursed"] = true
 	return out
 
 
@@ -79,6 +99,12 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 				owned_relics.append(rid)
 	if kind == CardKind.FALLBACK:
 		fallback_uses += 1
+	# REL_GAMBLER 诅咒卡（第 4 张）：附加 ATK −10% 诅咒词条（运行期构造 TraitData，
+	# 负贡献全额入池——B_spec 诅咒语义；净化机制 A3 §9.3-10 占位不做）
+	if bool(p_card.get("cursed", false)):
+		var curse := _primary_weapon(p_player)
+		if curse != null:
+			curse.attach_trait(_make_curse_trait())
 	EventBus.emit_card_chosen(StringName(String(p_card.get("id", ""))), kind)
 
 
@@ -214,6 +240,27 @@ func _fallback_stat_card() -> Dictionary:
 		"display_name": "应急强化（+5% 攻击）",
 		"description": "卡池候选耗尽的保底属性卡",
 	}
+
+
+func _make_curse_trait() -> TraitData:
+	# REL_GAMBLER 第 4 张的诅咒载荷（ATK −10%——A3 §5 curse_atk_pct；运行期构造，
+	# 非 .tres 加载 E-08 纪律不破；δ 同池 0.85，F-21 约束内）
+	var data := TraitData.new()
+	data.id = &"GAMBLER_CURSE"
+	data.display_name = "赌徒诅咒"
+	data.description = "攻击力 -10%（赌徒硬币代价）"
+	data.pool = GameConst.PoolClass.ADD
+	data.pool_id = &"add_atk"
+	data.effect_id = &"EF_STAT"
+	data.value = float(CARD_EXTRA_CURSE_PARAMS.get("curse_atk_pct", -0.1))
+	data.decay_delta = 0.85
+	data.params = {"stat": "atk_pct", "is_curse": true}
+	data.stack_max = 99
+	return data
+
+
+# REL_GAMBLER .tres params 镜像（curse_atk_pct 真源 resources/relics/REL_GAMBLER.tres）
+const CARD_EXTRA_CURSE_PARAMS := {"curse_atk_pct": -0.1}
 
 
 # ── 内部：权重工具 ────────────────────────────────────────────────

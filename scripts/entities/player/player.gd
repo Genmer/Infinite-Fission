@@ -12,7 +12,7 @@ var hp: float = 100.0
 var move_speed: float = 280.0                 # 移速（相对拖动 1:1 口径下的调试/键盘备用参数）
 var pickup_radius: float = 120.0              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
 var invuln_left: float = 0.0                  # 受击无敌帧（contact_tick=0.6s 口径）
-var weapon_slots: Array = []                  # ≤5（收紧受阻：pkg2 冻结用例喂 Node duck 武器——迁移后收 Array[WeaponBase]）
+var weapon_slots: Array[WeaponBase] = []      # ≤5（集成包 B.8 第二批收紧：pkg2 用例已迁移 WeaponBase 真件）
 var unlocked_slots: int = 1                   # w3→2 / w7→3 / Boss1→4 / Boss2 或 w21→5（F-19）
 var level: int = 1
 var xp: float = 0.0
@@ -88,10 +88,10 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 	_drag_accum = Vector2.ZERO
 	global_position += total
 	_clamp_to_playfield()
-	# 武器自动开火调度（每帧 tick；duck 调用受阻于 pkg2 冻结用例的 Node duck 武器——迁移后收紧为直调）
+	# 武器自动开火调度（每帧 tick；集成包 B.8 第二批收紧：weapon_slots 已收窄 WeaponBase——直调）
 	for weapon in weapon_slots:
-		if weapon is Object and (weapon as Object).has_method(&"tick"):
-			(weapon as Object).call(&"tick", p_game_delta)
+		if weapon != null:
+			weapon.tick(p_game_delta)
 
 
 func _unhandled_input(p_event: InputEvent) -> void:
@@ -117,8 +117,10 @@ func take_contact_damage(p_dmg: float) -> void:
 		_on_died()
 
 
-func equip_weapon(p_weapon: Node) -> bool:
-	# 装入武器实例（签名保持 Node 宽类型：pkg2 冻结用例喂 duck 武器——迁移后收窄 WeaponBase）
+func equip_weapon(p_weapon: WeaponBase) -> bool:
+	# 装入武器实例（集成包 B.8 第二批收紧：签名收窄 WeaponBase——pkg2 用例已迁移真件武器）
+	if p_weapon == null:
+		return false
 	for i in range(weapon_slots.size()):
 		if weapon_slots[i] == null:
 			if i >= unlocked_slots:
@@ -191,6 +193,19 @@ func gain_xp(p_amount: float) -> void:
 		level += 1
 		xp_need = _xp_need_for(level)
 		EventBus.emit_level_up(level)
+
+
+func respawn() -> void:
+	# 重开复活（GameLoop.restart_run → _reset_run_state 调用；集成包修复：死亡短路
+	# _dead 属一次性 E-16 仲裁标志，必须随局重置——否则重开后 take_contact_damage 永久无效）
+	_dead = false
+	hp = max_hp
+	level = 1
+	xp = 0.0
+	xp_need = _xp_need_for(1)
+	unlocked_slots = 1
+	invuln_left = 0.0
+	_drag_accum = Vector2.ZERO
 
 
 func get_hp_pct() -> float:

@@ -2,9 +2,8 @@
 # M-13 特化池：ProjectilePool（玩家弹 + 敌弹共用，team 区分；架构 §2.3/§5.1）
 # 闸门序：软上限 1500（新弹请求丢弃 + 计数）→ 容量内懒增长 → 硬上限 2000
 # （force_recycle_oldest 强制回收最老，FORCED 路径）。
-# 类型占位说明：架构原文 acquire() -> ProjectileBase / release(p: ProjectileBase)；
-# ProjectileBase 属包 2（scripts/combat/projectile/projectile_base.gd，extends Node2D），
-# 包 0 阶段以 Node2D 收窄返回值占位，包 2 合入后收紧（GDScript 覆写允许返回值协变）。
+# 类型收紧（集成包 B.8 第二批，pkg0 池用例已迁移真实弹体场景）：
+# acquire() -> ProjectileBase（架构原文口径；GDScript 覆写允许返回值协变）。
 class_name ProjectilePool
 extends ObjectPool
 
@@ -20,8 +19,8 @@ var _live_order: Dictionary = {}
 var _active_list: Array[Node2D] = []
 
 
-func acquire() -> Node2D:
-	# 类型收窄；超软上限 → null + 计数（调用方丢弃）
+func acquire() -> ProjectileBase:
+	# 类型收窄（架构原文口径）；超软上限 → null + 计数（调用方丢弃）
 	if total_active() >= soft_limit:
 		_register_miss()
 		return null
@@ -33,7 +32,7 @@ func acquire() -> Node2D:
 	if node != null:
 		_live_order[node] = true
 		_active_list.append(node)
-	return node as Node2D
+	return node as ProjectileBase
 
 
 func release(node: Node) -> void:

@@ -1,7 +1,7 @@
 # ⚡ INFINITE FISSION · 开发进度与交接文档（PROGRESS）
 
 > **本文档是跨工具/跨会话交接的唯一入口。新会话/新工具接手后：先读完本文 → 按 §5「下一步行动」顺序执行。**
-> 最后更新：2026-08-28 ｜ 更新人：主控 Agent（ZCode 会话，接手 TRAE 交接后已完成包 3 自测+修复）
+> 最后更新：2026-08-29 ｜ 更新人：主控 Agent（ZCode 会话：包 3 自测+修复、内容 .tres、duck 收紧、包 4、集成包两段接力，全部完成；当前在阶段 E 把关）
 > 远程仓库：`https://github.com/Genmer/Infinite-Fission.git`（main 分支）
 
 ---
@@ -21,12 +21,12 @@
 | D-包1 伤害结算管线 | 九步 resolve/反应通道/幂等/审计/固定种子 | ✅ 自测 108/108 PASS |
 | D-包2 实体基座 | ProjectileBase 六事件/Enemy/Player/WaveDirector/透传桩 | ✅ 自测 140/140 PASS |
 | **D-包3 武器/词缀/元素/内容** | 四形态武器+TraitStack+内置词条+ElementalSystem+全部内容 .tres | ✅ 完成（自测 128/128 + 内容 66 资源 0 剔除） |
-| D-包4 GameLoop/GameFeel/UI/卡牌流 | 主循环/打击感/HUD/三选一 | ⬜ 未开始 |
-| D-集成包 | main.tscn 组装/全链验收/压力 soak | ⬜ 未开始 |
+| D-包4 GameLoop/GameFeel/UI/卡牌流 | 主循环/打击感/HUD/三选一 | ✅ 完成（自测 98/98；4 笔待确认转集成包） |
+| D-集成包 | main.tscn 组装/全链验收/压力 soak | ✅ 完成（pkg5 自测 98/98；扫尾 8 项全落；压力 P95=5.62ms PASS；soak 180s 满载 0 实例化；详见 §5.6） |
 | E 审查+测试（并行） | 独立代码审查 + 运行验证 | ⬜ 未开始 |
 | F 交付报告 | 汇总判定+关键决策清单 | ⬜ 未开始 |
 
-**仓库当前可编译（0 解析错误），回归 505/505 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128）。**
+**仓库当前可编译（0 解析错误），回归 701/701 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 98）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95=5.62ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**（pkg4 提交 3c43634 因 github 443 超时 push 待重试）
 
 ## 3. 开发流水线（自创，非标准流水线）
 
@@ -68,9 +68,9 @@
 4. `orbit_weapon.gd` `_ensure_orbit_field` 漏注入 `orbit_field.weapon = self` → 周期弧斩从死代码变可用
 - 次生修复：`elemental_system._spread_reaction` 补窄相收窄（粗筛在网格、窄相在调用方口径）
 
-**包 3 仍缺（均已并入 §5 行动项）：**
-1. ~~包 3 收紧位~~ ✅ 第一批完成（2026-08-28）：`enemy.elemental` 收紧为 ElementalState 直调、`data_validator` effect_id 悬空剔除（TECH_EFFECT_IDS 注册表）、`Player.add_weapon(data)` 形态工厂（BALLISTIC/LASER/HOMING/MELEE 分派 + 槽位预检 + setup 依赖注入）。**第二批 6 处待包 4/集成期**（被冻结测试锁定：player.weapon_slots/ equip_weapon/ tick duck 三处被 pkg2 纯 Node 用例锁定；三池 acquire() 返回值被 pkg0 dummy 场景锁定；DamageContext.target 被 pkg1 裸 Node2D 用例锁定——迁移用例后再收紧）
-2. 遗留小项：R_rxn 反应伤害独立告警线字段（现用 ×500 兜底）、易伤注入去重（管线注释有说明）、is_first_hit_of_wave 接线、敌间分离力 E-10、RANGED 敌弹池注入
+**包 3 遗留（全部已在集成包落地，2026-08-29）：**
+1. ~~包 3 收紧位~~ ✅ 两批全完成：第一批（enemy.elemental 直调、validator effect_id 剔除、Player.add_weapon 工厂）；第二批 6 处（三池 acquire() 收窄返回值、weapon_slots→Array[WeaponBase]、equip_weapon(WeaponBase)、tick 直调、DamageContext.target→Enemy）——锁定用例已迁移为真实实体夹具，断言数不变（129/140/108）
+2. ~~遗留小项~~ ✅ 全部落地：R_rxn 独立告警线、易伤注入去重（has_mult_pool 守卫）、is_first_hit_of_wave、敌间分离力 E-10（SpaceGrid 邻域）、RANGED 敌弹池注入、xp 经验链路、遗物运行时处理器（relic_handler）
 
 ## 5. 下一步行动（按序执行）
 
@@ -78,9 +78,9 @@
 2. ~~补包 3 自测 test_pkg3.gd~~ ✅（128/128 全 PASS，顺带修复 4 个业务 bug，见 §4）
 3. ~~补包 3 内容 .tres~~ ✅（66 资源 0 剔除；pkg0 两条占位断言翻转为正向断言；裁决记录见 §4） ← **已过，当前断点在 4**
 4. ~~收紧 duck-typing 恢复点~~ ✅ 第一批完成（第二批 6 处转包 4/集成期，清单见 §4）
-5. **派发包 4**：GameLoop（状态机 Boot→Menu→Playing→Paused→LevelUp→GameOver、固定帧序①~⑧、game_delta 双时间通道——顿帧不写 Engine.time_scale！）、GameFeelDirector（顿帧/震屏 trauma/色差/粒子池）、HUD/跳字/三选一卡牌 UI；**另带包 3 转来的两笔**：爆虫自爆机制（半径 110/1.2s 引爆/警示圈）、Boss 波伴随怪差异（w20 伴 R、w30 混合怪×1/2s 场上≤14，现 WaveDirector 硬编码）← **当前断点**
-6. **集成包**：main.tscn 组装、切真管线（默认已是真件，桩仅 debug）、压力测试（500 弹+100 敌 P95<8.3ms、10 分钟 soak 零实例化）、AC 验收矩阵（A1 §3）
-7. **阶段 E**：并行派发独立代码审查 + 运行测试两路子代理
+5. ~~派发包 4~~ ✅（GameLoop/GameFeel/HUD/卡牌流/爆虫/Boss 伴随怪；自测 98/98；提交 3c43634，push 待网络恢复重试）
+6. ~~集成包~~ ✅（2026-08-29，两段接力：前任智能体完成 A/B/D 后跑 soak 超时被中断，续作智能体盘点补缺。main.tscn 全链可跑；扫尾 8 项全落；压力 P95=5.62ms<8.3ms + soak 180s 满载 0 实例化；pkg5 98/98。**续作额外修 3 bug**：game_feel_director.on_player_hit 双参信号签名、enemy._reset_state 归还置 dead=true（防二次死亡广播）、GameLoop spawner/wave_director 入树序（F-19 Boss 击杀解锁失效））
+7. **阶段 E**：并行派发独立代码审查 + 运行测试两路子代理 ← **当前断点**
 8. **阶段 F**：交付报告（含关键决策清单）
 9. 每完成一个包：**git commit + push**（纪律！）
 
@@ -102,7 +102,8 @@
 - 导入：`"$G" --headless --path "<项目根>" --import`
 - 跑测试：`"$G" --headless --path "<项目根>" -s tests/runner/test_pkg0.gd`（pkg1/pkg2/pkg3 同理）
 - 注意：`-s` 模式下入口脚本编译早于 autoload 注册，测试用「入口引导 + 运行时 load 用例体」两段式（pkg0~pkg3 都是这个模式，新测试照抄）
-- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128，全 PASS（共 505）**
+- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 98，全 PASS（共 701）**
+- 压力/soak：`tests/stress/test_perf_500p100e.gd`（AC-01.2，headless 逻辑帧口径）与 `tests/stress/test_soak.gd`（AC-14.1，SOAK_FRAMES 常量控时长；10 分钟版预计 ~12 分钟实际，长跑须后台+轮询防会话超时）
 
 ## 8. 冻结契约速查（跨包接口，改动需全包评估）
 

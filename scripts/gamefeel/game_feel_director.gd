@@ -88,8 +88,9 @@ func on_reaction_triggered(_p_rxn: int, p_pos: Vector2, _p_target_uid: int) -> v
 		particles.burst(EMITTER_SCENE_ID, p_pos, ParticleDirector.PRIORITY_CRIT)
 
 
-func on_player_hit(_p_damage: float) -> void:
-	# 玩家受击 → trauma 0.15（HIT 档；无顿帧）
+func on_player_hit(_p_damage: float, _p_source_uid: int) -> void:
+	# 玩家受击 → trauma 0.15（HIT 档；无顿帧）。签名对齐 EventBus.player_hit(damage, source_uid)
+	# 双参信号（集成包修复：单参签名在信号派发时报 Method expected 1 arguments 错误刷屏）。
 	add_trauma_for_level(GameConst.FeelLevel.HIT)
 
 

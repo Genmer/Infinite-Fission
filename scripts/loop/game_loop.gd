@@ -22,6 +22,11 @@ const SCENE_PARTICLE := "res://scenes/fx/burst_emitter.tscn"
 const SCENE_LASER := "res://scenes/combat/lasers/laser_beam.tscn"
 const MANIFEST_PATH := "res://data/manifest.cfg"
 const STARTING_WEAPON_ID := &"W1_pistol"      # Q-4：首发手枪
+const SCENE_XP_SHARD := "res://scenes/combat/pickups/xp_shard.tscn"   # B.1 经验碎片（XPPool 模板）
+# E-10 敌间分离力（软分离防重叠）：10Hz 降频 + 网格邻域查询（性能预案 §5.2-5；
+# 单轴单次推移 ≤4px 软钳——分离是观感修正而非物理约束，避免两帧内挤开 Boss 阵型）
+const SEPARATION_INTERVAL := 0.1              # 10Hz（架构 §2.11 敌间分离力口径）
+const SEPARATION_MAX_STEP := 4.0              # 单敌单次推移上限 px
 
 # 状态机（复用 GameConst.GameStatus：BOOT/MENU/PLAYING/PAUSED/LEVEL_UP/GAME_OVER）
 # 合法迁移矩阵（冻结；非法迁移 change_state 拒绝 + 计数）
@@ -60,13 +65,20 @@ var boss_bar: BossBar = null
 var game_over_screen: GameOverScreen = null
 var card_generator: CardGenerator = null
 var card_select_ui: CardSelectUI = null
-var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser}
+var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处理器
+var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
+var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
+var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp}
 
 var frame_order: Array[StringName] = []       # 帧序探针（每帧重建；测试断言固定帧序）
 var current_candidates: Array[Dictionary] = []   # 当前货架（测试观测）
+var active_shards: Array[XpShard] = []        # 场上经验碎片（掉落/吸附/归还管理，B.1）
+var stage_probe_enabled: bool = false         # 分阶段采样开关（架构 §5.5：P95 超线按阶段定位）
+var stage_probe_us: Dictionary = {}           # {StringName 阶段: 累计 usec}（仅 PLAYING 帧，逐帧重建）
 
 var _projectile_pool: ProjectilePool = null
 var _boot_elapsed_ms: float = 0.0             # Boot 耗时（AC：<3s 预算遥测）
+var _separation_left: float = SEPARATION_INTERVAL   # E-10 分离力 10Hz 相位
 
 
 func _ready() -> void:
@@ -75,6 +87,7 @@ func _ready() -> void:
 	var t0 := Time.get_ticks_usec()
 	if GameConfig.is_fatal():
 		boot_fatal = GameConfig.fatal_errors.duplicate()
+		_build_boot_error_screen()
 		push_error("[GameLoop] 致命配置，拒绝进入 MENU：%s" % str(boot_fatal))
 		return
 	_boot_load_data()
@@ -97,17 +110,27 @@ func _physics_process(p_raw_delta: float) -> void:
 		GameConst.GameStatus.PLAYING:
 			var gd := _game_delta(p_raw_delta)
 			frame_order.clear()
+			var _probe_t0 := Time.get_ticks_usec() if stage_probe_enabled else 0
+			if stage_probe_enabled:
+				stage_probe_us.clear()
 			# ① 输入采样：相对拖动由 Player._unhandled_input 自采（E-15 单指针锁定），
 			#    GameLoop 本层透传零向量 = 玩家消费自采样（包 2 落地口径）
 			frame_order.append(&"input")
 			# ② 玩家（移动/受击/拾取；内含武器冷却+开火调度——包 2 Player.tick 落地口径）
 			frame_order.append(&"player")
 			player.tick(gd, Vector2.ZERO)
+			_tick_xp_shards(gd)               # B.1：经验碎片磁吸/吸收（拾取属玩家阶段）
+			if stage_probe_enabled:
+				stage_probe_us[&"player"] = Time.get_ticks_usec() - _probe_t0
+				_probe_t0 = Time.get_ticks_usec()
 			# ④ 双网格重建（当前实体位置确定性快照）→ 投射物运动/碰撞/结算
 			frame_order.append(&"grid_projectile")
 			enemy_grid.rebuild(spawner.active)
 			enemy_bullet_grid.rebuild(_collect_enemy_bullets())
 			_tick_projectiles(gd)
+			if stage_probe_enabled:
+				stage_probe_us[&"grid_projectile"] = Time.get_ticks_usec() - _probe_t0
+				_probe_t0 = Time.get_ticks_usec()
 			# ⑤ 敌 AI + 元素 tick + 帧末反应检测（E-07；倒序遍历——自爆/结算可在 tick 内回收）
 			frame_order.append(&"enemy")
 			var eidx := spawner.active.size() - 1
@@ -118,9 +141,20 @@ func _physics_process(p_raw_delta: float) -> void:
 				eidx -= 1
 			elemental.tick(gd)
 			elemental.detect_reactions()
+			# E-10 敌间软分离（10Hz 降频；网格为 ④ 阶段重建快照——上一帧位置确定性口径）
+			_separation_left -= gd
+			if _separation_left <= 0.0:
+				_separation_left = SEPARATION_INTERVAL
+				_apply_enemy_separation()
+			if stage_probe_enabled:
+				stage_probe_us[&"enemy"] = Time.get_ticks_usec() - _probe_t0
+				_probe_t0 = Time.get_ticks_usec()
 			# ⑥ 波次推进（生成节流 ≤8/帧 / 窗口计时 / Boss 伴随怪流水）
 			frame_order.append(&"wave")
 			wave_director.tick(gd)
+			if stage_probe_enabled:
+				stage_probe_us[&"wave"] = Time.get_ticks_usec() - _probe_t0
+				_probe_t0 = Time.get_ticks_usec()
 			# ⑦ GameFeel（raw 通道）→ 顿帧申请出口（time_scale 唯一变更点）
 			frame_order.append(&"feel")
 			game_feel.tick(p_raw_delta)
@@ -128,6 +162,8 @@ func _physics_process(p_raw_delta: float) -> void:
 			# ⑧ UI（raw 通道：跳字/HUD/Boss 条——顿帧期间照常，Q-14）
 			frame_order.append(&"ui")
 			_tick_ui(p_raw_delta)
+			if stage_probe_enabled:
+				stage_probe_us[&"feel_ui"] = Time.get_ticks_usec() - _probe_t0
 		GameConst.GameStatus.LEVEL_UP, GameConst.GameStatus.PAUSED:
 			# tree.paused=true 冻结全部 PAUSABLE 子系统（AC-16.2 战斗完全冻结）；
 			# 仅 ⑦⑧ 以 raw 通道运行（架构帧序契约）
@@ -222,12 +258,26 @@ func _on_level_up(p_new_level: int) -> void:
 
 
 func _open_card_flow(p_new_level: int) -> void:
-	# 三选一流程：roll 3 张 → LEVEL_UP（暂停战斗）→ 选卡界面打开
-	current_candidates = card_generator.generate_candidates({
+	# 三选一流程：roll 3 张 → LEVEL_UP（暂停战斗）→ 选卡界面打开。
+	# 集成包 B.2：遗物改写发牌参数（GAMBLER 四选一+诅咒 / OVERCLOCK 稀有度保底），
+	# WORDS_TIDE 每波一次重随货架（保留稀有度 roll 序列）
+	var context := {
 		"player": player,
 		"wave": wave_director.current_wave,
 		"level": p_new_level,
-	})
+		"deal_count": relic_handler.deal_count(),
+		"curse_last": relic_handler.curse_requested(),
+		"min_rarity_floor": relic_handler.take_rarity_floor(),
+	}
+	current_candidates = card_generator.generate_candidates(context)
+	if relic_handler.consume_reroll():
+		var rarities: Array[int] = []
+		for c in current_candidates:
+			rarities.append(int(c.get("rarity", 0)))
+		var reroll_context := context.duplicate()
+		reroll_context["min_rarity_floor"] = -1       # 保底已折入首 roll 的稀有度序列
+		reroll_context["fixed_rarities"] = rarities
+		current_candidates = card_generator.generate_candidates(reroll_context)
 	change_state(GameConst.GameStatus.LEVEL_UP)
 	card_select_ui.open(current_candidates)
 
@@ -252,7 +302,7 @@ func _boot_load_data() -> void:
 
 
 func _boot_build_pools() -> void:
-	# 池×5（容量真源 BalanceTables.pool_prewarm；xp 池待集成包经验实体后补挂）
+	# 池×6（容量真源 BalanceTables.pool_prewarm；xp 池集成包 B.1 挂载——XpShard 真件落地）
 	_projectile_pool = ProjectilePool.new()
 	_projectile_pool.name = "ProjectilePool"
 	add_child(_projectile_pool)
@@ -276,12 +326,17 @@ func _boot_build_pools() -> void:
 	laser_pool.name = "LaserPool"
 	add_child(laser_pool)
 	laser_pool.setup(&"laser", load(SCENE_LASER), GameConfig.get_pool_capacity(&"laser"))
+	var xp_pool := XPPool.new()
+	xp_pool.name = "XPPool"
+	add_child(xp_pool)
+	xp_pool.setup(&"xp", load(SCENE_XP_SHARD), GameConfig.get_pool_capacity(&"xp"))
 	pools = {
 		&"projectile": _projectile_pool,
 		&"enemy": enemy_pool,
 		&"popup": popup_pool,
 		&"particle": particle_pool,
 		&"laser": laser_pool,
+		&"xp": xp_pool,
 	}
 	# 预热（AC-14.2，Boot 期完成）
 	_projectile_pool.prewarm(GameConfig.get_pool_capacity(&"projectile"))
@@ -289,6 +344,7 @@ func _boot_build_pools() -> void:
 	popup_pool.prewarm(GameConfig.get_pool_capacity(&"popup"))
 	particle_pool.prewarm(GameConfig.get_pool_capacity(&"particle"))
 	laser_pool.prewarm(GameConfig.get_pool_capacity(&"laser"))
+	xp_pool.prewarm(GameConfig.get_pool_capacity(&"xp"))
 
 
 func _boot_build_grids() -> void:
@@ -300,24 +356,28 @@ func _boot_build_grids() -> void:
 
 
 func _boot_build_actors() -> void:
-	# 管线（工厂自动切真件）→ 玩家（形态工厂依赖注入）→ 敌波 → 元素系统
+	# 管线（工厂自动切真件）→ 遗物处理器 → 敌波（spawner/wave_director）→ 玩家 → 元素系统
+	# ★ 经验掉落订阅必须先于 EnemySpawner 入树（信号连接序 = 派发序：掉落侧读取
+	#   exp_value/position 必须先于 spawner 的死亡归还清零，集成包 B.1）
+	EventBus.enemy_killed.connect(_on_enemy_killed_drop_xp)
 	pipeline = DamagePipelineStub.get_pipeline()
+	relic_handler = RelicHandler.new()
+	relic_handler.name = "RelicHandler"
+	add_child(relic_handler)
+	# ★ 遗物事件绑定提前至 Boot（连接序 = 派发序）：enemy_killed 的精英 tag/治疗读取
+	#   必须先于 EnemySpawner 的死亡归还清零（_reset_state 置 tags=0），集成包 B.2
+	relic_handler.bind_events()
 	elemental = ElementalSystem.new()
 	elemental.name = "ElementalSystem"
 	add_child(elemental)
 	elemental.pipeline = pipeline
 	elemental.enemy_grid = enemy_grid
-	player = (load(SCENE_PLAYER) as PackedScene).instantiate() as Player
-	player.name = "Player"
-	add_child(player)
-	player.setup({
-		"pipeline": pipeline,
-		"projectile_pool": _projectile_pool,
-		"enemy_grid": enemy_grid,
-		"enemy_bullet_grid": enemy_bullet_grid,
-		"laser_pool": pools[&"laser"],
-		"elemental": elemental,
-	})
+	# ★ wave_director 先于 spawner 入树（连接序 = 派发序）：F-19 Boss 击杀解锁读取
+	#   enemy.tags 必须先于 spawner 死亡归还的 tags 清零（_reset_state）——与上方 xp 掉落
+	#   订阅提前同因（集成包修复：此前 Boss 击杀解锁恒读 tags=0 失效，集成冒烟补断言）
+	wave_director = WaveDirector.new()
+	wave_director.name = "WaveDirector"
+	add_child(wave_director)
 	spawner = EnemySpawner.new()
 	spawner.name = "EnemySpawner"
 	add_child(spawner)
@@ -327,13 +387,25 @@ func _boot_build_actors() -> void:
 	spawner.enemy_grid = enemy_grid
 	spawner.elemental_system = elemental
 	spawner.prewarm()
-	wave_director = WaveDirector.new()
-	wave_director.name = "WaveDirector"
-	add_child(wave_director)
 	wave_director.spawner = spawner
 	wave_director.registry = registry
 	wave_director.wave_table = registry.get_wave_table()
 	wave_director.enemy_grid = enemy_grid
+	player = (load(SCENE_PLAYER) as PackedScene).instantiate() as Player
+	player.name = "Player"
+	player.z_index = 6
+	add_child(player)
+	player.setup({
+		"pipeline": pipeline,
+		"projectile_pool": _projectile_pool,
+		"enemy_grid": enemy_grid,
+		"enemy_bullet_grid": enemy_bullet_grid,
+		"laser_pool": pools[&"laser"],
+		"elemental": elemental,
+		"relic_handler": relic_handler,           # B.2：遗物命中乘区问询通道
+		"wave_director": wave_director,           # B.4：SYN_FIRST_STRIKE 波首命中位
+	})
+	relic_handler.setup({"registry": registry, "player": player})
 	# Q-4：首发手枪（形态工厂 add_weapon）
 	player.add_weapon(registry.get_weapon(STARTING_WEAPON_ID))
 
@@ -377,6 +449,16 @@ func _boot_build_presentation() -> void:
 	card_select_ui.name = "CardSelectUI"
 	add_child(card_select_ui)
 	card_select_ui.choice_made.connect(_on_card_choice)
+	# 集成包 A：震屏宿主相机（trauma² 偏移在 ⑧ raw 通道应用）+ 主菜单屏
+	camera = Camera2D.new()
+	camera.name = "Camera"
+	camera.position = Vector2(GameConfig.balance.res_logic) * 0.5
+	add_child(camera)
+	camera.make_current()
+	menu_screen = MenuScreen.new()
+	menu_screen.name = "MenuScreen"
+	add_child(menu_screen)
+	menu_screen.start_requested.connect(start_run)
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）
 	EventBus.player_died.connect(_on_player_died)
 	EventBus.level_up.connect(_on_level_up)
@@ -404,20 +486,116 @@ func _collect_enemy_bullets() -> Array[Node2D]:
 
 
 func _tick_ui(p_raw_delta: float) -> void:
-	# ⑧ UI 阶段（raw 通道）：跳字 → HUD → Boss 条
+	# ⑧ UI 阶段（raw 通道）：跳字 → HUD → Boss 条 → 相机震屏偏移（trauma² 映射应用位）
 	popup_manager.tick(p_raw_delta)
 	hud.tick(p_raw_delta)
 	boss_bar.tick(p_raw_delta)
+	_apply_camera_shake()
+
+
+func _apply_camera_shake() -> void:
+	# 集成包 A：CameraShake 纯计算输出 → 相机 transform（headless 无相机也安全）
+	if camera == null or game_feel == null or game_feel.shake == null:
+		return
+	var v := game_feel.shake.offset_and_rotation()
+	camera.offset = Vector2(v.x, v.y)
+	camera.rotation = v.z
+
+
+# ── 经验链路（集成包 B.1：击杀掉落 → 磁吸 → 经验 → 升级仲裁 E-16） ──
+func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
+	# 掉落值真源：Enemy.exp_value（波次通胀已缩放）× 遗物点金手倍率（REL_MIDAS +20%，A3 §5）
+	if not (p_enemy is Enemy):
+		return                                  # 裸实体探针/非敌事件防御
+	var value := (p_enemy as Enemy).exp_value * relic_handler.xp_mult()
+	_spawn_xp_shard(p_enemy.global_position, value)
+
+
+func _spawn_xp_shard(p_pos: Vector2, p_value: float) -> void:
+	if p_value <= 0.0:
+		return
+	var shard := (pools[&"xp"] as XPPool).acquire()
+	if shard == null:
+		# 满池合并为大面值碎片（数值守恒，架构 §5.1 XPPool 行）
+		if not active_shards.is_empty():
+			active_shards[0].merge_value(p_value)
+		return
+	shard.position = p_pos
+	shard.activate(p_value)
+	active_shards.append(shard)
+
+
+func _tick_xp_shards(p_gd: float) -> void:
+	# 磁吸/吸收推进（帧序②玩家阶段内；倒序遍历——吸收即归还擦除当前索引安全）
+	var idx := active_shards.size() - 1
+	while idx >= 0:
+		var shard := active_shards[idx]
+		if is_instance_valid(shard) and shard.tick(p_gd):
+			active_shards.remove_at(idx)
+			(pools[&"xp"] as XPPool).release(shard)
+		idx -= 1
+
+
+# ── E-10 敌间分离力（软分离防重叠；10Hz + 网格邻域查询） ──────────
+func _apply_enemy_separation() -> void:
+	if enemy_grid == null:
+		return
+	var actives := spawner.active
+	for i in range(actives.size() - 1, -1, -1):
+		var enemy := actives[i] as Enemy
+		if enemy == null or enemy.dead:
+			continue
+		# 邻域查询（网格保守半径超集）；查询缓冲顺序消费后即失效 → 不留存引用
+		var neighbors := enemy_grid.query_circle(enemy.global_position, enemy.hitbox_r)
+		for j in range(neighbors.size() - 1, -1, -1):
+			var other := neighbors[j] as Enemy
+			if other == null or other == enemy or other.dead:
+				continue
+			var delta := enemy.global_position - other.global_position
+			var min_d := enemy.hitbox_r + other.hitbox_r
+			var d := delta.length()
+			if d >= min_d:
+				continue
+			# 完全重叠（同点）时按敌 uid 定向散开（确定性，无 RNG）
+			var dir := delta / d if d >= 0.01 \
+				else Vector2.RIGHT.rotated(float(enemy.uid % 16) * TAU / 16.0)
+			var push := dir * ((min_d - d) * 0.5)          # 各让一半重叠量
+			enemy.global_position += push.limit_length(SEPARATION_MAX_STEP)
+
+
+# ── 致命配置错误清单屏（§六.2 boot_error 占位；程序化美术） ───────
+func _build_boot_error_screen() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "BootErrorScreen"
+	layer.layer = 100
+	add_child(layer)
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(root)
+	var dim := ColorRect.new()
+	dim.color = Color(0.12, 0.02, 0.02, 0.97)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(dim)
+	var title := Label.new()
+	title.text = "启动失败：致命配置错误"
+	title.add_theme_font_size_override("font_size", 30)
+	title.position = Vector2(40.0, 320.0)
+	root.add_child(title)
+	var lines := Label.new()
+	var text := ""
+	for err in boot_fatal:
+		text += String(err) + "\n"
+	lines.text = text
+	lines.add_theme_font_size_override("font_size", 15)
+	lines.position = Vector2(40.0, 400.0)
+	root.add_child(lines)
 
 
 func _reset_run_state() -> void:
-	# 重开重置：玩家（HP/经验/槽位/武器）/ HUD 统计 / 卡牌流 / 顿帧态
-	player.hp = player.max_hp
-	player.level = 1
-	player.xp = 0.0
-	player.xp_need = 14.0
-	player.unlocked_slots = 1
-	player.invuln_left = 0.0
+	# 重开重置：玩家（复活含死亡短路清除/HP/经验/槽位解锁）/ HUD 统计 / 卡牌流 / 顿帧态
+	player.respawn()
 	for i in range(player.weapon_slots.size()):
 		var w: WeaponBase = player.weapon_slots[i] if i < player.weapon_slots.size() else null
 		if w != null and is_instance_valid(w):
@@ -429,6 +607,12 @@ func _reset_run_state() -> void:
 	hud.total_damage = 0.0
 	hud.run_elapsed = 0.0
 	card_generator.owned_relics.clear()
+	relic_handler.reset_run()                     # B.2：遗物每场重新获取（owned/常驻位清零）
+	for shard in active_shards:                   # B.1：清场归还经验碎片
+		if is_instance_valid(shard):
+			(pools[&"xp"] as XPPool).release(shard)
+	active_shards.clear()
+	_separation_left = SEPARATION_INTERVAL
 	pending_level_ups = 0
 	game_feel.hit_stop_left = 0.0
 	game_feel.hit_stop_active_ms = 0.0

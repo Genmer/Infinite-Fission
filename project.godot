@@ -1,11 +1,12 @@
 ; Engine configuration file.
-; Infinite Fission —— 包 0 基座（架构 §1.4）
+; Infinite Fission —— 集成包（架构 §1.4）
 ; autoload 注册顺序即就绪顺序：EventBus → GameConfig → DebugStats（GameConfig._ready 依赖 EventBus 先注册）
 config_version=5
 
 [application]
 
 config/name="Infinite Fission"
+run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
 
 [autoload]

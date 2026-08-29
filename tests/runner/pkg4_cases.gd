@@ -63,10 +63,11 @@ func _boot_game_loop() -> void:
 		and _gl.elemental != null and _gl.game_feel != null and _gl.hud != null
 		and _gl.popup_manager != null and _gl.card_generator != null and _gl.card_select_ui != null)
 	_check("Boot：双网格持有（§1.3-6）", _gl.enemy_grid != null and _gl.enemy_bullet_grid != null)
-	_check("Boot：池×5 就绪", _gl.pools.size() == 5
+	# 集成包 xp 池挂载（B.1）授权更新：池×5 → 池×6（唯一改动的 pkg4 断言，其余语义不变）
+	_check("Boot：池×6 就绪（含 xp——集成包经验链路挂载）", _gl.pools.size() == 6
 		and _gl.pools[&"projectile"] != null and _gl.pools[&"enemy"] != null
 		and _gl.pools[&"popup"] != null and _gl.pools[&"particle"] != null
-		and _gl.pools[&"laser"] != null)
+		and _gl.pools[&"laser"] != null and _gl.pools[&"xp"] != null)
 	_check("Boot：首发手枪（Q-4）", _gl.player.weapon_slots[0] != null)
 	_check("Boot：time_scale 初始 1.0 / Engine.time_scale 未被改写",
 		_gl.time_scale == 1.0 and Engine.time_scale == 1.0)
@@ -208,8 +209,8 @@ func _test_trauma_levels_and_decay() -> void:
 	_check("衰减 0.2s → 0.5", absf(shake.trauma - 0.5) <= 0.01)
 	shake.tick(0.25)
 	_check("衰减 0.45s → 归零", shake.trauma == 0.0)
-	# 玩家受击 → HIT 档 trauma（player_hit 订阅）
-	feel.on_player_hit(10.0)
+	# 玩家受击 → HIT 档 trauma（player_hit 订阅；签名对齐 EventBus 双参信号——集成包）
+	feel.on_player_hit(10.0, 1)
 	_check("player_hit → trauma 0.15（HIT 档）", absf(shake.trauma - 0.15) <= 0.0001)
 	shake.trauma = 0.0
 	# 色差：CRIT 触发 0.004×2，0.15s 内线性归零（AC-15.4；先清残留段）

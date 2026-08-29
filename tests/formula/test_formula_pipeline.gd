@@ -1,8 +1,9 @@
 # tests/formula/test_formula_pipeline.gd
 # 包 1 自测用例体（模式 A 公式回归；由 tests/runner/test_pkg1.gd 入口在 autoload
 # 就绪后运行时加载编译——EventBus/GameConfig/DebugStats 全局名可用，静态类型全覆盖）。
-# 目标侧占位 Enemy 用动态脚本实现架构 §2.11 窄接口（uid/hp/dead/resist/status_vuln/
-# get_resist/take_result），验证管线的 duck-typing 收窄点。
+# 集成包 B.8 用例迁移：DamageContext.target 已收紧为 Enemy——目标夹具由「动态脚本裸
+# Node2D」升级为「extends Enemy 真件脚本」（uid/hp/dead/resist 承自 Enemy 基类，
+# 保留 take_result 计数覆写与 status_vuln 附加属性）；断言数值与意图全部不变。
 extends RefCounted
 
 var tree: SceneTree
@@ -10,7 +11,7 @@ var _pass: int = 0
 var _fail: int = 0
 var _failures: Array[String] = []
 var _probe: Node                          # EventBus 订阅探针（仅 Node 可订阅，E-12）
-var _dummy_script: GDScript               # 占位 Enemy 动态脚本
+var _dummy_script: GDScript               # Enemy 真件派生测试脚本
 var _targets: Array[Node2D] = []          # 动态 target 统一回收
 
 
@@ -103,35 +104,33 @@ func _setup_probe() -> void:
 	EventBus.reaction_triggered.connect(Callable(_probe, "on_reaction"))
 
 
-const DUMMY_ENEMY_SRC := "extends Node2D\n" \
-	+ "var uid: int = 0\n" \
-	+ "var hp: float = 1000000.0\n" \
-	+ "var dead: bool = false\n" \
-	+ "var resist: Array[float] = [0.0, 0.0, 0.0, 0.0]\n" \
+# 集成包 B.8 迁移：基类由 Node2D → Enemy 真件（uid/hp/dead/resist/get_resist 承自基类，
+# 不重复声明防成员遮蔽）；保留测试计数覆写 take_result 与附加属性 status_vuln。
+const DUMMY_ENEMY_SRC := "extends Enemy\n" \
 	+ "var status_vuln: float = 0.0\n" \
 	+ "var take_count: int = 0\n" \
 	+ "var applied_total: float = 0.0\n" \
-	+ "func get_resist(p_element: int) -> float:\n\treturn resist[p_element]\n" \
 	+ "func take_result(p_result: DamageResult) -> void:\n" \
 	+ "\ttake_count += 1\n\tapplied_total += p_result.final_value\n" \
 	+ "\thp -= p_result.final_value\n" \
 	+ "\tif hp <= 0.0 and not dead:\n\t\tdead = true\n"
 
 
-func _make_target(p_hp: float = 1000000.0) -> Node2D:
-	# 占位 Enemy（架构 §2.11 窄接口子集：uid/hp/dead/resist/status_vuln/get_resist/take_result）
+func _make_target(p_hp: float = 1000000.0) -> Enemy:
+	# 真件 Enemy 测试实例（接口收紧后 ctx.target: Enemy 的运行时实体；
+	# 计数覆写 take_result + 附加 status_vuln——断言口径与迁移前一致）
 	if _dummy_script == null:
 		_dummy_script = GDScript.new()
 		_dummy_script.source_code = DUMMY_ENEMY_SRC
 		_dummy_script.reload()
-	var t: Node2D = _dummy_script.new()
+	var t: Enemy = _dummy_script.new()
 	t.set("hp", p_hp)
 	t.set("uid", GameConst.next_uid())
 	_targets.append(t)
 	return t
 
 
-func _make_ctx(p_target: Node2D, p_frame: int, p_source: int = 1) -> DamageContext:
+func _make_ctx(p_target: Enemy, p_frame: int, p_source: int = 1) -> DamageContext:
 	var ctx := DamageContext.make()
 	ctx.source_uid = p_source
 	ctx.target = p_target
@@ -437,23 +436,28 @@ func _test_target_side() -> void:
 	target.set("status_vuln", 0.0)
 	var res_zero: Array[float] = [0.0, 0.0, 0.0, 0.0]
 	target.set("resist", res_zero)
-	# duck-typing 回退 1：裸 Node2D（无 resist/get_resist）→ ctx.target_resist 快照
-	var bare := Node2D.new()
-	_targets.append(bare)
+	# 接口收紧等价迁移（原「裸 Node2D 无 resist 接口 → ctx 快照回退」）：
+	# ctx.target 已收窄 Enemy → get_resist 直读路径；期望值 70 与数值语义不变
+	var res_03: Array[float] = [0.0, 0.0, 0.3, 0.0]
+	target.set("resist", res_03)
 	pipe.begin_frame(4)
-	var ctxb2 := _make_ctx(bare, 4)
-	ctxb2.target_resist = 0.3
+	var ctxb2 := _make_ctx(target, 4)
+	ctxb2.element = GameConst.Element.ICE
 	var rb2: DamageResult = pipe.resolve(ctxb2)
-	_check("duck-typing 回退：无 resist 接口 → ctx 快照 0.3 → V=0.7 → 70",
+	_check("目标接口收紧：Enemy.get_resist 直读 r=0.3 → V=0.7 → 70",
 		rb2 != null and is_equal_approx(rb2.final_value, 70.0), "got %s" % str(rb2.final_value if rb2 != null else null))
-	# duck-typing 回退 2：全缺省 → 中性 1.0
+	target.set("resist", res_zero)
+	# 缺省中性回退：真件 Enemy 无 status_vuln 属性 → _read_status_vuln 回退 0.0 → V=1.0
+	var plain: Enemy = Enemy.new()                 # 纯真件（无派生脚本、无附加属性）
+	plain.set("hp", 1000000.0)
+	_targets.append(plain)
 	pipe.begin_frame(5)
-	var ctxb3 := _make_ctx(bare, 5)
+	var ctxb3 := _make_ctx(plain, 5)
 	var rb3: DamageResult = pipe.resolve(ctxb3)
-	_check("duck-typing 缺省：全无 → V=1.0 中性 → 100",
+	_check("目标缺省：真件 Enemy 零抗零易伤 → V=1.0 中性 → 100",
 		rb3 != null and is_equal_approx(rb3.final_value, 100.0))
-	# 裸 Node2D 无 take_result → killed=false（纯公式模式）
-	_check("无 take_result 接口 → killed=false", rb3 != null and not rb3.killed)
+	# 目标存活：满血真件 Enemy（take_result 走 apply_damage）→ killed=false
+	_check("满血真件 Enemy → killed=false", rb3 != null and not rb3.killed)
 
 
 # ── 8. 暴击 RNG（固定种子复现） ──────────────────────────────────
