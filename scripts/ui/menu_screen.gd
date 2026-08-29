@@ -29,6 +29,7 @@ var _t: float = 0.0                           # 光标闪烁时钟
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	layer = TerminalTheme.UI_LAYER               # CRT 氛围层(4)之上——扫描线不压菜单文字
 	_build_ui()
 	_root.visible = false
 	EventBus.state_changed.connect(_on_state_changed)
@@ -102,14 +103,15 @@ func _build_ui() -> void:
 	_log_label = Label.new()
 	_log_label.text = ""
 	_log_label.position = Vector2(60.0, 130.0)
-	_log_label.size = Vector2(600.0, 280.0)
-	_log_label.add_theme_font_size_override("font_size", TerminalTheme.SIZE_LOG + 1)
+	_log_label.size = Vector2(600.0, 300.0)
+	_log_label.add_theme_font_size_override("font_size", TerminalTheme.SIZE_BODY)
 	_log_label.add_theme_color_override("font_color", Palette.TEXT_BODY)
 	_log_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_log_label)
 	_title_label = Label.new()
 	_title_label.text = Lore.TITLE
 	_title_label.add_theme_font_size_override("font_size", TerminalTheme.SIZE_HEADER + 8)
+	TerminalTheme.style_key_label(_title_label)  # 标题：字重 800 + 6px 描边
 	_title_label.add_theme_color_override("font_color", Palette.PHOS)
 	_title_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_title_label.position = Vector2(0.0, 420.0)

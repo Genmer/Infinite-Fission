@@ -1,6 +1,9 @@
 # scripts/ui/crt_overlay.gd
 # CRT 全局氛围层（方向 B 交付 ①+⑤）：扫描线 + 轻微色差 + 暗角 + 开机淡入，
 # 合并为【单张全屏 shader 单 pass】（性能红线：禁止逐实体跑屏后 shader）。
+# 可读性 pass：氛围层从 UI 之上（90）移到世界之上 / UI 之下（LAYER=4）——扫描线/色差
+# 不再压 UI 文字（终端 UI 靠 Theme 磷光微辉 + 近黑描边保持 CRT 质感）；开机淡入改由
+# 更高层的纯黑遮罩承担（FADE_LAYER=20，UI 之上），开机瞬间依旧全屏黑 → 透出。
 # 签名瞬间（同 shader 内 uniform 驱动，不加第二 pass）：
 #   · Boss 死亡 = CRT 信号干扰（横向撕裂 glitch 0.3s + 磷光余辉绿抬升）
 #   · 波次切换 = 屏幕轻闪 + 刷新线自上而下扫过
@@ -12,10 +15,12 @@ const BOOT_FADE_S := 1.1                      # 开机式淡入（全黑 → 透
 const GLITCH_S := 0.30                        # Boss 死亡干扰时长
 const SWEEP_S := 0.38                         # 刷新线扫过时长
 const FLASH_S := 0.14                         # 波次轻闪时长
-const LAYER := 90                             # UI 层之上（HUD=默认 1）
+const LAYER := 4                              # 世界(0)之上 / UI(TerminalTheme.UI_LAYER=10) 之下
+const FADE_LAYER := 20                        # 开机黑幕层（UI 之上、BootError(100) 之下）
 
 var _rect: ColorRect = null
 var _mat: ShaderMaterial = null
+var _fade_rect: ColorRect = null              # 开机黑幕（全局含 UI，淡出后隐藏）
 var _fade_left: float = BOOT_FADE_S
 var _glitch_left: float = 0.0
 var _sweep_left: float = 0.0
@@ -50,6 +55,10 @@ func _process(p_delta: float) -> void:
 	if _flash_left > 0.0:
 		_flash_left = maxf(_flash_left - p_delta, 0.0)
 		flash = clampf(_flash_left / FLASH_S, 0.0, 1.0)
+	if _fade_rect != null:
+		# 开机黑幕（UI 之上）：alpha 随淡出归零后隐藏（避免常驻 overdraw）
+		_fade_rect.visible = fade > 0.0
+		_fade_rect.color = Color(0.0, 0.0, 0.0, fade)
 	_push(fade, glitch, sweep_y, flash)
 
 
@@ -131,6 +140,17 @@ void fragment() {\n\
 	_mat.shader = shader
 	_rect.material = _mat
 	add_child(_rect)
+	# 开机黑幕：独立更高层全屏纯黑（扫描线层在 UI 之下后，淡入仍需盖住 UI）
+	var fade_layer := CanvasLayer.new()
+	fade_layer.name = "BootFade"
+	fade_layer.layer = FADE_LAYER
+	_fade_rect = ColorRect.new()
+	_fade_rect.name = "BootFadeRect"
+	_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fade_rect.color = Color(0.0, 0.0, 0.0, 1.0)
+	fade_layer.add_child(_fade_rect)
+	add_child(fade_layer)
 
 
 func _push(p_fade: float, p_glitch: float, p_sweep_y: float, p_flash: float) -> void:

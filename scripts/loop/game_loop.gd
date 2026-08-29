@@ -596,6 +596,7 @@ func _build_boot_error_screen() -> void:
 	root.add_child(dim)
 	var title := Label.new()
 	title.text = "启动失败：致命配置错误"
+	title.add_theme_font_override("font", TerminalTheme.title_font())  # 可读性 pass：粗字重
 	title.add_theme_font_size_override("font_size", 30)
 	title.position = Vector2(40.0, 320.0)
 	root.add_child(title)
@@ -604,7 +605,8 @@ func _build_boot_error_screen() -> void:
 	for err in boot_fatal:
 		text += String(err) + "\n"
 	lines.text = text
-	lines.add_theme_font_size_override("font_size", 15)
+	lines.add_theme_font_override("font", TerminalTheme.mono_font())   # 可读性 pass：正文≥17
+	lines.add_theme_font_size_override("font_size", 17)
 	lines.position = Vector2(40.0, 400.0)
 	root.add_child(lines)
 

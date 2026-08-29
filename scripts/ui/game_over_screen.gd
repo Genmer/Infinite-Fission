@@ -18,6 +18,7 @@ var _quote_label: Label = null
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	layer = TerminalTheme.UI_LAYER               # CRT 氛围层(4)之上——扫描线不压结算文字
 	_build_ui()
 	EventBus.state_changed.connect(_on_state_changed)
 
@@ -77,7 +78,8 @@ func _build_ui() -> void:
 	_root.add_child(dim)
 	var title := Label.new()
 	title.text = Lore.GAME_OVER_TITLE
-	title.add_theme_font_size_override("font_size", TerminalTheme.SIZE_SECTION + 12)
+	title.add_theme_font_size_override("font_size", TerminalTheme.SIZE_KEY + 8)
+	TerminalTheme.style_key_label(title)         # 结算标题：字重 800 + 6px 描边
 	title.add_theme_color_override("font_color", Palette.HOT_RED)
 	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	title.position = Vector2(0.0, 400.0)
@@ -101,7 +103,7 @@ func _build_ui() -> void:
 	_root.add_child(_summary_label)
 	_quote_label = Label.new()
 	_quote_label.text = ""
-	_quote_label.add_theme_font_size_override("font_size", TerminalTheme.SIZE_LOG + 1)
+	_quote_label.add_theme_font_size_override("font_size", TerminalTheme.SIZE_LOG + 2)
 	_quote_label.add_theme_color_override("font_color", Palette.TEXT_DIM)
 	_quote_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_quote_label.position = Vector2(0.0, 536.0)

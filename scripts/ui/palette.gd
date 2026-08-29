@@ -13,8 +13,8 @@ const HOT_RED := Color("FF4444")            # 敌方热红
 const WHITE_HOT := Color("FFFFFF")          # 白热（传说/Boss 核心）
 
 # ── 文本层级 ──────────────────────────────────────────────────────
-const TEXT_BODY := Color("A8FFB0")          # 正文磷光绿（微辉光感）
-const TEXT_DIM := Color("3F5C42")           # 弱化（注脚/次要信息）
+const TEXT_BODY := Color("C8FFC8")          # 正文磷光绿（可读性 pass：A8FFB0 偏暗提亮）
+const TEXT_DIM := Color("3F5C42")           # 弱化（注脚/真正次要信息专用）
 
 # ── 稀有度（磷光亮度阶梯，非色相） ────────────────────────────────
 const RARITY_COMMON := Color("4E7A52")      # 普通 = 暗绿

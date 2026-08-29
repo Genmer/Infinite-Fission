@@ -39,6 +39,7 @@ const HP_LOW_PCT := 0.3                       # 低血量阈值（血条转热�
 func _ready() -> void:
 	# ALWAYS：暂停/顿帧期间 UI 照常（Q-14）
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	layer = TerminalTheme.UI_LAYER               # CRT 氛围层(4)之上——扫描线不压 HUD 文字
 	_build_ui()
 
 
@@ -214,8 +215,8 @@ func _build_ui() -> void:
 	_hp_fill.position = Vector2.ZERO
 	_hp_fill.size = HP_BAR_SIZE
 	hp_bg.add_child(_hp_fill)
-	_hp_label = _add_label(root, Vector2(352.0, 26.0), "HP 100/100", TerminalTheme.SIZE_BODY)
-	_hp_ascii_label = _add_label(root, Vector2(352.0, 44.0), "[■■■■■■■■]", TerminalTheme.SIZE_LOG)
+	_hp_label = _add_label(root, Vector2(352.0, 24.0), "HP 100/100", TerminalTheme.SIZE_BODY)
+	_hp_ascii_label = _add_label(root, Vector2(352.0, 46.0), "[■■■■■■■■]", TerminalTheme.SIZE_BODY)
 	_hp_ascii_label.self_modulate = Palette.PHOS
 
 	var xp_bg := ColorRect.new()
@@ -229,19 +230,21 @@ func _build_ui() -> void:
 	_xp_fill.color = Palette.AMBER
 	_xp_fill.size = Vector2.ZERO
 	xp_bg.add_child(_xp_fill)
-	_level_label = _add_label(root, Vector2(24.0, 60.0), "Lv 1", TerminalTheme.SIZE_LOG)
+	_level_label = _add_label(root, Vector2(24.0, 62.0), "Lv 1", TerminalTheme.SIZE_BODY)
 
-	_wave_label = _add_label(root, Vector2(24.0, 80.0), "WAVE 00", TerminalTheme.SIZE_BODY)
+	_wave_label = _add_label(root, Vector2(24.0, 88.0), "WAVE 00", TerminalTheme.SIZE_BODY)
 	_wave_label.self_modulate = Palette.PHOS
-	_kill_label = _add_label(root, Vector2(150.0, 80.0), "KILL 0000", TerminalTheme.SIZE_BODY)
-	_time_label = _add_label(root, Vector2(290.0, 80.0), "0:00", TerminalTheme.SIZE_BODY)
-	_build_label = _add_dim_label(root, Vector2(24.0, 100.0), "MODULES W:0 T:0", TerminalTheme.SIZE_MONSTER)
+	_kill_label = _add_label(root, Vector2(150.0, 88.0), "KILL 0000", TerminalTheme.SIZE_BODY)
+	_time_label = _add_label(root, Vector2(290.0, 88.0), "0:00", TerminalTheme.SIZE_BODY)
+	_build_label = _add_dim_label(root, Vector2(352.0, 70.0), "MODULES W:0 T:0", TerminalTheme.SIZE_MONSTER)
 
-	_state_label = _add_label(root, Vector2(0.0, 560.0), "", TerminalTheme.SIZE_SECTION + 2)
+	_state_label = _add_label(root, Vector2(0.0, 560.0), "", TerminalTheme.SIZE_STATE)
+	TerminalTheme.style_key_label(_state_label)  # 关键时刻：字重 800 + 6px 描边
 	_state_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_state_label.visible = false
-	_toast_label = _add_label(root, Vector2(0.0, 212.0), "", TerminalTheme.SIZE_SECTION)
+	_toast_label = _add_label(root, Vector2(0.0, 212.0), "", TerminalTheme.SIZE_KEY)
+	TerminalTheme.style_key_label(_toast_label)  # 波次 toast：关键时刻大一档
 	_toast_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast_label.self_modulate = Palette.AMBER

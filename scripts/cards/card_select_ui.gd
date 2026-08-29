@@ -20,6 +20,7 @@ var _title: Label = null
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	layer = TerminalTheme.UI_LAYER               # CRT 氛围层(4)之上——扫描线不压选卡文字
 	_build_ui()
 
 
@@ -122,17 +123,19 @@ func _build_ui() -> void:
 	_root.add_child(dim)
 	_title = Label.new()
 	_title.text = Lore.CARD_TITLE
-	_title.add_theme_font_size_override("font_size", TerminalTheme.SIZE_SECTION)
+	_title.add_theme_font_size_override("font_size", TerminalTheme.SIZE_KEY)
+	TerminalTheme.style_key_label(_title)        # 选卡标题：字重 800 + 6px 描边
 	_title.add_theme_color_override("font_color", Palette.PHOS)
 	_title.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_title.position = Vector2(0.0, 300.0)
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_root.add_child(_title)
 	# 4 卡槽位（REL_GAMBLER 四选一上限；open() 按货架数显隐——三选一时第 4 槽隐藏）
+	# 卡面字号 = 正文档 18px（描述可读下限）；描边走 Theme Button 默认（近黑 4px）
 	for i in range(4):
 		var btn := Button.new()
 		btn.name = "Card%d" % i
-		btn.add_theme_font_size_override("font_size", TerminalTheme.SIZE_LOG + 2)
+		btn.add_theme_font_size_override("font_size", TerminalTheme.SIZE_BODY)
 		btn.position = Vector2(60.0, 370.0 + 190.0 * float(i))
 		btn.size = Vector2(600.0, 170.0)
 		btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

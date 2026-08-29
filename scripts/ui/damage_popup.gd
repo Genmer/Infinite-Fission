@@ -2,7 +2,7 @@
 # M-16 DamagePopup（架构 §2.15）：伤害跳字实体（池化——popup_pool 真件，包 4 收紧目标）。
 # 动画：上浮 + 淡出（raw 通道驱动，由 PopupManager.tick 统一推进——顿帧期间跳字照常，Q-14）。
 # 合并：merge() 数值累加 + 重置漂浮计时（E-17 同目标短窗合并）。
-# 样式分级：GameConst.PopupStyle（NORMAL/CRIT/REACTION/DOT/HEAL/XP）——颜色/字号占位美术。
+# 样式分级：GameConst.PopupStyle（NORMAL/CRIT/REACTION/DOT/HEAL/XP）——分档字号+描边（可读性）。
 class_name DamagePopup
 extends Node2D
 
@@ -20,13 +20,34 @@ const RISE_PX := 42.0                         # 上浮距离 px
 const MERGE_LIFE_RESET := 0.35                # 合并后重置的展示时长（短于新起，观感收敛）
 
 # 样式分级配色（方向 B 终端色：等宽字体 + 磷光亮度分级；CRIT 琥珀 / REACTION 白热）
+# 可读性 pass：NORMAL 提亮到正文色 C8FFC8；字号下限 17，暴击/普通分档拉大（19 vs 30）
 const STYLE_COLORS := {
-	GameConst.PopupStyle.NORMAL: Color("A8FFB0"),
+	GameConst.PopupStyle.NORMAL: Color("C8FFC8"),
 	GameConst.PopupStyle.CRIT: Color("FFB000"),
 	GameConst.PopupStyle.REACTION: Color("FFFFFF"),
 	GameConst.PopupStyle.DOT: Color("86D88C"),
 	GameConst.PopupStyle.HEAL: Color("7CFF6B"),
 	GameConst.PopupStyle.XP: Color("6FA877"),
+}
+
+# 样式分级字号（px；跳字在世界层受扫描线干扰——近黑描边把数值顶出来）
+const STYLE_SIZES := {
+	GameConst.PopupStyle.NORMAL: 19,
+	GameConst.PopupStyle.CRIT: 30,
+	GameConst.PopupStyle.REACTION: 25,
+	GameConst.PopupStyle.DOT: 18,
+	GameConst.PopupStyle.HEAL: 20,
+	GameConst.PopupStyle.XP: 17,
+}
+
+# 样式分级描边粗细（深色近黑 = Palette.BG；暴击/反应最粗）
+const STYLE_OUTLINES := {
+	GameConst.PopupStyle.NORMAL: 4,
+	GameConst.PopupStyle.CRIT: 6,
+	GameConst.PopupStyle.REACTION: 5,
+	GameConst.PopupStyle.DOT: 4,
+	GameConst.PopupStyle.HEAL: 4,
+	GameConst.PopupStyle.XP: 4,
 }
 
 
@@ -36,7 +57,8 @@ func _ready() -> void:
 	_label.name = "Value"
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.add_theme_font_override("font", TerminalTheme.mono_font())
-	_label.add_theme_font_size_override("font_size", 16)
+	_label.add_theme_color_override("font_outline_color", Palette.BG)
+	_label.add_theme_font_size_override("font_size", 19)
 	add_child(_label)
 	visible = false
 
@@ -89,9 +111,11 @@ func _reset_state() -> void:
 
 
 func _refresh_label() -> void:
-	# 数值 + 样式刷新（CRIT 加大字号——占位分级）
+	# 数值 + 样式刷新（分档字号直出——暴击 30 / 普通 19，差距比旧版 scale 1.35 更大更清晰）
 	if _label == null:
 		return
 	_label.text = str(int(round(merged_value)))
 	_label.self_modulate = STYLE_COLORS.get(style, Color.WHITE)
-	_label.scale = Vector2.ONE * (1.35 if style == GameConst.PopupStyle.CRIT else 1.0)
+	_label.add_theme_font_size_override("font_size", int(STYLE_SIZES.get(style, 19)))
+	_label.add_theme_constant_override("outline_size", int(STYLE_OUTLINES.get(style, 4)))
+	_label.scale = Vector2.ONE

@@ -22,6 +22,7 @@ const BAR_SIZE := Vector2(560.0, 18.0)
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	layer = TerminalTheme.UI_LAYER               # CRT 氛围层(4)之上——扫描线不压 Boss 文字
 	_build_ui()
 	EventBus.boss_spawned.connect(_on_boss_spawned)
 	EventBus.enemy_killed.connect(_on_enemy_killed)
@@ -93,7 +94,8 @@ func _build_ui() -> void:
 	_alert_label = Label.new()
 	_alert_label.name = "AlertLine"
 	_alert_label.text = ""
-	_alert_label.add_theme_font_size_override("font_size", TerminalTheme.SIZE_BODY)
+	_alert_label.add_theme_font_size_override("font_size", TerminalTheme.SIZE_SECTION + 4)
+	TerminalTheme.style_key_label(_alert_label)  # 预警=关键时刻：字重 800 + 6px 描边
 	_alert_label.add_theme_color_override("font_color", Palette.AMBER)
 	_alert_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_alert_label.position = Vector2(0.0, 124.0)
@@ -103,7 +105,7 @@ func _build_ui() -> void:
 	var bg := ColorRect.new()
 	bg.name = "BarBg"
 	bg.color = Color(Palette.HOT_RED.r, Palette.HOT_RED.g, Palette.HOT_RED.b, 0.10)
-	bg.position = Vector2(80.0, 166.0)
+	bg.position = Vector2(80.0, 190.0)
 	bg.size = BAR_SIZE
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(bg)
@@ -121,14 +123,15 @@ func _build_ui() -> void:
 	box.set_border_width_all(1)
 	box.set_corner_radius_all(0)
 	_frame.add_theme_stylebox_override("panel", box)
-	_frame.position = Vector2(77.0, 163.0)
+	_frame.position = Vector2(77.0, 187.0)
 	_frame.size = BAR_SIZE + Vector2(6.0, 6.0)
 	_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_frame)
 	_name_label = Label.new()
-	_name_label.position = Vector2(80.0, 146.0)
+	_name_label.position = Vector2(80.0, 160.0)
 	_name_label.text = "BOSS"
-	_name_label.add_theme_font_size_override("font_size", TerminalTheme.SIZE_LOG + 1)
+	_name_label.add_theme_font_size_override("font_size", TerminalTheme.SIZE_SECTION - 2)
+	TerminalTheme.style_key_label(_name_label)   # Boss 名=关键时刻：字重 800 + 6px 描边
 	_name_label.add_theme_color_override("font_color", Palette.WHITE_HOT)
 	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_name_label)
