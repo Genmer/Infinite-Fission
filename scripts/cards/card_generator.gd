@@ -47,6 +47,7 @@ const RARITY_VALUE_SCALE := [1.0, 1.4, 1.9, 2.6]
 const MASTERY_DOUBLE_RARITY := 2              # 紫(2)/金(3) 精通卡 → +2 级
 
 var _re_pct := RegEx.create_from_string("[+-]?\\d+(\\.\\d+)?%")   # 描述首百分比定位
+var _re_signed := RegEx.create_from_string("[+-]\\d+(\\.\\d+)?")   # 描述首带符号数值（平数值词条）
 
 
 func setup(p_registry: DataRegistry) -> void:
@@ -136,19 +137,25 @@ func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
 
 
 func _scaled_description(p_desc: String, p_scale: float, p_rarity: int) -> String:
-	# 描述首 "N%" 重写为缩放后值（+15% → 金卡 +39%）；无百分比 → 追加品质倍率尾注
+	# 描述数值重写（用户反馈二轮「史诗强化×1.9 是什么」→ 卡面必须直接显示真实数值）：
+	# ① 首百分比 "+15%" → "+39%"；② 首带符号平数值 "+25" → "+47"（带号数字 = 效果值，
+	#   "可叠 N 层"等无号数字不误伤）；③ 两者皆无 → 追加品质倍率尾注
 	var m := _re_pct.search(p_desc)
 	if m == null:
-		return "%s（%s强化 ×%.1f）" % [p_desc, PopPalette.rarity_name(p_rarity), p_scale]
+		m = _re_signed.search(p_desc)
+	if m == null:
+		return "%s（%s品质：效果数值 ×%.1f）" % [p_desc, PopPalette.rarity_name(p_rarity), p_scale]
 	var raw := m.get_string()
+	var is_pct := raw.ends_with("%")
 	var num := raw.trim_suffix("%").to_float()
 	var scaled_num := num * p_scale
-	var txt := ("%+.0f" % scaled_num) if (raw.begins_with("+") or raw.begins_with("-")) \
-		else ("%.0f" % scaled_num)
-	if not is_equal_approx(scaled_num, roundf(scaled_num)):
-		txt = ("%+.1f" % scaled_num) if (raw.begins_with("+") or raw.begins_with("-")) \
-			else ("%.1f" % scaled_num)
-	return p_desc.substr(0, m.get_start()) + txt + "%" + p_desc.substr(m.get_end())
+	var signed := raw.begins_with("+") or raw.begins_with("-")
+	var body := ("%+.1f" % scaled_num) if (signed and not is_equal_approx(scaled_num,
+		roundf(scaled_num))) else (("%+.0f" % scaled_num) if signed \
+		else (("%.1f" % scaled_num) if not is_equal_approx(scaled_num, roundf(scaled_num)) \
+		else "%.0f" % scaled_num))
+	return p_desc.substr(0, m.get_start()) + body + ("%" if is_pct else "") \
+		+ p_desc.substr(m.get_end())
 
 
 func apply_choice(p_card: Dictionary, p_player: Node) -> void:
