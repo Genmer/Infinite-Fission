@@ -25,6 +25,12 @@ var hitbox_radius: float = 16.0               # 命中盒半径（敌弹距离�
 var _dead: bool = false
 var _drag_accum: Vector2 = Vector2.ZERO       # 相对拖动采样累计（E-15）
 var input_enabled: bool = true                 # 输入使能（暂停恢复 0.5s 防误触宽限期——GameLoop 驱动）
+# 格挡力场（MEC_SHIELD 玩家侧接线，A3 §4.4：每 interval_s 生成护盾格挡 1 次接触伤害，
+# 2 层 → 5.5s；shield_interval<=0 = 未持有。charge 就绪 → 力场环可见；格挡瞬间脉冲扩散）
+var shield_interval: float = 0.0
+var shield_timer: float = 0.0                  # 充能剩余（就绪后停走；HUD 护盾条数据源）
+var shield_ready: bool = false
+var _shield_pulse_left: float = 0.0            # 格挡扩散脉冲剩余（表现层）
 var _pickup_area: Area2D = null
 var _pickup_shape: CollisionShape2D = null
 var _hit_shape: CollisionShape2D = null
@@ -32,6 +38,7 @@ var _sprite: Sprite2D = null
 var _flame_l: Sprite2D = null                  # 左引擎喷焰（移动时点亮 + 抖动）
 var _flame_r: Sprite2D = null                  # 右引擎喷焰（与左反相抖动）
 var _flash: Sprite2D = null                    # 受击白闪剪影（叠在机体上方）
+var _shield_ring: Sprite2D = null              # 格挡力场环（就绪可见 + 格挡脉冲——A3 §4.4 MEC_SHIELD）
 var _flash_left: float = 0.0
 var _punch_left: float = 0.0                   # 受击 squash punch 剩余
 var _tilt: float = 0.0                         # 移动倾斜（横移 bank）
@@ -49,6 +56,8 @@ const HOVER_AMP := 2.6                         # hover 待机浮动幅度 px（�
 const HOVER_PERIOD := 2.6                      # hover 周期 rad/s 基频
 const POD_L := Vector2(-20.0, 34.0)            # 左引擎舱喷口（贴图坐标——随 _visual_scale 缩放）
 const POD_R := Vector2(20.0, 34.0)             # 右引擎舱喷口
+const SHIELD_PULSE_TIME := 0.32                # 格挡脉冲扩散时长 s（表现层）
+const SHIELD_RING_R := 46.0                    # 力场环贴图基准半径 px（TextureFactory.shield_bubble）
 
 
 func _ready() -> void:
@@ -96,6 +105,13 @@ func _ready() -> void:
 	_flash.scale = Vector2(_visual_scale, _visual_scale)
 	_flash.visible = false
 	add_child(_flash)
+	# 格挡力场环（MEC_SHIELD 就绪时显示；叠在机体上方，半透青蓝泡泡——挡住才「现形」的力场感）
+	_shield_ring = Sprite2D.new()
+	_shield_ring.name = "ShieldRing"
+	_shield_ring.texture = TextureFactory.shield_bubble()
+	_shield_ring.scale = Vector2.ONE * (_visual_scale * SHIELD_RING_R / 24.0)
+	_shield_ring.visible = false
+	add_child(_shield_ring)
 	weapon_slots.resize(MAX_SLOTS)
 	EventBus.slot_unlocked.connect(_on_slot_unlocked_event)
 	var bal := GameConfig.balance
@@ -120,6 +136,11 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 		invuln_left -= p_game_delta
 		if invuln_left < 0.0:
 			invuln_left = 0.0
+	# 格挡力场充能（MEC_SHIELD：非就绪期走表，充满置位；未持有词条时 interval=0 短路）
+	if shield_interval > 0.0 and not shield_ready:
+		shield_timer = maxf(shield_timer - p_game_delta, 0.0)
+		if shield_timer <= 0.0:
+			shield_ready = true
 	var total := p_move_delta
 	if total == Vector2.ZERO:
 		total = _drag_accum if input_enabled else Vector2.ZERO   # 宽限期吞掉自采样拖动（防误触）
@@ -144,8 +165,16 @@ func _unhandled_input(p_event: InputEvent) -> void:
 
 
 func take_contact_damage(p_dmg: float) -> void:
-	# ★ 简化路径（Q-16）：无敌帧判定 → 直接扣 HP → player_hit 事件（不入 M-12）
+	# ★ 简化路径（Q-16）：无敌帧判定 → 格挡力场 → 直接扣 HP → player_hit 事件（不入 M-12）
 	if _dead or invuln_left > 0.0:
+		return
+	# 格挡力场优先（A3 §4.4 MEC_SHIELD：就绪的护盾吞掉这次接触伤害并进入再充能）
+	if shield_ready:
+		shield_ready = false
+		shield_timer = shield_interval
+		_shield_pulse_left = SHIELD_PULSE_TIME
+		invuln_left = GameConfig.balance.contact_tick if GameConfig.balance != null else 0.6
+		EventBus.emit_shield_blocked(global_position)
 		return
 	var dmg := maxf(p_dmg, 0.0)
 	hp -= dmg
@@ -163,6 +192,16 @@ func apply_max_hp_up(p_amount: float) -> void:
 	#（主控裁定 2026-08-29——买血条即时爽感）；负值（诅咒对称口径）双向钳制不越界。
 	max_hp += p_amount
 	hp = minf(hp + p_amount, max_hp)
+
+
+func apply_shield_trait(p_layers: int, p_params: Dictionary) -> void:
+	# MEC_SHIELD 消费点（A3 §4.4）：每 interval_s 生成护盾格挡 1 次接触伤害；
+	# 2 层 → interval_lv2(5.5s)。重复挂载/层变化即刷新间隔；首个护盾需走完一次充能。
+	shield_interval = float(p_params.get(
+		"interval_lv2", p_params.get("interval_s", 8.0))) if p_layers >= 2 \
+		else float(p_params.get("interval_s", 8.0))
+	if not shield_ready and shield_timer <= 0.0:
+		shield_timer = shield_interval
 
 
 func equip_weapon(p_weapon: WeaponBase) -> bool:
@@ -255,6 +294,11 @@ func respawn() -> void:
 	xp_need = _xp_need_for(1)
 	unlocked_slots = 1
 	invuln_left = RESPAWN_INVULN_S
+	# 格挡力场复位（词条随武器重建重挂；interval 清零防上局残留——挂载时再置位）
+	shield_interval = 0.0
+	shield_timer = 0.0
+	shield_ready = false
+	_shield_pulse_left = 0.0
 	_drag_accum = Vector2.ZERO
 	_flash_left = 0.0                            # 表现态复位（方向 C）
 	_punch_left = 0.0
@@ -347,3 +391,23 @@ func _tick_visual(p_game_delta: float, p_move: Vector2) -> void:
 		_flash.visible = false
 	# 无敌帧闪烁（半透呼吸）
 	modulate.a = 0.62 + 0.38 * sin(_anim_t * 26.0) if invuln_left > 0.0 else 1.0
+	# 格挡力场环（MEC_SHIELD）：就绪=青蓝泡泡呼吸；充能=隐藏；格挡=扩散脉冲淡出
+	if _shield_ring != null:
+		if _shield_pulse_left > 0.0:
+			_shield_pulse_left = maxf(_shield_pulse_left - p_game_delta, 0.0)
+			var bt := 1.0 - _shield_pulse_left / SHIELD_PULSE_TIME
+			_shield_ring.visible = true
+			_shield_ring.rotation = 0.0
+			_shield_ring.position = _sprite.position
+			_shield_ring.scale = Vector2.ONE * (_visual_scale * SHIELD_RING_R / 24.0
+				* (1.0 + 0.55 * bt))
+			_shield_ring.modulate.a = (1.0 - bt) * 0.9
+		elif shield_interval > 0.0 and shield_ready:
+			_shield_ring.visible = true
+			_shield_ring.rotation = _anim_t * 0.9
+			_shield_ring.position = _sprite.position
+			_shield_ring.scale = Vector2.ONE * (_visual_scale * SHIELD_RING_R / 24.0
+				* (1.0 + 0.045 * sin(_anim_t * 5.2)))
+			_shield_ring.modulate.a = 0.5 + 0.14 * sin(_anim_t * 5.2)
+		else:
+			_shield_ring.visible = false

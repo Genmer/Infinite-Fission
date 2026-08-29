@@ -124,6 +124,7 @@ func _nullify_enemy_bullets(p_center: Vector2) -> void:
 		if bullet is ProjectileBase and (bullet as ProjectileBase).team == 1:
 			(bullet as ProjectileBase).nullify()
 			DebugStats.count(&"bullet_nullified")
+			EventBus.emit_bullet_nullified((bullet as ProjectileBase).global_position)
 
 
 func _reset_state() -> void:

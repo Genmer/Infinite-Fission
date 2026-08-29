@@ -86,6 +86,11 @@ func attach_trait(p_trait: TraitData) -> bool:
 				and p_trait.params.has("reaction_mult") and elemental != null:
 			# ELE_REACTION_VOID：反应强化注册到 ElementalSystem（全局 ×1.8 聚合）
 			elemental.register_reaction_mult(uid, float(p_trait.params["reaction_mult"]))
+		if p_trait.id == &"MEC_SHIELD" and player != null:
+			# MEC_SHIELD 消费点接线（A3 §4.4 格挡力场：每 interval_s 护盾挡 1 次接触伤害，
+			# 2 层 → 5.5s；原「包 4 接线」遗留——2026-08-29 用户反馈补齐）。挂载收束口：
+			# 选卡与 REL_ECHO 回响复制共用本路径；重开时 respawn 复位后随武器重建重挂。
+			player.call(&"apply_shield_trait", p_trait.layers, p_trait.params)
 	return attached
 
 

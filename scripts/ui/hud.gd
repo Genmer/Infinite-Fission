@@ -20,7 +20,12 @@ var _level_label: Label = null
 var _wave_label: Label = null
 var _kill_label: Label = null
 var _time_label: Label = null
-var _build_label: Label = null                # 词条栏（武器/词条计数行）
+var _build_label: Label = null                # 构筑统计行（面板底行计数，延续原词条栏）
+var _build_panel: Control = null              # 构筑面板（左下角：武器图标行 + 词条宝石行——用户反馈）
+var _build_sig: String = ""                   # 构筑签名缓存（变化才重建，1Hz 兜底下的防抖）
+var _shield_panel: Control = null             # 护盾条（MEC_SHIELD 持有时显示——用户反馈）
+var _shield_fill: Panel = null
+var _shield_fill_style: StyleBoxFlat = null
 var _state_label: Label = null                # 状态提示（LEVEL_UP/PAUSED/GAME_OVER——测试锁定节点名）
 var _toast_label: Label = null                # 波次 toast（果冻 pop + lore 文案）
 var _toast_left: float = 0.0                  # toast 剩余展示时长（raw 通道）
@@ -51,6 +56,7 @@ func bind_events() -> void:
 	EventBus.enemy_killed.connect(_on_enemy_killed)
 	EventBus.state_changed.connect(_on_state_changed)
 	EventBus.damage_resolved.connect(_on_damage_resolved)
+	EventBus.card_chosen.connect(_on_card_chosen_build)
 
 
 func setup(p_player: Node2D) -> void:
@@ -73,6 +79,20 @@ func refresh_stats() -> void:
 		_xp_fill.size = Vector2(maxf((XP_BAR_SIZE.x - 6.0) * xp_pct, 3.0), XP_BAR_SIZE.y - 6.0)
 		_level_label.text = "Lv %d" % int(player.get("level"))
 		_build_label.text = _build_summary()
+		# 护盾条（MEC_SHIELD 持有才显示：就绪满条亮青；充能期按剩余比例灰蓝）
+		var s_interval: float = player.get("shield_interval")
+		_shield_panel.visible = s_interval > 0.0
+		if s_interval > 0.0:
+			var s_ready: bool = player.get("shield_ready")
+			var s_timer: float = player.get("shield_timer")
+			var s_pct := 1.0 if s_ready else clampf(1.0 - s_timer / maxf(s_interval, 0.01), 0.05, 1.0)
+			_shield_fill.size = Vector2(maxf((148.0 - 6.0) * s_pct, 8.0), 36.0 - 6.0)
+			_shield_fill_style.bg_color = PopPalette.PLAYER.lerp(
+				PopPalette.INK_SOFT, 0.35 * (1.0 - s_pct)) if not s_ready else PopPalette.PLAYER
+		var sig := _compute_build_sig()
+		if sig != _build_sig:
+			_build_sig = sig
+			_refresh_build()
 	_wave_label.text = "第 %d 波" % wave
 	_kill_label.text = "击杀 %d" % kills
 	_time_label.text = "%d:%02d" % [int(run_elapsed) / 60, int(run_elapsed) % 60]
@@ -179,6 +199,107 @@ func _build_summary() -> String:
 	return "构筑  W:%d T:%d" % [wcount, tcount]
 
 
+func _on_card_chosen_build(_card_id: StringName, _target_kind: int) -> void:
+	# 选卡应用 → 构筑面板强制重建（1Hz 兜底之外的即时响应）
+	_build_sig = ""
+
+
+func _compute_build_sig() -> String:
+	# 构筑签名：武器 uid:level + 词条 id:layers（挂载序）——变化才重建面板
+	if player == null or not is_instance_valid(player):
+		return "-"
+	var sig := ""
+	var slots: Array = player.get("weapon_slots")
+	for w in slots:
+		if w != null and is_instance_valid(w):
+			sig += "w%d:%d;" % [int(w.get("uid")), int(w.get("level"))]
+			var stack: Variant = w.get("trait_stack")
+			if stack != null and stack.get("traits") != null:
+				for t: Variant in (stack.get("traits") as Array):
+					var tb: Variant = t
+					var td: Variant = tb.get("data")
+					if td != null:
+						sig += "t%s:%d;" % [String(td.get("id")), int(tb.get("layers"))]
+	return sig
+
+
+func _refresh_build() -> void:
+	# 构筑面板重建：武器图标行（5 槽位含空槽态，Lv 角标）+ 词条宝石行（跨武器聚合挂载序）
+	if _build_panel == null or player == null or not is_instance_valid(player):
+		return
+	for child in _build_panel.get_children():
+		if child.name != "BuildBg":
+			child.queue_free()
+	var content := Control.new()
+	content.name = "BuildContent"
+	content.position = Vector2(10.0, 8.0)
+	content.size = Vector2(232.0, 98.0)
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_build_panel.add_child(content)
+	# ① 武器图标行（5 槽：持有=武器图标+Lv 角标；空槽=描边圆环占位）
+	var slots: Array = player.get("weapon_slots")
+	var unlocked: int = int(player.get("unlocked_slots"))
+	for i in range(5):
+		var w: Variant = slots[i] if i < slots.size() else null
+		var slot_x := float(i) * 46.0
+		var icon := TextureRect.new()
+		icon.name = "Wpn%d" % i
+		icon.position = Vector2(slot_x, 0.0)
+		icon.custom_minimum_size = Vector2(40.0, 40.0)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if w != null and is_instance_valid(w):
+			var wdata: Variant = w.get("data")
+			icon.texture = TextureFactory.weapon_icon(
+				StringName(str(wdata.get("id"))) if wdata != null else &"W_MISSING")
+			content.add_child(icon)
+			var lv := StickerTheme.label_sticker(Label.new(), 11, PopPalette.INK, 0, Color.WHITE, true)
+			lv.text = "Lv%d" % int(w.get("level"))
+			lv.size = Vector2(40.0, 13.0)
+			lv.position = Vector2(slot_x, 40.0)
+			lv.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			content.add_child(lv)
+		else:
+			var locked := i >= unlocked
+			icon.texture = TextureFactory.ring_tex(
+				PopPalette.INK_SOFT if locked else PopPalette.INK_SOFT.lerp(Color.WHITE, 0.4),
+				36, 2.6)
+			icon.modulate.a = 0.35 if locked else 0.6
+			content.add_child(icon)
+	# ② 词条宝石行（跨武器聚合挂载序，最多 7 枚：类别章形 + ×层数）
+	var gems: Array = []
+	for w in slots:
+		if w == null or not is_instance_valid(w):
+			continue
+		var stack: Variant = w.get("trait_stack")
+		if stack == null or stack.get("traits") == null:
+			continue
+		for t: Variant in (stack.get("traits") as Array):
+			var tb: Variant = t
+			var td: Variant = tb.get("data")
+			if td != null:
+				gems.append({"pool": int(td.get("pool")), "layers": int(tb.get("layers")),
+					"tid": StringName(str(td.get("id")))})
+	for gi in range(mini(gems.size(), 7)):
+		var gx := float(gi % 7) * 32.0
+		var gem_icon := TextureRect.new()
+		gem_icon.name = "Gem%d" % gi
+		gem_icon.texture = TextureFactory.type_icon(1, int(gems[gi]["pool"]))
+		gem_icon.position = Vector2(gx, 60.0)
+		gem_icon.custom_minimum_size = Vector2(24.0, 24.0)
+		gem_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		gem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		gem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_child(gem_icon)
+		if int(gems[gi]["layers"]) > 1:
+			var cnt := StickerTheme.label_sticker(Label.new(), 10, PopPalette.INK, 0, Color.WHITE, true)
+			cnt.text = "×%d" % int(gems[gi]["layers"])
+			cnt.size = Vector2(20.0, 12.0)
+			cnt.position = Vector2(gx + 2.0, 82.0)
+			content.add_child(cnt)
+
+
 # ── 程序化 UI 组装（方向 C 贴纸风） ────────────────────────────────
 func _build_ui() -> void:
 	var root := Control.new()
@@ -265,16 +386,54 @@ func _build_ui() -> void:
 	_time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	time_pill.add_child(_time_label)
 
-	# 构筑统计（左下角，避开弹幕主区）
-	var build_pill := _sticker_panel(root, Vector2(24.0, 1206.0), Vector2(190.0, 36.0), 18.0)
-	build_pill.modulate.a = 0.9
-	_build_label = StickerTheme.label_sticker(Label.new(), 15, PopPalette.INK_SOFT)
+	# 构筑面板（左下角，避开弹幕主区——用户反馈 2026-08-29：当前持有武器+词条要展示）
+	var build_root := Control.new()
+	build_root.name = "BuildPanel"
+	build_root.position = Vector2(24.0, 1124.0)
+	build_root.size = Vector2(252.0, 132.0)
+	build_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(build_root)
+	_build_panel = build_root
+	var build_bg := _sticker_panel(build_root, Vector2.ZERO, Vector2(252.0, 132.0), 16.0)
+	build_bg.name = "BuildBg"
+	build_bg.modulate.a = 0.92
+	_build_label = StickerTheme.label_sticker(Label.new(), 14, PopPalette.INK_SOFT)
 	_build_label.name = "BuildText"
 	_build_label.text = "构筑 -"
-	_build_label.size = Vector2(190.0, 22.0)
-	_build_label.position = Vector2(0.0, 7.0)
+	_build_label.size = Vector2(252.0, 18.0)
+	_build_label.position = Vector2(0.0, 110.0)
 	_build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	build_pill.add_child(_build_label)
+	build_bg.add_child(_build_label)
+
+	# 护盾条（时间气泡右侧；MEC_SHIELD 持有才显示——用户反馈「单独的护盾条」）
+	_shield_panel = _sticker_panel(root, Vector2(306.0, 92.0), Vector2(148.0, 36.0), 18.0)
+	_shield_panel.name = "ShieldBar"
+	_shield_panel.modulate.a = 0.94
+	_shield_panel.visible = false
+	var shield_icon := TextureRect.new()
+	shield_icon.name = "ShieldIcon"
+	shield_icon.texture = TextureFactory.shield_bubble()
+	shield_icon.position = Vector2(4.0, 4.0)
+	shield_icon.custom_minimum_size = Vector2(28.0, 28.0)
+	shield_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	shield_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	shield_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shield_panel.add_child(shield_icon)
+	_shield_fill = Panel.new()
+	_shield_fill.name = "ShieldFill"
+	_shield_fill_style = StyleBoxFlat.new()
+	_shield_fill_style.bg_color = PopPalette.PLAYER
+	_shield_fill_style.set_corner_radius_all(6)
+	_shield_fill.add_theme_stylebox_override("panel", _shield_fill_style)
+	_shield_fill.position = Vector2(34.0, 3.0)
+	_shield_fill.size = Vector2(3.0, 30.0)
+	_shield_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shield_panel.add_child(_shield_fill)
+	var shield_tag := StickerTheme.label_sticker(Label.new(), 12, PopPalette.INK_SOFT)
+	shield_tag.text = "护盾"
+	shield_tag.position = Vector2(36.0, 8.0)
+	shield_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shield_panel.add_child(shield_tag)
 
 	# 暂停按钮（右上角贴纸图标：白底圆角 + 藏青 ⏸ 双竖条；仅 PLAYING 态显示——
 	# 用户反馈 2026-08-29「没有暂停的地方」；申请经信号 → GameLoop 仲裁）

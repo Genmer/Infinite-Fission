@@ -129,8 +129,17 @@ func _roll_one(p_player: Node, p_wave: int, p_picked: Array[StringName]) -> Dict
 		match category:
 			"MASTERY":
 				var pool := _mastery_candidates(p_player)
-				if not pool.is_empty():
-					var weapon: Object = pool[rng.randi_range(0, pool.size() - 1)]
+				# 同批去重（用户反馈 2026-08-29「独立升级给玩家选择」）：本批已出过的武器
+				# 升级卡不再重复——多持时同批多张 MASTERY 必然指向不同武器，玩家可自选
+				# 「单系走到底」还是「多系铺开」。
+				var fresh: Array = []
+				for w in pool:
+					var token := StringName("wpn#%d" % int(w.get("uid")))
+					if not p_picked.has(token):
+						fresh.append(w)
+				if not fresh.is_empty():
+					var weapon: Object = fresh[rng.randi_range(0, fresh.size() - 1)]
+					p_picked.append(StringName("wpn#%d" % int(weapon.get("uid"))))
 					return _make_mastery_card(weapon)
 			"ADD", "MULT", "MECH", "ELEM":
 				var trait_pool := _trait_candidates(category, p_player, p_picked)

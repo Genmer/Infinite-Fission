@@ -20,6 +20,8 @@ const RING_COUNT := 6                         # 碎裂冲击环并发池
 const RING_LIFE := 0.26                       # 冲击环时长 s
 const RING_R0 := 14.0                         # 冲击环起始半径 px
 const RING_R1 := 62.0                         # 冲击环结束半径 px
+const RIPPLE_COUNT := 12                      # 青色涟漪并发池（护盾格挡 / 弧斩消弹共用）
+const RIPPLE_LIFE := 0.24                     # 涟漪时长 s
 
 var _bolts: Array[Dictionary] = []            # [{root, core, glow, flash, left}]（池条目）
 var _bolt_idx: int = 0
@@ -29,6 +31,8 @@ var _sparks: Array[Dictionary] = []           # [{sprite, vel, left}]
 var _spark_idx: int = 0
 var _rings: Array[Dictionary] = []            # [{sprite, left}]
 var _ring_idx: int = 0
+var _ripples: Array[Dictionary] = []          # [{sprite, left, r0, r1}]（青色涟漪池）
+var _ripple_idx: int = 0
 
 
 func _ready() -> void:
@@ -37,9 +41,12 @@ func _ready() -> void:
 	_build_bolts()
 	_build_sparks()
 	_build_rings()
+	_build_ripples()
 	EventBus.chain_lightning.connect(_on_chain_lightning)
 	EventBus.elemental_dot_fired.connect(_on_dot_fired)
 	EventBus.reaction_triggered.connect(_on_reaction_triggered)
+	EventBus.shield_blocked.connect(_on_shield_blocked)
+	EventBus.bullet_nullified.connect(_on_bullet_nullified)
 
 
 func tick(p_raw_delta: float) -> void:
@@ -47,6 +54,7 @@ func tick(p_raw_delta: float) -> void:
 	_tick_bolts(p_raw_delta)
 	_tick_sparks(p_raw_delta)
 	_tick_rings(p_raw_delta)
+	_tick_ripples(p_raw_delta)
 
 
 # ── 感电连锁主锯齿闪电（签名特效） ────────────────────────────────
@@ -222,6 +230,61 @@ func _layout_ring(p_ring: Dictionary, p_progress: float) -> void:
 	var r: float = lerpf(RING_R0, RING_R1, p_progress)
 	sp.scale = Vector2.ONE * (r / 19.0)          # 贴图环半径 19px 口径
 	sp.modulate.a = clampf(1.0 - p_progress, 0.0, 1.0) * 0.95
+
+
+# ── 青色涟漪（护盾格挡 / 弧斩消弹——2026-08-29 用户反馈「格挡要看得见」） ──
+func _build_ripples() -> void:
+	var cyan := PopPalette.PLAYER.lerp(Color.WHITE, 0.18)
+	for i in range(RIPPLE_COUNT):
+		var sp := Sprite2D.new()
+		sp.name = "CyanRipple%d" % i
+		sp.texture = TextureFactory.ring_tex(cyan, 48, 4.0)
+		sp.visible = false
+		add_child(sp)
+		_ripples.append({"sprite": sp, "left": 0.0, "r0": 8.0, "r1": 30.0})
+
+
+func _on_shield_blocked(p_pos: Vector2) -> void:
+	# 格挡力场挡下伤害：大涟漪（与 Player._shield_ring 脉冲同源互补）
+	_fire_ripple(p_pos, 16.0, 56.0)
+
+
+func _on_bullet_nullified(p_pos: Vector2) -> void:
+	# 弧斩消弹（W9 NULLIFIED 路径）：小涟漪
+	_fire_ripple(p_pos, 6.0, 24.0)
+
+
+func _fire_ripple(p_pos: Vector2, p_r0: float, p_r1: float) -> void:
+	var ripple: Dictionary = _ripples[_ripple_idx % RIPPLE_COUNT]
+	_ripple_idx += 1
+	var sp: Sprite2D = ripple["sprite"]
+	sp.position = p_pos
+	sp.visible = true
+	ripple["left"] = RIPPLE_LIFE
+	ripple["r0"] = p_r0
+	ripple["r1"] = p_r1
+	_layout_ripple(ripple, 0.0)
+
+
+func _layout_ripple(p_ripple: Dictionary, p_progress: float) -> void:
+	var sp: Sprite2D = p_ripple["sprite"]
+	var r: float = lerpf(float(p_ripple["r0"]), float(p_ripple["r1"]), p_progress)
+	sp.scale = Vector2.ONE * (r / 19.0)
+	sp.modulate.a = clampf(1.0 - p_progress, 0.0, 1.0) * 0.85
+
+
+func _tick_ripples(p_raw_delta: float) -> void:
+	for ripple: Dictionary in _ripples:
+		var left := float(ripple["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		ripple["left"] = left
+		var sp: Sprite2D = ripple["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		_layout_ripple(ripple, 1.0 - left / RIPPLE_LIFE)
 
 
 func _tick_rings(p_raw_delta: float) -> void:

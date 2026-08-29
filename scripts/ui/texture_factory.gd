@@ -482,6 +482,118 @@ static func ice_shard() -> ImageTexture:
 		])))
 
 
+static func shield_bubble() -> ImageTexture:
+	# 格挡力场泡（A3 §4.4 MEC_SHIELD 表现层）：半透青蓝圆 + 亮描边环 + 高光点。
+	# 贴图环基准半径 24px（Player.SHIELD_RING_R 换算口径）。
+	var key := "shield_bubble"
+	return _cached(key, func() -> ImageTexture:
+		var cyan := PopPalette.PLAYER.lerp(Color.WHITE, 0.18)
+		var bubble_fill := Color(cyan.r, cyan.g, cyan.b, 0.14)
+		var ring_col := Color(cyan.r, cyan.g, cyan.b, 0.78)
+		return _render(64, 64, _shade([
+			{"sd": _circle_at(Vector2.ZERO, 24.0), "fill": bubble_fill, "ow": 0.0},
+			{"sd": _ring_at(24.0, 3.6), "fill": ring_col, "ow": 0.0},
+			{"sd": _circle_at(Vector2(-9.0, -10.0), 3.2), "fill": Color(1.0, 1.0, 1.0, 0.85), "ow": 0.0},
+			{"sd": _circle_at(Vector2(-3.0, -15.0), 1.9), "fill": Color(1.0, 1.0, 1.0, 0.65), "ow": 0.0},
+		])))
+
+
+static func weapon_icon(p_id: StringName) -> ImageTexture:
+	# 武器库图标（HUD 构筑面板 + 设定图共用）：9 把武器各一枚贴纸风程序化图形，
+	# 56px 画布、玩家蓝填充 + 藏青描边 + 白高光，剪影差异承载辨识度。
+	var key := "weapon_icon_%s" % p_id
+	return _cached(key, func() -> ImageTexture:
+		var blue := PopPalette.PLAYER
+		var deep := blue.lerp(PopPalette.OUTLINE, 0.32)
+		var white := Color(1.0, 1.0, 1.0, 0.9)
+		var layers: Array = []
+		match String(p_id):
+			"W1_pistol":                      # 手枪：L 形枪身 + 握把
+				layers = [
+					{"sd": _box_at(Vector2(2.0, -7.0), Vector2(17.0, 5.5), 2.5), "fill": blue, "ow": 3.2},
+					{"sd": _box_at(Vector2(-6.0, 6.0), Vector2(5.0, 9.0), 2.0), "fill": deep, "ow": 3.0},
+					{"sd": _circle_at(Vector2(16.0, -7.0), 2.2), "fill": white, "ow": 0.0},
+				]
+			"W2_gatling":                     # 加特林：三管 + 供弹鼓
+				layers = [
+					{"sd": _box_at(Vector2(-2.0, 4.0), Vector2(9.0, 7.0), 3.0), "fill": deep, "ow": 3.0},
+					{"sd": _box_at(Vector2(10.0, -6.0), Vector2(11.0, 2.6), 1.3), "fill": blue, "ow": 2.8},
+					{"sd": _box_at(Vector2(10.0, 0.0), Vector2(11.0, 2.6), 1.3), "fill": blue, "ow": 2.8},
+					{"sd": _box_at(Vector2(10.0, 6.0), Vector2(11.0, 2.6), 1.3), "fill": blue, "ow": 2.8},
+				]
+			"W3_shotgun":                     # 霰弹：宽双管 + 枪托
+				layers = [
+					{"sd": _box_at(Vector2(-8.0, 5.0), Vector2(6.0, 7.0), 2.0), "fill": deep, "ow": 3.0},
+					{"sd": _box_at(Vector2(7.0, -4.0), Vector2(15.0, 3.4), 1.7), "fill": blue, "ow": 2.8},
+					{"sd": _box_at(Vector2(7.0, 4.0), Vector2(15.0, 3.4), 1.7), "fill": blue, "ow": 2.8},
+				]
+			"W4_pulse_beam":                  # 脉冲光束：发射器 + 直线光束条
+				layers = [
+					{"sd": _box_at(Vector2(-9.0, 0.0), Vector2(6.0, 8.0), 3.0), "fill": deep, "ow": 3.0},
+					{"sd": _box_at(Vector2(8.0, 0.0), Vector2(17.0, 3.2), 1.6), "fill": blue, "ow": 2.6},
+					{"sd": _circle_at(Vector2(22.0, 0.0), 2.6), "fill": white, "ow": 0.0},
+				]
+			"W5_prism":                       # 棱镜：菱形晶体 + 折射双线
+				layers = [
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(-6.0, -14.0), Vector2(4.0, 0.0), Vector2(-6.0, 14.0), Vector2(-16.0, 0.0),
+					])), "fill": blue, "ow": 3.0},
+					{"sd": _box_at(Vector2(13.0, -7.0), Vector2(9.0, 2.0), 1.0), "fill": blue, "ow": 2.4},
+					{"sd": _box_at(Vector2(13.0, 7.0), Vector2(9.0, 2.0), 1.0), "fill": blue, "ow": 2.4},
+					{"sd": _circle_at(Vector2(-6.0, -6.0), 2.4), "fill": white, "ow": 0.0},
+				]
+			"W6_micro_missile":               # 微导：小导弹圆头 + 尾翼
+				layers = [
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(0.0, -16.0), Vector2(6.0, -6.0), Vector2(6.0, 10.0),
+						Vector2(0.0, 6.0), Vector2(-6.0, 10.0), Vector2(-6.0, -6.0),
+					])), "fill": blue, "ow": 3.0},
+					{"sd": _circle_at(Vector2(0.0, -9.0), 2.4), "fill": white, "ow": 0.0},
+				]
+			"W7_cluster_rocket":              # 集束火箭：粗火箭 + 双侧尾翼
+				layers = [
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(0.0, -18.0), Vector2(8.0, -6.0), Vector2(8.0, 12.0), Vector2(-8.0, 12.0),
+						Vector2(-8.0, -6.0),
+					])), "fill": blue, "ow": 3.2},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(-8.0, 2.0), Vector2(-15.0, 12.0), Vector2(-8.0, 12.0),
+					])), "fill": deep, "ow": 2.8},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(8.0, 2.0), Vector2(15.0, 12.0), Vector2(8.0, 12.0),
+					])), "fill": deep, "ow": 2.8},
+					{"sd": _circle_at(Vector2(0.0, -10.0), 3.0), "fill": white, "ow": 0.0},
+				]
+			"W8_orbit_field":                 # 环绕力场：力场环 + 双卫星珠
+				layers = [
+					{"sd": _ring_at(16.0, 4.2), "fill": blue, "ow": 0.0},
+					{"sd": _circle_at(Vector2(0.0, -16.0), 4.6), "fill": deep, "ow": 2.8},
+					{"sd": _circle_at(Vector2(13.9, 8.0), 4.6), "fill": deep, "ow": 2.8},
+					{"sd": _circle_at(Vector2(0.0, 0.0), 3.0), "fill": white, "ow": 0.0},
+				]
+			"W9_arc_slash":                   # 弧斩：扇形弧刀（外弧 20 / 内弧 10，±65°）
+				var arc := PackedVector2Array()
+				for i in range(9):
+					var ang := deg_to_rad(-65.0 + 130.0 * float(i) / 8.0) - PI * 0.5
+					arc.append(Vector2(cos(ang), sin(ang)) * 20.0)
+				for j in range(9):
+					var ang_in := deg_to_rad(65.0 - 130.0 * float(j) / 8.0) - PI * 0.5
+					arc.append(Vector2(cos(ang_in), sin(ang_in)) * 10.0)
+				layers = [
+					{"sd": _poly_sd(arc), "fill": blue, "ow": 3.2},
+					{"sd": _circle_at(Vector2(0.0, 0.0), 2.6), "fill": white, "ow": 0.0},
+				]
+			_:                                # 兜底：四角星
+				layers = [
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(0.0, -16.0), Vector2(4.5, -4.5), Vector2(16.0, 0.0),
+						Vector2(4.5, 4.5), Vector2(0.0, 16.0), Vector2(-4.5, 4.5),
+						Vector2(-16.0, 0.0), Vector2(-4.5, -4.5),
+					])), "fill": blue, "ow": 3.0},
+				]
+		return _render(56, 56, _shade(layers)))
+
+
 static func ui_glyph(p_kind: int) -> ImageTexture:
 	# 暂停按钮贴纸图标（白底圆角方 + 藏青描边 + 藏青图形）：0=⏸ 双竖条 / 1=▶ 三角
 	var key := "ui_glyph_%d" % p_kind
