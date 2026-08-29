@@ -13,7 +13,9 @@ extends Area2D
 var max_hp: float = 60.0                       # 声明值与 cfg 同口径（_ready 覆读 cfg 真源）
 var hp: float = 60.0
 var move_speed: float = 280.0                 # 移速（相对拖动 1:1 口径下的调试/键盘备用参数）
-var pickup_radius: float = 120.0              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
+var pickup_radius: float = 120.0
+var gold: int = 0                             # 金币（击杀 gold_drop 掉账；战地黑市货币，M7）
+var _last_move_dir: Vector2 = Vector2.UP      # 最近移动方向（游侠闪现取向）              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
 # 角色系统（用户反馈「不同的角色有不同的技能」）：选择经 Meta 持久化，开局 set_character 应用
 var character_id: StringName = &"sentinel"
 var character_atk_pct: float = 0.0            # 角色攻击修正（武器面板经 meta_atk_pct 合成）
@@ -160,6 +162,8 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 	if total == Vector2.ZERO:
 		total = _drag_accum if input_enabled else Vector2.ZERO   # 宽限期吞掉自采样拖动（防误触）
 	_drag_accum = Vector2.ZERO
+	if total != Vector2.ZERO:
+		_last_move_dir = total.normalized()
 	global_position += total
 	_clamp_to_playfield()
 	# 武器自动开火调度（每帧 tick；集成包 B.8 第二批收紧：weapon_slots 已收窄 WeaponBase——直调）
@@ -293,6 +297,7 @@ func set_character(p_id: StringName) -> void:
 	max_hp = float(def.get("hp", 60.0)) + Meta.hp_bonus()
 	hp = max_hp
 	pickup_radius = 120.0 * (1.0 + Meta.magnet_pct())
+	gold = 30 + Meta.start_gold()                # 开局资金（养成·初始资金，M8 二期）
 	character_atk_pct = float(def.get("atk_pct", 0.0))
 	skill_cd_base = float(def.get("cd", 30.0)) * (1.0 - Meta.skill_cdr_pct())
 	skill_cd_left = 0.0
@@ -302,6 +307,13 @@ func set_character(p_id: StringName) -> void:
 		if w is WeaponBase and is_instance_valid(w):
 			(w as WeaponBase).meta_atk_pct = Meta.atk_pct() + character_atk_pct
 			(w as WeaponBase).call(&"_invalidate_panel")
+
+
+func _clamp_to_playfield_pos(p_pos: Vector2) -> Vector2:
+	var size: Vector2 = Vector2(720.0, 1280.0)
+	if GameConfig.balance != null:
+		size = Vector2(GameConfig.balance.res_logic)
+	return Vector2(clampf(p_pos.x, 24.0, size.x - 24.0), clampf(p_pos.y, 24.0, size.y - 24.0))
 
 
 func skill_ready() -> bool:
@@ -322,6 +334,10 @@ func activate_skill() -> bool:
 			skill_active_left = 4.0
 		&"bulwark":
 			_skill_stomp()
+		&"ranger":
+			var dir := _last_move_dir if _last_move_dir != Vector2.ZERO else Vector2.UP
+			global_position = _clamp_to_playfield_pos(global_position + dir * 260.0)
+			invuln_left = maxf(invuln_left, 1.0)
 	DebugStats.count(&"skill_used")
 	return true
 
@@ -350,7 +366,7 @@ func _skill_stomp() -> void:
 func gain_xp(p_amount: float) -> void:
 	# 经验/等级：xp_gained → 升级（多级连升逐次广播，弹卡排队由 GameLoop 仲裁 E-16）
 	# 升级回满血（用户反馈 2026-08-29「升级还是回满血吧」：升级即奖励，血条拉满解压）
-	var amount := maxf(p_amount, 0.0)
+	var amount := maxf(p_amount, 0.0) * (1.0 + Meta.xp_pct())   # 局外养成·经验萃取（M8 二期）
 	xp += amount
 	EventBus.emit_xp_gained(amount)
 	while xp >= xp_need:

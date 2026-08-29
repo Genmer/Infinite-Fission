@@ -40,6 +40,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_maps_systems()
 	_test_swamp_eco()
 	_test_char_meta()
+	_test_economy()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -546,7 +547,7 @@ func _test_swamp_eco() -> void:
 # ── ⑱ 角色系统 + 局外养成（M8 落地验收） ─────────────────────────
 func _test_char_meta() -> void:
 	print("── 角色与局外养成 ──")
-	_check("CharacterTable：3 角色", CharacterTable.count() == 3)
+	_check("CharacterTable：4 角色（含游侠·岚）", CharacterTable.count() == 4)
 	# 角色应用：薇拉（45 血 + 25% 攻）
 	var p: Node = _gl.player
 	_gl.state = GameConst.GameStatus.MENU
@@ -595,13 +596,69 @@ func _test_char_meta() -> void:
 	menu._on_lobby_pressed("char")
 	_check("大厅：角色面板 3 张卡", _live_children(menu._panel_list) == CharacterTable.count())
 	menu._on_lobby_pressed("upgrade")
-	_check("大厅：养成面板（结晶头 + 4 升级 + 注释 = 6 行）",
-		_live_children(menu._panel_list) == 6)
+	_check("大厅：养成面板（结晶头 + 6 升级 + 注释 = 8 行）",
+		_live_children(menu._panel_list) == 8)
 	menu._on_panel_close()
 	Meta.character_id = &"sentinel"
 	Meta.upgrades = {}
 	Meta.crystals = 0
 	Meta._save()                                  # 养成测试不留痕（防污染 pkg 字面量断言）
+
+
+# ── ⑲ 战地黑市 + 金币 + 音效（M7 落地验收） ─────────────────────
+func _test_economy() -> void:
+	print("── 战地黑市与音效 ──")
+	# 金币掉账：强制 gold_drop 必中
+	var e := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	e.spawn(_fixture_enemy(&"E_GOLD", 10.0), 1, 0)
+	e.data.gold_drop = {"chance": 1.0, "min": 7, "max": 7}
+	var g0: int = int(_gl.player.get("gold"))
+	_gl._on_enemy_killed_drop_xp(e)
+	_check("金币：击杀掉账 +7", int(_gl.player.get("gold")) == g0 + 7)
+	_gl.pools[&"enemy"].release(e)
+	# 行情系数界
+	var shop: ShopUi = _gl.shop_ui
+	var in_band := true
+	for slot in range(6):
+		var m := shop.market_mult(5, slot)
+		if m < 0.7 or m > 1.3:
+			in_band = false
+	_check("行情：系数 ∈ [0.7, 1.3]", in_band)
+	# 开店 → 货架 → 购买治疗包 → 出击
+	_gl.state = GameConst.GameStatus.PLAYING
+	_gl.player.set("gold", 500)
+	_gl.player.set("hp", 10.0)
+	var hp0: float = float(_gl.player.get("hp"))
+	var gold0: int = int(_gl.player.get("gold"))
+	shop.open(_gl.player, 5)
+	_check("黑市：开店可见", shop.is_shop_visible())
+	var healed := false
+	for i in range(shop._wares.size()):
+		if String(shop._wares[i].get("kind", "")) == "heal":
+			shop._buy(i)
+			healed = float(_gl.player.get("hp")) > hp0 + 1.0
+			break
+	_check("黑市：治疗包购买回血", healed)
+	_check("黑市：金币扣减", int(_gl.player.get("gold")) < gold0)
+	var g1: int = int(_gl.player.get("gold"))
+	shop._on_refresh_pressed()
+	_check("黑市：刷新扣费", int(_gl.player.get("gold")) <= g1 - 10)
+	shop.close()
+	_check("黑市：出击 → PLAYING（含宽限）", _gl.state == GameConst.GameStatus.PLAYING)
+	# 游侠闪现
+	var p: Node = _gl.player
+	Meta.character_id = &"ranger"
+	p.call(&"set_character", &"ranger")
+	var pos0: Vector2 = (p as Node2D).global_position
+	p.set("_last_move_dir", Vector2.RIGHT)
+	p.call(&"activate_skill")
+	_check("游侠：瞬步位移 + 无敌", ((p as Node2D).global_position - pos0).length() > 200.0
+		and float(p.get("invuln_left")) > 0.5)
+	Meta.character_id = &"sentinel"
+	# 音效库
+	_check("音效：8 种程序化音色就绪", SfxBank.I != null and SfxBank.I._streams.size() >= 9)
+	SfxBank.I.play(&"kill")
+	SfxBank.I.play(&"level")
 
 
 func _live_children(p_node: Node) -> int:

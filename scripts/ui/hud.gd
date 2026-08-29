@@ -21,6 +21,8 @@ var _level_label: Label = null
 var _wave_label: Label = null
 var map_name: String = ""                  # 当前地图名（M2 多地图，HUD 波次前缀）
 var _skill_btn: Button = null              # 角色技能键（右下角；冷却中置灰倒计时）
+var _gold_label: Label = null                 # 金币（战地黑市货币，M7）
+var _boss_banner: Label = null                # Boss 出场横幅（表现层一期）
 var _kill_label: Label = null
 var _time_label: Label = null
 var _build_label: Label = null                # 构筑统计行（面板底行计数，延续原词条栏）
@@ -59,6 +61,7 @@ func bind_events() -> void:
 	EventBus.enemy_killed.connect(_on_enemy_killed)
 	EventBus.state_changed.connect(_on_state_changed)
 	EventBus.damage_resolved.connect(_on_damage_resolved)
+	EventBus.boss_spawned.connect(_on_boss_banner)
 	EventBus.card_chosen.connect(_on_card_chosen_build)
 
 
@@ -98,6 +101,8 @@ func refresh_stats() -> void:
 			_refresh_build()
 	_wave_label.text = ("%s · 第 %d 波" % [map_name, wave]) if map_name != "" \
 		else "第 %d 波" % wave
+	if _gold_label != null and player != null and is_instance_valid(player):
+		_gold_label.text = "◎ %d" % int(player.get("gold"))
 	if _skill_btn != null and player != null and is_instance_valid(player):
 		var ready_now: bool = bool(player.call(&"skill_ready"))
 		_skill_btn.disabled = not ready_now
@@ -198,6 +203,26 @@ func _on_skill_pressed() -> void:
 	# 角色技能键（仲裁在 player.skill_ready；PLAYING 态才生效）
 	if player != null and is_instance_valid(player) and bool(player.call(&"skill_ready")):
 		player.call(&"activate_skill")
+
+
+func _on_boss_banner(p_boss: Node2D) -> void:
+	# Boss 出场横幅演出（表现层一期：弹入 → 停留 1.6s → 淡出）
+	var ename := "未知聚合体"
+	var d: Variant = p_boss.get("data")
+	if d != null:
+		ename = String(d.get("display_name"))
+	_boss_banner.text = "⚠ %s 降临" % ename
+	_boss_banner.visible = true
+	_boss_banner.pivot_offset = _boss_banner.size * 0.5
+	_boss_banner.scale = Vector2(1.6, 1.6)
+	_boss_banner.modulate.a = 0.0
+	var tw := _boss_banner.create_tween()
+	tw.tween_property(_boss_banner, "scale", Vector2.ONE, 0.22)\
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(_boss_banner, "modulate:a", 1.0, 0.18)
+	tw.tween_interval(1.6)
+	tw.tween_property(_boss_banner, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(func() -> void: _boss_banner.visible = false)
 
 
 func _on_build_gui_input(p_ev: InputEvent) -> void:
@@ -428,6 +453,26 @@ func _build_ui() -> void:
 	skill_btn.button_down.connect(func() -> void: StickerTheme.press_punch(skill_btn))
 	root.add_child(skill_btn)
 	_skill_btn = skill_btn
+		# 金币 pill（左上，护盾条同款贴纸风——战地黑市货币）
+	var gold_pill := _sticker_panel(root, Vector2(24.0, 44.0), Vector2(132.0, 36.0), 18.0)
+	gold_pill.name = "GoldPill"
+	gold_pill.modulate.a = 0.94
+	_gold_label = StickerTheme.label_sticker(Label.new(), 17, PopPalette.XP, 0, Color.WHITE, true)
+	_gold_label.text = "◎ 0"
+	_gold_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_gold_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	gold_pill.add_child(_gold_label)
+	# Boss 出场横幅（演出：缩放弹入 → 停留 → 淡出）
+	_boss_banner = StickerTheme.label_sticker(Label.new(), 30, PopPalette.ENEMY, 6, Color.WHITE, true)
+	_boss_banner.name = "BossBanner"
+	_boss_banner.text = ""
+	_boss_banner.position = Vector2(0.0, 210.0)
+	_boss_banner.size = Vector2(720.0, 46.0)
+	_boss_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_boss_banner.visible = false
+	_boss_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_boss_banner)
 		# 构筑面板（左下角，避开弹幕主区——用户反馈 2026-08-29：当前持有武器+词条要展示；
 	# 二轮反馈「点击左下角，可以看 buff 详情」→ 面板可点击 → 暂停 + 构筑详情卡）
 	var build_root := Control.new()

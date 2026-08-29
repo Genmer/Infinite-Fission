@@ -60,6 +60,8 @@ const UPGRADES: Array[Dictionary] = [
 	{"id": &"atk", "name": "火力校准", "desc": "全武器攻击 +4%/级", "max_lv": 5, "base_cost": 30},
 	{"id": &"magnet", "name": "磁力线圈", "desc": "拾取半径 +15%/级", "max_lv": 3, "base_cost": 25},
 	{"id": &"cdr", "name": "技能超频", "desc": "角色技能冷却 -8%/级", "max_lv": 3, "base_cost": 35},
+	{"id": &"xp_gain", "name": "经验萃取", "desc": "经验获取 +8%/级", "max_lv": 3, "base_cost": 30},
+	{"id": &"start_gold", "name": "初始资金", "desc": "开局金币 +20/级", "max_lv": 3, "base_cost": 25},
 ]
 
 
@@ -105,6 +107,14 @@ func magnet_pct() -> float:
 
 func skill_cdr_pct() -> float:
 	return float(upgrade_level(&"cdr")) * 0.08
+
+
+func xp_pct() -> float:
+	return float(upgrade_level(&"xp_gain")) * 0.08
+
+
+func start_gold() -> int:
+	return int(upgrade_level(&"start_gold")) * 20
 
 
 func set_character_id(p_id: StringName) -> void:

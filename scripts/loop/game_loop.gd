@@ -74,6 +74,8 @@ var card_select_ui: CardSelectUI = null
 var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处理器
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var pause_overlay: PauseOverlay = null        # 方向 C：暂停遮罩面板（PAUSED 态宿主）
+var shop_ui: ShopUi = null                    # 战地黑市（M7 股市商店，SHOP 波事件宿主）
+var sfx: SfxBank = null                       # 程序化音效库（表现层一期）
 var elemental_fx: ElementalFxLayer = null     # 方向 C：元素签名特效层（连锁闪电/碎裂环/DOT 火星）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
 var confetti: ConfettiBurst = null            # 方向 C：Boss 死亡彩纸屑（actors 段前置订阅）
@@ -218,6 +220,14 @@ func change_state(p_new: int) -> bool:
 func request_pause() -> bool:
 	# M-16/M-17 暂停申请（仲裁后生效）
 	return change_state(GameConst.GameStatus.PAUSED)
+
+
+func _on_shop_requested(p_wave: int) -> void:
+	# 战地黑市开店仲裁（M7）：PLAYING 态 → LEVEL_UP（复用弹卡态，E-16 仲裁同源）
+	if state != GameConst.GameStatus.PLAYING:
+		return
+	if change_state(GameConst.GameStatus.LEVEL_UP):
+		shop_ui.open(player, p_wave)
 
 
 func _on_build_details() -> void:
@@ -528,6 +538,20 @@ func _boot_build_presentation() -> void:
 	pause_overlay.resume_requested.connect(request_resume)
 	pause_overlay.restart_requested.connect(restart_run)
 	pause_overlay.menu_requested.connect(quit_to_menu)
+	shop_ui = ShopUi.new()
+	shop_ui.name = "ShopUi"
+	add_child(shop_ui)
+	shop_ui.closed.connect(request_resume)       # 出击 → LEVEL_UP → PLAYING（含宽限）
+	wave_director.shop_requested.connect(_on_shop_requested)
+	sfx = SfxBank.new()
+	sfx.name = "SfxBank"
+	add_child(sfx)
+	EventBus.damage_resolved.connect(func(_r: DamageResult) -> void: sfx.play(&"hit"))
+	EventBus.enemy_killed.connect(func(_e: Node2D) -> void: sfx.play(&"kill"))
+	EventBus.level_up.connect(func(_l: int) -> void: sfx.play(&"level"))
+	EventBus.card_chosen.connect(func(_i: StringName, _k: int) -> void: sfx.play(&"coin"))
+	EventBus.shield_blocked.connect(func(_p: Vector2) -> void: sfx.play(&"shield"))
+	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
 	boss_bar = BossBar.new()
 	boss_bar.name = "BossBar"
 	add_child(boss_bar)
@@ -538,6 +562,7 @@ func _boot_build_presentation() -> void:
 	game_over_screen.restart_requested.connect(restart_run)
 	card_generator = CardGenerator.new()
 	card_generator.setup(registry)
+	shop_ui.card_generator = card_generator      # 黑市货架走同一条卡链（注入须在创建后）
 	card_select_ui = CardSelectUI.new()
 	card_select_ui.name = "CardSelectUI"
 	add_child(card_select_ui)
@@ -630,6 +655,12 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 		return                                  # 裸实体探针/非敌事件防御
 	var value := (p_enemy as Enemy).exp_value * relic_handler.xp_mult()
 	_spawn_xp_shard(p_enemy.global_position, value)
+	# 金币掉账（M7 战地黑市货币：gold_drop = {chance, min, max}，首次接线——此前为死数据）
+	var gdrop: Variant = (p_enemy as Enemy).data.gold_drop
+	if gdrop is Dictionary and not (gdrop as Dictionary).is_empty():
+		var gd := gdrop as Dictionary
+		if randf() < float(gd.get("chance", 0.0)):
+			player.gold += int(round(randf_range(float(gd.get("min", 1)), float(gd.get("max", 1)))))
 
 
 func _spawn_xp_shard(p_pos: Vector2, p_value: float) -> void:

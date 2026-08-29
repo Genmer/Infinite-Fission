@@ -24,6 +24,12 @@ const CHARACTERS: Array[Dictionary] = [
 		"skill_name": "震荡践踏", "skill_desc": "震退周围敌人并清除身旁弹幕",
 		"cd": 20.0,
 	},
+	{
+		"id": &"ranger", "name": "游侠·岚", "desc": "灵动刺客（血 52 / 攻 +10%），走位拉满",
+		"hp": 52.0, "atk_pct": 0.10,
+		"skill_name": "影袭瞬步", "skill_desc": "朝移动方向瞬步 260px 并短暂无敌",
+		"cd": 18.0,
+	},
 ]
 
 

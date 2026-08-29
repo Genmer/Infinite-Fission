@@ -8,6 +8,7 @@ class_name WaveDirector
 extends Node
 
 var wave_table: WaveTableData = null          # M-14 注入（null → 公式 fallback）
+signal shop_requested(wave: int)              # 商店波清空（events 含 SHOP → 战地黑市，M7）
 var spawner: EnemySpawner = null
 var registry: DataRegistry = null             # 注入（fallback 构成/敌人 id 解析）
 var enemy_grid: SpaceGrid = null              # 注入（spawner.tick 转递；E-10 预留）
@@ -120,6 +121,10 @@ func tick(p_game_delta: float) -> void:
 			# 清空检测：窗口结束 + 队列排空 + 场上清空
 			if _phase == WavePhase.CLEARING and spawner.queue_empty() and spawner.active_count() == 0:
 				EventBus.emit_wave_cleared(current_wave)
+				# 战地黑市（M7）：本波 events 含 SHOP → 请求开店（GameLoop 仲裁开面板）
+				var shop_entry := _table_entry(current_wave)
+				if shop_entry != null and shop_entry.events.has(&"SHOP"):
+					shop_requested.emit(current_wave)
 				# F-19：w3 波后解锁槽2 / w7 波后解锁槽3
 				if current_wave == 3:
 					EventBus.emit_slot_unlocked(2)
