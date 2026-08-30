@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"AFF_CDR"
 display_name = "加速冷却"
-description = "冷却缩减 +10%（Σ≤60%），可叠 4 层（A3 §4.2）"
+description = "武器攻击间隔 -10%（射速提升，作用于全部武器）"
 pool = 0
 pool_id = &"add_cdr"
 effect_id = &"EF_STAT"

@@ -61,6 +61,7 @@ func _reroll_wares(p_paid: bool) -> void:
 		var t := card_generator.registry.get_trait(tid)
 		if t == null:
 			continue
+		var target_w := card_generator._random_owned_weapon(_player)
 		var rarity := card_generator._roll_rarity(_wave)
 		var scale := float(CardGenerator.RARITY_VALUE_SCALE[clampi(rarity, 0, 3)])
 		var data := t.duplicate() as TraitData
@@ -68,7 +69,7 @@ func _reroll_wares(p_paid: bool) -> void:
 			data.value = t.value * scale
 			data.description = card_generator._scaled_description(t.description, scale, rarity)
 		_wares.append({
-			"kind": "trait", "data": data, "rarity": rarity,
+			"kind": "trait", "data": data, "rarity": rarity, "target": target_w,
 			"base": 40.0 * float(CardGenerator.RARITY_VALUE_SCALE[clampi(rarity, 0, 3)]),
 			"mult": market_mult(_wave, slot),
 		})
@@ -227,7 +228,9 @@ func _make_ware_row(p_index: int, p_ware: Dictionary) -> Control:
 	match kind:
 		"trait":
 			var td: TraitData = p_ware["data"]
-			display = String(td.display_name)
+			var tw: Object = p_ware.get("target")
+			var wtag := ("【%s】" % card_generator._weapon_short_name(tw)) if tw != null else ""
+			display = wtag + String(td.display_name)
 			desc = String(td.description)
 		"relic":
 			var rd: RelicData = p_ware["data"]

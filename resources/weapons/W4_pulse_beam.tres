@@ -7,7 +7,7 @@
 script = ExtResource("2_wls")
 base_atk = 6.0
 rof = 8.0
-cd = 1.0
+cd = 1.6
 pierce = 1
 pellets = 1
 note = "A3 §3.4 L1：tick_atk 6 × 8 跳/s；起始 DPS 48；满层 DPS 67.2"
@@ -16,7 +16,7 @@ note = "A3 §3.4 L1：tick_atk 6 × 8 跳/s；起始 DPS 48；满层 DPS 67.2"
 script = ExtResource("2_wls")
 base_atk = 7.0
 rof = 8.0
-cd = 1.0
+cd = 1.5
 pierce = 1
 pellets = 1
 note = "A3 §3.4 L2：tick_atk 7 × 8 跳/s；满层 DPS 78.4"
@@ -25,7 +25,7 @@ note = "A3 §3.4 L2：tick_atk 7 × 8 跳/s；满层 DPS 78.4"
 script = ExtResource("2_wls")
 base_atk = 7.0
 rof = 9.0
-cd = 1.0
+cd = 1.4
 pierce = 1
 pellets = 1
 note = "A3 §3.4 L3：tick_atk 7 × 9 跳/s；满层 DPS 88.2"
@@ -34,7 +34,7 @@ note = "A3 §3.4 L3：tick_atk 7 × 9 跳/s；满层 DPS 88.2"
 script = ExtResource("2_wls")
 base_atk = 9.0
 rof = 9.0
-cd = 1.0
+cd = 1.3
 pierce = 1
 pellets = 1
 note = "A3 §3.4 L4：tick_atk 9 × 9 跳/s；满层 DPS 113.4"
@@ -43,7 +43,7 @@ note = "A3 §3.4 L4：tick_atk 9 × 9 跳/s；满层 DPS 113.4"
 script = ExtResource("2_wls")
 base_atk = 11.0
 rof = 9.0
-cd = 1.0
+cd = 1.2
 pierce = 1
 pellets = 1
 note = "A3 §3.4 L5：tick_atk 11 × 9 跳/s；灼焦上限 5→8 层；满层 DPS 162.4"
@@ -71,7 +71,7 @@ threshold_traits = [{
 "effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
 }]
 laser = {
-"beam_length": 560.0, "beam_width": 14.0, "tick_rate": 8.0,
+"beam_length": 560.0, "beam_width": 14.0, "tick_rate": 5.0,
 "scorch_max_layers": 5, "scorch_per_layer": 0.08,
 "refract_beams": 0, "refract_ratio": 0.6, "refract_depth": 2,
 "scorch_max_layers_levels": [5.0, 5.0, 5.0, 5.0, 8.0]

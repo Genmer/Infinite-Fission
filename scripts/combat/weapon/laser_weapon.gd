@@ -39,6 +39,7 @@ func try_fire() -> bool:
 func _on_tick_post(p_game_delta: float) -> void:
 	# 主束重定向 + 存活光束推进（死亡段裁剪）
 	if _main_beam != null and _main_beam.is_live():
+		_main_beam.set_origin(muzzle_position())
 		_main_beam.set_aim(aim_direction())
 	for beam in active_beams.duplicate():
 		if beam.is_live():
@@ -55,6 +56,8 @@ func _spawn_beam(p_origin: Vector2, p_dir: Vector2, p_depth: int, p_dmg_mult: fl
 		EventBus.emit_chain_fused(p_depth, &"laser_refract")
 		return null
 	var beam := laser_pool.acquire() as LaserBeam
+	if beam == null:
+		return null   # 池满拒绝
 	if beam == null:
 		return null
 	beam.weapon = self

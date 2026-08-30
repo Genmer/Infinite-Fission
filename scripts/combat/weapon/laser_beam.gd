@@ -21,6 +21,7 @@ var tick_atk: float = 6.0                      # 每跳基础 ATK（L 表 tick_a
 var tick_rate: float = 8.0                     # 跳/s
 var beam_length: float = 560.0
 var beam_width: float = 14.0
+var lifetime: float = 0.0     # 脉冲寿命 s（0=常驻，>0=脉冲收束，用户反馈「激光常驻」）
 var scorch_max_layers: int = 5                 # ≤8（schema 上限；W4 L5 = 8）
 var scorch_per_layer: float = 0.08             # 每层 +8%（本光束自身乘算）
 var refract_beams: int = 0
@@ -80,6 +81,7 @@ func spawn(p_params: Dictionary) -> void:
 	tick_atk = maxf(float(p_params.get("tick_atk", 6.0)), 0.0)
 	tick_rate = maxf(float(p_params.get("tick_rate", 8.0)), 0.1)
 	beam_length = maxf(float(p_params.get("beam_length", 560.0)), 1.0)
+	lifetime = maxf(float(p_params.get("lifetime", 0.0)), 0.0)
 	beam_width = maxf(float(p_params.get("beam_width", 14.0)), 1.0)
 	scorch_max_layers = clampi(int(p_params.get("scorch_max_layers", 5)), 1, 8)
 	scorch_per_layer = float(p_params.get("scorch_per_layer", 0.08))
@@ -106,6 +108,7 @@ func spawn(p_params: Dictionary) -> void:
 			_hit_exclusions[int(uid_v)] = true
 	_tick_left = 1.0 / tick_rate
 	_time_alive = 0.0
+	lifetime = 0.0
 	popup_count = 0
 	settle_count = 0
 	_live = true
@@ -122,6 +125,9 @@ func tick(p_game_delta: float) -> void:
 	if not _live:
 		return
 	_time_alive += p_game_delta
+	if lifetime > 0.0 and _time_alive >= lifetime:
+		_recycle()
+		return
 	var dir := _resolve_aim()
 	var hit := _first_hit(dir)
 	var end_pos := global_position + dir * beam_length
@@ -131,6 +137,10 @@ func tick(p_game_delta: float) -> void:
 	_sync_line(end_pos)
 	_tick_settle(hit, p_game_delta)
 
+
+func set_origin(p_origin: Vector2) -> void:
+	# 光束跟随（用户反馈「激光不跟随主角」：武器每帧更新原点）
+	position = p_origin
 
 func set_aim(p_dir: Vector2) -> void:
 	# 主束指向（武器每帧刷新——目标策略：最近/最前）

@@ -182,7 +182,10 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 		CardKind.TRAIT, CardKind.FALLBACK:
 			var data: TraitData = p_card.get("data")
 			if data != null:
-				var weapon := _primary_weapon(p_player)
+				# 词条挂目标武器（用户反馈「全是手枪强化」——卡面标注的武器即实际挂载对象）
+				var target: Object = p_card.get("target_weapon")
+				var weapon := target if target is WeaponBase and is_instance_valid(target) \
+					else _primary_weapon(p_player)
 				if weapon != null:
 					weapon.attach_trait(data)
 		CardKind.RELIC:
@@ -225,10 +228,11 @@ func _roll_one(p_player: Node, p_wave: int, p_picked: Array[StringName]) -> Dict
 					p_picked.append(StringName("wpn#%d" % int(weapon.get("uid"))))
 					return _make_mastery_card(weapon)
 			"ADD", "MULT", "MECH", "ELEM":
-				var trait_pool := _trait_candidates(category, p_player, p_picked)
+				var target := _random_owned_weapon(p_player)
+				var trait_pool := _trait_candidates(category, p_player, p_picked, target)
 				if not trait_pool.is_empty():
 					var tid: StringName = trait_pool[rng.randi_range(0, trait_pool.size() - 1)]
-					return _make_trait_card(tid, p_wave)
+					return _make_trait_card(tid, p_wave, target)
 			"WEAPON":
 				# 新武器卡（用户反馈 2026-08-29）：未持有武器 + 有空槽 → 随机一把上架
 				var weapon_pool := _weapon_candidates(p_player)
@@ -245,12 +249,22 @@ func _roll_one(p_player: Node, p_wave: int, p_picked: Array[StringName]) -> Dict
 	return {}                                   # 全类目空 → 调用方 fallback
 
 
-func _trait_candidates(p_category: String, p_player: Node, p_picked: Array[StringName]) -> Array[StringName]:
-	# 类别 → PoolClass → 注册表池 → 叠层/重复过滤（§6.4：至 stack_max 移出池）
+func _trait_candidates(p_category: String, p_player: Node, p_picked: Array[StringName],
+		p_target: WeaponBase = null) -> Array[StringName]:
+	# 类别 → PoolClass → 注册表池 → 叠层/重复过滤（§6.4：至 stack_max 移出池）。
+	# p_target 给定时按目标武器自身叠层计数（词条目标随机化，2026-08-30）
 	var pool_class := _pool_class_for(p_category)
 	if registry == null or pool_class < 0:
 		return []
 	var used_layers := _used_trait_layers(p_player)
+	if p_target != null and is_instance_valid(p_target):
+		used_layers = {}
+		var tstack: Variant = p_target.get("trait_stack")
+		if tstack != null and tstack.get("traits") != null:
+			for tb: Variant in (tstack.get("traits") as Array):
+				var td: Variant = tb.get("data")
+				if td != null:
+					used_layers[StringName(str(td.get("id")))] = int(tb.get("layers"))
 	var out: Array[StringName] = []
 	for tid in registry.trait_ids_by_pool(pool_class):
 		if p_picked.has(tid):
@@ -334,15 +348,28 @@ func _unowned_relic_ids() -> Array[StringName]:
 	return out
 
 
-func _make_trait_card(p_tid: StringName, p_wave: int) -> Dictionary:
+func _make_trait_card(p_tid: StringName, p_wave: int, p_target: WeaponBase = null) -> Dictionary:
 	var t := registry.get_trait(p_tid)
+	var rarity := _roll_rarity(p_wave)
+	var scale := float(RARITY_VALUE_SCALE[clampi(rarity, 0, RARITY_VALUE_SCALE.size() - 1)])
+	var data: TraitData = null
+	var desc := ""
+	if t != null:
+		data = t.duplicate() as TraitData
+		if scale > 1.0:
+			data.value = t.value * scale
+			desc = _scaled_description(t.description, scale, rarity)
+			data.description = desc
+	var prefix := ("【%s】" % _weapon_short_name(p_target)) if p_target != null else ""
 	return {
 		"kind": CardKind.TRAIT,
 		"id": p_tid,
-		"rarity": _roll_rarity(p_wave),
-		"data": t,
-		"display_name": t.display_name if t != null else String(p_tid),
-		"description": t.description if t != null else "",
+		"rarity": rarity,
+		"value_scale": scale,
+		"data": data,
+		"target_weapon": p_target,
+		"display_name": prefix + (t.display_name if t != null else String(p_tid)),
+		"description": desc if desc != "" else (t.description if t != null else ""),
 	}
 
 
@@ -477,6 +504,24 @@ func _used_trait_layers(p_player: Node) -> Dictionary:
 			var tid: StringName = tb.get("data").id
 			used[tid] = int(used.get(tid, 0)) + int(tb.get("layers"))
 	return used
+
+
+func _random_owned_weapon(p_player: Node) -> WeaponBase:
+	# 随机选一把已装备武器（词条目标——所有武器都有强化概率，用户反馈 2026-08-30）
+	var out: Array[WeaponBase] = []
+	for w in p_player.get("weapon_slots"):
+		if w is WeaponBase and is_instance_valid(w):
+			out.append(w)
+	if out.is_empty():
+		return _primary_weapon(p_player)
+	return out[rng.randi_range(0, out.size() - 1)]
+
+
+func _weapon_short_name(p_weapon: WeaponBase) -> String:
+	if p_weapon == null or not is_instance_valid(p_weapon):
+		return "?"
+	var wd: Variant = p_weapon.get("data")
+	return String(wd.get("display_name")) if wd != null else "?"
 
 
 func _primary_weapon(p_player: Node) -> WeaponBase:

@@ -258,6 +258,7 @@ func start_run() -> bool:
 		return false
 	wave_director.wave_table = MapTable.load_table(current_map_id, registry)
 	Meta.set_run_map(current_map_id)
+	card_generator.rng.randomize()               # 卡池每局随机（固定种子=「选项写死」观感根因；pkg 测试自行定种子）
 	player.set_character(Meta.character_id)   # 角色应用（含养成加成——M8/角色系统）
 	var map_def := MapTable.get_map(current_map_id)
 	spawner.map_mods = {}
