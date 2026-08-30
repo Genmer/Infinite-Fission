@@ -556,17 +556,22 @@ func _rebuild_char_select() -> void:
 	for i in range(CharacterTable.count()):
 		var def := CharacterTable.CHARACTERS[i]
 		var picked: bool = Meta.character_id == def.id
+		var unlocked: bool = Meta.is_character_unlocked(def.id)
 		var row := Panel.new()
 		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(14.0, 3, false))
 		row.custom_minimum_size = Vector2(576.0, 118.0)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var name_l := Label.new()
-		StickerTheme.label_sticker(name_l, 20, PopPalette.PLAYER if picked else PopPalette.INK,
+		StickerTheme.label_sticker(name_l, 20, PopPalette.PLAYER if picked else (PopPalette.INK if unlocked else PopPalette.INK_SOFT),
 			0, Color.WHITE, true)
-		name_l.text = String(def.name) + ("　✓ 当前" if picked else "")
+		var unlock_hint := ""
+		if not unlocked:
+			var umap: StringName = def.get("unlock_map", &"")
+			unlock_hint = "　🔒 通关「%s」解锁" % String(MapTable.get_map(umap).get("name", "?"))
+		name_l.text = String(def.name) + ("　✓ 当前" if picked else "") + unlock_hint
 		name_l.position = Vector2(20.0, 12.0)
-		name_l.size = Vector2(400.0, 28.0)
+		name_l.size = Vector2(460.0, 28.0)
 		name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(name_l)
 		var stat_l := Label.new()
@@ -585,7 +590,7 @@ func _rebuild_char_select() -> void:
 		skill_l.size = Vector2(540.0, 20.0)
 		skill_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(skill_l)
-		if not picked:
+		if not picked and unlocked:
 			var pick_btn := Button.new()
 			pick_btn.text = "选用"
 			pick_btn.add_theme_font_size_override("font_size", 16)

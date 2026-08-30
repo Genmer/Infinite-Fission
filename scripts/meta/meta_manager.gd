@@ -127,6 +127,16 @@ func set_character_id(p_id: StringName) -> void:
 	_save()
 
 
+func is_character_unlocked(p_id: StringName) -> bool:
+	# 角色解锁链（用户反馈「通关大关解锁，每个大关一个」）：unlock_map 空 = 初始；
+	# 否则 = 对应大关已通关（派生自 maps_cleared——零新增存档字段）
+	var def := CharacterTable.get_character(p_id)
+	var unlock_map: StringName = def.get("unlock_map", &"")
+	if unlock_map == &"":
+		return true
+	return is_map_cleared(unlock_map)
+
+
 func _ready() -> void:
 	_load()
 	EventBus.enemy_killed.connect(_on_enemy_killed)

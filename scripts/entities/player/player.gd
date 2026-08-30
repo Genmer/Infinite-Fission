@@ -296,6 +296,9 @@ func unlock_slot(p_slot: int) -> bool:
 
 func set_character(p_id: StringName) -> void:
 	# 应用角色（大厅选人 → GameLoop.start_run/respawn 调用；含局外养成加成——M8）
+	# 解锁守卫：未通关解锁链的角色回落哨兵（存档迁移/异常输入防御）
+	if not Meta.is_character_unlocked(p_id):
+		p_id = &"sentinel"
 	character_id = p_id
 	var def := CharacterTable.get_character(p_id)
 	max_hp = float(def.get("hp", 60.0)) + Meta.hp_bonus()
@@ -312,6 +315,50 @@ func set_character(p_id: StringName) -> void:
 		if w is WeaponBase and is_instance_valid(w):
 			(w as WeaponBase).meta_atk_pct = Meta.atk_pct() + character_atk_pct
 			(w as WeaponBase).call(&"_invalidate_panel")
+
+
+func _skill_time_stop() -> void:
+	# 时滞力场（演算者·零·终极控场）：全场敌人静止 2.5s——直写 freeze_timer
+	#（角色终极无视免疫位；仅定身，不清血——数值零副作用）
+	var grid: Variant = _deps.get("enemy_grid")
+	if grid == null:
+		return
+	for e in (grid as SpaceGrid).query_circle(global_position, 4096.0):
+		if e == null or bool(e.get("dead")):
+			continue
+		var st: Variant = e.get("elemental")
+		if st is ElementalState:
+			(st as ElementalState).freeze_timer = 2.5   # 冻结计时器在元素状态容器（真修）
+	DebugStats.count(&"time_stop")
+
+
+func _skill_poison_nova() -> void:
+	# 毒沼绽放（腐化者·莽·终极毒核）：全屏敌人结算 150% 主武器攻击（AOE_SECONDARY 通道）
+	var grid: Variant = _deps.get("enemy_grid")
+	var pipeline: Variant = _deps.get("pipeline")
+	var w0: Variant = weapon_slots[0] if weapon_slots.size() > 0 else null
+	if grid == null or w0 == null:
+		return
+	var base := float((w0 as WeaponBase).build_panel_snapshot().get("base_atk", 0.0)) * 1.5
+	var settled := 0
+	for e in (grid as SpaceGrid).query_circle(global_position, 4096.0):
+		if e == null or bool(e.get("dead")):
+			continue
+		var ctx := DamageContext.make()
+		ctx.source_uid = int(get_instance_id())   # 玩家侧 nova 幂等键（Player 无 uid 字段）
+		ctx.target = e
+		ctx.target_uid = int(e.get("uid"))
+		ctx.frame_stamp = GameConfig.frame_stamp
+		ctx.base_atk = base
+		ctx.element = GameConst.Element.FIR
+		ctx.hit_flags |= GameConst.HIT_IS_AOE_SECONDARY
+		ctx.crit_chance = 0.0
+		ctx.pos = (e as Node2D).global_position
+		if pipeline != null and (pipeline as Object).has_method(&"resolve"):
+			pipeline.call(&"resolve", ctx)
+			settled += 1
+	if settled > 0:
+		DebugStats.count(&"poison_nova")
 
 
 func _clamp_to_playfield_pos(p_pos: Vector2) -> Vector2:
@@ -343,6 +390,10 @@ func activate_skill() -> bool:
 			var dir := _last_move_dir if _last_move_dir != Vector2.ZERO else Vector2.UP
 			global_position = _clamp_to_playfield_pos(global_position + dir * 260.0)
 			invuln_left = maxf(invuln_left, 1.0)
+		&"zero":
+			_skill_time_stop()
+		&"mank":
+			_skill_poison_nova()
 	DebugStats.count(&"skill_used")
 	return true
 

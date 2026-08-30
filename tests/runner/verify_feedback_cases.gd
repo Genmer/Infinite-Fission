@@ -548,7 +548,18 @@ func _test_swamp_eco() -> void:
 # ── ⑱ 角色系统 + 局外养成（M8 落地验收） ─────────────────────────
 func _test_char_meta() -> void:
 	print("── 角色与局外养成 ──")
-	_check("CharacterTable：4 角色（含游侠·岚）", CharacterTable.count() == 4)
+	_check("CharacterTable：6 角色（解锁链完整）", CharacterTable.count() == 6)
+	# 解锁链：全图通关（测试环境解锁全部角色）
+	for m in MapTable.MAPS:
+		Meta.mark_map_cleared(m.id)
+	_check("解锁链：哨兵恒解锁 / 零需树海通关",
+		Meta.is_character_unlocked(&"sentinel") and Meta.is_character_unlocked(&"zero"))
+	Meta.maps_cleared = {}
+	Meta.mark_map_cleared(&"world_grass")
+	_check("解锁链：薇拉解锁（草原） / 零回落锁定（树海未清）",
+		Meta.is_character_unlocked(&"veles") and not Meta.is_character_unlocked(&"zero"))
+	for m in MapTable.MAPS:
+		Meta.mark_map_cleared(m.id)
 	# 角色应用：薇拉（45 血 + 25% 攻）
 	var p: Node = _gl.player
 	_gl.state = GameConst.GameStatus.MENU
@@ -571,10 +582,39 @@ func _test_char_meta() -> void:
 	for i in range(200):
 		p.call(&"tick", DT, Vector2.ZERO)
 	_check("技能：增益到期 rof_mult 回 1", absf(float(p.get("rof_mult")) - 1.0) <= 0.001)
-	# 磐：践踏消弹
+	# 磐：践踏消弹（增强后 -5% 攻）
 	Meta.character_id = &"bulwark"
 	p.call(&"set_character", &"bulwark")
-	_check("角色：磐血量 95 + 养成", absf(float(p.get("max_hp")) - (95.0 + Meta.hp_bonus())) <= 0.01)
+	_check("角色：磐血量 95 + 养成（增强 -5% 攻口径）",
+		absf(float(p.get("max_hp")) - (95.0 + Meta.hp_bonus())) <= 0.01)
+	# 零：时滞力场（全场静止）
+	var stop_target := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	stop_target.spawn(_fixture_enemy(&"E_TS", 100.0), 1, 0)
+	_gl.enemy_grid.rebuild([stop_target])
+	_gl.elemental.register_host(stop_target)     # 冻结计时器在 ElementalState（需挂宿主）
+	Meta.character_id = &"zero"
+	p.call(&"set_character", &"zero")
+	_check("角色：零血量 65 + 养成", absf(float(p.get("max_hp")) - (65.0 + Meta.hp_bonus())) <= 0.01)
+	p.call(&"activate_skill")
+	_check("技能：时滞力场 → 全场静止 2.5s",
+		stop_target.elemental != null
+		and float((stop_target.elemental as ElementalState).freeze_timer) >= 2.4)
+	_gl.elemental.unregister_host(stop_target)
+	_gl.pools[&"enemy"].release(stop_target)
+	# 莽：毒沼绽放（全屏毒伤）
+	var nova_target := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	nova_target.spawn(_fixture_enemy(&"E_Nova", 100000.0), 1, 0)
+	_gl.elemental.register_host(nova_target)
+	_gl.enemy_grid.rebuild([nova_target])
+	Meta.character_id = &"mank"
+	p.call(&"set_character", &"mank")
+	var nhp0: float = float(nova_target.get("hp"))
+	p.set("skill_cd_left", 0.0)
+	p.call(&"activate_skill")
+	_check("技能：毒沼绽放 → 全屏 150% 攻结算", float(nova_target.get("hp")) < nhp0)
+	_gl.elemental.unregister_host(nova_target)
+	_gl.pools[&"enemy"].release(nova_target)
+	Meta.character_id = &"sentinel"
 	# 养成：结晶购买
 	Meta.crystals = 200
 	Meta.upgrades = {}
