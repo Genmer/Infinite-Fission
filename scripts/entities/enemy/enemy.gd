@@ -24,6 +24,22 @@ var boss_phase: int = 0                       # Boss 阶段（HP<50% → 2 等�
 var fire_cd_left: float = 0.0                 # RANGED 行为射击冷却
 var projectile_pool: ProjectilePool = null    # 敌弹池注入（RANGED 开火；ballistic 场景池）
 var enemy_grid: SpaceGrid = null               # 网格引用注入（E-10 分离力/查询预留）
+var summon_spawner: EnemySpawner = null       # v0.6.0 召唤注入（Boss 召唤入队宿主；spawner 出队段注入）
+var _spawn_wave: int = 1                      # v0.6.0 召唤波号快照（波次成长口径）
+
+# ── v0.6.0 Boss 弹幕/召唤（A4 §7；T7 落地，Boss3 charge/phase3/laser_sweep defer 不消费） ──
+var _boss_pattern: Dictionary = {}            # bullet_patterns 快照（spawn 时 duplicate）
+var _boss_summons: Dictionary = {}            # summons 快照（spawn 时 duplicate）
+var _pattern_cd_left: float = 0.0             # 弹幕计时（开场半冷却防同帧齐射）
+var _summon_cd_left: float = 0.0              # 召唤计时（开场半冷却）
+var _spiral_offset: float = 0.0               # spiral 逐轮推进角（rad）
+
+const BOSS_BULLET_SPEED := 300.0              # Boss 弹速 px/s（A3 §2.2 Boss 弹）
+const BOSS_BULLET_LIFETIME := 6.0             # Boss 弹存活 s
+const BOSS_BULLET_RADIUS := 6.0               # Boss 弹命中半径 px
+const FAN_STEP_DEG := 10.0                    # fan 相邻弹夹角（P2 用 count_phase2）
+const SPIRAL_ADVANCE := 0.7                   # spiral 每轮推进角 rad
+const BOSS_SUMMON_ACTIVE_CAP := 12            # 场上召唤上限（spawner.active_count 闸）
 
 # RANGED 行为参数（EnemyData.ranged 快照）
 var bullet_speed: float = 300.0
@@ -133,6 +149,13 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	spread_deg = float(data.ranged.get("spread", 0.0))
 	fire_range = float(data.ranged.get("fire_range", 340.0))
 	fire_cd_left = fire_cd * 0.5              # 开场半冷却（避免同帧齐射）
+	# v0.6.0 Boss 弹幕/召唤快照（duplicate 防资源共享改写；空段 = 非 Boss/无弹幕，tick 短路）
+	_boss_pattern = (data.boss.get("bullet_patterns", {}) as Dictionary).duplicate()
+	_boss_summons = (data.boss.get("summons", {}) as Dictionary).duplicate()
+	_pattern_cd_left = float(_boss_pattern.get("interval_s", 6.0)) * 0.5   # 开场半冷却
+	_summon_cd_left = float(_boss_summons.get("interval_s", 12.0)) * 0.5
+	_spiral_offset = 0.0
+	_spawn_wave = p_wave
 	_flash_left = 0.0
 	_fade_left = FADE_IN_TIME
 	modulate.a = 0.0                          # 入场渐显起点
@@ -174,6 +197,8 @@ func tick(p_game_delta: float) -> void:
 		for area in _hit_area.get_overlapping_areas():
 			if area is Player:
 				(area as Player).take_contact_damage(contact_dmg)
+	if is_boss():
+		_tick_boss_patterns(p_game_delta)     # v0.6.0：Boss 弹幕/召唤计时（A4 §7）
 	_check_boss_phase()
 
 
@@ -323,6 +348,106 @@ func _fire_at(p_player: Node2D) -> void:
 	})
 
 
+# ── v0.6.0 Boss 弹幕三形态 + 召唤（A4 §7） ────────────────────────
+func _tick_boss_patterns(p_game_delta: float) -> void:
+	# Boss 专用计时（tick 内 is_boss 时调用；dead 短路已由 tick 入口拦）：
+	# 弹幕/召唤双计时器，开场半冷却（interval_s×0.5），发射后回满间隔
+	if dead:
+		return
+	if not _boss_pattern.is_empty():
+		_pattern_cd_left -= p_game_delta
+		if _pattern_cd_left <= 0.0:
+			_fire_pattern()
+			_pattern_cd_left = maxf(float(_boss_pattern.get("interval_s", 6.0)), 0.1)
+	if not _boss_summons.is_empty():
+		_summon_cd_left -= p_game_delta
+		if _summon_cd_left <= 0.0:
+			_summon_allies()
+			_summon_cd_left = maxf(float(_boss_summons.get("interval_s", 12.0)), 0.1)
+
+
+func _fire_pattern() -> void:
+	# 三形态（A4 §7）：fan（朝向玩家扇形）/ ring（环形均分）/ spiral（逐轮推进）。
+	# P2 判定统一 boss_phase >= 2（真源 _check_boss_phase HP<50%）；count_phase2 /
+	# speed_mult_phase2 仅 P2 生效；伤害只走 panel_snapshot.base_atk 单点路径。
+	var count := int(_boss_pattern.get("count", 8))
+	var phase2 := boss_phase >= 2
+	if phase2 and _boss_pattern.has("count_phase2"):
+		count = int(_boss_pattern.get("count_phase2", count))
+	var speed := BOSS_BULLET_SPEED
+	if phase2 and _boss_pattern.has("speed_mult_phase2"):
+		speed *= float(_boss_pattern.get("speed_mult_phase2", 1.0))
+	var dmg := float(_boss_pattern.get("dmg", 10.0))
+	match String(_boss_pattern.get("pattern", "fan")):
+		"fan":
+			var player := _player()
+			var to_player := 0.0
+			if player != null:
+				to_player = (player.global_position - global_position).angle()
+			for i in range(count):
+				var angle := to_player \
+					+ (float(i) - float(count - 1) / 2.0) * deg_to_rad(FAN_STEP_DEG)
+				_fire_boss_bullet(angle, speed, dmg)
+		"ring":
+			for i in range(count):
+				_fire_boss_bullet(float(i) * TAU / float(count), speed, dmg)
+		"spiral":
+			for i in range(count):
+				_fire_boss_bullet(_spiral_offset + float(i) * TAU / float(count), speed, dmg)
+			_spiral_offset = fmod(_spiral_offset + SPIRAL_ADVANCE, TAU)
+		_:
+			pass                                    # 未知形态：跳过该轮（降级不崩溃）
+
+
+func _fire_boss_bullet(p_angle: float, p_speed: float, p_dmg: float) -> void:
+	# 单发 Boss 弹（★ 伤害只走 panel_snapshot.base_atk → take_contact_damage 单点，
+	# projectile_base team=1 既有路径；禁入 DamagePipeline/settle_aoe——双落血防线，A4 §7 留痕 3）
+	if projectile_pool == null:
+		return
+	var bullet := projectile_pool.acquire() as BallisticProjectile
+	if bullet == null:
+		return                                      # 满池：跳过该发（不阻塞不崩溃）
+	bullet.pool = projectile_pool
+	bullet.position = global_position
+	bullet.spawn({
+		"velocity": Vector2.RIGHT.rotated(p_angle) * p_speed,
+		"lifetime": BOSS_BULLET_LIFETIME,
+		"pierce": 1,
+		"bounces": 0,
+		"hitbox_radius": BOSS_BULLET_RADIUS,
+		"team": 1,
+		"panel_snapshot": {"base_atk": p_dmg},
+	})
+
+
+func _summon_allies() -> void:
+	# 召唤（A4 §7）：门 = spawner 注入 + 场上 < BOSS_SUMMON_ACTIVE_CAP + 分波门
+	#（summons.phase 仅 P2 放行）；位置 = Boss 周围半径 90px 环形均分（无 RNG 确定性）；
+	# mode=="split" 且 hp_ratio → hp_override = max_hp × hp_ratio（spawn 侧消费）
+	if summon_spawner == null or _boss_summons.is_empty() or dead:
+		return
+	if summon_spawner.active_count() >= BOSS_SUMMON_ACTIVE_CAP:
+		return
+	if _boss_summons.has("phase") and boss_phase < int(_boss_summons.get("phase", 0)):
+		return                                      # 分波门未开（P2 才召唤）
+	var data_id := StringName(String(_boss_summons.get("enemy_id", "")))
+	if data_id == &"":
+		return
+	var count := int(_boss_summons.get("count", 1))
+	if boss_phase >= 2 and _boss_summons.has("count_phase2"):
+		count = int(_boss_summons.get("count_phase2", count))
+	var hp_override := 0.0
+	if String(_boss_summons.get("mode", "")) == "split":
+		hp_override = maxf(float(_boss_summons.get("hp_ratio", 0.0)), 0.0)
+	for i in range(count):
+		var pos := global_position \
+			+ Vector2.RIGHT.rotated(TAU * float(i) / float(count)) * 90.0
+		var entry := {"data_id": data_id, "wave": _spawn_wave, "tags": 0, "pos": pos}
+		if hp_override > 0.0:
+			entry["hp_override"] = max_hp * hp_override
+		summon_spawner.enqueue(entry)
+
+
 func _check_boss_phase() -> void:
 	# Boss 阶段检查（HP<50% → 阶段2 全抗 +phase2_resist；阶段3 预留）
 	if not is_boss() or boss_phase != 1:
@@ -358,6 +483,13 @@ func _reset_state() -> void:
 	fire_cd_left = 0.0
 	projectile_pool = null
 	enemy_grid = null
+	summon_spawner = null                       # v0.6.0：Boss 弹幕/召唤全量清零（含注入引用）
+	_boss_pattern = {}
+	_boss_summons = {}
+	_pattern_cd_left = 0.0
+	_summon_cd_left = 0.0
+	_spiral_offset = 0.0
+	_spawn_wave = 1
 	bullet_speed = 300.0
 	fire_cd = 1.5
 	bullet_atk_ratio = 0.5

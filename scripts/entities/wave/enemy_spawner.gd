@@ -31,7 +31,8 @@ func prewarm() -> void:
 
 
 func enqueue(p_entry: Dictionary) -> void:
-	# WaveDirector 投放生成请求：{data_id, wave, tags, pos}（pos 可缺省→出生点抽样）
+	# WaveDirector/Boss 召唤投放生成请求：{data_id, wave, tags, pos}（pos 可缺省→出生点抽样；
+	# v0.6.0 可选键 hp_override:float——>0 时 spawn 后覆写 max_hp/hp，A4 §7）
 	spawn_queue.append(p_entry)
 
 
@@ -58,8 +59,15 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		enemy.spawn(data, int(entry.get("wave", 1)), int(entry.get("tags", 0)))
 		enemy.projectile_pool = projectile_pool
 		enemy.enemy_grid = enemy_grid
+		enemy.summon_spawner = self                  # v0.6.0：Boss 召唤宿主注入（A4 §7）
 		if elemental_system != null:
 			elemental_system.register_host(enemy)   # 包 4：出生挂元素状态容器（帧序⑤宿主）
+		# v0.6.0 增量键 hp_override（A4 §7）：>0 → spawn 后覆写 max_hp/hp（Boss split 子代血量）
+		var hp_ov: Variant = entry.get("hp_override", 0.0)
+		if typeof(hp_ov) == TYPE_FLOAT or typeof(hp_ov) == TYPE_INT:
+			if float(hp_ov) > 0.0:
+				enemy.max_hp = maxf(float(hp_ov), 1.0)
+				enemy.hp = enemy.max_hp
 		var pos_v: Variant = entry.get("pos", null)
 		if pos_v is Vector2:
 			enemy.position = pos_v

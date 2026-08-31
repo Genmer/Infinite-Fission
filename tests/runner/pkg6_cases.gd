@@ -24,6 +24,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_weapon_cards()                          # T5
 	_test_hud_layout_and_banner()                 # T2
 	_test_shop()                                  # T6
+	_test_boss_patterns()                         # T7
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -708,6 +709,234 @@ func _total_trait_layers(p_player: Node) -> int:
 		if w is WeaponBase and is_instance_valid(w) and (w as WeaponBase).trait_stack != null:
 			total += (w as WeaponBase).trait_stack.size()
 	return total
+
+
+# ── T7：Boss 弹幕三形态 + 召唤（节奏 / P2 / 敌弹伤害 / split / 停射 / wave_cleared 可达） ──
+func _test_boss_patterns() -> void:
+	print("── T7 Boss 弹幕 ──")
+	var proj_pool: ProjectilePool = _gl.pools[&"projectile"]
+	var player := _gl.player
+	player.global_position = Vector2(360.0, 1100.0)
+	player.invuln_left = 0.0
+	player.hp = player.max_hp                     # 夹具满血（T6 heal 残留隔离）
+	_release_enemy_bullets(proj_pool)
+	# ① boss1 fan：P1 单轮 8 发（开场半冷却 3s 快照）+ 发射后 6s 节奏
+	var boss1: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire() as Enemy
+	boss1.spawn(_gl.registry.get_enemy(&"E6_boss1"), 10, GameConst.TAG_BOSS)
+	boss1.position = Vector2(360.0, 200.0)
+	boss1.summon_spawner = _gl.spawner
+	boss1.projectile_pool = _gl.pools[&"projectile"]   # 手动取出：注入敌弹池（spawner.tick 同款）
+	_check("夹具：boss1 快照（fan/6s/8 发/半冷却 3s）",
+		String(boss1._boss_pattern.get("pattern")) == "fan"
+		and is_equal_approx(float(boss1._boss_pattern.get("interval_s")), 6.0)
+		and int(boss1._boss_pattern.get("count")) == 8
+		and is_equal_approx(boss1._pattern_cd_left, 3.0))
+	boss1._pattern_cd_left = DT
+	boss1.tick(DT)
+	_check("boss1 P1 fan 单轮 8 发", _enemy_bullet_count(proj_pool) == 8)
+	var fired_at := 0
+	for i in range(800):
+		boss1.tick(DT)
+		if _enemy_bullet_count(proj_pool) >= 16:
+			fired_at = i + 1
+			break
+	_check("boss1 6s 节奏：第二轮恰在 +720 帧 ±2", absi(fired_at - 720) <= 2,
+		"fired_at=%d" % fired_at)
+	# ② boss1 P2：count_phase2 → 12 发
+	boss1.boss_phase = 2
+	_release_enemy_bullets(proj_pool)
+	boss1._pattern_cd_left = DT
+	boss1.tick(DT)
+	_check("boss1 P2 fan 单轮 12 发（count_phase2，A4 §7）",
+		_enemy_bullet_count(proj_pool) == 12)
+	_release_enemy_bullets(proj_pool)
+	# ③ 敌弹 team=1 伤害：pattern dmg → take_contact_damage 单点（player +x 方向 100px）
+	player.global_position = boss1.global_position + Vector2(100.0, 0.0)
+	player.invuln_left = 0.0
+	var hp0: float = player.hp
+	boss1._fire_boss_bullet(0.0, 300.0, 12.0)
+	_check("夹具：敌弹 1 发 + 朝向玩家", _enemy_bullet_count(proj_pool) == 1)
+	var bullet: ProjectileBase = null
+	for proj in proj_pool.active_projectiles():
+		if proj is ProjectileBase and (proj as ProjectileBase).team == 1:
+			bullet = proj
+	var frames := 0
+	while bullet != null and is_instance_valid(bullet) and frames < 120:
+		bullet.tick(DT)                           # 单弹直驱（team=1 路径免网格）
+		frames += 1
+		if not is_instance_valid(bullet) or not bullet._live:
+			break                                 # 回收完成（_recycle 置 _live=false）
+	_check("敌弹命中玩家：扣血 = pattern dmg 12（单点，双落血防线）",
+		is_equal_approx(player.hp, hp0 - 12.0), "hp=%s" % str(player.hp))
+	_check("敌弹命中后回收（pool 循环）", _enemy_bullet_count(proj_pool) == 0)
+	# ④ boss2 ring 16 发 + P2 弹速 ×1.4 + split 召唤 hp_override
+	var boss2: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire() as Enemy
+	boss2.spawn(_gl.registry.get_enemy(&"E6_boss2"), 20, GameConst.TAG_BOSS)
+	boss2.position = Vector2(360.0, 200.0)
+	boss2.summon_spawner = _gl.spawner
+	boss2.projectile_pool = _gl.pools[&"projectile"]   # 手动取出：注入敌弹池（spawner.tick 同款）
+	boss2._pattern_cd_left = DT
+	boss2.tick(DT)
+	_check("boss2 P1 ring 单轮 16 发 + 弹速 300", _enemy_bullet_count(proj_pool) == 16
+		and _enemy_bullet_speed(proj_pool) > 0.0
+		and is_equal_approx(_enemy_bullet_speed(proj_pool), 300.0))
+	boss2.boss_phase = 2
+	_release_enemy_bullets(proj_pool)
+	boss2._pattern_cd_left = DT
+	boss2.tick(DT)
+	_check("boss2 P2 弹速 ×1.4（speed_mult_phase2=420）",
+		_enemy_bullet_count(proj_pool) == 16
+		and is_equal_approx(_enemy_bullet_speed(proj_pool), 420.0))
+	_release_enemy_bullets(proj_pool)
+	# split 召唤（P1，count 2）：hp_override = boss max_hp × 0.08
+	boss2.boss_phase = 1                          # 还原 P1（P2 时 count_phase2=3）
+	var queue0: int = _gl.spawner.queue_count()
+	boss2._summon_cd_left = DT
+	boss2.tick(DT)
+	_check("boss2 split 召唤入队 2（hp_override = max_hp × 0.08）",
+		_gl.spawner.queue_count() == queue0 + 2)
+	var override_expected: float = boss2.max_hp * 0.08
+	_gl.spawner.tick(DT, _gl.enemy_grid)          # 出队 → spawn 消费 hp_override
+	var split_hit := 0
+	for e in _gl.spawner.active:
+		var enemy := e as Enemy
+		if enemy != null and enemy.data != null and enemy.data.id == &"E5_elite" \
+				and is_equal_approx(enemy.max_hp, maxf(override_expected, 1.0)):
+			split_hit += 1
+	_check("hp_override 消费：spawn 后 max_hp = override（±1 下限）", split_hit == 2,
+		"hit=%d expect=%s" % [split_hit, str(override_expected)])
+	for e in _gl.spawner.active.duplicate():
+		var enemy := e as Enemy
+		if enemy != null and enemy.data != null and enemy.data.id == &"E5_elite":
+			enemy.hp = 0.0
+			enemy.dead = true
+			_gl.spawner.on_enemy_killed(enemy)    # 静默归还（非战斗语义）
+	# ⑤ boss3 spiral 20 发 + 逐轮推进 + P2 分波召唤 6×E4
+	var boss3: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire() as Enemy
+	boss3.spawn(_gl.registry.get_enemy(&"E6_boss3"), 30, GameConst.TAG_BOSS)
+	boss3.position = Vector2(360.0, 300.0)
+	boss3.summon_spawner = _gl.spawner
+	boss3.projectile_pool = _gl.pools[&"projectile"]   # 手动取出：注入敌弹池（spawner.tick 同款）
+	_release_enemy_bullets(proj_pool)
+	boss3._pattern_cd_left = DT
+	boss3.tick(DT)
+	_check("boss3 P1 spiral 单轮 20 发 + 推进角 0.7rad",
+		_enemy_bullet_count(proj_pool) == 20 and is_equal_approx(boss3._spiral_offset, 0.7))
+	_release_enemy_bullets(proj_pool)
+	var queue1: int = _gl.spawner.queue_count()
+	boss3._summon_cd_left = DT
+	boss3.tick(DT)
+	_check("boss3 P1 召唤分波门拦截（phase 2 > boss_phase 1）",
+		_gl.spawner.queue_count() == queue1)
+	boss3.boss_phase = 2
+	boss3._summon_cd_left = DT
+	boss3.tick(DT)
+	var e4_rows: int = 0
+	var ring_ok := true
+	for entry in _gl.spawner.spawn_queue:
+		var row: Dictionary = entry
+		if StringName(String(row.get("data_id", ""))) == &"E4_volatile":
+			e4_rows += 1
+			var pos: Vector2 = row.get("pos")
+			if absf(pos.distance_to(boss3.global_position) - 90.0) > 0.5:
+				ring_ok = false
+	_check("boss3 P2 召唤 6×E4（90px 环形均分，无 RNG）", e4_rows == 6 and ring_ok,
+		"e4=%d ring=%s" % [e4_rows, str(ring_ok)])
+	_gl.spawner.spawn_queue.clear()
+	_release_enemy_bullets(proj_pool)
+	# ⑥ Boss 死后停射停召（快照清零 + dead 短路）
+	boss1.hp = 0.0
+	boss1._on_died()                              # enemy_killed → spawner 侧池归还（自动）
+	_check("Boss 死亡：快照清零（弹幕/召唤/注入）",
+		boss1._boss_pattern.is_empty() and boss1._boss_summons.is_empty()
+		and boss1.summon_spawner == null and boss1.dead)
+	var bullets_after_death: int = _enemy_bullet_count(proj_pool)
+	for i in range(30):
+		boss1.tick(DT)                            # dead 短路 → 零发射
+	_check("死后停射（弹量不变）", _enemy_bullet_count(proj_pool) == bullets_after_death)
+	_release_enemy_bullets(proj_pool)
+	# ⑦ Boss 波清尽 → wave_cleared 可达（独立环境：boss 死 → 伴随闸关 → 清空判据）
+	_test_boss_wave_clear()
+	# 清理：Boss 死亡掉落物（xp 碎片/金币）归还 + 召唤队列清空
+	for shard in _gl.active_shards:
+		if is_instance_valid(shard):
+			(_gl.pools[&"xp"] as XPPool).release(shard)
+	_gl.active_shards.clear()
+	for coin in _gl.active_coins:
+		if is_instance_valid(coin):
+			(_gl.pools[&"gold"] as GoldPool).release(coin)
+	_gl.active_coins.clear()
+	_gl.spawner.spawn_queue.clear()
+
+
+func _enemy_bullet_count(p_pool: ProjectilePool) -> int:
+	var n := 0
+	for proj in p_pool.active_projectiles():
+		if proj is ProjectileBase and (proj as ProjectileBase).team == 1:
+			n += 1
+	return n
+
+
+func _enemy_bullet_speed(p_pool: ProjectilePool) -> float:
+	for proj in p_pool.active_projectiles():
+		if proj is ProjectileBase and (proj as ProjectileBase).team == 1:
+			return (proj as ProjectileBase).velocity.length()
+	return -1.0
+
+
+func _release_enemy_bullets(p_pool: ProjectilePool) -> void:
+	for proj in p_pool.active_projectiles().duplicate():
+		if proj is ProjectileBase and (proj as ProjectileBase).team == 1:
+			p_pool.release(proj)
+
+
+func _test_boss_wave_clear() -> void:
+	# 独立环境（pkg4 escort 模式）：w10 BOSS 波 → Boss 死 → 伴随闸关 → 清空判据 →
+	# wave_cleared（BUFFER 相位与缓冲时长为派发证据）
+	var registry := DataRegistry.new()
+	registry.enemies[&"E1"] = _make_shop_env_enemy(&"E1")
+	var boss_data := _make_shop_env_enemy(&"BOSS")
+	boss_data.tags = GameConst.TAG_BOSS
+	boss_data.tp_cost = 64.0
+	registry.enemies[&"BOSS"] = boss_data
+	var table := WaveTableData.new()
+	var w10 := WaveEntryData.new()
+	w10.index = 10
+	w10.composition = []                          # Boss 由 _spawn_boss 单一入队（防双 Boss）
+	w10.events = [&"BOSS"]
+	table.entries = [w10]
+	var pool := EnemyPool.new()
+	pool.name = "BossClearPool"
+	tree.get_root().add_child(pool)
+	pool.setup(&"enemy_bossclear", load("res://scenes/combat/enemies/enemy.tscn"), 8)
+	var spawner := EnemySpawner.new()
+	spawner.name = "BossClearSpawner"
+	tree.get_root().add_child(spawner)
+	spawner.pool = pool
+	spawner.registry = registry
+	var director := WaveDirector.new()
+	director.name = "BossClearDirector"
+	tree.get_root().add_child(director)
+	director.spawner = spawner
+	director.registry = registry
+	director.wave_table = table
+	director.start_wave(10)
+	director.window_left = 0.001
+	director.tick(DT)                             # Boss 出队生成（boss_spawned → 伴随闸开）
+	_check("Boss 波：Boss 登场（_boss_seen）", director._boss_seen
+		and spawner.active_count() == 1)
+	for e in spawner.active.duplicate():
+		var boss := e as Enemy
+		if boss != null:
+			boss.dead = true                      # 静默击杀（不走 enemy_killed——隔离共享订阅）
+			spawner.on_enemy_killed(boss)         # active 移除 + 池归还（清空判据口径）
+	director.tick(DT)                             # 清空检测 → wave_cleared → BUFFER
+	_check("Boss 死后清尽 → wave_cleared 可达（BUFFER 4s 缓冲）",
+		director._phase == WaveDirector.WavePhase.BUFFER
+		and is_equal_approx(director.buffer_left, 4.0))
+	director.free()
+	spawner.free()
+	pool.free()
 
 
 # ── 断言 ──────────────────────────────────────────────────────────
