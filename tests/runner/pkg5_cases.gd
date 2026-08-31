@@ -88,18 +88,19 @@ func _test_main_scene_assembly() -> void:
 		and inst_ms < 3000.0, "boot=%s ms" % str(_gl._boot_elapsed_ms))
 	_check("切真管线：get_pipeline() 工厂默认真件（九步）",
 		_gl.pipeline is DamagePipeline and not (_gl.pipeline is DamagePipelineStub))
-	_check("组装：池×6 / 遗物处理器 / 菜单屏 / 相机就绪",
-		_gl.pools.size() == 6 and _gl.relic_handler != null
+	# v0.6.0 授权更新：池数量断言 ×6 → ×7（金币池挂载，A4 §7；与 pkg4 池断言同授权模式）
+	_check("组装：池×7 / 遗物处理器 / 菜单屏 / 相机就绪",
+		_gl.pools.size() == 7 and _gl.relic_handler != null
 		and _gl.menu_screen != null and _gl.camera != null)
 	_check("组装：MenuScreen 仅 MENU 态可见", _gl.menu_screen.is_menu_visible())
 	_check("冻结契约：Engine.time_scale 未被改写（§8.7）", Engine.time_scale == 1.0)
-	# AC-14.2：进 PLAYING 前各池完成预热（Boot 后立即对账——free == capacity ×6）
+	# AC-14.2：进 PLAYING 前各池完成预热（Boot 后立即对账——free == capacity；v0.6.0 起 ×7）
 	var prewarmed := true
 	for pool_id in _gl.pools:
 		var pool: ObjectPool = _gl.pools[pool_id]
 		if int(pool.stats()["free"]) != int(pool.stats()["capacity"]):
 			prewarmed = false
-	_check("AC-14.2：六池 Boot 期全量预热（live=0 / free=capacity）", prewarmed)
+	_check("AC-14.2：七池 Boot 期全量预热（live=0 / free=capacity）", prewarmed)
 
 
 # ── AC-16.1 全链冒烟 ──────────────────────────────────────────────

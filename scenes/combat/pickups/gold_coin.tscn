@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/entities/player/gold_coin.gd" id="1_gold"]
+
+[node name="GoldCoin" type="Area2D"]
+script = ExtResource("1_gold")

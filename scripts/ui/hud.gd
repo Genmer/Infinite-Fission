@@ -19,9 +19,11 @@ var _kill_label: Label = null
 var _time_label: Label = null
 var _build_label: Label = null                # 词条栏（武器/词条计数行）
 var _state_label: Label = null                # 状态提示（LEVEL_UP/PAUSED/GAME_OVER）
+var _gold_label: Label = null                 # v0.6.0 金币标签（临时位；T2 全量重排定坐标）
 
 var kills: int = 0
 var wave: int = 0
+var gold: int = 0                             # v0.6.0 金币余额显示值（gold_changed 驱动）
 var run_elapsed: float = 0.0                  # 计时（raw 通道累计——含顿帧，观感口径）
 var _fallback_timer: float = 0.0              # 1Hz 兜底刷新
 
@@ -36,9 +38,10 @@ func _ready() -> void:
 
 
 func bind_events() -> void:
-	# 订阅 player_hit / xp_gained / wave_started / enemy_killed / state_changed / damage_resolved
+	# 订阅 player_hit / xp_gained / gold_changed / wave_started / enemy_killed / state_changed / damage_resolved
 	EventBus.player_hit.connect(_on_player_hit)
 	EventBus.xp_gained.connect(_on_xp_gained)
+	EventBus.gold_changed.connect(_on_gold_changed)
 	EventBus.wave_started.connect(_on_wave_started)
 	EventBus.enemy_killed.connect(_on_enemy_killed)
 	EventBus.state_changed.connect(_on_state_changed)
@@ -93,6 +96,17 @@ func displayed_kills() -> int:
 
 func displayed_level_text() -> String:
 	return _level_label.text
+
+
+func displayed_gold() -> int:
+	# v0.6.0 金币余额观测口（headless 断言用）
+	return gold
+
+
+func _on_gold_changed(p_total: int) -> void:
+	# 金币余额刷新（gold_changed 事件驱动；GameLoop._add_gold 唯一来源）
+	gold = p_total
+	_gold_label.text = "G %d" % gold
 
 
 # ── 事件 ──────────────────────────────────────────────────────────
@@ -189,6 +203,7 @@ func _build_ui() -> void:
 	xp_bg.add_child(_xp_fill)
 
 	_level_label = _add_label(root, Vector2(352.0, 44.0), "Lv 1", 15)
+	_gold_label = _add_label(root, Vector2(352.0, 72.0), "G 0", 15)   # v0.6.0 临时位（T2 重排）
 	_wave_label = _add_label(root, Vector2(24.0, 92.0), "Wave 0", 15)
 	_kill_label = _add_label(root, Vector2(120.0, 92.0), "Kills 0", 15)
 	_time_label = _add_label(root, Vector2(224.0, 92.0), "0:00", 15)

@@ -24,9 +24,10 @@ extends Resource
 @export var projectile_soft_limit: int = 1500                # 软上限（丢弃+计数）
 @export var projectile_hard_limit: int = 2000                # 硬上限（回收最老）
 # 每值 >0（=0 → 致命拒绝启动）；§5.1 预热容量表：弹 640 / 敌 128 / 跳字 80 / 粒子 64 / 激光 12 / 经验 160
+# v0.6.0 增金币行 96（A4 §7 裁定）
 @export var pool_prewarm: Dictionary = {
 	"projectile": 640, "enemy": 128, "popup": 80,
-	"particle": 64, "laser": 12, "xp": 160,
+	"particle": 64, "laser": 12, "xp": 160, "gold": 96,
 }
 @export var frame_budget_ms: float = 8.3                     # §五.4 预算锚
 @export var contact_tick: float = 0.6                        # 受击无敌帧（F-35）

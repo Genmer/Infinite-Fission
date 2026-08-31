@@ -23,6 +23,8 @@ const SCENE_LASER := "res://scenes/combat/lasers/laser_beam.tscn"
 const MANIFEST_PATH := "res://data/manifest.cfg"
 const STARTING_WEAPON_ID := &"W1_pistol"      # Q-4：首发手枪
 const SCENE_XP_SHARD := "res://scenes/combat/pickups/xp_shard.tscn"   # B.1 经验碎片（XPPool 模板）
+const SCENE_GOLD_COIN := "res://scenes/combat/pickups/gold_coin.tscn"   # v0.6.0 金币（GoldPool 模板，A4 §3）
+const GOLD_RNG_SEED: int = 42                 # 金币掉落 roll 固定种子（A4 §7：与卡牌流同口径，可注入）
 # E-10 敌间分离力（软分离防重叠）：10Hz 降频 + 网格邻域查询（性能预案 §5.2-5；
 # 单轴单次推移 ≤4px 软钳——分离是观感修正而非物理约束，避免两帧内挤开 Boss 阵型）
 const SEPARATION_INTERVAL := 0.1              # 10Hz（架构 §2.11 敌间分离力口径）
@@ -68,22 +70,26 @@ var card_select_ui: CardSelectUI = null
 var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处理器
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
-var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp}
+var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp, gold}
 
 var frame_order: Array[StringName] = []       # 帧序探针（每帧重建；测试断言固定帧序）
 var current_candidates: Array[Dictionary] = []   # 当前货架（测试观测）
 var active_shards: Array[XpShard] = []        # 场上经验碎片（掉落/吸附/归还管理，B.1）
+var gold: int = 0                             # v0.6.0 金币余额（唯一真源；变更走 _add_gold → gold_changed）
+var active_coins: Array[GoldCoin] = []        # 场上金币（掉落/吸附/入账/归还管理，A4 §3）
 var stage_probe_enabled: bool = false         # 分阶段采样开关（架构 §5.5：P95 超线按阶段定位）
 var stage_probe_us: Dictionary = {}           # {StringName 阶段: 累计 usec}（仅 PLAYING 帧，逐帧重建）
 
 var _projectile_pool: ProjectilePool = null
 var _boot_elapsed_ms: float = 0.0             # Boot 耗时（AC：<3s 预算遥测）
 var _separation_left: float = SEPARATION_INTERVAL   # E-10 分离力 10Hz 相位
+var _gold_rng: RandomNumberGenerator = RandomNumberGenerator.new()   # v0.6.0 金币 roll 流（默认 seed 42）
 
 
 func _ready() -> void:
 	# Boot 序列（架构 §六.2）：fatal 检查 → registry → 池预热 → 子系统组装 → MENU
 	process_mode = Node.PROCESS_MODE_ALWAYS      # tree.paused 期间仍驱动 ⑦⑧（帧序契约）
+	_gold_rng.seed = GOLD_RNG_SEED               # v0.6.0：金币 roll 定种子（set_gold_rng_seed 可注入）
 	var t0 := Time.get_ticks_usec()
 	if GameConfig.is_fatal():
 		boot_fatal = GameConfig.fatal_errors.duplicate()
@@ -120,6 +126,7 @@ func _physics_process(p_raw_delta: float) -> void:
 			frame_order.append(&"player")
 			player.tick(gd, Vector2.ZERO)
 			_tick_xp_shards(gd)               # B.1：经验碎片磁吸/吸收（拾取属玩家阶段）
+			_tick_gold_coins(gd)              # v0.6.0：金币磁吸/吸收（紧随经验碎片，帧序②内）
 			if stage_probe_enabled:
 				stage_probe_us[&"player"] = Time.get_ticks_usec() - _probe_t0
 				_probe_t0 = Time.get_ticks_usec()
@@ -231,6 +238,11 @@ func set_time_scale(p_value: float, p_source: StringName) -> void:
 	time_scale_source = p_source
 
 
+func set_gold_rng_seed(p_seed: int) -> void:
+	# v0.6.0 金币 roll 流种子注入（测试确定性 / 同种子掉落序列可复现，A4 §7）
+	_gold_rng.seed = p_seed
+
+
 func _game_delta(p_raw_delta: float) -> float:
 	# raw × time_scale（子系统唯一时间源；顿帧 ≈0 → 全部游戏计时自然冻结，E-11）
 	return p_raw_delta * time_scale
@@ -330,6 +342,11 @@ func _boot_build_pools() -> void:
 	xp_pool.name = "XPPool"
 	add_child(xp_pool)
 	xp_pool.setup(&"xp", load(SCENE_XP_SHARD), GameConfig.get_pool_capacity(&"xp"))
+	# v0.6.0 金币池（A4 §7：容量真源 BalanceTables.pool_prewarm 增 "gold" 行）
+	var gold_pool := GoldPool.new()
+	gold_pool.name = "GoldPool"
+	add_child(gold_pool)
+	gold_pool.setup(&"gold", load(SCENE_GOLD_COIN), GameConfig.get_pool_capacity(&"gold"))
 	pools = {
 		&"projectile": _projectile_pool,
 		&"enemy": enemy_pool,
@@ -337,6 +354,7 @@ func _boot_build_pools() -> void:
 		&"particle": particle_pool,
 		&"laser": laser_pool,
 		&"xp": xp_pool,
+		&"gold": gold_pool,
 	}
 	# 预热（AC-14.2，Boot 期完成）
 	_projectile_pool.prewarm(GameConfig.get_pool_capacity(&"projectile"))
@@ -345,6 +363,7 @@ func _boot_build_pools() -> void:
 	particle_pool.prewarm(GameConfig.get_pool_capacity(&"particle"))
 	laser_pool.prewarm(GameConfig.get_pool_capacity(&"laser"))
 	xp_pool.prewarm(GameConfig.get_pool_capacity(&"xp"))
+	gold_pool.prewarm(GameConfig.get_pool_capacity(&"gold"))
 
 
 func _boot_build_grids() -> void:
@@ -360,6 +379,9 @@ func _boot_build_actors() -> void:
 	# ★ 经验掉落订阅必须先于 EnemySpawner 入树（信号连接序 = 派发序：掉落侧读取
 	#   exp_value/position 必须先于 spawner 的死亡归还清零，集成包 B.1）
 	EventBus.enemy_killed.connect(_on_enemy_killed_drop_xp)
+	# ★ v0.6.0 金币掉落订阅紧邻 xp 掉落连接点之后（连接序 = 派发序纪律同上：
+	#   掉落侧读取 data.gold_drop/position 必须先于 spawner 死亡归还清零，A4 §3）
+	EventBus.enemy_killed.connect(_on_enemy_killed_drop_gold)
 	pipeline = DamagePipelineStub.get_pipeline()
 	relic_handler = RelicHandler.new()
 	relic_handler.name = "RelicHandler"
@@ -544,6 +566,75 @@ func _tick_xp_shards(p_gd: float) -> void:
 		idx -= 1
 
 
+# ── 金币链路（v0.6.0，A4 §3：击杀掉落 → 磁吸 → 吸收入账） ──────────
+func _on_enemy_killed_drop_gold(p_enemy: Node2D) -> void:
+	# 掉落公式（A4 §3）：chance = clamp(drop.chance + Σadd_gold_drop, 0, 1) → roll 判定 →
+	# base = randi_range(min, max) → amount = round(base × (1 + Σadd_gold_value))。
+	# 三层 guard：空 dict / 负值 / 零面值全跳过。
+	if not (p_enemy is Enemy):
+		return                                  # 裸实体探针/非敌事件防御（与 xp 掉落同口径）
+	var enemy := p_enemy as Enemy
+	if enemy.data == null or enemy.data.gold_drop.is_empty():
+		return                                  # 空段 = 不掉金币（合法）
+	var drop := enemy.data.gold_drop
+	var min_v := float(drop.get("min", 0.0))
+	var max_v := float(drop.get("max", 0.0))
+	if min_v < 0.0 or max_v < 0.0:
+		return                                  # 负值 guard（校验器 warning 级，掉落侧兜底）
+	if max_v < min_v:
+		max_v = min_v                           # 坏序防御（randi_range 前提 min ≤ max）
+	var chance := clampf(float(drop.get("chance", 0.0)) + _gold_add_sum(&"add_gold_drop"), 0.0, 1.0)
+	if chance <= 0.0 or _gold_rng.randf() > chance:
+		return                                  # 零概率 / roll 未中
+	var base := _gold_rng.randi_range(int(min_v), int(max_v))
+	var amount := int(round(float(base) * (1.0 + _gold_add_sum(&"add_gold_value"))))
+	_spawn_gold_coin(enemy.global_position, amount)
+
+
+func _spawn_gold_coin(p_pos: Vector2, p_value: int) -> void:
+	if p_value <= 0:
+		return                                  # 零面值 guard
+	var coin := (pools[&"gold"] as GoldPool).acquire()
+	if coin == null:
+		# 满池合并为大面值金币（数值守恒，A4 §3——同 XPPool 降级口径）
+		if not active_coins.is_empty():
+			active_coins[0].merge_value(p_value)
+		return
+	coin.position = p_pos
+	coin.activate(p_value)
+	active_coins.append(coin)
+
+
+func _tick_gold_coins(p_gd: float) -> void:
+	# 磁吸/吸收推进（帧序②内紧随 _tick_xp_shards；倒序遍历——吸收即归还擦除当前索引安全）。
+	# ★ 吸收入账在 GameLoop：_add_gold(coin.value) 先于 release（release 清零面值，E-04 契约）
+	var idx := active_coins.size() - 1
+	while idx >= 0:
+		var coin := active_coins[idx]
+		if is_instance_valid(coin) and coin.tick(p_gd):
+			active_coins.remove_at(idx)
+			_add_gold(coin.value)
+			(pools[&"gold"] as GoldPool).release(coin)
+		idx -= 1
+
+
+func _add_gold(p_delta: int) -> void:
+	# 金币余额唯一写入口（钳 ≥0）→ gold_changed 广播（HUD/商店刷新共源）
+	gold = maxi(gold + p_delta, 0)
+	EventBus.emit_gold_changed(gold)
+
+
+func _gold_add_sum(p_pool: StringName) -> float:
+	# Σ 全武器 trait_stack.aggregate_panel()[p_pool]（F3 衰减内含；金币侧唯一消费口径，A4 §4）
+	var total := 0.0
+	if player == null or not is_instance_valid(player):
+		return total
+	for w in player.weapon_slots:
+		if w is WeaponBase and is_instance_valid(w) and w.trait_stack != null:
+			total += float(w.trait_stack.aggregate_panel().get(p_pool, 0.0))
+	return total
+
+
 # ── E-10 敌间分离力（软分离防重叠；10Hz + 网格邻域查询） ──────────
 func _apply_enemy_separation() -> void:
 	if enemy_grid == null:
@@ -623,6 +714,11 @@ func _reset_run_state() -> void:
 		if is_instance_valid(shard):
 			(pools[&"xp"] as XPPool).release(shard)
 	active_shards.clear()
+	for coin in active_coins:                     # v0.6.0：清场归还金币（余额归零 emit，A4 §3）
+		if is_instance_valid(coin):
+			(pools[&"gold"] as GoldPool).release(coin)
+	active_coins.clear()
+	_add_gold(-gold)
 	_separation_left = SEPARATION_INTERVAL
 	pending_level_ups = 0
 	game_feel.hit_stop_left = 0.0

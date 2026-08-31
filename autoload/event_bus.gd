@@ -22,6 +22,7 @@ signal player_hit(damage: float, source_uid: int)          # 简化路径受击�
 signal player_died()                                       # 死亡优先级最高（E-16 仲裁输入）
 signal level_up(new_level: int)                            # 升级请求（GameLoop 仲裁）
 signal xp_gained(amount: float)
+signal gold_changed(total: int)                            # v0.6.0 金币余额变更（A4 §3）
 signal wave_started(wave: int)
 signal wave_cleared(wave: int)
 signal slot_unlocked(slot: int)                            # 武器槽解锁（HUD 提示）
@@ -107,6 +108,11 @@ func emit_level_up(new_level: int) -> void:
 func emit_xp_gained(amount: float) -> void:
 	_track_dispatch(&"xp_gained")
 	xp_gained.emit(amount)
+
+
+func emit_gold_changed(total: int) -> void:
+	_track_dispatch(&"gold_changed")
+	gold_changed.emit(total)
 
 
 func emit_wave_started(wave: int) -> void:

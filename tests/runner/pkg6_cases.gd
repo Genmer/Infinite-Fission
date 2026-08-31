@@ -20,6 +20,7 @@ func run(p_tree: SceneTree) -> void:
 	_boot_game_loop()
 	_test_weapon_gated_trait()                    # T1
 	_test_gold_trait_data()                       # T4
+	_test_gold_chain()                            # T3
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -102,13 +103,14 @@ func _test_weapon_gated_trait() -> void:
 			or (w8b.trait_stack.size() == 1
 				and w8b.trait_stack.traits[0].data.id == &"MEC_ORBIT_LINK")),
 		"host=%d w8b=%s" % [host.trait_stack.size(), str(w8b != null)])
-	# 卸下 W8（还原夹具，不影响后续用例）
+	# 卸下 W8（还原夹具，不影响后续用例）；W1 词条栈清空还原（初始无词条）
 	for i in range(player.weapon_slots.size()):
 		var w: WeaponBase = player.weapon_slots[i]
 		if w is WeaponBase and (w as WeaponBase).data.id == &"W8_orbit_field":
 			player.weapon_slots[i] = null
 			if is_instance_valid(w):
 				w.free()
+	player.weapon_slots[0].trait_stack.clear()
 
 
 # ── T4：金币词条数据 + 校验器扩项 ────────────────────────────────
@@ -167,6 +169,140 @@ func _registry_gold_warnings_zero(p_v: DataValidator, p_reg: DataRegistry) -> bo
 		if not p_v.validate_enemy(p_reg.enemies[id]).is_empty():
 			return false
 	return true
+
+
+# ── T3：金币链路（掉落可复现 / 满池合并守恒 / 吸收入账 / restart 归零 / chance 抽样） ──
+func _test_gold_chain() -> void:
+	print("── T3 金币链路 ──")
+	_gl.start_run()
+	var player := _gl.player
+	var pool: GoldPool = _gl.pools[&"gold"]
+	# 夹具：必掉敌（内存构造，chance=1.0 min=8 max=12——pkg4 _make_enemy 口径）
+	var data := EnemyData.new()
+	data.id = &"E_GOLD_TEST"
+	data.hp_base = 60.0
+	data.spd_base = 80.0
+	data.dmg_base = 8.0
+	data.exp_base = 3.0
+	data.tp_cost = 1.0
+	data.hitbox_r = 14.0
+	data.gold_drop = {"chance": 1.0, "min": 8, "max": 12}
+	var enemy := (_gl.pools[&"enemy"] as EnemyPool).acquire() as Enemy
+	enemy.spawn(data, 1, 0)
+	# ① chance=1.0 必掉且面值 ∈ [min,max]（无词条加成；定种子锚定后续精确比对）
+	_gl.set_gold_rng_seed(20260831)
+	var gold0: int = _gl.gold
+	_gl._on_enemy_killed_drop_gold(enemy)
+	var base_val: int = _gl.active_coins[_gl.active_coins.size() - 1].value
+	_check("chance=1.0 必掉 1 枚", _gl.active_coins.size() == 1)
+	_check("面值 ∈ [min,max]（8~12，无加成）", base_val >= 8 and base_val <= 12, "base=%d" % base_val)
+	# ② 定种子复现：清场 → 同种子重放 60 次 → 掉落总额一致
+	_gl.set_gold_rng_seed(777)
+	_release_all_coins(pool)
+	for i in range(60):
+		enemy.global_position = Vector2(100.0 + 5.0 * float(i), 100.0)
+		_gl._on_enemy_killed_drop_gold(enemy)
+	var sum_a := _coins_total_value()
+	_gl.set_gold_rng_seed(777)
+	_release_all_coins(pool)
+	for i in range(60):
+		enemy.global_position = Vector2(100.0 + 5.0 * float(i), 100.0)
+		_gl._on_enemy_killed_drop_gold(enemy)
+	var sum_b := _coins_total_value()
+	_check("定种子 60 次击杀掉落总额可复现（两轮同种子同总额）", sum_a == sum_b and sum_a > 0,
+		"a=%d b=%d" % [sum_a, sum_b])
+	# ③ 满池合并守恒：先摆 3 枚 → 排空空闲栈 → 第 4 枚走合并进首枚，面值和守恒
+	_release_all_coins(pool)
+	var vals := [10, 20, 30]
+	for i in range(vals.size()):
+		_gl._spawn_gold_coin(Vector2(200.0 + 20.0 * float(i), 200.0), vals[i])
+	var hoard := _drain_pool(pool)               # 排空空闲栈（满池口径）
+	_gl._spawn_gold_coin(Vector2(300.0, 200.0), 7)   # 满池 → merge 进 active_coins[0]
+	var merged_sum := 0
+	for c: GoldCoin in _gl.active_coins:
+		merged_sum += c.value
+	_check("满池合并数值守恒（10+20+30+7=67）", merged_sum == 67, "sum=%d" % merged_sum)
+	_check("满池合并落在首枚（active 仍 3 枚，首枚=17）", _gl.active_coins.size() == 3
+		and _gl.active_coins[0].value == 17)
+	_release_all_coins(pool)
+	_release_hoard(pool, hoard)
+	# ④ 吸收入账：金币置于玩家位置 → 帧序② tick → _add_gold → HUD displayed_gold
+	_gl._spawn_gold_coin(player.global_position, 25)
+	_gl._tick_gold_coins(DT)
+	_check("吸收入账：余额 +25 且场上清空", _gl.gold == gold0 + 25 and _gl.active_coins.is_empty(),
+		"gold=%d gold0=%d" % [_gl.gold, gold0])
+	_check("吸收入账：HUD displayed_gold 同步（gold_changed）",
+		_gl.hud.displayed_gold() == gold0 + 25)
+	# ⑤ 面值词条加成：同种子下 base 精确比对（1 层 AFF_GOLD_VALUE → amount = round(base × 1.15)）
+	_gl.set_gold_rng_seed(20260831)
+	_gl._on_enemy_killed_drop_gold(enemy)        # 无加成基准（与 ① 同种子同 base）
+	_release_all_coins(pool)
+	var host: WeaponBase = player.weapon_slots[0]
+	host.attach_trait(_gl.registry.get_trait(&"AFF_GOLD_VALUE"))
+	_gl.set_gold_rng_seed(20260831)
+	_gl._on_enemy_killed_drop_gold(enemy)        # 有加成（consume 同一 roll 序列）
+	var buffed: int = _gl.active_coins[_gl.active_coins.size() - 1].value
+	host.trait_stack.clear()                     # 还原（W1 初始无词条）
+	_check("面值词条 1 层：amount = round(base × 1.15)",
+		buffed == int(round(float(base_val) * 1.15)), "buffed=%d base=%d" % [buffed, base_val])
+	_check("夹具还原：主武器栈清空", host.trait_stack.size() == 0)
+	# ⑥ 空段/零面值 guard
+	enemy.data.gold_drop = {}
+	var coins_before: int = _gl.active_coins.size()
+	_gl._on_enemy_killed_drop_gold(enemy)
+	_check("gold_drop 空段：不掉落", _gl.active_coins.size() == coins_before)
+	enemy.data.gold_drop = {"chance": 1.0, "min": 0, "max": 0}
+	_gl._on_enemy_killed_drop_gold(enemy)
+	_check("零面值 guard：不掉落", _gl.active_coins.size() == coins_before)
+	# ⑦ restart 归零：余额/场上金币全清 + HUD 同步
+	enemy.data.gold_drop = {"chance": 1.0, "min": 8, "max": 12}
+	for i in range(5):
+		_gl._spawn_gold_coin(Vector2(400.0, 400.0), 5)
+	_gl._add_gold(99)
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_check("restart 前置：进入 GAME_OVER", _gl.state == GameConst.GameStatus.GAME_OVER)
+	_gl.restart_run()
+	_check("restart：金币余额归零", _gl.gold == 0)
+	_check("restart：场上金币清空", _gl.active_coins.is_empty())
+	_check("restart：HUD displayed_gold 归零", _gl.hud.displayed_gold() == 0)
+	# 清理：场上金币归还 + 探针敌归还（死亡路径口径，触发池归还清零）
+	_release_all_coins(pool)
+	if not enemy.dead:
+		enemy.hp = 0.0
+		enemy.dead = true
+		(_gl.pools[&"enemy"] as EnemyPool).release(enemy)
+
+
+func _coins_total_value() -> int:
+	var total := 0
+	for c: GoldCoin in _gl.active_coins:
+		total += c.value
+	return total
+
+
+func _release_all_coins(p_pool: GoldPool) -> void:
+	# 场上金币全量归还（非战斗语义清理——与 GameLoop._reset_run_state 同口径的测试侧工具）
+	for coin in _gl.active_coins:
+		if is_instance_valid(coin):
+			p_pool.release(coin)
+	_gl.active_coins.clear()
+
+
+func _drain_pool(p_pool: GoldPool) -> Array[GoldCoin]:
+	# 排空空闲栈（满池口径构造）；取出的实例由 _release_hoard 归还
+	var hoard: Array[GoldCoin] = []
+	while true:
+		var c := p_pool.acquire()
+		if c == null:
+			break
+		hoard.append(c)
+	return hoard
+
+
+func _release_hoard(p_pool: GoldPool, p_hoard: Array[GoldCoin]) -> void:
+	for c in p_hoard:
+		if is_instance_valid(c):
+			p_pool.release(c)
 
 
 # ── 断言 ──────────────────────────────────────────────────────────
