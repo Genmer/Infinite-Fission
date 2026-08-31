@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="WaveTableData" load_steps=33 format=3]
+[gd_resource type="Resource" script_class="WaveTableData" load_steps=43 format=3]
 
 [ext_resource type="Script" path="res://scripts/core/data/resources/wave_table_data.gd" id="1_wtd"]
 [ext_resource type="Script" path="res://scripts/core/data/resources/wave_entry_data.gd" id="2_wed"]
@@ -243,9 +243,91 @@ tp_override = 0.0
 window = 30.0
 events = [&"BOSS"]
 
+[sub_resource type="Resource" id="WaveEntryData_e31"]
+script = ExtResource("2_wed")
+index = 31
+composition = [{"enemy_id": &"E1_grunt", "count": 28}, {"enemy_id": &"E2_runner", "count": 15}, {"enemy_id": &"E3_bastion", "count": 5}, {"enemy_id": &"E4_volatile", "count": 9}, {"enemy_id": &"E7_spitter", "count": 3}]
+tp_override = 84.6
+window = 30.2
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_e32"]
+script = ExtResource("2_wed")
+index = 32
+composition = [{"enemy_id": &"E1_grunt", "count": 28}, {"enemy_id": &"E2_runner", "count": 15}, {"enemy_id": &"E3_bastion", "count": 5}, {"enemy_id": &"E5_elite", "count": 1}, {"enemy_id": &"E4_volatile", "count": 8}, {"enemy_id": &"E7_spitter", "count": 3}]
+tp_override = 99.1
+window = 30.4
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_e33"]
+script = ExtResource("2_wed")
+index = 33
+composition = [{"enemy_id": &"E1_grunt", "count": 30}, {"enemy_id": &"E2_runner", "count": 16}, {"enemy_id": &"E3_bastion", "count": 5}, {"enemy_id": &"E5_elite", "count": 1}, {"enemy_id": &"E4_volatile", "count": 9}, {"enemy_id": &"E7_spitter", "count": 3}]
+tp_override = 103.8
+window = 30.6
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_e34"]
+script = ExtResource("2_wed")
+index = 34
+composition = [{"enemy_id": &"E1_grunt", "count": 30}, {"enemy_id": &"E2_runner", "count": 16}, {"enemy_id": &"E3_bastion", "count": 6}, {"enemy_id": &"E5_elite", "count": 1}, {"enemy_id": &"E4_volatile", "count": 10}, {"enemy_id": &"E7_spitter", "count": 4}]
+tp_override = 111.0
+window = 30.8
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_e35"]
+script = ExtResource("2_wed")
+index = 35
+composition = [{"enemy_id": &"E6_boss1", "count": 1}]
+tp_override = 1.0
+window = 32.0
+events = [&"BOSS"]
+
+[sub_resource type="Resource" id="WaveEntryData_e36"]
+script = ExtResource("2_wed")
+index = 36
+composition = [{"enemy_id": &"E1_grunt", "count": 32}, {"enemy_id": &"E2_runner", "count": 17}, {"enemy_id": &"E3_bastion", "count": 6}, {"enemy_id": &"E5_elite", "count": 2}, {"enemy_id": &"E4_volatile", "count": 10}, {"enemy_id": &"E7_spitter", "count": 4}]
+tp_override = 130.2
+window = 31.0
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_e37"]
+script = ExtResource("2_wed")
+index = 37
+composition = [{"enemy_id": &"E1_grunt", "count": 33}, {"enemy_id": &"E2_runner", "count": 18}, {"enemy_id": &"E3_bastion", "count": 6}, {"enemy_id": &"E5_elite", "count": 2}, {"enemy_id": &"E4_volatile", "count": 11}, {"enemy_id": &"E7_spitter", "count": 4}]
+tp_override = 133.9
+window = 31.2
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_e38"]
+script = ExtResource("2_wed")
+index = 38
+composition = [{"enemy_id": &"E1_grunt", "count": 33}, {"enemy_id": &"E2_runner", "count": 18}, {"enemy_id": &"E3_bastion", "count": 7}, {"enemy_id": &"E5_elite", "count": 2}, {"enemy_id": &"E4_volatile", "count": 11}, {"enemy_id": &"E7_spitter", "count": 4}]
+tp_override = 137.9
+window = 31.4
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_e39"]
+script = ExtResource("2_wed")
+index = 39
+composition = [{"enemy_id": &"E1_grunt", "count": 34}, {"enemy_id": &"E2_runner", "count": 18}, {"enemy_id": &"E3_bastion", "count": 7}, {"enemy_id": &"E5_elite", "count": 2}, {"enemy_id": &"E4_volatile", "count": 12}, {"enemy_id": &"E7_spitter", "count": 4}]
+tp_override = 140.4
+window = 31.6
+events = []
+
+[sub_resource type="Resource" id="WaveEntryData_e40"]
+script = ExtResource("2_wed")
+index = 40
+composition = [{"enemy_id": &"E1_grunt", "count": 35}, {"enemy_id": &"E2_runner", "count": 19}, {"enemy_id": &"E3_bastion", "count": 7}, {"enemy_id": &"E5_elite", "count": 3}, {"enemy_id": &"E4_volatile", "count": 12}, {"enemy_id": &"E7_spitter", "count": 4}]
+tp_override = 158.6
+window = 31.8
+events = []
+
+
 [resource]
 script = ExtResource("1_wtd")
 id = &"main"
+endless_entries = [SubResource("WaveEntryData_e31"), SubResource("WaveEntryData_e32"), SubResource("WaveEntryData_e33"), SubResource("WaveEntryData_e34"), SubResource("WaveEntryData_e35"), SubResource("WaveEntryData_e36"), SubResource("WaveEntryData_e37"), SubResource("WaveEntryData_e38"), SubResource("WaveEntryData_e39"), SubResource("WaveEntryData_e40")]
 entries = [SubResource("WaveEntryData_w1"), SubResource("WaveEntryData_w2"), SubResource("WaveEntryData_w3"), SubResource("WaveEntryData_w4"), SubResource("WaveEntryData_w5"), SubResource("WaveEntryData_w6"), SubResource("WaveEntryData_w7"), SubResource("WaveEntryData_w8"), SubResource("WaveEntryData_w9"), SubResource("WaveEntryData_w10"), SubResource("WaveEntryData_w11"), SubResource("WaveEntryData_w12"), SubResource("WaveEntryData_w13"), SubResource("WaveEntryData_w14"), SubResource("WaveEntryData_w15"), SubResource("WaveEntryData_w16"), SubResource("WaveEntryData_w17"), SubResource("WaveEntryData_w18"), SubResource("WaveEntryData_w19"), SubResource("WaveEntryData_w20"), SubResource("WaveEntryData_w21"), SubResource("WaveEntryData_w22"), SubResource("WaveEntryData_w23"), SubResource("WaveEntryData_w24"), SubResource("WaveEntryData_w25"), SubResource("WaveEntryData_w26"), SubResource("WaveEntryData_w27"), SubResource("WaveEntryData_w28"), SubResource("WaveEntryData_w29"), SubResource("WaveEntryData_w30")]
 endless = {"tp_base": 110.0, "tp_growth": 1.03, "window_base": 30.0, "window_slope": 0.2, "window_cap": 40.0, "elite_mod": 4, "boss_mod": 10}
 tp_formula = {"base": 14.0, "slope": 3.2, "jitter": 0.1, "elite_wave_mult": 1.25}

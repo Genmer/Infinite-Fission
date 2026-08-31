@@ -1,8 +1,11 @@
 # scripts/entities/wave/wave_director.gd
 # M-04 WaveDirector（架构 §2.13）：波表驱动 + 公式 fallback + 窗口/清空/叠波调度 + 事件波。
 # 数据源：WaveTableData（M-14 注入，表缺失/缺波 → 公式回退，E-08 降级不崩溃）。
+# 查波顺序（分图无尽 P1 2026-08-31）：entries 主体段 → endless_entries 无尽段（表内无尽优先
+# 消费）→ 表尽/无表 → 公式回退（主表既有行为不变）。
 # 事件波调度（A3 §2.4）：精英散布 {8,12,16,22,24,26,28}（fallback 常量）/ Boss 逢 10；
-# 无尽段（w>30，A3 §2.6）：TP=110×1.03^(w−30)、窗口 min(30+0.2(w−30),40)、精英 w mod 4==0、Boss w mod 10==0。
+# 无尽段（w>30，A3 §2.6）：TP=110×1.03^(w−30)、窗口 min(30+0.2(w−30),40)、精英 w mod 4==0、Boss w mod 10==0；
+# 表内无尽段：构成/TP/窗口/Boss（events=BOSS 逢 5）由 endless_entries 承载。
 # 编排说明（§2.17）：tick(game_delta) 由 GameLoop ⑥ 驱动；内部驱动 EnemySpawner 节流出队。
 class_name WaveDirector
 extends Node
@@ -51,6 +54,17 @@ const TP_FALLBACK := {"base": 14.0, "slope": 3.2, "elite_wave_mult": 1.25}   # A
 const ENDLESS_FALLBACK := {
 	"tp_base": 110.0, "tp_growth": 1.03, "window_base": 30.0, "window_slope": 0.2,
 	"window_cap": 40.0, "elite_mod": 4, "boss_mod": 10,
+}
+# 无尽/表缺 Boss 回退轮换池（per-map，分图无尽延伸 P1 2026-08-31）：成员 = 各图 w10/w20
+# 已用 Boss 组成（真源 = 各图波表）；键 = WaveTableData.id（无表 → main 口径不变）。
+# 主表（草原）轮换 boss1~3；frost=boss1+E17 / demon=boss2+E18 / grove=boss1+E19 / swamp=boss2+E20。
+# 表内 Boss 波仍以 composition 为真源（_find_boss_data 第一优先），本池仅作用于回退段。
+const BOSS_ROTATION: Dictionary = {
+	&"main": [&"E6_boss1", &"E6_boss2", &"E6_boss3"],
+	&"frost": [&"E6_boss1", &"E17_frost_sovereign"],
+	&"demon": [&"E6_boss2", &"E18_demon_lord"],
+	&"grove": [&"E6_boss1", &"E19_grove_warden"],
+	&"swamp": [&"E6_boss2", &"E20_swamp_hydra"],
 }
 
 
@@ -262,10 +276,14 @@ func _is_elite_wave(p_wave: int) -> bool:
 
 
 func _table_entry(p_wave: int) -> WaveEntryData:
-	# 波表条目（缺失 → null → 调用方走公式 fallback；剔除波同口径，E-08）
+	# 波表条目（分图无尽 P1：entries 主体段优先 → endless_entries 无尽段 → 均缺失 → null
+	# → 调用方走公式 fallback；剔除波同口径，E-08）
 	if wave_table == null:
 		return null
 	for entry in wave_table.entries:
+		if entry.index == p_wave:
+			return entry
+	for entry in wave_table.endless_entries:
 		if entry.index == p_wave:
 			return entry
 	return null
@@ -353,10 +371,10 @@ func _spawn_boss(p_wave: int) -> void:
 
 func _find_boss_data(p_wave: int) -> EnemyData:
 	# Boss 数据选取：波表 composition 内的 TAG_BOSS 敌优先——composition 即该图 Boss 波
-	# 名额的真源（P1「每图专属 Boss」2026-08-31：frost/demon/grove/swamp w20 各配专属
-	# Boss，rotation 池扩到 7 只后 id 轮换不再与表内一致，以表为准）。表缺/无表/composition
-	# 无 Boss 条目（公式 fallback 波/无尽段）→ 注册表 TAG_BOSS 敌按 id 排序逢 10 轮换
-	#（10→首、20→次、30→三；既有三 Boss 表在此口径下选取结果与旧版逐波一致）。
+	# 名额的真源（P1「每图专属 Boss」2026-08-31 + 分图无尽 P1：主体段 w10/w20 与无尽段
+	# 逢 5 Boss 波均在表内编入本图 Boss）。表缺/无表/composition 无 Boss 条目（公式
+	# fallback 波/表尽段）→ per-map 轮换池（BOSS_ROTATION，按 wave_table.id 取；无表 →
+	# main）按 id 排序逢 10 轮换（slot = (w/10 − 1) % 池深；主表 w10/20/30 选取与旧版一致）。
 	if registry == null:
 		return null
 	var entry := _table_entry(p_wave)
@@ -365,13 +383,26 @@ func _find_boss_data(p_wave: int) -> EnemyData:
 			var e := registry.get_enemy(StringName(String(comp.get("enemy_id", ""))))
 			if e != null and (e.tags & GameConst.TAG_BOSS) != 0:
 				return e
+	var pool_ids: Array = BOSS_ROTATION.get(_rotation_key(), BOSS_ROTATION[&"main"])
 	var bosses: Array[EnemyData] = []
-	for id in registry.enemies:
-		var e: EnemyData = registry.enemies[id]
+	for pid: Variant in pool_ids:
+		var e := registry.get_enemy(StringName(String(pid)))
 		if e != null and (e.tags & GameConst.TAG_BOSS) != 0:
 			bosses.append(e)
+	if bosses.is_empty():
+		# per-map 池在注册表全缺（测试桩注册表/自定义 Boss id）→ 旧全局口径回退：
+		# 注册表全部 TAG_BOSS 敌按 id 排序轮换（pkg2 冻结行为兼容）
+		for id in registry.enemies:
+			var global_e: EnemyData = registry.enemies[id]
+			if global_e != null and (global_e.tags & GameConst.TAG_BOSS) != 0:
+				bosses.append(global_e)
 	if bosses.is_empty():
 		return null
 	bosses.sort_custom(func(a: EnemyData, b: EnemyData) -> bool: return String(a.id) < String(b.id))
 	var slot := (p_wave / 10 - 1) % bosses.size()
 	return bosses[slot]
+
+
+func _rotation_key() -> StringName:
+	# 回退轮换池键：当前波表 id（无表 → main——pkg2 无表 Boss 波口径不变）
+	return wave_table.id if wave_table != null else &"main"

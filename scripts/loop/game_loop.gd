@@ -261,20 +261,58 @@ func start_run() -> bool:
 	card_generator.rng.randomize()               # 卡池每局随机（固定种子=「选项写死」观感根因；pkg 测试自行定种子）
 	player.set_character(Meta.character_id)   # 角色应用（含养成加成——M8/角色系统）
 	var map_def := MapTable.get_map(current_map_id)
-	spawner.map_mods = {}
-	match String(map_def.get("mod_id", "")):
-		"ice_resist":
-			spawner.map_mods = {"ice_resist": 0.2}
-		"spd_mult":
-			spawner.map_mods = {"spd_mult": 1.10}
-		"hp_mult":
-			spawner.map_mods = {"hp_mult": 1.08}
-	player.map_xp_mult = 1.10 if String(map_def.get("mod_id", "")) == "xp_mult" else 1.0
+	_apply_map_affixes(map_def)                  # 词缀二期：双词缀注入（祝→玩家 / 诅→敌侧）
 	if _backdrop != null:
 		_backdrop.modulate = map_def.get("tint", Color.WHITE)   # 分图云层主题色
 	hud.set_map_name(String(map_def.get("name", "")))
 	wave_director.start_wave(1)
 	return true
+
+
+func _apply_map_affixes(p_map_def: Dictionary) -> void:
+	# 地图词缀二期（双词缀祝/诅咒，P1 2026-08-31；数值真源 = map_table.gd MAPS 注释块）：
+	# 诅咒（利敌）→ spawner.map_mods（spawner._apply_map_mods 出生差分应用）；
+	# 祝福（利好玩家）→ player.map_* 字段——金币（本类掉账）/ 经验（Player.gain_xp）/
+	# 射速（WeaponBase._fire_interval rof 乘区）/ 每波回血（本类 _on_wave_cleared_bless_heal）。
+	# 旧 mod_id 单向词缀键保留兼容（断言锁定），应用口径由本表替代。
+	spawner.map_mods = {}
+	player.map_xp_mult = 1.0
+	player.map_gold_mult = 1.0
+	player.map_rof_mult = 1.0
+	player.map_wave_heal_pct = 0.0
+	match String(p_map_def.get("curse_id", "")):
+		&"curse_swarm":
+			spawner.map_mods = {"mob_hp_mult": 1.08}    # 虫群（草原）：小怪 HP +8%（Boss 免除）
+		&"curse_frost_armor":
+			spawner.map_mods = {"ice_resist": 0.2}      # 霜甲（冰原）：敌冰抗 +20%（沿用旧值）
+		&"curse_swift_demon":
+			spawner.map_mods = {"spd_mult": 1.10}       # 疾魔（魔域）：敌移速 +10%（沿用旧值）
+		&"curse_toxic_skin":
+			spawner.map_mods = {"contact_mult": 1.08}   # 毒肤（树海）：敌接触伤 +8%
+		&"curse_mire":
+			spawner.map_mods = {"hp_mult": 1.10}        # 泥沼（沼泽）：敌 HP +10%（旧 8% 上调）
+	match String(p_map_def.get("bless_id", "")):
+		&"bless_harvest":
+			player.map_gold_mult = 1.10                 # 丰饶（草原）：金币 +10%
+		&"bless_frost_crystal":
+			player.map_xp_mult = 1.10                   # 寒晶（冰原）：经验 +10%
+		&"bless_fervor":
+			player.map_rof_mult = 1.06                  # 狂热（魔域）：射速 +6%
+		&"bless_nurture":
+			player.map_wave_heal_pct = 0.02             # 滋养（树海）：每波回 2% max_hp
+		&"bless_rich_vein":
+			player.map_xp_mult = 1.08                   # 富矿（沼泽）：经验 +8% 且金币 +8%
+			player.map_gold_mult = 1.08
+
+
+func _on_wave_cleared_bless_heal(_p_wave: int) -> void:
+	# 祝福·滋养（树海）：波次清空回复 map_wave_heal_pct × max_hp（数值真源 map_table.gd）。
+	# 死亡/GAME_OVER 后 wave_cleared 不再派发（GameLoop 帧序仅 PLAYING 驱动⑥），此处为防御。
+	if player == null or not is_instance_valid(player):
+		return
+	if player.map_wave_heal_pct <= 0.0 or player.hp <= 0.0:
+		return
+	player.hp = minf(player.hp + player.max_hp * player.map_wave_heal_pct, player.max_hp)
 
 
 func _on_menu_start(p_map_id: StringName) -> void:
@@ -562,6 +600,7 @@ func _boot_build_presentation() -> void:
 	EventBus.card_chosen.connect(func(_i: StringName, _k: int) -> void: sfx.play(&"coin"))
 	EventBus.shield_blocked.connect(func(_p: Vector2) -> void: sfx.play(&"shield"))
 	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
+	EventBus.wave_cleared.connect(_on_wave_cleared_bless_heal)   # 祝福·滋养（词缀二期）
 	boss_bar = BossBar.new()
 	boss_bar.name = "BossBar"
 	add_child(boss_bar)
@@ -665,12 +704,14 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 		return                                  # 裸实体探针/非敌事件防御
 	var value := (p_enemy as Enemy).exp_value * relic_handler.xp_mult()
 	_spawn_xp_shard(p_enemy.global_position, value)
-	# 金币掉账（M7 战地黑市货币：gold_drop = {chance, min, max}，首次接线——此前为死数据）
+	# 金币掉账（M7 战地黑市货币：gold_drop = {chance, min, max}，首次接线——此前为死数据；
+	# 词缀二期：祝福·丰饶/富矿金币倍率在掉账额入账（player.map_gold_mult，真源 map_table.gd））
 	var gdrop: Variant = (p_enemy as Enemy).data.gold_drop
 	if gdrop is Dictionary and not (gdrop as Dictionary).is_empty():
 		var gd := gdrop as Dictionary
 		if randf() < float(gd.get("chance", 0.0)):
-			player.gold += int(round(randf_range(float(gd.get("min", 1)), float(gd.get("max", 1)))))
+			player.gold += int(round(randf_range(float(gd.get("min", 1)), float(gd.get("max", 1)))
+				* player.map_gold_mult))
 
 
 func _spawn_xp_shard(p_pos: Vector2, p_value: float) -> void:

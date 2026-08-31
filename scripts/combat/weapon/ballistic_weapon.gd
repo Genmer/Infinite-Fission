@@ -76,8 +76,9 @@ func _on_tick_post(p_game_delta: float) -> void:
 
 
 func _fire_interval() -> float:
-	# F11：rof × (1+ΣAdd_ROF) clamp 30；加特林 = 冷/热按预热进度插值
-	rof_current = clampf(_effective_rof() * (1.0 + _add_rof()), 0.1, _cap_rof())
+	# F11：rof × (1+ΣAdd_ROF) clamp 30；加特林 = 冷/热按预热进度插值；
+	# 玩家侧射速合成（过载咆哮 × 地图祝福，词缀二期；与基类同口径经 _player_rof_mult）
+	rof_current = clampf(_effective_rof() * (1.0 + _add_rof()) * _player_rof_mult(), 0.1, _cap_rof())
 	return 1.0 / rof_current
 
 

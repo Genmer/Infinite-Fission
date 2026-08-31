@@ -524,7 +524,10 @@ func _test_relic_handler() -> void:
 	_check("REL_BLACK_MARKET：w35/w45 排程、w36 不排程（占位计数 2）",
 		h.pending_shop_waves == 2)
 	# REL_PHOENIX：致死保留 1 HP + 清屏冲击（每场 1 次）——放最后（含死亡分支）
-	_check("REL_PHOENIX：激活", h.activate(&"REL_PHOENIX"))
+	# 幂等护栏（同 REL_GAMBLER/REL_BLACK_MARKET 先例）：冒烟选卡可能随机抽中 PHOENIX
+	# （card_chosen 通道自动激活）→ 显式 activate 被「每场唯一」拒绝属业务正确，已持有即生效
+	_check("REL_PHOENIX：激活（卡牌流提前入场 → 已持有即生效）",
+		h.activate(&"REL_PHOENIX") or h.has_relic(&"REL_PHOENIX"))
 	_gl.player.invuln_left = 0.0
 	_gl.player.hp = 5.0
 	_gl.player.take_contact_damage(999999.0)

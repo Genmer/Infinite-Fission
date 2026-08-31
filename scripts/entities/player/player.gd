@@ -18,6 +18,9 @@ var gold: int = 0                             # 金币（击杀 gold_drop 掉账
 var _last_move_dir: Vector2 = Vector2.UP      # 最近移动方向（游侠闪现取向）
 var revives_left: int = 0                     # 应急协议剩余复活（局外养成，每局重置）
 var map_xp_mult: float = 1.0                  # 地图词缀·经验倍率（GameLoop.start_run 注入）              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
+var map_gold_mult: float = 1.0                # 地图祝福·金币倍率（GameLoop 金币掉账消费；词缀二期）
+var map_rof_mult: float = 1.0                 # 地图祝福·射速倍率（WeaponBase._fire_interval 消费；词缀二期）
+var map_wave_heal_pct: float = 0.0            # 地图祝福·每波回血比 max_hp（GameLoop wave_cleared 消费；词缀二期）
 # 角色系统（用户反馈「不同的角色有不同的技能」）：选择经 Meta 持久化，开局 set_character 应用
 var character_id: StringName = &"sentinel"
 var character_atk_pct: float = 0.0            # 角色攻击修正（武器面板经 meta_atk_pct 合成）

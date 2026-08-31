@@ -44,6 +44,8 @@ func run(p_tree: SceneTree) -> void:
 	_test_polish()
 	_test_p0_fixes()
 	_test_map_bosses()
+	_test_map_affixes2()
+	_test_endless_maps()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -965,6 +967,247 @@ func _test_map_bosses() -> void:
 	_check("F-19 伴怪闸：w20 节奏 ×1/2.5s 场上≤12 + 未登场闸开（不回归）",
 		absf(float(rhythm["interval"]) - 2.5) <= 0.001 and int(rhythm["cap"]) == 12
 		and bool(_gl.wave_director.call(&"_escort_gate_open")))
+
+
+# ── 地图词缀二期（双词缀：祝福利好玩家 + 诅咒利敌） ────────────────
+func _test_map_affixes2() -> void:
+	# 数值真源：map_table.gd MAPS 注释块（2026-08-31 本轮裁定，强度温和 ±5~12%）。
+	# 应用点：诅咒 → spawner._apply_map_mods；祝福 → player.map_*（金币: GameLoop 掉账 /
+	# 经验: Player.gain_xp / 射速: WeaponBase._fire_interval / 回血: GameLoop wave_cleared 订阅）
+	print("── 双词缀（祝福/诅咒） ──")
+	# ① 5 图双键齐全 + 旧 mod_id 兼容（既有单向词缀键不删）
+	var dual_ok := true
+	var legacy_ok := true
+	var expect_legacy := {&"world_grass": "", &"world_frost": "ice_resist",
+		&"world_demon": "spd_mult", &"world_grove": "xp_mult", &"world_swamp": "hp_mult"}
+	for m in MapTable.MAPS:
+		for k in ["bless_id", "bless_name", "curse_id", "curse_name"]:
+			if String(m.get(k, "")) == "":
+				dual_ok = false
+		if String(m.get("mod_id", "")) != String(expect_legacy[m.id]):
+			legacy_ok = false
+	_check("双词缀：5 图 bless/curse 键齐全", dual_ok)
+	_check("双词缀：旧 mod_id 键保留（兼容断言）", legacy_ok)
+	# ② 注入口实测：_apply_map_affixes → 敌侧 mods + 玩家侧四字段（逐图口径）
+	var inject_ok := true
+	var inject_info := ""
+	var checks: Array = [
+		[&"world_grass", {"mob_hp_mult": 1.08}, 1.10, 1.0, 1.0, 0.0],
+		[&"world_frost", {"ice_resist": 0.2}, 1.0, 1.0, 1.10, 0.0],
+		[&"world_demon", {"spd_mult": 1.10}, 1.0, 1.06, 1.0, 0.0],
+		[&"world_grove", {"contact_mult": 1.08}, 1.0, 1.0, 1.0, 0.02],
+		[&"world_swamp", {"hp_mult": 1.10}, 1.08, 1.0, 1.08, 0.0],
+	]
+	for c: Array in checks:
+		_gl._apply_map_affixes(MapTable.get_map(c[0]))
+		var bad := ""
+		if _gl.spawner.map_mods != (c[1] as Dictionary):
+			bad += "mods=%s " % str(_gl.spawner.map_mods)
+		if absf(_gl.player.map_gold_mult - float(c[2])) > 0.001:
+			bad += "gold=%.3f " % _gl.player.map_gold_mult
+		if absf(_gl.player.map_rof_mult - float(c[3])) > 0.001:
+			bad += "rof=%.3f " % _gl.player.map_rof_mult
+		if absf(_gl.player.map_xp_mult - float(c[4])) > 0.001:
+			bad += "xp=%.3f " % _gl.player.map_xp_mult
+		if absf(_gl.player.map_wave_heal_pct - float(c[5])) > 0.001:
+			bad += "heal=%.3f" % _gl.player.map_wave_heal_pct
+		if bad != "":
+			inject_ok = false
+			inject_info += "%s[%s] " % [String(c[0]), bad.strip_edges()]
+	_check("双词缀注入：5 图诅咒 mods + 祝福字段（gold/rof/xp/回血）", inject_ok, inject_info)
+	_gl._apply_map_affixes(MapTable.get_map(MapTable.FIRST_MAP_ID))   # 还原草原口径
+	# ③ 敌侧诅咒应用实测（spawner._apply_map_mods 出生差分；w1 = data 基准值）
+	var epool := _gl.pools[&"enemy"] as EnemyPool
+	var fx := _fixture_enemy(&"E_AFFX", 100.0)
+	fx.spd_base = 60.0
+	fx.dmg_base = 10.0
+	var en := epool.acquire()
+	en.spawn(fx, 1, 0)
+	_gl.spawner.map_mods = {"hp_mult": 1.10}
+	_gl.spawner._apply_map_mods(en)
+	_check("诅咒·泥沼：敌 HP +10%", absf(en.max_hp - 110.0) <= 0.01 and absf(en.hp - 110.0) <= 0.01)
+	_gl.spawner.map_mods = {"mob_hp_mult": 1.08}
+	_gl.spawner._apply_map_mods(en)
+	_check("诅咒·虫群：非 Boss HP +8%（叠加 110 → 118.8）", absf(en.max_hp - 118.8) <= 0.01)
+	var boss_fx := _fixture_enemy(&"E_AFFX_B", 100.0)
+	boss_fx.tags = GameConst.TAG_BOSS
+	var ben := epool.acquire()
+	ben.spawn(boss_fx, 1, GameConst.TAG_BOSS)
+	_gl.spawner._apply_map_mods(ben)
+	_check("诅咒·虫群：Boss 免除", absf(ben.max_hp - 100.0) <= 0.01)
+	_gl.spawner.map_mods = {"contact_mult": 1.08}
+	_gl.spawner._apply_map_mods(en)
+	_check("诅咒·毒肤：敌接触伤 +8%（10 → 10.8）", absf(en.contact_dmg - 10.8) <= 0.01)
+	_gl.spawner.map_mods = {"ice_resist": 0.2}
+	_gl.spawner._apply_map_mods(en)
+	_check("诅咒·霜甲：敌冰抗 +20%", absf(float(en.resist[2]) - 0.2) <= 0.001)
+	_gl.spawner.map_mods = {"spd_mult": 1.10}
+	_gl.spawner._apply_map_mods(en)
+	_check("诅咒·疾魔：敌移速 +10%（60 → 66）", absf(en.speed - 66.0) <= 0.01)
+	_gl.spawner.map_mods = {}
+	epool.release(en)
+	epool.release(ben)
+	# ④ 玩家侧祝福实测
+	var p: Node = _gl.player
+	# 金币（丰饶 ×1.10：gold_drop 固定 10 → 入账 11）
+	var gstub := _make_killed_enemy_stub(false)
+	(gstub.data as EnemyData).gold_drop = {"chance": 1.0, "min": 10, "max": 10}
+	var gold0: int = int(p.get("gold"))
+	p.set("map_gold_mult", 1.10)
+	_gl._on_enemy_killed_drop_xp(gstub)
+	_check("祝福·丰饶：金币掉账 +10%（10 → 11）", int(p.get("gold")) == gold0 + 11)
+	p.set("map_gold_mult", 1.0)
+	_gl.pools[&"enemy"].release(gstub)
+	# 经验（寒晶：gain_xp 差分比 = map_xp_mult；养成萃取系数在比值中相消）
+	p.set("xp", 0.0)
+	p.set("map_xp_mult", 1.0)
+	p.call(&"gain_xp", 10.0)
+	var d1: float = float(p.get("xp"))
+	p.set("xp", 0.0)
+	p.set("map_xp_mult", 1.10)
+	p.call(&"gain_xp", 10.0)
+	var d2: float = float(p.get("xp"))
+	_check("祝福·寒晶：gain_xp ×1.10（差分比）", d1 > 0.0 and absf(d2 / d1 - 1.10) <= 0.01)
+	p.set("xp", 0.0)
+	p.set("map_xp_mult", 1.0)
+	# 射速（狂热 ×1.06 → 开火间隔 /1.06）
+	var w0: WeaponBase = (p.get("weapon_slots") as Array)[0]
+	p.set("map_rof_mult", 1.0)
+	var itv0: float = float(w0.call(&"_fire_interval"))
+	p.set("map_rof_mult", 1.06)
+	var itv1: float = float(w0.call(&"_fire_interval"))
+	_check("祝福·狂热：射速 interval /1.06",
+		itv0 > 0.0 and absf(itv1 / itv0 - 1.0 / 1.06) <= 0.001)
+	p.set("map_rof_mult", 1.0)
+	# 每波回血（滋养 2% max_hp + 满血钳制 + 无祝福不回血）
+	p.set("hp", 30.0)
+	p.set("map_wave_heal_pct", 0.02)
+	_gl._on_wave_cleared_bless_heal(5)
+	var heal_expect: float = 30.0 + float(p.get("max_hp")) * 0.02
+	_check("祝福·滋养：波清回血 2% max_hp", absf(float(p.get("hp")) - heal_expect) <= 0.01)
+	p.set("hp", float(p.get("max_hp")))
+	_gl._on_wave_cleared_bless_heal(6)
+	_check("祝福·滋养：满血不溢出", absf(float(p.get("hp")) - float(p.get("max_hp"))) <= 0.01)
+	p.set("map_wave_heal_pct", 0.0)
+	p.set("hp", 30.0)
+	_gl._on_wave_cleared_bless_heal(7)
+	_check("祝福·滋养：无祝福不回血", absf(float(p.get("hp")) - 30.0) <= 0.01)
+	p.set("hp", float(p.get("max_hp")))
+	# ⑤ 菜单展示存在性（每图祝/诅两行小字）
+	_gl.menu_screen._open_map_select()
+	var bless_cnt := 0
+	var curse_cnt := 0
+	for row_node in _gl.menu_screen._panel_list.get_children():
+		if row_node.is_queued_for_deletion():
+			continue
+		for sub in (row_node as Node).get_children():
+			if sub is Label:
+				var txt := String((sub as Label).text)
+				if txt.begins_with("祝"):
+					bless_cnt += 1
+				elif txt.begins_with("诅"):
+					curse_cnt += 1
+	_check("菜单展示：双词缀两行小字（5 祝 + 5 诅）", bless_cnt == 5 and curse_cnt == 5,
+		"bless=%d curse=%d" % [bless_cnt, curse_cnt])
+	_gl.menu_screen._on_panel_close()
+
+
+# ── 分图无尽延伸（表内无尽段 + per-map Boss 轮换 + Meta 深度） ─────
+func _test_endless_maps() -> void:
+	print("── 分图无尽延伸 ──")
+	# ① 5 表无尽条目存在且 ≥10 条 + index 自 final_wave+1 连续
+	var cnt_ok := true
+	var idx_ok := true
+	for m in MapTable.MAPS:
+		var t := MapTable.load_table(m.id, _gl.registry)
+		if t == null or t.endless_entries.size() < 10:
+			cnt_ok = false
+			continue
+		var expect := int(m.final_wave) + 1
+		for e in t.endless_entries:
+			if e.index != expect:
+				idx_ok = false
+			expect += 1
+	_check("无尽表：5 表 endless_entries ≥10 条", cnt_ok)
+	_check("无尽表：index 自 final_wave+1 连续", idx_ok)
+	# ② 驱动器消费表内无尽条目（冰原 w21：构成/TP/窗口取表值）
+	var wd := _gl.wave_director
+	var saved_tbl: WaveTableData = wd.wave_table
+	_gl.spawner.spawn_queue.clear()
+	wd.wave_table = MapTable.load_table(&"world_frost", _gl.registry)
+	var e21: WaveEntryData = wd.call(&"_table_entry", 21)
+	var e21_sum := 0
+	if e21 != null:
+		for comp in e21.composition:
+			e21_sum += int(comp.get("count", 0))
+	wd.start_wave(21)
+	_check("无尽表消费：w21 构成源自 endless_entries（48 只入队）",
+		e21 != null and _gl.spawner.queue_count() == e21_sum and e21_sum == 48,
+		"queue=%d sum=%d" % [_gl.spawner.queue_count(), e21_sum])
+	_check("无尽表消费：w21 TP/窗口取表值（60.4 / 26.2）",
+		absf(wd.tp_budget - 60.4) <= 0.01 and absf(wd.window_left - 26.2) <= 0.01)
+	# ③ 无尽 Boss 波：逢 5 轮换本图池（表内 composition 真源）
+	_check("无尽 Boss：w25 逢 5 + 表内轮换 E6_boss1",
+		bool(wd.call(&"_is_boss_wave", 25))
+		and (wd.call(&"_find_boss_data", 25) as EnemyData).id == &"E6_boss1")
+	_check("无尽 Boss：w30 本图专属 E17_frost_sovereign",
+		(wd.call(&"_find_boss_data", 30) as EnemyData).id == &"E17_frost_sovereign")
+	_gl.spawner.spawn_queue.clear()
+	# ④ 表尽回退公式（w45 无条目 → 无尽公式 TP/窗口，A3 §2.6 口径不变）
+	wd.start_wave(45)
+	_check("表尽回退：w45 TP = 110×1.03^15 / 窗口 33",
+		absf(wd.tp_budget - 110.0 * pow(1.03, 15.0)) <= 0.01
+		and absf(wd.window_left - 33.0) <= 0.01)
+	_gl.spawner.spawn_queue.clear()
+	# ⑤ per-map Boss 回退轮换池（表尽段逢 10；池 = 各图 w10/w20 已用 Boss）
+	var rot_ok := true
+	var rot_info := ""
+	var rot_cases: Array = [
+		[&"world_grass", 50, &"E6_boss2"],
+		[&"world_frost", 40, &"E6_boss1"],
+		[&"world_demon", 40, &"E6_boss2"],
+		[&"world_grove", 40, &"E6_boss1"],
+		[&"world_swamp", 40, &"E6_boss2"],
+	]
+	for rc: Array in rot_cases:
+		wd.wave_table = MapTable.load_table(rc[0], _gl.registry)
+		var pick: EnemyData = wd.call(&"_find_boss_data", rc[1])
+		if pick == null or pick.id != StringName(String(rc[2])):
+			rot_ok = false
+			rot_info += "%s w%d→%s " % [String(rc[0]), int(rc[1]),
+				String(pick.id) if pick != null else "null"]
+	_check("Boss 回退轮换：per-map 池（grass w50→boss2 / frost·grove w40→boss1 / demon·swamp w40→boss2）",
+		rot_ok, rot_info)
+	# ⑥ 主表无尽行为不回归：无表公式段 TP（pkg2 锁定口径）+ 主表主体段 30 波不变
+	wd.wave_table = null
+	wd.start_wave(35)
+	_check("主表不回归：无表 w35 公式 TP 110×1.03^5",
+		absf(wd.tp_budget - 110.0 * pow(1.03, 5.0)) <= 0.01)
+	_gl.spawner.spawn_queue.clear()
+	wd.wave_table = _gl.registry.get_wave_table()
+	var e31: WaveEntryData = wd.call(&"_table_entry", 31)
+	_check("主表无尽段：w31 表驱动（主体段 30 波 + endless 10 条分表存储）",
+		e31 != null and _gl.registry.get_wave_table().entries.size() == 30
+		and _gl.registry.get_wave_table().endless_entries.size() == 10)
+	_gl.spawner.spawn_queue.clear()
+	wd.wave_table = saved_tbl
+	# ⑦ Meta 无尽深度：结算写入 / 读取 / 未记录默认 0（快照隔离——先断言再还原；
+	# 清残留结算先行改道 grass——残留 _run_max_wave 的深度只会写入一次性 grass 记录）
+	var saved_mr: Dictionary = Meta.map_records
+	Meta.map_records = {}
+	Meta.set_run_map(&"world_grass")
+	Meta._on_state_changed(GameConst.GameStatus.GAME_OVER)      # 清残留单局计数
+	Meta.set_run_map(&"world_frost")
+	Meta._on_wave_started(27)                                    # 冰原 final 20 → 深度 7
+	Meta._on_state_changed(GameConst.GameStatus.GAME_OVER)
+	_check("Meta 无尽深度：frost 27 波 → 深度 7", Meta.endless_depth(&"world_frost") == 7,
+		"got=%d" % Meta.endless_depth(&"world_frost"))
+	_check("Meta 无尽深度：未记录图默认 0",
+		Meta.endless_depth(&"world_swamp") == 0 and Meta.endless_depth(&"world_demon") == 0)
+	Meta.map_records = saved_mr
+	# ⑧ HUD 波次号无尽段继续递增
+	EventBus.emit_wave_started(41)
+	_check("HUD：无尽段波次号递增（41）", _gl.hud.wave == 41)
 
 
 func _live_children(p_node: Node) -> int:

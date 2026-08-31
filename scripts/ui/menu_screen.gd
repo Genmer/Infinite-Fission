@@ -209,13 +209,27 @@ func _open_map_select() -> void:
 		name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(name_l)
 		var desc_l := Label.new()
-		StickerTheme.label_sticker(desc_l, 13, PopPalette.INK_SOFT)
-		var mod_line := String(def.get("mod_name", ""))
-		desc_l.text = (String(def.desc) + "｜" + mod_line) if mod_line != "" else String(def.desc)
-		desc_l.position = Vector2(64.0, 44.0)
-		desc_l.size = Vector2(500.0, 22.0)
+		StickerTheme.label_sticker(desc_l, 12, PopPalette.INK_SOFT)
+		desc_l.text = String(def.desc)
+		desc_l.position = Vector2(64.0, 40.0)
+		desc_l.size = Vector2(500.0, 18.0)
 		desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(desc_l)
+		# 词缀二期：双词缀两行小字（祝 = 薄荷绿 / 诅 = 珊瑚红；数值真源 map_table.gd）
+		var bless_l := Label.new()
+		StickerTheme.label_sticker(bless_l, 12, PopPalette.SUCCESS)
+		bless_l.text = "祝　%s" % String(def.get("bless_name", ""))
+		bless_l.position = Vector2(64.0, 58.0)
+		bless_l.size = Vector2(500.0, 18.0)
+		bless_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(bless_l)
+		var curse_l := Label.new()
+		StickerTheme.label_sticker(curse_l, 12, PopPalette.ENEMY)
+		curse_l.text = "诅　%s" % String(def.get("curse_name", ""))
+		curse_l.position = Vector2(64.0, 76.0)
+		curse_l.size = Vector2(500.0, 18.0)
+		curse_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(curse_l)
 		if unlocked:
 			var play_btn := Button.new()
 			play_btn.text = "出发"
@@ -694,8 +708,10 @@ func _rebuild_records() -> void:
 	for i in range(MapTable.count()):
 		var def := MapTable.MAPS[i]
 		var mr: Dictionary = Meta.map_records.get(String(def.id), {})
+		var depth := int(mr.get("endless_depth", 0))
 		lines.append(["%s 最高波次" % String(def.name),
-			"%d%s" % [int(mr.get("best_wave", 0)), " ★" if Meta.is_map_cleared(def.id) else ""]])
+			"%d%s%s" % [int(mr.get("best_wave", 0)), " ★" if Meta.is_map_cleared(def.id) else "",
+				" · 无尽 %d" % depth if depth > 0 else ""]])
 	lines.append(["通关进度", "%d/%d 图" % [Meta.cleared_count(), MapTable.count()]])
 	for l in lines:
 		var row := Panel.new()

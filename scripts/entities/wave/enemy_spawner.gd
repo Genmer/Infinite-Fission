@@ -74,7 +74,8 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 
 
 func _apply_map_mods(p_enemy: Enemy) -> void:
-	# 地图词缀（M2 二期）：出生后差分修正——冰抗/移速/生命
+	# 地图词缀（M2 二期 + 词缀二期双词缀诅咒侧，数值真源 map_table.gd 注释块）：
+	# 出生后差分修正——冰抗/移速/生命/小怪生命/接触伤
 	if map_mods.is_empty():
 		return
 	if map_mods.has("ice_resist"):
@@ -86,6 +87,13 @@ func _apply_map_mods(p_enemy: Enemy) -> void:
 	if map_mods.has("hp_mult"):
 		p_enemy.max_hp = p_enemy.max_hp * float(map_mods["hp_mult"])
 		p_enemy.hp = p_enemy.max_hp
+	if map_mods.has("mob_hp_mult") and not p_enemy.is_boss():
+		# 虫群（草原诅咒）：小怪 HP +8%——Boss 免除（词缀二期口径： TAG_BOSS 不吃）
+		p_enemy.max_hp = p_enemy.max_hp * float(map_mods["mob_hp_mult"])
+		p_enemy.hp = p_enemy.max_hp
+	if map_mods.has("contact_mult"):
+		# 毒肤（树海诅咒）：敌接触伤 +8%（敌弹伤害同源 contact_dmg，随动放大）
+		p_enemy.contact_dmg = p_enemy.contact_dmg * float(map_mods["contact_mult"])
 
 
 func on_enemy_killed(p_enemy: Node2D) -> void:

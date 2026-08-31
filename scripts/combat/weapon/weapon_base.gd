@@ -252,16 +252,21 @@ func level_up() -> void:
 
 
 # ── 内部 ──────────────────────────────────────────────────────────
+func _player_rof_mult() -> float:
+	# 玩家侧射速合成倍率：过载咆哮（角色技能）× 地图祝福·射速（词缀二期「狂热」+6%，
+	# 数值真源 map_table.gd）——基类与 BallisticWeapon 覆写共用（两形态同一口径）
+	if player == null or not is_instance_valid(player):
+		return 1.0
+	return maxf(float(player.get("rof_mult")) * float(player.get("map_rof_mult")), 0.1)
+
+
 func _fire_interval() -> float:
 	# 节拍间隔：BALLISTIC = 1/rof（子类覆写射速口径）；其余形态 = cd × (1−ΣCDR)
 	if data == null:
 		return 1.0
-	var rof_mult := 1.0
-	if player != null and is_instance_valid(player):
-		rof_mult = maxf(float(player.get("rof_mult")), 0.1)   # 过载咆哮（角色技能）
 	if data.form == GameConst.WeaponForm.BALLISTIC:
 		var rof := clampf(get_stat(&"rof"), 0.1, _cap_rof())
-		return 1.0 / (rof * rof_mult)
+		return 1.0 / (rof * _player_rof_mult())
 	var cd := maxf(get_stat(&"cd"), 0.01)
 	var cdr := 0.0
 	var cap_cdr := 0.6
@@ -270,10 +275,7 @@ func _fire_interval() -> float:
 	if GameConfig.balance != null:
 		cap_cdr = GameConfig.balance.cap_cdr_sum
 	cdr = clampf(cdr, 0.0, cap_cdr)
-	var rof_mult2 := 1.0
-	if player != null and is_instance_valid(player):
-		rof_mult2 = maxf(float(player.get("rof_mult")), 0.1)
-	return cd * (1.0 - cdr) / rof_mult2
+	return cd * (1.0 - cdr) / _player_rof_mult()
 
 
 func _cap_rof() -> float:

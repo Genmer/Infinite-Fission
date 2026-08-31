@@ -40,7 +40,7 @@ var records: Dictionary = {
 	"total_runs": 0, "total_kills": 0,
 }
 var maps_cleared: Dictionary = {}             # map_id(String) → true（通关解锁链，M2）
-var map_records: Dictionary = {}              # map_id(String) → {best_wave, best_kills, best_level}
+var map_records: Dictionary = {}              # map_id(String) → {best_wave, best_kills, best_level, endless_depth}
 # 单局计数（GAME_OVER 结算后清零）
 var _run_kills: int = 0
 var _run_max_wave: int = 0
@@ -177,6 +177,15 @@ func mark_map_cleared(p_map_id: StringName) -> void:
 		_save()
 
 
+func endless_depth(p_map_id: StringName) -> int:
+	# 分图无尽深度（P1 无尽分图延伸 2026-08-31）：该图历史最深的「超出最终波波数」；
+	# 旧档无键 / 未记录 → 0（降级不崩）
+	var mr: Variant = map_records.get(String(p_map_id), {})
+	if mr is Dictionary:
+		return int((mr as Dictionary).get("endless_depth", 0))
+	return 0
+
+
 func cleared_count() -> int:
 	return maps_cleared.size()
 
@@ -264,6 +273,9 @@ func _on_state_changed(p_state: int) -> void:
 	mr["best_wave"] = maxi(int(mr["best_wave"]), _run_max_wave)
 	mr["best_kills"] = maxi(int(mr["best_kills"]), _run_kills)
 	mr["best_level"] = maxi(int(mr["best_level"]), _run_max_level)
+	# 无尽深度（分图无尽 P1）：本局最深超出该图最终波的波数（不足为 0）
+	var final_wave := int(MapTable.get_map(_run_map).get("final_wave", 1 << 30))
+	mr["endless_depth"] = maxi(int(mr.get("endless_depth", 0)), maxi(0, _run_max_wave - final_wave))
 	_check_achievements()
 	_save()
 	_run_kills = 0
