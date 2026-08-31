@@ -19,6 +19,7 @@ func run(p_tree: SceneTree) -> void:
 	_ensure_autoloads()
 	_boot_game_loop()
 	_test_weapon_gated_trait()                    # T1
+	_test_gold_trait_data()                       # T4
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -108,6 +109,64 @@ func _test_weapon_gated_trait() -> void:
 			player.weapon_slots[i] = null
 			if is_instance_valid(w):
 				w.free()
+
+
+# ── T4：金币词条数据 + 校验器扩项 ────────────────────────────────
+func _test_gold_trait_data() -> void:
+	print("── T4 金币词条数据/校验器 ──")
+	var reg := _gl.registry
+	var drop := reg.get_trait(&"AFF_GOLD_DROP")
+	var value := reg.get_trait(&"AFF_GOLD_VALUE")
+	_check("AFF_GOLD_DROP 注册加载（id/pool/pool_id）",
+		drop != null and drop.pool == GameConst.PoolClass.ADD and drop.pool_id == &"add_gold_drop")
+	_check("AFF_GOLD_DROP 数值（A4 §4：0.08/层 ×3 蓝 δ0.85）",
+		is_equal_approx(drop.value, 0.08) and drop.stack_max == 3
+		and drop.rarity == 1 and is_equal_approx(drop.decay_delta, 0.85))
+	_check("AFF_GOLD_VALUE 注册加载（id/pool/pool_id）",
+		value != null and value.pool == GameConst.PoolClass.ADD and value.pool_id == &"add_gold_value")
+	_check("AFF_GOLD_VALUE 数值（A4 §4：0.15/层 ×3 紫 δ0.85）",
+		is_equal_approx(value.value, 0.15) and value.stack_max == 3
+		and value.rarity == 2 and is_equal_approx(value.decay_delta, 0.85))
+	_check("金币词条 effect_id=EF_STAT（外观占位，GameLoop 侧聚合消费）",
+		drop.effect_id == &"EF_STAT" and value.effect_id == &"EF_STAT")
+	# 校验器封闭注册表扩项（不得入 LINEAR_ADD_POOLS——走 F3 衰减）
+	var v := DataValidator.new()
+	_check("ADD_POOL_IDS 含 add_gold_drop / add_gold_value",
+		DataValidator.ADD_POOL_IDS.has(&"add_gold_drop")
+		and DataValidator.ADD_POOL_IDS.has(&"add_gold_value"))
+	_check("金币两池不入 LINEAR_ADD_POOLS（F3 衰减）",
+		not TraitStack.LINEAR_ADD_POOLS.has(&"add_gold_drop")
+		and not TraitStack.LINEAR_ADD_POOLS.has(&"add_gold_value"))
+	_check("validate_trait：金币词条 0 错误",
+		v.validate_trait(drop).is_empty() and v.validate_trait(value).is_empty())
+	# gold_drop 结构校验（warning 级）
+	var e := EnemyData.new()
+	e.id = &"E_TEST"
+	e.hp_base = 10.0
+	e.tp_cost = 1.0
+	_check("gold_drop 空段：无告警（合法不掉金）", v.validate_enemy(e).is_empty())
+	e.gold_drop = {"chance": 1.5, "min": 8, "max": 12}
+	var w_bad: Array = v.validate_enemy(e)
+	_check("gold_drop.chance > 1 → warning", _has_warning_field(w_bad, "gold_drop.chance"))
+	e.gold_drop = {"chance": 0.5, "min": 12, "max": 8}
+	_check("gold_drop.min > max → warning", _has_warning_field(v.validate_enemy(e), "gold_drop.min"))
+	e.gold_drop = {"chance": 0.06, "min": 8, "max": 12}
+	_check("gold_drop 合法段：无告警", v.validate_enemy(e).is_empty())
+	_check("registry 既有敌表 gold_drop 全部 0 告警", _registry_gold_warnings_zero(v, reg))
+
+
+func _has_warning_field(p_verdicts: Array, p_field: String) -> bool:
+	for e in p_verdicts:
+		if String(e.get("field", "")) == p_field and String(e.get("severity", "")) == DataValidator.SEV_WARNING:
+			return true
+	return false
+
+
+func _registry_gold_warnings_zero(p_v: DataValidator, p_reg: DataRegistry) -> bool:
+	for id in p_reg.enemies:
+		if not p_v.validate_enemy(p_reg.enemies[id]).is_empty():
+			return false
+	return true
 
 
 # ── 断言 ──────────────────────────────────────────────────────────

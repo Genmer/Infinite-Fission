@@ -12,10 +12,12 @@ const SEV_ERROR := "error"
 const SEV_WARNING := "warning"
 
 # ── 封闭注册表（A2 §1.9 守门；来源：A3 §4.2/§4.3 + BalanceTables.add_pool_caps + A2 §1.8）──
-# 加算池 id 全集（A3 §4.2 十二条；BalanceTables.add_pool_caps 覆盖前五项的池钳）
+# 加算池 id 全集（A3 §4.2 十二条 + v0.6.0 金币两条；BalanceTables.add_pool_caps 覆盖前五项的池钳）
+# ★ 金币两池不入 LINEAR_ADD_POOLS——走 F3 衰减（TraitStack.aggregate_panel 消费）
 const ADD_POOL_IDS: Array[StringName] = [
 	&"add_atk", &"add_rof", &"add_cdr", &"add_crit", &"add_critdmg",
 	&"add_spd", &"add_hp", &"add_move", &"add_pickup", &"add_size", &"add_pierce", &"add_pellets",
+	&"add_gold_drop", &"add_gold_value",
 ]
 # 独立乘区池 id 全集（§三.5 + A3 §4.3；vuln 为目标侧易伤区，A2 §1.8）
 const MULT_POOL_IDS: Array[StringName] = [
@@ -141,6 +143,15 @@ func validate_enemy(e: EnemyData) -> Array:
 		_err(out, &"boss", e.boss.is_empty(), "tags 含 BOSS 必填 boss 段")
 		for key in ["phases", "bullet_patterns", "summons", "phase2_resist"]:
 			_err(out, StringName("boss." + key), not e.boss.has(key), "boss 缺键 %s" % key)
+	# v0.6.0 金币掉落段结构校验（仅告警——空段 = 不掉金币，合法；坏值 → 告警 + 掉落侧 guard 兜底）
+	if not e.gold_drop.is_empty():
+		_warn(out, &"gold_drop.chance", not e.gold_drop.has("chance")
+			or float(e.gold_drop["chance"]) < 0.0 or float(e.gold_drop["chance"]) > 1.0,
+			"gold_drop.chance ∈ [0, 1]")
+		_warn(out, &"gold_drop.min", not e.gold_drop.has("min")
+			or float(e.gold_drop["min"]) < 0.0, "gold_drop.min ≥ 0")
+		_warn(out, &"gold_drop.min", not e.gold_drop.has("min") or not e.gold_drop.has("max")
+			or float(e.gold_drop["min"]) > float(e.gold_drop["max"]), "gold_drop.min ≤ gold_drop.max")
 	return out
 
 

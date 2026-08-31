@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"AFF_GOLD_DROP"
+display_name = "点金手"
+description = "金币掉率 +8%，可叠 3 层"
+pool = 0
+pool_id = &"add_gold_drop"
+effect_id = &"EF_STAT"
+value = 0.08
+value2 = 0.0
+params = {}
+event_hooks = []
+stack_max = 3
+decay_delta = 0.85
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+required_weapon = &""
+condition = {}
