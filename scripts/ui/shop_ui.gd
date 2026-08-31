@@ -39,6 +39,7 @@ var _maxhp_used: bool = false                 # max_hp+10 每店限 1
 var _black_market: bool = false
 var _wave: int = 0
 var _gold: int = 0                            # 最近一次余额（refresh_gold 同步）
+var _player_full_hp: bool = false             # v0.7.0 U7：满血 heal 预禁用（open/heal 后回写）
 
 
 func _ready() -> void:
@@ -120,6 +121,12 @@ func mark_utility_used(p_util: StringName) -> void:
 	_refresh_shelf()
 
 
+func set_player_full_hp(p_full: bool) -> void:
+	# v0.7.0 U7：heal 预禁用回写（open 后与 heal 购买成功后由 GameLoop 调用）
+	_player_full_hp = p_full
+	_refresh_shelf()
+
+
 func price_for(p_index: int) -> int:
 	# 定价（A4 §2）：0~2 明码卡按 rarity（黑市且 rarity==3 → 260）；3 武器架 100
 	if p_index == 3:
@@ -169,16 +176,16 @@ func _refresh_shelf() -> void:
 	var maxhp_btn: Button = _util_buttons[&"maxhp"]
 	reroll_btn.disabled = _reroll_used or _gold < REROLL_PRICE
 	_util_text(reroll_btn, &"reroll", REROLL_PRICE, "（已购）" if _reroll_used else "")
-	heal_btn.disabled = _gold < HEAL_PRICE
-	_util_text(heal_btn, &"heal", HEAL_PRICE, "")
+	heal_btn.disabled = _gold < HEAL_PRICE or _player_full_hp   # v0.7.0 U7：满血预禁用
+	_util_text(heal_btn, &"heal", HEAL_PRICE, "（满血）" if _player_full_hp else "")
 	maxhp_btn.disabled = _maxhp_used or _gold < MAXHP_PRICE
 	_util_text(maxhp_btn, &"maxhp", MAXHP_PRICE, "（已购）" if _maxhp_used else "")
 
 
 func _shelf_text(p_card: Dictionary, p_weapon: bool, p_price: int) -> String:
-	# 货架项文本：[类别] 名称 / 描述 / 价格
+	# 货架项文本：[类别] 名称 / 描述 / 价格（kind 单源 GameConst.card_kind_name，U14）
 	var kind_name: String = "武器" if p_weapon \
-		else String(["精通", "词条", "遗物", "保底", "武器"][clampi(int(p_card.get("kind", 0)), 0, 4)])
+		else GameConst.card_kind_name(int(p_card.get("kind", 0)))
 	return "[%s] %s\n%s\n价格：%d 金币" % [kind_name, String(p_card.get("display_name", "")),
 		String(p_card.get("description", "")), p_price]
 

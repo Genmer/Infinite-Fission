@@ -17,6 +17,8 @@ var hit_stop_left: float = 0.0                # 顿帧剩余（raw 通道计时�
 var hit_stop_active_ms: float = 0.0           # 当前激活时长（合并比较基准）
 var merge_window: float = 0.03                # 30ms 内多触发取最大不叠加（AC-15.2）
 var chromatic_rect: ColorRect = null          # 全屏色差 ColorRect（程序化 shader 占位）
+var hit_flash_left: float = 0.0               # v0.7.0 U14：受击红闪剩余（raw 通道，s）
+var hit_flash_rect: ColorRect = null          # v0.7.0 U14：全屏红闪 ColorRect
 
 var current_ca_intensity: float = 0.0         # 当前色差强度（遥测/测试观测）
 var _ca_peak: float = 0.0                     # 本段色差峰值（线性衰减基准）
@@ -53,6 +55,7 @@ func setup(p_deps: Dictionary) -> void:
 		merge_window = float(feel_config.hit_stop_merge_ms) / 1000.0
 	shake.setup(max_px, max_rot, decay)
 	_setup_chromatic_rect(p_deps.get("chromatic_host"))
+	_setup_hit_flash_rect(p_deps.get("chromatic_host"))   # v0.7.0 U14：受击红闪（同宿主）
 	# 事件订阅（仅 Node 派生类可订阅，E-12；本类 extends Node ✓）
 	EventBus.damage_resolved.connect(on_damage_resolved)
 	EventBus.reaction_triggered.connect(on_reaction_triggered)
@@ -96,9 +99,12 @@ func on_reaction_triggered(_p_rxn: int, p_pos: Vector2, _p_target_uid: int) -> v
 
 
 func on_player_hit(_p_damage: float, _p_source_uid: int) -> void:
-	# 玩家受击 → trauma 0.15（HIT 档；无顿帧）。签名对齐 EventBus.player_hit(damage, source_uid)
-	# 双参信号（集成包修复：单参签名在信号派发时报 Method expected 1 arguments 错误刷屏）。
+	# 玩家受击 → trauma 0.15（HIT 档；无顿帧）+ 全屏红闪 0.22s（v0.7.0 U14）。
+	# 签名对齐 EventBus.player_hit(damage, source_uid) 双参信号（集成包修复：单参签名在
+	# 信号派发时报 Method expected 1 arguments 错误刷屏）。
 	add_trauma_for_level(GameConst.FeelLevel.HIT)
+	hit_flash_left = HIT_FLASH_TIME
+	_update_hit_flash()
 
 
 func request_hit_stop(p_duration_ms: float) -> void:
@@ -113,12 +119,15 @@ func request_hit_stop(p_duration_ms: float) -> void:
 
 
 func tick(p_raw_delta: float) -> void:
-	# raw 通道：顿帧剩余衰减 / trauma 衰减 / 色差线性归零（顿帧期间表现层照常，Q-14）
+	# raw 通道：顿帧剩余衰减 / trauma 衰减 / 色差线性归零 / 红闪衰减（顿帧期间表现层照常，Q-14）
 	_raw_elapsed += p_raw_delta
 	if hit_stop_left > 0.0:
 		hit_stop_left = maxf(hit_stop_left - p_raw_delta, 0.0)
 		if hit_stop_left <= 0.0:
 			hit_stop_active_ms = 0.0
+	if hit_flash_left > 0.0:
+		hit_flash_left = maxf(hit_flash_left - p_raw_delta, 0.0)
+		_update_hit_flash()                       # 零强度隐藏（同色差 visible 门控口径）
 	if shake != null:
 		shake.tick(p_raw_delta)
 	if _ca_left > 0.0:
@@ -212,3 +221,26 @@ void fragment() {\n\
 	chromatic_rect.material = _chromatic_material
 	if p_host != null:
 		p_host.add_child(chromatic_rect)
+
+
+# ── v0.7.0 U14：玩家受击全屏红闪（程序化占位；同色差宿主） ────────
+const HIT_FLASH_TIME := 0.22                  # 红闪时长 s（raw 通道衰减）
+const HIT_FLASH_COLOR := Color(1.0, 0.2, 0.2, 0.22)
+
+
+func _setup_hit_flash_rect(p_host: Node) -> void:
+	# 全屏红色 ColorRect（mouse IGNORE；初始隐藏，visible 门控零开销）
+	hit_flash_rect = ColorRect.new()
+	hit_flash_rect.name = "HitFlash"
+	hit_flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hit_flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hit_flash_rect.color = HIT_FLASH_COLOR
+	hit_flash_rect.visible = false
+	if p_host != null:
+		p_host.add_child(hit_flash_rect)
+
+
+func _update_hit_flash() -> void:
+	# visible 门控（零强度隐藏——同 _push_chromatic_uniform 口径）
+	if hit_flash_rect != null:
+		hit_flash_rect.visible = hit_flash_left > 0.0

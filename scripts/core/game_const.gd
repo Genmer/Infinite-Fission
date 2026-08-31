@@ -59,3 +59,9 @@ static func next_uid() -> int:
 	if _uid_counter > UID_MAX:
 		_uid_counter = 1
 	return _uid_counter
+
+
+static func card_kind_name(p_kind: int) -> String:
+	# v0.7.0 U14：CardKind → 中文名单源（card_select_ui / shop_ui 双处数组字面量收束；
+	# 越界入参钳 0~4）
+	return ["精通", "词条", "遗物", "保底", "武器"][clampi(p_kind, 0, 4)]

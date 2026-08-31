@@ -16,6 +16,7 @@ var enemy_grid: SpaceGrid = null              # 最近一次 tick 的网格（E-
 var elemental_system: ElementalSystem = null  # 注入（包 4 帧序⑤：出生 register_host 挂状态容器）
 var spawn_queue: Array[Dictionary] = []      # 待生成队列 {data_id, wave, tags, pos}
 var active: Array[Node2D] = []                # 活跃敌列表（GameLoop ④ enemy_grid.rebuild 数据源）
+var summon_active_count: int = 0              # v0.7.0 U13：场上召唤物计数（Boss 召唤闸真源/观测口）
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 
@@ -32,7 +33,8 @@ func prewarm() -> void:
 
 func enqueue(p_entry: Dictionary) -> void:
 	# WaveDirector/Boss 召唤投放生成请求：{data_id, wave, tags, pos}（pos 可缺省→出生点抽样；
-	# v0.6.0 可选键 hp_override:float——>0 时 spawn 后覆写 max_hp/hp，A4 §7）
+	# v0.6.0 可选键 hp_override:float——>0 时 spawn 后覆写 max_hp/hp，A4 §7；
+	# v0.7.0 U13 可选键 summon:bool——实际出生时 is_summon=true 且 summon_active_count+1）
 	spawn_queue.append(p_entry)
 
 
@@ -60,6 +62,10 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		enemy.projectile_pool = projectile_pool
 		enemy.enemy_grid = enemy_grid
 		enemy.summon_spawner = self                  # v0.6.0：Boss 召唤宿主注入（A4 §7）
+		# v0.7.0 U13 可选键 summon:bool：出生即计入场上召唤数（Enemy._summon_allies 闸真源）
+		if bool(entry.get("summon", false)):
+			enemy.is_summon = true
+			summon_active_count += 1
 		if elemental_system != null:
 			elemental_system.register_host(enemy)   # 包 4：出生挂元素状态容器（帧序⑤宿主）
 		# v0.6.0 增量键 hp_override（A4 §7）：>0 → spawn 后覆写 max_hp/hp（Boss split 子代血量）
@@ -84,6 +90,9 @@ func on_enemy_killed(p_enemy: Node2D) -> void:
 	active.erase(p_enemy)
 	if elemental_system != null:
 		elemental_system.unregister_host(p_enemy)
+	# v0.7.0 U13：召唤计数在池归还清零前读取（is_summon 随 _reset_state 归零；maxi 防御）
+	if bool(p_enemy.get("is_summon")):
+		summon_active_count = maxi(summon_active_count - 1, 0)
 	if pool != null:
 		pool.release(p_enemy)
 

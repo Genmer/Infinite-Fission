@@ -26,6 +26,8 @@ var projectile_pool: ProjectilePool = null    # 敌弹池注入（RANGED 开火�
 var enemy_grid: SpaceGrid = null               # 网格引用注入（E-10 分离力/查询预留）
 var summon_spawner: EnemySpawner = null       # v0.6.0 召唤注入（Boss 召唤入队宿主；spawner 出队段注入）
 var _spawn_wave: int = 1                      # v0.6.0 召唤波号快照（波次成长口径）
+var is_summon: bool = false                   # v0.7.0 U13：Boss 召唤物标记（出生入列键 summon:true）
+var gold_rush: bool = false                   # v0.7.0 U5：金币狂欢波标记（掉落覆写消费）
 
 # ── v0.6.0 Boss 弹幕/召唤（A4 §7；T7 落地，Boss3 charge/phase3/laser_sweep defer 不消费） ──
 var _boss_pattern: Dictionary = {}            # bullet_patterns 快照（spawn 时 duplicate）
@@ -141,6 +143,8 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	resist = data.resist.duplicate()
 	immune_mask = data.immune_mask
 	dead = false
+	is_summon = false                            # v0.7.0 U13：默认非召唤（入列键 summon 置真）
+	gold_rush = false                            # v0.7.0 U5：默认非金币关（波次标记置真）
 	boss_phase = 1 if is_boss() else 0
 	elemental = null                          # 包 3 ElementalSystem.register_host 挂入
 	bullet_speed = float(data.ranged.get("bullet_speed", 300.0))
@@ -305,6 +309,11 @@ func is_elite() -> bool:
 	return (tags & GameConst.TAG_ELITE) != 0
 
 
+func spawn_wave() -> int:
+	# v0.7.0 观测口：出生波号快照（U6 Boss 芯片掉落按出生波 roll；_spawn_wave spawn 期已记录）
+	return _spawn_wave
+
+
 func _on_died() -> void:
 	# 一次性死亡：置 dead → EventBus.emit_enemy_killed → 池归还（EnemySpawner 订阅承担）
 	dead = true
@@ -421,12 +430,14 @@ func _fire_boss_bullet(p_angle: float, p_speed: float, p_dmg: float) -> void:
 
 
 func _summon_allies() -> void:
-	# 召唤（A4 §7）：门 = spawner 注入 + 场上 < BOSS_SUMMON_ACTIVE_CAP + 分波门
-	#（summons.phase 仅 P2 放行）；位置 = Boss 周围半径 90px 环形均分（无 RNG 确定性）；
+	# 召唤（A4 §7 + v0.7.0 U13）：门 = spawner 注入 + 场上召唤 < BOSS_SUMMON_ACTIVE_CAP
+	#（U13 修复：原闸 spawner.active_count() 含普通敌——杂波期 Boss 召唤被误拦/放量失真，
+	# 改为召唤独立计数 summon_active_count）+ 分波门（summons.phase 仅 P2 放行）；
+	# 位置 = Boss 周围半径 90px 环形均分（无 RNG 确定性）；
 	# mode=="split" 且 hp_ratio → hp_override = max_hp × hp_ratio（spawn 侧消费）
 	if summon_spawner == null or _boss_summons.is_empty() or dead:
 		return
-	if summon_spawner.active_count() >= BOSS_SUMMON_ACTIVE_CAP:
+	if summon_spawner.summon_active_count >= BOSS_SUMMON_ACTIVE_CAP:
 		return
 	if _boss_summons.has("phase") and boss_phase < int(_boss_summons.get("phase", 0)):
 		return                                      # 分波门未开（P2 才召唤）
@@ -442,7 +453,8 @@ func _summon_allies() -> void:
 	for i in range(count):
 		var pos := global_position \
 			+ Vector2.RIGHT.rotated(TAU * float(i) / float(count)) * 90.0
-		var entry := {"data_id": data_id, "wave": _spawn_wave, "tags": 0, "pos": pos}
+		var entry := {"data_id": data_id, "wave": _spawn_wave, "tags": 0, "pos": pos,
+			"summon": true}                        # v0.7.0 U13：入列即标记（出生计数）
 		if hp_override > 0.0:
 			entry["hp_override"] = max_hp * hp_override
 		summon_spawner.enqueue(entry)
@@ -484,6 +496,8 @@ func _reset_state() -> void:
 	projectile_pool = null
 	enemy_grid = null
 	summon_spawner = null                       # v0.6.0：Boss 弹幕/召唤全量清零（含注入引用）
+	is_summon = false                           # v0.7.0 U13/U5：标记清零
+	gold_rush = false
 	_boss_pattern = {}
 	_boss_summons = {}
 	_pattern_cd_left = 0.0

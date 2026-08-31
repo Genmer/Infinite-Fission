@@ -78,7 +78,7 @@ events = [&"SHOP"]
 [sub_resource type="Resource" id="WaveEntryData_w10"]
 script = ExtResource("2_wed")
 index = 10
-composition = [{"enemy_id": &"E6_boss1", "count": 1}]
+composition = []
 tp_override = 0.0
 window = 22.0
 events = [&"BOSS", &"UNLOCK_SLOT_4"]
@@ -158,7 +158,7 @@ events = [&"SHOP"]
 [sub_resource type="Resource" id="WaveEntryData_w20"]
 script = ExtResource("2_wed")
 index = 20
-composition = [{"enemy_id": &"E6_boss2", "count": 1}]
+composition = []
 tp_override = 0.0
 window = 26.0
 events = [&"BOSS"]
@@ -238,7 +238,7 @@ events = [&"SHOP"]
 [sub_resource type="Resource" id="WaveEntryData_w30"]
 script = ExtResource("2_wed")
 index = 30
-composition = [{"enemy_id": &"E6_boss3", "count": 1}]
+composition = []
 tp_override = 0.0
 window = 30.0
 events = [&"BOSS"]

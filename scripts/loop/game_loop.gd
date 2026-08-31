@@ -341,6 +341,7 @@ func _open_shop_flow(p_wave: int, p_black_market: bool) -> bool:
 			weapon_pool[card_generator.rng.randi_range(0, weapon_pool.size() - 1)])
 	change_state(GameConst.GameStatus.SHOP)
 	shop_ui.open(p_wave, p_black_market, current_candidates, weapon_card, gold)
+	shop_ui.set_player_full_hp(player.hp >= player.max_hp)   # v0.7.0 U7：heal 预禁用回写
 	return true
 
 
@@ -443,6 +444,7 @@ func _on_shop_utility(p_util: StringName) -> void:
 				return
 			_add_gold(-ShopUI.HEAL_PRICE)
 			player.set("hp", minf(hp + max_hp * 0.3, max_hp))
+			shop_ui.set_player_full_hp(player.hp >= player.max_hp)   # v0.7.0 U7：回写预禁用
 		&"maxhp":
 			if bool(shelf["maxhp_used"]):
 				push_warning("[GameLoop] max_hp+10 每店限 1 次，拒绝")

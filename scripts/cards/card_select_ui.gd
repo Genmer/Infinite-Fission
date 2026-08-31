@@ -65,7 +65,7 @@ func _setup_button(p_btn: Button, p_card: Dictionary) -> void:
 		p_btn.disabled = true
 		return
 	p_btn.disabled = false
-	var kind_name: String = ["精通", "词条", "遗物", "保底", "武器"][clampi(int(p_card.get("kind", 0)), 0, 4)]   # v0.6.0 扩第 5 项（WEAPON）
+	var kind_name: String = GameConst.card_kind_name(int(p_card.get("kind", 0)))   # v0.7.0 U14 单源
 	p_btn.text = "[%s] %s\n%s" % [kind_name, String(p_card.get("display_name", "")), String(p_card.get("description", ""))]
 
 

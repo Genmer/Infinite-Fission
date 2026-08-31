@@ -21,6 +21,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_chip_data()                             # U1
 	_test_chip_handler()                          # U2
 	_test_chip_pipeline()                         # U3
+	_test_u12_u13_u14()                           # U12+U13+U14
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -542,3 +543,98 @@ func _balance_has_field(p_verdicts: Array, p_field: String) -> bool:
 		if String(v.get("field", "")) == p_field:
 			return true
 	return false
+
+
+# ══ U12+U13+U14：双 Boss 修复 / 召唤独立计数 / kind 单源 + 红闪 ═════
+func _test_u12_u13_u14() -> void:
+	print("── U12 双 Boss 修复 ──")
+	# 波表静态：w10/w20/w30 composition 空（events BOSS 保留）
+	var table := _gl.registry.get_wave_table()
+	var empty_ok := true
+	for wave in [10, 20, 30]:
+		for entry in table.entries:
+			if entry.index == wave and not entry.composition.is_empty():
+				empty_ok = false
+	_check("波表：w10/w20/w30 composition 置空（events BOSS 保留）", empty_ok)
+	# 动态：每 Boss 波 TAG_BOSS 敌恰 1 只（_spawn_boss 唯一路径）
+	for wave in [10, 20, 30]:
+		_gl.spawner.spawn_queue.clear()
+		for e in _gl.spawner.active.duplicate():
+			_gl.spawner.on_enemy_killed(e)
+		_gl.wave_director.start_wave(wave)
+		var guard := 0
+		while not _gl.spawner.queue_empty() and guard < 400:
+			_gl.spawner.tick(DT, _gl.enemy_grid)
+			guard += 1
+		var boss_n := 0
+		for e2 in _gl.spawner.active:
+			if e2 is Enemy and (e2 as Enemy).is_boss():
+				boss_n += 1
+		_check("w%d：TAG_BOSS 敌恰 1 只（双 Boss 修复）" % wave, boss_n == 1, "n=%d" % boss_n)
+		for e3 in _gl.spawner.active.duplicate():
+			_gl.spawner.on_enemy_killed(e3)       # 静默归还（非战斗语义）
+	print("── U13 召唤独立计数 ──")
+	var spawner := _gl.spawner
+	spawner.summon_active_count = 0
+	var boss2: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire() as Enemy
+	boss2.spawn(_gl.registry.get_enemy(&"E6_boss2"), 20, GameConst.TAG_BOSS)
+	boss2.summon_spawner = spawner
+	boss2.projectile_pool = _gl.pools[&"projectile"]
+	var q0 := spawner.queue_count()
+	boss2._summon_cd_left = DT
+	boss2.tick(DT)
+	_check("boss2 split 召唤入队 2", spawner.queue_count() == q0 + 2)
+	var has_summon_key := true
+	for entry in spawner.spawn_queue:
+		var row: Dictionary = entry
+		if StringName(String(row.get("data_id", ""))) == &"E5_elite":
+			has_summon_key = has_summon_key and bool(row.get("summon", false))
+	_check("召唤入列条目含 summon:true", has_summon_key)
+	spawner.tick(DT, _gl.enemy_grid)              # 出队 → 出生计数
+	_check("出生计数 summon_active_count=2", spawner.summon_active_count == 2)
+	var summoned: Array[Node2D] = []
+	for e4 in spawner.active:
+		var en := e4 as Enemy
+		if en != null and en.is_summon:
+			summoned.append(e4)
+	_check("出生实体 is_summon=true ×2", summoned.size() == 2)
+	for e5 in summoned:
+		spawner.on_enemy_killed(e5)               # 归还前读 is_summon → 计数-1
+	_check("死亡归还后计数回 0", spawner.summon_active_count == 0)
+	# U13 闸：召唤独立计数满 12 → 拦截（不再被普通敌 active_count 干扰）
+	spawner.summon_active_count = 12
+	var q1 := spawner.queue_count()
+	boss2._summon_cd_left = DT
+	boss2.tick(DT)
+	_check("召唤闸：summon_active_count≥12 → 拦截", spawner.queue_count() == q1)
+	spawner.summon_active_count = 0
+	(_gl.pools[&"enemy"] as EnemyPool).release(boss2)   # 静默归还（非战斗语义）
+	print("── U14 kind 单源 + 受击红闪 + heal 预禁用 ──")
+	_check("card_kind_name 全表",
+		GameConst.card_kind_name(0) == "精通" and GameConst.card_kind_name(1) == "词条"
+		and GameConst.card_kind_name(2) == "遗物" and GameConst.card_kind_name(3) == "保底"
+		and GameConst.card_kind_name(4) == "武器")
+	_check("card_kind_name 越界钳 0~4",
+		GameConst.card_kind_name(9) == "武器" and GameConst.card_kind_name(-1) == "精通")
+	var btn := Button.new()
+	_gl.card_select_ui._setup_button(btn, {"kind": 4, "display_name": "X", "description": ""})
+	_check("CardSelectUI kind 单源：[武器] 前缀", String(btn.text).begins_with("[武器]"))
+	btn.free()
+	var gf := _gl.game_feel
+	_check("红闪初始隐藏（零强度门控）",
+		gf.hit_flash_left == 0.0 and not gf.hit_flash_rect.visible)
+	EventBus.emit_player_hit(8.0, 0)
+	_check("受击 → 红闪激活 0.22s",
+		is_equal_approx(gf.hit_flash_left, 0.22) and gf.hit_flash_rect.visible)
+	gf.tick(0.10)
+	_check("raw 衰减中仍可见", gf.hit_flash_left > 0.0 and gf.hit_flash_rect.visible)
+	gf.tick(0.30)
+	_check("衰减归零隐藏", gf.hit_flash_left == 0.0 and not gf.hit_flash_rect.visible)
+	# heal 预禁用（U7 自包含部分：open 后与 heal 购买后回写）
+	var shop := _gl.shop_ui
+	shop.open(9, false, [], {}, 1000)
+	shop.set_player_full_hp(true)
+	_check("满血 → heal 预禁用", (shop._util_buttons[&"heal"] as Button).disabled)
+	shop.set_player_full_hp(false)
+	_check("非满血 + 余额足 → heal 可购", not (shop._util_buttons[&"heal"] as Button).disabled)
+	shop.close()
