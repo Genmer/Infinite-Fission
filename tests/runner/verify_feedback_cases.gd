@@ -8,6 +8,7 @@
 #   ⑨ 左下角构筑面板 → 暂停 + 详情卡可见 ⑩ 粒子池寿命兜底回收（爆炸残留修复）
 #   ⑪ 感电落雷/燃烧余烬/冰冻冰晶表现件挂载 ⑫ Boss 巨大化 + 弹幕密度 + E7 织入波表
 #   ⑬ 描述去黑话（无 W8 编号）⑭ META_ROADMAP 规划文档存在
+#   ⑮ P3 设置页（音量换算/震屏·伤害数字短路/持久化/双入口/面板状态机）
 extends RefCounted
 
 const DT := 1.0 / 120.0
@@ -50,6 +51,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_p2_bgm()
 	_test_p2_daily()
 	_test_p2_characters()
+	_test_settings()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -426,8 +428,8 @@ func _test_meta_systems() -> void:
 	# 大厅 UI：入口 + 面板
 	var menu: MenuScreen = _gl.menu_screen
 	_check("大厅：registry 已注入", menu.registry != null)
-	_check("大厅：六入口按钮就位（图鉴/成就/记录/角色/养成/每日——P2 每日挑战入口 +1）",
-		menu._lobby_btns.size() == 6)
+	_check("大厅：七入口按钮就位（图鉴/成就/记录/角色/养成/每日/设置——P2 每日 + P3 设置各 +1）",
+		menu._lobby_btns.size() == 7)
 	menu._on_lobby_pressed("codex")
 	_check("大厅：图鉴面板打开且条目 >0",
 		menu._panel_root.visible and menu._panel_list.get_child_count() > 0)
@@ -1487,6 +1489,107 @@ func _test_p2_characters() -> void:
 		_live_children(menu._panel_list) == CharacterTable.count())
 	menu._on_panel_close()
 	p.call(&"set_character", &"sentinel")
+
+
+# ── P3 设置页（音量/震屏/伤害数字开关 + 持久化 + 双入口面板状态机） ─
+func _test_settings() -> void:
+	print("── P3 设置页 ──")
+	# ① 默认值（读口缺键回退默认表——清空已存段断言出厂值，末尾快照还原不留痕）
+	var saved_settings: Dictionary = Meta._settings.duplicate()
+	Meta._settings = {}
+	_check("设置：默认音量 sfx=0.8 / bgm=0.6",
+		absf(float(Meta.settings("sfx_volume")) - 0.8) <= 0.001
+		and absf(float(Meta.settings("bgm_volume")) - 0.6) <= 0.001)
+	_check("设置：默认开关 震屏/伤害数字 = true",
+		bool(Meta.settings("shake_on")) and bool(Meta.settings("damage_numbers_on")))
+	# ② 写口：越界钳制 + 未知键忽略（防脏写穿档）
+	Meta.set_setting("sfx_volume", 5.0)
+	Meta.set_setting("bgm_volume", -0.5)
+	_check("设置：写口越界钳制（5.0→1.0 / -0.5→0.0）",
+		absf(float(Meta.settings("sfx_volume")) - 1.0) <= 0.001
+		and absf(float(Meta.settings("bgm_volume"))) <= 0.001)
+	Meta.set_setting("not_a_setting", 1)
+	_check("设置：未知键忽略（读口 null）", Meta.settings("not_a_setting") == null)
+	# ③ 持久化：写即存 → _load 磁盘回路还原（user://meta_save.cfg settings 段）
+	Meta.set_setting("sfx_volume", 0.25)
+	Meta._load()
+	_check("设置：持久化（0.25 过 user:// 磁盘写读回路）",
+		absf(float(Meta.settings("sfx_volume")) - 0.25) <= 0.001)
+	# ④ 音量换算端点 + SfxBank 实时接线（settings_changed 驱动，同步落点）
+	_check("设置：换算端点（0→-60dB / 1→0dB）",
+		absf(SfxBank.linear_gain_db(0.0) + 60.0) <= 0.01
+		and absf(SfxBank.linear_gain_db(1.0)) <= 0.0001)
+	Meta.set_setting("sfx_volume", 1.0)
+	Meta.set_setting("bgm_volume", 1.0)
+	_check("设置：音量接线满档 = 既有基准档（sfx -14 / pad -18）",
+		absf((SfxBank.I._players[&"hit"] as AudioStreamPlayer).volume_db + 14.0) <= 0.01
+		and absf(SfxBank.I._bgm_player.volume_db + 18.0) <= 0.01)
+	Meta.set_setting("sfx_volume", 0.0)
+	Meta.set_setting("bgm_volume", 0.0)
+	_check("设置：音量接线静音档（0 → 基准再 -60dB）",
+		absf((SfxBank.I._players[&"hit"] as AudioStreamPlayer).volume_db + 74.0) <= 0.01
+		and absf(SfxBank.I._bgm_player.volume_db + 78.0) <= 0.01)
+	# ⑤ 震屏开关短路实测（开→trauma 叠加；关→恒 0；顿帧打击感保留）
+	var fr := DamageResult.new()
+	fr.feel_level = GameConst.FeelLevel.CRIT
+	fr.final_value = 1.0
+	fr.target_uid = 9801
+	fr.popup_style = GameConst.PopupStyle.NORMAL
+	Meta.set_setting("shake_on", true)
+	_gl.game_feel.shake.trauma = 0.0
+	EventBus.damage_resolved.emit(fr)
+	_check("设置：震屏开 → CRIT trauma 叠加（>0）", _gl.game_feel.shake.trauma > 0.0)
+	Meta.set_setting("shake_on", false)
+	_gl.game_feel.shake.trauma = 0.0
+	_gl.game_feel.hit_stop_left = 0.0
+	EventBus.damage_resolved.emit(fr)
+	_check("设置：震屏关 → trauma 恒 0（入口短路）", _gl.game_feel.shake.trauma == 0.0)
+	_check("设置：震屏关不伤打击感（顿帧仍生效）", _gl.game_feel.hit_stop_left > 0.0)
+	_gl.game_feel.hit_stop_left = 0.0
+	# ⑥ 伤害数字开关短路实测（关→跳字入口全关；开→恢复；伤害结算管线不受影响）
+	var pm: PopupManager = _gl.popup_manager
+	pm.tick(10.0)                                # 清场（归还⑤派生的跳字）
+	var r2 := DamageResult.new()
+	r2.final_value = 10.0
+	r2.target_uid = 9802
+	r2.pos = Vector2(100.0, 100.0)
+	r2.popup_style = GameConst.PopupStyle.NORMAL
+	Meta.set_setting("damage_numbers_on", false)
+	pm.on_damage_resolved(r2)
+	_check("设置：伤害数字关 → 跳字入口短路（0 活跃）", pm.active_popups == 0)
+	Meta.set_setting("damage_numbers_on", true)
+	pm.on_damage_resolved(r2)
+	_check("设置：伤害数字开 → 跳字恢复", pm.active_popups == 1)
+	pm.tick(10.0)
+	# ⑦ 双入口存在性（大厅按钮行 + 暂停卡「设置」按钮）
+	var menu: MenuScreen = _gl.menu_screen
+	var lobby_btn: Button = menu._root.find_child("Lobby_settings", true, false) as Button
+	_check("设置：大厅入口按钮就位（文本「设置」）",
+		lobby_btn != null and lobby_btn.text == "设置")
+	var pbtn: Button = _gl.pause_overlay._card.find_child("SettingsButton", true, false) as Button
+	_check("设置：暂停面板「设置」按钮就位", pbtn != null and pbtn.text == "设置")
+	# ⑧ 面板开合状态机（纯 UI：开合不改 GameLoop 状态）
+	var sp: SettingsPanel = _gl.settings_panel
+	_check("设置：面板初始关闭", not sp.is_open())
+	sp.open()
+	_check("设置：open() → 可见", sp.is_open())
+	sp.close()
+	_check("设置：close() → 隐藏（关闭恢复原界面）", not sp.is_open())
+	# ⑨ 面板控件 → 写口联动（滑条 value_changed / 开关翻转，写即存）
+	sp.open()
+	sp._sfx_slider.value = 0.5                   # value_changed → Meta.set_setting
+	_check("设置：滑条拖动 → 写口生效（0.5）",
+		absf(float(Meta.settings("sfx_volume")) - 0.5) <= 0.001)
+	var shake_before: bool = bool(Meta.settings("shake_on"))
+	sp._shake_btn.pressed.emit()
+	_check("设置：开关点击 → shake_on 翻转", bool(Meta.settings("shake_on")) != shake_before)
+	sp._shake_btn.pressed.emit()
+	_check("设置：开关再点 → 复位原值", bool(Meta.settings("shake_on")) == shake_before)
+	sp.close()
+	# 还原（测试不留痕：快照回写 + 播放侧重应用）
+	Meta._settings = saved_settings
+	Meta._save()
+	SfxBank.I.apply_settings_volumes()
 
 
 func _live_children(p_node: Node) -> int:

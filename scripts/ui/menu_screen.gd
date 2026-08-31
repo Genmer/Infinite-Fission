@@ -13,6 +13,7 @@ extends CanvasLayer
 signal start_requested()                      # → GameLoop.start_run()（MENU → PLAYING，兼容口）
 signal start_map_requested(map_id: StringName)   # 选图启动（M2 多地图 → GameLoop._on_menu_start）
 signal start_daily_requested()                # 每日挑战启动（P2 → GameLoop._on_menu_start_daily）
+signal settings_requested()                   # 设置页打开（P3 → GameLoop 接线 SettingsPanel.open）
 
 var registry: DataRegistry = null             # GameLoop Boot 期注入（图鉴全量清单）
 
@@ -258,7 +259,7 @@ func is_menu_visible() -> bool:
 
 # ── 大厅入口（图鉴 / 成就 / 记录） ────────────────────────────────
 func _build_lobby() -> void:
-	# 出发按钮下方三入口（按钮文案带完成度角标——图鉴 x/y、成就 x/y）
+	# 出发按钮下方入口行（按钮文案带完成度角标——图鉴 x/y、成就 x/y）
 	var defs := [
 		{"kind": "codex", "text": "图鉴", "pos": Vector2(44.0, 900.0)},
 		{"kind": "ach", "text": "成就", "pos": Vector2(265.0, 900.0)},
@@ -266,10 +267,12 @@ func _build_lobby() -> void:
 		{"kind": "char", "text": "角色", "pos": Vector2(155.0, 988.0)},
 		{"kind": "upgrade", "text": "养成", "pos": Vector2(375.0, 988.0)},
 		{"kind": "daily", "text": "每日挑战", "pos": Vector2(265.0, 1076.0)},
+		{"kind": "settings", "text": "设置", "pos": Vector2(486.0, 1076.0)},
 	]
 	for d in defs:
 		var btn := Button.new()
 		btn.name = "Lobby_%s" % String(d.kind)
+		btn.text = String(d.text)                # 基础文案（动态角标由 _refresh_lobby_counts 覆盖）
 		btn.add_theme_font_size_override("font_size", 22)
 		btn.add_theme_font_override("font", StickerTheme.font_bold())
 		btn.position = d.pos
@@ -301,6 +304,10 @@ func _refresh_lobby_counts() -> void:
 
 
 func _on_lobby_pressed(p_kind: String) -> void:
+	if p_kind == "settings":
+		# 设置页为独立全屏面板（不占大厅详情壳；GameLoop 接线 SettingsPanel.open）
+		settings_requested.emit()
+		return
 	_panel_root.visible = true
 	var titles := {"codex": "图鉴", "ach": "成就", "records": "历史记录",
 		"char": "选择角色", "upgrade": "局外养成", "daily": "每日挑战"}

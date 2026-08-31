@@ -1,6 +1,7 @@
 # scripts/ui/pause_overlay.gd
 # 方向 C 暂停遮罩面板（用户反馈 2026-08-29「没有暂停的地方」）：全屏压暗 + 「暂停中」
-# 大标题白卡 + 三按钮（继续 / 重新开始 / 回主菜单）。仅 PAUSED 态显示（state_changed 绑定）。
+# 大标题白卡 + 四按钮（继续 / 重新开始 / 回主菜单 / 设置——P3 设置页入口，纯 UI 不改
+# 暂停态）。仅 PAUSED 态显示（state_changed 绑定）。
 # process_mode = ALWAYS（tree.paused 期间 UI 照常，Q-14 口径）；申请经信号 → GameLoop
 # 仲裁（迁移矩阵唯一裁决位，E-16 同源）：resume→PLAYING / restart→restart_run /
 # menu→quit_to_menu（PAUSED→MENU 合法迁移，pkg4 非法迁移枚举不含此对，证据见交付报告）。
@@ -10,6 +11,7 @@ extends CanvasLayer
 signal resume_requested()                     # → GameLoop.request_resume()（PAUSED → PLAYING）
 signal restart_requested()                    # → GameLoop.restart_run()（PAUSED → PLAYING 重开）
 signal menu_requested()                       # → GameLoop.quit_to_menu()（PAUSED → MENU）
+signal settings_requested()                   # → GameLoop 接线 SettingsPanel.open（P3，纯 UI 不改状态）
 
 var _root: Control = null
 var _card: Panel = null
@@ -89,12 +91,12 @@ func _build_ui() -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(dim)
 
-	# 暂停白卡（贴纸面板：圆角 24 + 藏青描边 + 底部厚投影）
+	# 暂停白卡（贴纸面板：圆角 24 + 藏青描边 + 底部厚投影；P3 加高容纳第四钮「设置」）
 	_card = Panel.new()
 	_card.name = "PauseCard"
 	_card.add_theme_stylebox_override("panel", StickerTheme.panel_style(24.0, 4, true))
-	_card.position = Vector2(120.0, 428.0)
-	_card.size = Vector2(480.0, 424.0)
+	_card.position = Vector2(120.0, 378.0)
+	_card.size = Vector2(480.0, 524.0)
 	_card.pivot_offset = _card.size * 0.5
 	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_card)
@@ -129,6 +131,7 @@ func _build_ui() -> void:
 	_add_card_button("ResumeButton", "继续", Vector2(140.0, 156.0), _on_resume_pressed)
 	_add_card_button("RestartButton", "重新开始", Vector2(140.0, 246.0), _on_restart_pressed)
 	_add_card_button("MenuButton", "回主菜单", Vector2(140.0, 336.0), _on_menu_pressed)
+	_add_card_button("SettingsButton", "设置", Vector2(140.0, 426.0), _on_settings_pressed)
 
 
 func _add_card_button(p_name: String, p_text: String, p_pos: Vector2, p_handler: Callable) -> void:
@@ -332,3 +335,8 @@ func _on_restart_pressed() -> void:
 
 func _on_menu_pressed() -> void:
 	menu_requested.emit()
+
+
+func _on_settings_pressed() -> void:
+	# 设置页打开（P3）：纯 UI 层——暂停态不变，面板盖在暂停卡上方，关闭即恢复
+	settings_requested.emit()

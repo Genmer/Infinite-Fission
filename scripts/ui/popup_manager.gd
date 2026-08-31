@@ -34,8 +34,11 @@ func setup(p_pool: PopupPool) -> void:
 
 
 func on_damage_resolved(p_result: DamageResult) -> void:
-	# 主入口：合并判断 → 池取出 → 样式分级
+	# 主入口：合并判断 → 池取出 → 样式分级。
+	# 设置页伤害数字开关（P3）：入口短路——跳字/档音/档震全关（伤害结算管线不受影响）
 	if popup_pool == null:
+		return
+	if not bool(Meta.settings("damage_numbers_on")):
 		return
 	var uid := p_result.target_uid
 	var entry: Dictionary = _merge_registry.get(uid, {})

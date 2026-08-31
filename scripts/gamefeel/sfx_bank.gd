@@ -7,6 +7,9 @@
 # 纯循环播放）；战斗态播 pad、Boss 存活期叠加低频脉冲第二循环（同长循环锁相 +
 # stream_paused 拨运输），菜单暂停。音量 -18dB 级别（AudioServer 之外仅 player.volume_db，
 # 不动总线/场景树结构）。
+# 设置页音量接线（P3，META_ROADMAP §5.10「设置页」）：Meta.settings(sfx/bgm_volume)
+# 线性 0~1 → 响度近似 db（linear_to_db(max(v,0.001))，0 → -60dB 静音档）——音量 1.0 =
+# 既有基准档；settings_changed 信号驱动实时应用。
 class_name SfxBank
 extends Node
 
@@ -23,6 +26,7 @@ const BGM_LOOP_S := 8.0                        # 循环长（4 小节）
 const BGM_PAD_DB := -18.0                      # pad 层音量（-18dB 级别）
 const BGM_BOSS_DB := -16.0                     # Boss 脉冲层音量（略高于 pad，仍在环境级）
 const BGM_LFO_BLOCK := 128                     # LFO 步进块（≈11.6ms——慢 LFO 听感连续）
+const SFX_BASE_DB := -14.0                     # 音效基准音量（既有 -14dB 档；设置音量 1.0 = 此档）
 
 var _bgm_player: AudioStreamPlayer = null      # pad 循环宿主
 var _bgm_boss_player: AudioStreamPlayer = null # Boss 脉冲层宿主（与 pad 同长锁相）
@@ -36,6 +40,33 @@ func _ready() -> void:
 	I = self
 	_build_all()
 	_build_bgm()
+	apply_settings_volumes()
+	Meta.settings_changed.connect(_on_settings_changed)   # 设置页拖动 → 实时应用
+
+
+func _on_settings_changed(p_key: String) -> void:
+	# 设置段音量键变更（P3）→ 立即换算应用（写即存链路的播放侧落点）
+	if p_key == "sfx_volume" or p_key == "bgm_volume":
+		apply_settings_volumes()
+
+
+static func linear_gain_db(p_linear: float) -> float:
+	# 线性 0~1 → 响度近似 db：db = linear_to_db(max(v, 0.001))——
+	# 0 → -60dB 静音档（简单稳妥：不拨 stream_paused，数学下限即听感静音）
+	return linear_to_db(maxf(clampf(p_linear, 0.0, 1.0), 0.001))
+
+
+func apply_settings_volumes() -> void:
+	# 设置页音量接线（P3）：音量 1.0 = 既有基准档（sfx -14 / pad -18 / boss -16），
+	# 相对基准叠加增益——线性→响度近似，零档全播放器统一 -60dB 静音档
+	var sfx_db := SFX_BASE_DB + linear_gain_db(float(Meta.settings("sfx_volume")))
+	for key: Variant in _players:
+		(_players[key] as AudioStreamPlayer).volume_db = sfx_db
+	var bgm_db := linear_gain_db(float(Meta.settings("bgm_volume")))
+	if _bgm_player != null:
+		_bgm_player.volume_db = BGM_PAD_DB + bgm_db
+	if _bgm_boss_player != null:
+		_bgm_boss_player.volume_db = BGM_BOSS_DB + bgm_db
 
 
 func play(p_name: StringName) -> void:
@@ -70,7 +101,7 @@ func _make(p_name: StringName, p_dur: float, p_f0: float, p_f1: float,
 	var player := AudioStreamPlayer.new()
 	player.name = "Sfx_%s" % String(p_name)
 	player.stream = stream
-	player.volume_db = -14.0
+	player.volume_db = SFX_BASE_DB
 	player.max_polyphony = 4
 	add_child(player)
 	_players[p_name] = player

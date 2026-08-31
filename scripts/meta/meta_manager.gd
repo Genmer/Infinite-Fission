@@ -4,13 +4,15 @@
 # · 成就：定义表驱动（累计击杀 / 单局波次 / 单局等级 / 持有武器 / 单局词条 / 击败Boss /
 #   完成局数），事件即时判定，解锁即存档。
 # · 记录：历史最高（波次/击杀/单局等级）+ 累计（局数/击杀），GAME_OVER 结算落盘。
-# 持久化：user://meta_save.cfg（ConfigFile 三段）；autoload 不声明 class_name（§九纪律）。
+# 持久化：user://meta_save.cfg（ConfigFile 多段：codex/achievements/records/maps/daily/
+# meta/settings）；autoload 不声明 class_name（§九纪律）。
 # 事件消费只读（enemy_killed 的敌人节点读 data.id / tags；card_chosen 读 kind——解锁写入
 # 均在本管理器，零数值副作用）。
 extends Node
 
 signal codex_changed()                        # 图鉴解锁（大厅面板刷新用）
 signal achievements_changed(ach_id: StringName)   # 成就解锁提示（大厅面板刷新用）
+signal settings_changed(p_key: String)        # 设置变更（P3：SfxBank 音量实时应用等）
 
 const SAVE_PATH := "user://meta_save.cfg"
 
@@ -66,6 +68,45 @@ const UPGRADES: Array[Dictionary] = [
 	{"id": &"start_gold", "name": "初始资金", "desc": "开局金币 +20/级", "max_lv": 3, "base_cost": 25},
 	{"id": &"revive", "name": "应急协议", "desc": "每局可复活 1 次/级（满血复活 + 2s 无敌）", "max_lv": 2, "base_cost": 80},
 ]
+
+
+# ── 设置段（P3 设置页，META_ROADMAP §5.10）：随 user:// 存档落盘 ────
+# 4 项：sfx/bgm 音量（0~1，写口钳制）+ 震屏/伤害数字开关（GameFeel/Popup 入口短路）。
+# 读口缺键 = 默认表回退（旧档无 settings 段自动出厂值，降级不崩）。
+const SETTINGS_DEFAULTS: Dictionary = {
+	"sfx_volume": 0.8,                        # 音效音量（线性 0~1）
+	"bgm_volume": 0.6,                        # 音乐音量（线性 0~1）
+	"shake_on": true,                         # 震屏开关（只关震动，顿帧打击感保留）
+	"damage_numbers_on": true,                # 伤害数字开关（低端机福音；结算不受影响）
+}
+var _settings: Dictionary = {}                # key(String) → 值（缺键 = 默认表回退）
+
+
+func settings(p_key: String) -> Variant:
+	# 读口：已存值优先，否则默认表回退（未知键 → null）
+	if _settings.has(p_key):
+		return _settings[p_key]
+	return SETTINGS_DEFAULTS.get(p_key)
+
+
+func set_setting(p_key: String, p_value: Variant) -> void:
+	# 写口：类型/范围归一 → 写即存（同 character_id 口径）；未知键忽略（防脏写穿档）
+	var normed: Variant = _normalized_setting(p_key, p_value)
+	if normed == null:
+		return
+	_settings[p_key] = normed
+	_save()
+	settings_changed.emit(p_key)
+
+
+func _normalized_setting(p_key: String, p_value: Variant) -> Variant:
+	# 键白名单 + 类型/范围归一（写口与 _load 共用真源；未知键 → null）
+	match p_key:
+		"sfx_volume", "bgm_volume":
+			return clampf(float(p_value), 0.0, 1.0)
+		"shake_on", "damage_numbers_on":
+			return bool(p_value)
+	return null
 
 
 func upgrade_level(p_id: StringName) -> int:
@@ -423,6 +464,7 @@ func _save() -> void:
 	cfg.set_value("meta", "crystals", crystals)
 	cfg.set_value("meta", "upgrades", upgrades)
 	cfg.set_value("meta", "character", String(character_id))
+	cfg.set_value("settings", "values", _settings)
 	cfg.save(SAVE_PATH)
 
 
@@ -454,3 +496,11 @@ func _load() -> void:
 	if ups is Dictionary:
 		upgrades = ups
 	character_id = StringName(String(cfg.get_value("meta", "character", "sentinel")))
+	# 设置段（P3）：逐键白名单归一（脏档键值丢弃 → 缺键回默认表）
+	_settings = {}
+	var saved_settings: Variant = cfg.get_value("settings", "values", {})
+	if saved_settings is Dictionary:
+		for key: Variant in (saved_settings as Dictionary):
+			var normed: Variant = _normalized_setting(String(key), (saved_settings as Dictionary)[key])
+			if normed != null:
+				_settings[String(key)] = normed

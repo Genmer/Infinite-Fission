@@ -74,6 +74,7 @@ var card_select_ui: CardSelectUI = null
 var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处理器
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var pause_overlay: PauseOverlay = null        # 方向 C：暂停遮罩面板（PAUSED 态宿主）
+var settings_panel: SettingsPanel = null      # P3：设置页（大厅/暂停卡双入口，纯 UI 层）
 var shop_ui: ShopUi = null                    # 战地黑市（M7 股市商店，SHOP 波事件宿主）
 var sfx: SfxBank = null                       # 程序化音效库（表现层一期）
 var elemental_fx: ElementalFxLayer = null     # 方向 C：元素签名特效层（连锁闪电/碎裂环/DOT 火星）
@@ -678,6 +679,13 @@ func _boot_build_presentation() -> void:
 	menu_screen.start_requested.connect(func() -> void: _on_menu_start(MapTable.FIRST_MAP_ID))
 	menu_screen.start_map_requested.connect(_on_menu_start)   # 选图启动（M2 多地图）
 	menu_screen.start_daily_requested.connect(_on_menu_start_daily)   # 每日挑战启动（P2）
+	# P3 设置页（META_ROADMAP §5.10）：独立全屏面板（layer 10 盖过菜单/暂停卡），
+	# 大厅按钮行 + 暂停卡「设置」双入口，纯 UI——打开/关闭不改 GameLoop 状态机
+	settings_panel = SettingsPanel.new()
+	settings_panel.name = "SettingsPanel"
+	add_child(settings_panel)
+	menu_screen.settings_requested.connect(settings_panel.open)
+	pause_overlay.settings_requested.connect(settings_panel.open)
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）
 	EventBus.player_died.connect(_on_player_died)
 	EventBus.level_up.connect(_on_level_up)

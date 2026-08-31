@@ -141,8 +141,11 @@ func desired_time_scale() -> float:
 
 
 func add_trauma_for_level(p_level: int) -> void:
-	# 按档位叠加 trauma（shake_trauma[p_level]，clamp 由 CameraShake 承担）
+	# 按档位叠加 trauma（shake_trauma[p_level]，clamp 由 CameraShake 承担）。
+	# 设置页震屏开关（P3）：入口短路——只关震动，顿帧/色差/粒子打击感全保留
 	if shake == null or feel_config == null:
+		return
+	if not bool(Meta.settings("shake_on")):
 		return
 	var idx := clampi(p_level, 0, feel_config.shake_trauma.size() - 1)
 	shake.add(feel_config.shake_trauma[idx])
