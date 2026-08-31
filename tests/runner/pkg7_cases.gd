@@ -20,6 +20,7 @@ func run(p_tree: SceneTree) -> void:
 	_boot_game_loop()
 	_test_chip_data()                             # U1
 	_test_chip_handler()                          # U2
+	_test_chip_pipeline()                         # U3
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -330,3 +331,214 @@ func _offers_equal(p_a: Array[Dictionary], p_b: Array[Dictionary]) -> bool:
 				or int(p_a[i].get("rarity", -1)) != int(p_b[i].get("rarity", -1)):
 			return false
 	return true
+
+
+# ══ U3：芯片结算接线（管线 ⑥b 独立乘区段 / 面板折算 / 消费点） ══════
+func _test_chip_pipeline() -> void:
+	print("── U3 芯片结算接线 ──")
+	# cap_chip_zone schema 默认 + validator 非致命域
+	_check("cap_chip_zone schema 默认 1.0", is_equal_approx(GameConfig.balance.cap_chip_zone, 1.0))
+	var v := DataValidator.new()
+	var bad_bt := BalanceTables.new()
+	bad_bt.cap_chip_zone = 4.5
+	_check("validate_balance：cap_chip_zone=4.5 ∉ (0,4] 报错（非致命）",
+		_balance_has_field(v.validate_balance(bad_bt), "cap_chip_zone"))
+	var good_bt := BalanceTables.new()
+	good_bt.cap_chip_zone = 4.0
+	_check("validate_balance：cap_chip_zone=4.0 合法（无该字段报告）",
+		not _balance_has_field(v.validate_balance(good_bt), "cap_chip_zone"))
+	# aggregate_chip 单元（Σ / 负钳 0 / cap 截断 / 审计）
+	var stack := ModifierStack.new()
+	stack.audit = DamageAudit.new()
+	stack.aggregate_chip([{"stat": &"atk_pct", "contrib": 0.35}, {"stat": &"atk_pct", "contrib": 0.65}], 4.0)
+	_check("aggregate_chip：Σ=1.0 → chip_product=2.0", is_equal_approx(stack.chip_product, 2.0))
+	var stack_neg := ModifierStack.new()
+	stack_neg.audit = DamageAudit.new()
+	stack_neg.aggregate_chip([{"stat": &"atk_pct", "contrib": -0.5}], 4.0)
+	_check("aggregate_chip：负贡献钳 0 → chip_product=1.0", is_equal_approx(stack_neg.chip_product, 1.0))
+	var stack_cap := ModifierStack.new()
+	stack_cap.audit = DamageAudit.new()
+	stack_cap.aggregate_chip([{"stat": &"atk_pct", "contrib": 6.0}], 1.0)
+	_check("aggregate_chip：Σ>cap 截断 + clamped_chip + audit 同步",
+		is_equal_approx(stack_cap.chip_product, 2.0) and stack_cap.audit.clamped_chip
+		and is_equal_approx(stack_cap.audit.chip_product, 2.0))
+	# 管线 ⑥b：final = S × min(M×chip, cap_prod) × L × C × V
+	var pipe := DamagePipeline.new()
+	pipe.set_rng_seed(12345)
+	var e := Enemy.new()
+	e.uid = GameConst.next_uid()
+	e.hp = 1000000.0
+	e.max_hp = 1000000.0
+	pipe.begin_frame()
+	var ctx := DamageContext.make()
+	ctx.source_uid = 1
+	ctx.target = e
+	ctx.target_uid = int(e.uid)
+	ctx.frame_stamp = 1
+	ctx.base_atk = 100.0
+	ctx.crit_chance = 0.0
+	ctx.chip_entries = [{"stat": &"atk_pct", "contrib": 0.5}]
+	var r1 := pipe.resolve(ctx)
+	_check("管线 ⑥b：chip 0.5 → final=150 / chip_product=1.5",
+		r1 != null and is_equal_approx(r1.final_value, 150.0) and is_equal_approx(r1.chip_product, 1.5))
+	# 恒等性：chip_product=1.0 时与 v0.6.0 公式恒等（fixed-seed 回归共证）
+	pipe.begin_frame()
+	var ctx2 := DamageContext.make()
+	ctx2.source_uid = 1
+	ctx2.target = e
+	ctx2.target_uid = int(e.uid)
+	ctx2.frame_stamp = 2
+	ctx2.base_atk = 100.0
+	ctx2.crit_chance = 0.0
+	var r2 := pipe.resolve(ctx2)
+	_check("管线恒等：零芯片 final=100（v0.6.0 公式不变）",
+		r2 != null and is_equal_approx(r2.final_value, 100.0) and is_equal_approx(r2.chip_product, 1.0))
+	# cap_chip_zone 截断（Σ6.0 → 钳 1.0 → final=200 + audit.clamped_chip）
+	pipe.begin_frame()
+	var ctx3 := DamageContext.make()
+	ctx3.source_uid = 1
+	ctx3.target = e
+	ctx3.target_uid = int(e.uid)
+	ctx3.frame_stamp = 3
+	ctx3.base_atk = 100.0
+	ctx3.crit_chance = 0.0
+	ctx3.chip_entries = [{"stat": &"atk_pct", "contrib": 6.0}]
+	var r3 := pipe.resolve(ctx3)
+	_check("管线 ⑥b：Σ 超限钳 cap_chip_zone → final=200 + clamped_chip",
+		r3 != null and is_equal_approx(r3.final_value, 200.0) and r3.audit.clamped_chip)
+	# 联合钳：M=8（contrib 7 cap 7）× chip 2.0 → joint=min(16,8)=8 → final=800 + compressed
+	pipe.begin_frame()
+	var ctx4 := DamageContext.make()
+	ctx4.source_uid = 1
+	ctx4.target = e
+	ctx4.target_uid = int(e.uid)
+	ctx4.frame_stamp = 4
+	ctx4.base_atk = 100.0
+	ctx4.crit_chance = 0.0
+	ctx4.mult_pools = [{"pool_id": &"frost_dmg", "source_uid": 1, "contrib": 7.0, "cap_pool": 7.0}]
+	ctx4.chip_entries = [{"stat": &"atk_pct", "contrib": 1.0}]
+	var r4 := pipe.resolve(ctx4)
+	_check("管线 joint：min(M×chip, cap_prod)=8 → final=800 + compressed 语义",
+		r4 != null and is_equal_approx(r4.final_value, 800.0) and r4.audit.compressed)
+	# 反应不吃芯片段：resolve_reaction 的 chip_product 恒 1.0（A6 §3 契约）
+	pipe.begin_frame()
+	var ctx5 := DamageContext.make()
+	ctx5.source_uid = 2
+	ctx5.target = e
+	ctx5.target_uid = int(e.uid)
+	ctx5.frame_stamp = 5
+	ctx5.base_atk = 100.0
+	ctx5.chip_entries = [{"stat": &"atk_pct", "contrib": 1.0}]
+	var r5 := pipe.resolve_reaction(100.0, 2.0, ctx5)
+	_check("反应通道不吃芯片段：final=200 / chip_product=1.0",
+		r5 != null and is_equal_approx(r5.final_value, 200.0) and is_equal_approx(r5.chip_product, 1.0))
+	e.free()
+	# 武器面板折算（crit_rate/crit_mult/chip_atk_pct）+ 装备后失效
+	var h := _gl.chip_handler
+	h.reset_run()
+	var weapon: WeaponBase = _gl.player.weapon_slots[0]
+	weapon.invalidate_panel()
+	var snap0 := weapon.build_panel_snapshot()
+	h.equip(&"CHIP_CRIT", 3)
+	h.equip(&"CHIP_CRITDMG", 3)
+	h.equip(&"CHIP_ATK", 3)
+	weapon.invalidate_panel()
+	var snap1 := weapon.build_panel_snapshot()
+	_check("面板折算：crit_rate = 表值 + 0.18（cap 内）",
+		is_equal_approx(float(snap1.get("crit_rate", -1.0)), minf(float(snap0.get("crit_rate", 0.0)) + 0.18, 1.0)))
+	_check("面板折算：crit_mult = 表值 + 0.6",
+		is_equal_approx(float(snap1.get("crit_mult", -1.0)), float(snap0.get("crit_mult", 0.0)) + 0.6))
+	_check("面板快照增键 chip_atk_pct = 0.35", is_equal_approx(float(snap1.get("chip_atk_pct", -1.0)), 0.35))
+	# ctx 注入两处：weapon 路径 + projectile 路径（快照键 → chip_entries）
+	var target := Enemy.new()
+	target.uid = GameConst.next_uid()
+	var wctx := weapon.build_damage_context(target)
+	_check("weapon ctx 注入：chip_entries=[atk_pct 0.35]",
+		wctx.chip_entries.size() == 1
+		and StringName(String((wctx.chip_entries[0] as Dictionary).get("stat", ""))) == &"atk_pct"
+		and is_equal_approx(float((wctx.chip_entries[0] as Dictionary).get("contrib", 0.0)), 0.35))
+	var proj := ProjectileBase.new()
+	proj.panel_snapshot = {"base_atk": 50.0, "chip_atk_pct": 0.35}
+	proj.uid = GameConst.next_uid()
+	var pctx := proj._build_damage_ctx(target)
+	_check("projectile ctx 注入：chip_entries=[atk_pct 0.35]",
+		pctx.chip_entries.size() == 1
+		and is_equal_approx(float((pctx.chip_entries[0] as Dictionary).get("contrib", 0.0)), 0.35))
+	proj.free()
+	target.free()
+	# 射速：BALLISTIC rof × (1+K_rof)；非 BALLISTIC interval = cd×(1−cdr)/(1+K_rof)
+	h.reset_run()
+	var bw := BallisticWeapon.new()
+	bw.setup(_gl.registry.get_weapon(&"W1_pistol"), _gl.player, {"chip_handler": h})
+	var rof_base: float = bw.get_stat(&"rof")
+	bw._fire_interval()
+	_check("BALLISTIC 无芯片：rof_current = 表值", is_equal_approx(bw.rof_current, rof_base))
+	h.equip(&"CHIP_ROF", 3)
+	bw._fire_interval()
+	_check("BALLISTIC 金 rof 芯片：rof_current = 表值 × 1.25", is_equal_approx(bw.rof_current, rof_base * 1.25))
+	bw.free()
+	var laser_data: WeaponData = null
+	for wid in _gl.registry.weapons:
+		if (_gl.registry.weapons[wid] as WeaponData).form != GameConst.WeaponForm.BALLISTIC:
+			laser_data = _gl.registry.weapons[wid]
+			break
+	var lw := LaserWeapon.new()
+	lw.setup(laser_data, _gl.player, {"chip_handler": h})
+	var cd_base: float = lw.get_stat(&"cd")
+	h.reset_run()                                 # 先归零（BALLISTIC 段遗留 rof 芯片）
+	var interval_no := lw._fire_interval()
+	h.equip(&"CHIP_ROF", 3)
+	var interval_chip := lw._fire_interval()
+	_check("非 BALLISTIC：interval = cd/(1+K_rof)（金 1.25）",
+		is_equal_approx(interval_no, cd_base) and is_equal_approx(interval_chip, cd_base / 1.25))
+	lw.free()
+	h.reset_run()
+	# 消费点：金币 ×(1+K_gold)（负数不缩放）/ 经验 ×(1+K_xp) / 附着 ×(1+K_attach)
+	h.equip(&"CHIP_GOLD", 3)                      # 金档 0.40
+	var g0 := _gl.gold
+	_gl._add_gold(100)
+	_check("_add_gold 正增量 ×1.4 → +140", _gl.gold == g0 + 140, "gold=%d" % _gl.gold)
+	_gl._add_gold(-40)
+	_check("_add_gold 负增量不缩放 → -40", _gl.gold == g0 + 100)
+	_gl._add_gold(-(g0 + 100 - g0))               # 还原余额（净 -100）
+	h.reset_run()
+	h.equip(&"CHIP_XP", 0)                        # 白档 0.08
+	var xp_enemy := Enemy.new()
+	xp_enemy.exp_value = 10.0
+	xp_enemy.global_position = Vector2(200.0, 800.0)
+	_gl._on_enemy_killed_drop_xp(xp_enemy)
+	var shard_ok := false
+	if not _gl.active_shards.is_empty():
+		var shard := _gl.active_shards[_gl.active_shards.size() - 1]
+		shard_ok = is_equal_approx(shard.value, 10.8)
+		_gl.active_shards.erase(shard)
+		(_gl.pools[&"xp"] as XPPool).release(shard)
+	_check("经验掉落 ×1.08（K_xp 白档）", shard_ok)
+	xp_enemy.free()
+	h.reset_run()
+	h.equip(&"CHIP_ATTACH", 2)                    # 紫档 0.35
+	var es := ElementalSystem.new()
+	es.chip_handler = h
+	var ae := Enemy.new()
+	ae.immune_mask = 0
+	es.register_host(ae)
+	es.apply_attach(ae, GameConst.Element.FIR, 20.0)
+	var st: ElementalState = ae.elemental
+	_check("附着入口 ×1.35（K_attach 紫档）",
+		st != null and is_equal_approx(st.gauges[GameConst.Element.FIR], 27.0))
+	es.free()
+	ae.free()
+	h.reset_run()
+	# respawn：max_hp 重导出基线（芯片/商店加成不跨局）
+	_gl.player.max_hp = 555.0
+	_gl.player.hp = 555.0
+	_gl.player.respawn()
+	_check("respawn：max_hp 回基线 %d" % int(GameConfig.get_constant(&"player_base_hp", 100.0)),
+		is_equal_approx(_gl.player.max_hp, GameConfig.get_constant(&"player_base_hp", 100.0)))
+
+
+func _balance_has_field(p_verdicts: Array, p_field: String) -> bool:
+	for v in p_verdicts:
+		if String(v.get("field", "")) == p_field:
+			return true
+	return false

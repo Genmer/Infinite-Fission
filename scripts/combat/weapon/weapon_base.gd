@@ -28,6 +28,7 @@ var laser_pool: LaserBeamPool = null           # 注入（LASER 形态）
 var elemental: ElementalSystem = null          # 注入（元素附着通道）
 var relic_handler: RelicHandler = null         # 注入（集成包 B.2：遗物命中乘区问询）
 var wave_director: WaveDirector = null         # 注入（集成包 B.4：SYN_FIRST_STRIKE 波首命中位）
+var chip_handler: ChipHandler = null           # 注入（v0.7.0 A6 §3：芯片 crit 折算/rof/atk 段）
 
 var _panel_cache: Dictionary = {}              # 面板快照缓存（词条挂载/升级时失效）
 
@@ -45,6 +46,7 @@ func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
 	elemental = p_deps.get("elemental")
 	relic_handler = p_deps.get("relic_handler")
 	wave_director = p_deps.get("wave_director")
+	chip_handler = p_deps.get("chip_handler")
 	cooldown_left = 0.0
 	level = 1
 	_invalidate_panel()
@@ -109,12 +111,22 @@ func build_panel_snapshot() -> Dictionary:
 	var crit_cap := 1.0
 	if GameConfig.balance != null:
 		crit_cap = GameConfig.balance.cap_crit_rate
+	# v0.7.0 芯片折算（A6 §3）：crit_rate = clamp(表值 + Σadd_crit + K_crit, 0, cap)、
+	# crit_mult = 表值 + Σadd_critdmg + K_critdmg（K = chip stat_bonus；null 守卫）
+	var k_crit := 0.0
+	var k_critdmg := 0.0
+	var k_atk := 0.0
+	if chip_handler != null:
+		k_crit = chip_handler.stat_bonus(&"crit_rate")
+		k_critdmg = chip_handler.stat_bonus(&"crit_dmg")
+		k_atk = chip_handler.stat_bonus(&"atk_pct")
 	var snapshot := {
 		"base_atk": get_current_atk(),
-		"crit_rate": clampf(crit_rate + float(aggregate.get("add_crit", 0.0)), 0.0, crit_cap),
-		"crit_mult": crit_dmg + float(aggregate.get("add_critdmg", 0.0)),
+		"crit_rate": clampf(crit_rate + float(aggregate.get("add_crit", 0.0)) + k_crit, 0.0, crit_cap),
+		"crit_mult": crit_dmg + float(aggregate.get("add_critdmg", 0.0)) + k_critdmg,
 		"flat_bonus": 0.0,
 		"add_entries": trait_stack.aggregate_add_entries() if trait_stack != null else [],
+		"chip_atk_pct": k_atk,   # v0.7.0：芯片 ATK% 独立乘区段（ctx.chip_entries 注入源）
 	}
 	_panel_cache = snapshot
 	return snapshot
@@ -136,6 +148,10 @@ func build_damage_context(p_target: Node2D) -> DamageContext:
 	if entries is Array:
 		for entry in entries:
 			ctx.add_entries.append(entry)
+	# v0.7.0（A6 §3）：芯片 ATK% 独立乘区段注入（>0 才入列——零芯片零开销）
+	var chip_pct := float(snapshot.get("chip_atk_pct", 0.0))
+	if chip_pct > 0.0:
+		ctx.chip_entries.append({"stat": &"atk_pct", "contrib": chip_pct})
 	ctx.element = GameConst.Element.KIN
 	ctx.is_first_hit_of_wave = is_wave_first_hit()   # B.4：波首命中位（SYN_FIRST_STRIKE）
 	if p_target != null:
@@ -236,7 +252,8 @@ func level_up() -> void:
 
 # ── 内部 ──────────────────────────────────────────────────────────
 func _fire_interval() -> float:
-	# 节拍间隔：BALLISTIC = 1/rof（子类覆写射速口径）；其余形态 = cd × (1−ΣCDR)
+	# 节拍间隔：BALLISTIC = 1/rof（子类覆写射速口径）；其余形态 = cd × (1−ΣCDR) / (1+K_rof)
+	#（v0.7.0：芯片 rof 独立乘数；射速 ≤30 护栏由换算后区间天然收窄 + 子类钳制保留）
 	if data == null:
 		return 1.0
 	if data.form == GameConst.WeaponForm.BALLISTIC:
@@ -250,7 +267,14 @@ func _fire_interval() -> float:
 	if GameConfig.balance != null:
 		cap_cdr = GameConfig.balance.cap_cdr_sum
 	cdr = clampf(cdr, 0.0, cap_cdr)
-	return cd * (1.0 - cdr)
+	return cd * (1.0 - cdr) / (1.0 + _chip_rof())
+
+
+func _chip_rof() -> float:
+	# v0.7.0：芯片射速独立乘数 K_rof（ChipHandler.stat_bonus；null 守卫 → 0.0）
+	if chip_handler != null:
+		return maxf(chip_handler.stat_bonus(&"rof"), 0.0)
+	return 0.0
 
 
 func _cap_rof() -> float:

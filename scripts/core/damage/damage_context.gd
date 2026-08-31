@@ -22,6 +22,9 @@ var flat_bonus: float = 0.0
 var mult_pools: Array[Dictionary] = []
 # 私有乘区段：每项 {local_id: StringName, contrib: float, cap_local: float}
 var local_pools: Array[Dictionary] = []
+# v0.7.0 芯片独立乘区段（A6 §3）：每项 {stat: StringName, contrib: float}——聚合在管线
+# ⑥b aggregate_chip（cap_chip_zone 钳制）；仅直击通道注入（settle_aoe/DOT/反应不吃芯片段）
+var chip_entries: Array[Dictionary] = []
 # 暴击
 var crit_chance: float = 0.0
 var crit_mult: float = 2.0

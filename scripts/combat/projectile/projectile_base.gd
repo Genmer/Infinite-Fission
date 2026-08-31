@@ -295,6 +295,10 @@ func _build_damage_ctx(p_target: Node2D) -> DamageContext:
 	if adds is Array and not (adds as Array).is_empty():
 		for entry in adds:
 			ctx.add_entries.append(entry)     # 逐项入列（类型化数组不接受整批 Array 直赋）
+	# v0.7.0（A6 §3）：芯片 ATK% 独立乘区段注入（快照键 >0 才入列——零芯片零开销）
+	var chip_pct := float(panel_snapshot.get("chip_atk_pct", 0.0))
+	if chip_pct > 0.0:
+		ctx.chip_entries.append({"stat": &"atk_pct", "contrib": chip_pct})
 	ctx.element = element
 	ctx.hit_flags = _hit_flags()
 	if p_target.has_method(&"get_resist"):

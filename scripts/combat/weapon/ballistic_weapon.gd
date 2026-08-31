@@ -76,8 +76,9 @@ func _on_tick_post(p_game_delta: float) -> void:
 
 
 func _fire_interval() -> float:
-	# F11：rof × (1+ΣAdd_ROF) clamp 30；加特林 = 冷/热按预热进度插值
-	rof_current = clampf(_effective_rof() * (1.0 + _add_rof()), 0.1, _cap_rof())
+	# F11 + v0.7.0：rof × (1+ΣAdd_ROF) × (1+K_rof) clamp [0.1, 30]（芯片 rof 独立乘数，
+	# A6 §3；射速 ≤30 双护栏保留）；加特林 = 冷/热按预热进度插值
+	rof_current = clampf(_effective_rof() * (1.0 + _add_rof()) * (1.0 + _chip_rof()), 0.1, _cap_rof())
 	return 1.0 / rof_current
 
 

@@ -550,6 +550,7 @@ func _boot_build_actors() -> void:
 	add_child(elemental)
 	elemental.pipeline = pipeline
 	elemental.enemy_grid = enemy_grid
+	elemental.chip_handler = chip_handler         # v0.7.0：附着强度芯片注入（A6 §3）
 	# ★ wave_director 先于 spawner 入树（连接序 = 派发序）：F-19 Boss 击杀解锁读取
 	#   enemy.tags 必须先于 spawner 死亡归还的 tags 清零（_reset_state）——与上方 xp 掉落
 	#   订阅提前同因（集成包修复：此前 Boss 击杀解锁恒读 tags=0 失效，集成冒烟补断言）
@@ -705,9 +706,12 @@ func _apply_camera_shake() -> void:
 # ── 经验链路（集成包 B.1：击杀掉落 → 磁吸 → 经验 → 升级仲裁 E-16） ──
 func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 	# 掉落值真源：Enemy.exp_value（波次通胀已缩放）× 遗物点金手倍率（REL_MIDAS +20%，A3 §5）
+	# × (1+K_xp)（v0.7.0 芯片 xp_gain，A6 §3）
 	if not (p_enemy is Enemy):
 		return                                  # 裸实体探针/非敌事件防御
 	var value := (p_enemy as Enemy).exp_value * relic_handler.xp_mult()
+	if chip_handler != null:
+		value *= 1.0 + maxf(chip_handler.stat_bonus(&"xp_gain"), 0.0)
 	_spawn_xp_shard(p_enemy.global_position, value)
 
 
@@ -789,8 +793,12 @@ func _tick_gold_coins(p_gd: float) -> void:
 
 
 func _add_gold(p_delta: int) -> void:
-	# 金币余额唯一写入口（钳 ≥0）→ gold_changed 广播（HUD/商店刷新共源）
-	gold = maxi(gold + p_delta, 0)
+	# 金币余额唯一写入口（钳 ≥0）→ gold_changed 广播（HUD/商店刷新共源）。
+	# v0.7.0（A6 §3）：正增量 ×(1+K_gold)（芯片 gold_gain）；负数消费不缩放。
+	var delta := p_delta
+	if delta > 0 and chip_handler != null:
+		delta = int(round(float(delta) * (1.0 + maxf(chip_handler.stat_bonus(&"gold_gain"), 0.0))))
+	gold = maxi(gold + delta, 0)
 	EventBus.emit_gold_changed(gold)
 
 

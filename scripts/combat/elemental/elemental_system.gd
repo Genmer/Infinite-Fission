@@ -11,6 +11,7 @@ extends Node
 
 var pipeline: RefCounted = null                # 注入（DamagePipeline 或桩；独立结算通道）
 var enemy_grid: SpaceGrid = null               # 注入（连锁传导/范围扩散目标查询）
+var chip_handler: ChipHandler = null           # 注入（v0.7.0 A6 §3：附着强度芯片 ×(1+K_attach)）
 var _hosts: Array[Node2D] = []                 # 已挂载状态容器的敌人（§1.3-3 白名单：状态宿主）
 
 var _reaction_mults: Dictionary = {}           # source_uid -> mult（ELE_REACTION_VOID ×1.8 聚合）
@@ -61,13 +62,18 @@ func reaction_mult() -> float:
 
 func apply_attach(p_enemy: Node2D, p_element: int, p_value: float,
 		p_info: Dictionary = {}) -> void:
-	# 附着入口（§4.4 ⑤）：immune_mask 检查在状态触发位；满槽 → 状态/连锁调度
+	# 附着入口（§4.4 ⑤）：immune_mask 检查在状态触发位；满槽 → 状态/连锁调度。
+	# v0.7.0（A6 §3）：入口统一 ×(1+K_attach)（芯片 attach_strength）——覆盖弹载荷与
+	# ELE 词条请求两条路（projectile_base._apply_elemental 双路都经本入口）。
 	var state: Variant = p_enemy.get("elemental") if p_enemy != null else null
 	if not (state is ElementalState):
 		return
+	var value := p_value
+	if chip_handler != null:
+		value *= 1.0 + maxf(chip_handler.stat_bonus(&"attach_strength"), 0.0)
 	var snapshot := float(p_info.get("snapshot", 0.0))
 	var overrides: Dictionary = p_info.get("overrides", {})
-	var code: int = (state as ElementalState).apply(p_element, p_value, snapshot, overrides)
+	var code: int = (state as ElementalState).apply(p_element, value, snapshot, overrides)
 	if code == ElementalState.TRIGGER_SHOCK:
 		var hit_damage := float(p_info.get("hit_damage", snapshot))
 		if (state as ElementalState).shock_chain_cd <= 0.0:

@@ -201,7 +201,10 @@ func respawn() -> void:
 	# _dead 属一次性 E-16 仲裁标志，必须随局重置——否则重开后 take_contact_damage 永久无效）
 	# 重生无敌 1.5s（B_spec 无重生无敌数值 → 主控裁定；重开保护——防残留/新刷弹幕
 	# 重生首帧秒杀，配合 GameLoop._reset_run_state 战场清场序，审查 Fix 1）
+	# v0.7.0（A6 §3）：max_hp 重导出基线真源（global_constants player_base_hp）——
+	# 消除芯片/商店 maxhp 加成残留跨局。
 	_dead = false
+	max_hp = GameConfig.get_constant(&"player_base_hp", 100.0)
 	hp = max_hp
 	level = 1
 	xp = 0.0

@@ -17,6 +17,9 @@ extends Resource
 @export var cap_cdr_sum: float = 0.6                         # F-11
 @export var cap_rof_per_weapon: float = 30.0                 # 性能双护栏；>0
 @export var cap_crit_rate: float = 1.0
+# v0.7.0 芯片独立乘区段整体钳（A6 §3）：Σ chip contrib 截断上限；schema 默认即合法
+#（balance_tables.tres 不必改）。合法域 (0, 4]（非致命校验，超限回退默认）。
+@export var cap_chip_zone: float = 1.0
 @export var decay_delta_max: float = 0.92                    # F-21 词条校验上限
 @export var split_max_generation: int = 3                    # E-01 三闸之一
 @export var split_max_children: int = 8                      # 三闸之二

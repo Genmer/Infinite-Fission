@@ -60,6 +60,8 @@ func resolve(p_ctx: DamageContext) -> DamageResult:
 	_aggregate_mults(p_ctx, stack)
 	# ⑥ Local 池独立聚合（不入名额、不受 cap_prod，自有 cap_local，F-15）
 	_aggregate_local(p_ctx, stack)
+	# ⑥b 芯片独立乘区段（v0.7.0，A6 §3）：cap_chip_zone 钳制；仅直击通道有 chip_entries
+	_aggregate_chip(p_ctx, stack)
 	# ⑦ 暴击掷骰（独立 RNG 流；HIT_NO_CRIT → C=1，不掷骰不消耗序列）
 	var crit := _roll_crit(p_ctx)
 	var result := DamageResult.new()
@@ -218,6 +220,13 @@ func _aggregate_local(p_ctx: DamageContext, p_stack: ModifierStack) -> void:
 	p_stack.aggregate_local(p_ctx.local_pools)
 
 
+func _aggregate_chip(p_ctx: DamageContext, p_stack: ModifierStack) -> void:
+	# 6b. 芯片独立乘区段聚合（v0.7.0，A6 §3）：Σ chip contrib → cap_chip_zone 截断 →
+	# chip_product = 1 + Σ_clamped。反应通道（resolve_reaction）不走本段——反应基数是
+	# S 快照，芯片 ATK 段不参与（A6 §3 契约：settle_aoe/DOT/反应不吃芯片 ATK 段）。
+	p_stack.aggregate_chip(p_ctx.chip_entries, _balance().cap_chip_zone)
+
+
 func _roll_crit(p_ctx: DamageContext) -> bool:
 	# 7. 暴击掷骰：独立 RNG 流 Bernoulli(crit_chance)（F7）。
 	#    HIT_NO_CRIT（DOT/反应）→ C=1，不掷骰不消耗序列（A2 §1.7 排除项）；
@@ -241,6 +250,7 @@ func _populate_result(p_ctx: DamageContext, p_stack: ModifierStack, p_crit: bool
 	p_result.panel_snapshot = p_ctx.base_atk * (1.0 + add_sum) + p_stack.flat_clamped
 	p_result.mult_product = p_stack.product_clamped
 	p_result.local_product = p_stack.local_product
+	p_result.chip_product = p_stack.chip_product   # v0.7.0：芯片段同步（A6 §3）
 	p_result.is_crit = p_crit
 	p_result.element = p_ctx.element
 	p_result.source_uid = p_ctx.source_uid
@@ -278,17 +288,23 @@ func _apply_target_side(p_ctx: DamageContext, p_stack: ModifierStack, p_result: 
 
 func _finalize(p_ctx: DamageContext, p_stack: ModifierStack, p_result: DamageResult) -> void:
 	# 9a+9b. 终值钳制 + R_alarm 双闸 + 审计落字段 + killed 判定。
-	# 9a. raw = S × M × L × C × V → clamp(raw, 0, base_atk × r_alarm_ratio)（保险钳制）
+	# 9a. raw = S × joint × L × C × V → clamp(raw, 0, base_atk × r_alarm_ratio)（保险钳制）。
+	#     joint = min(M × chip_product, cap_prod)（v0.7.0 A6 §3：芯片段与乘区段联合钳
+	#     cap_prod；chip_product=1.0 时与 v0.6.0 公式恒等——fixed-seed 回归保障）。
+	var cap_prod := _balance().cap_prod
+	var joint := minf(p_result.mult_product * p_result.chip_product, cap_prod)
+	if p_result.mult_product * p_result.chip_product > cap_prod:
+		p_stack.audit.compressed = true            # 联合钳触发 → 既有 compressed 语义
 	var c := p_ctx.crit_mult if p_result.is_crit else 1.0
-	var raw := p_result.panel_snapshot * p_result.mult_product * p_result.local_product * c * p_result.target_factor
+	var raw := p_result.panel_snapshot * joint * p_result.local_product * c * p_result.target_factor
 	var alarm_ratio := _balance().r_alarm_ratio
 	var final_val := clampf(raw, 0.0, maxf(p_ctx.base_atk * alarm_ratio, 0.0))
 	if not is_finite(final_val):
 		final_val = 0.0                    # NaN 兜底（±Inf 已被 clamp 正确钳制）
 	p_result.final_value = final_val
-	# R_alarm 检查（抗性前口径 F10：S×M×L×C / base_atk > r_alarm_ratio——只测玩家构筑强度）
+	# R_alarm 检查（抗性前口径 F10：S×joint×L×C / base_atk > r_alarm_ratio——只测玩家构筑强度）
 	if p_ctx.base_atk > 0.0:
-		p_stack.audit.ratio = p_result.panel_snapshot * p_result.mult_product \
+		p_stack.audit.ratio = p_result.panel_snapshot * joint \
 			* p_result.local_product * c / p_ctx.base_atk
 		if p_stack.audit.ratio > alarm_ratio:
 			p_stack.audit.alarm = true

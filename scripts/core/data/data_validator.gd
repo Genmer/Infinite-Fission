@@ -336,6 +336,7 @@ func validate_balance(bt: BalanceTables) -> Array:
 			bad_add_cap = true
 	_nf(out, "add_pool_caps", bad_add_cap, "add_pool_caps 每值 > 0（F4 保险丝）")
 	_nf(out, "cap_rof_per_weapon", bt.cap_rof_per_weapon <= 0.0, "cap_rof_per_weapon > 0")
+	_nf(out, "cap_chip_zone", bt.cap_chip_zone <= 0.0 or bt.cap_chip_zone > 4.0, "cap_chip_zone ∈ (0, 4]")
 	_nf(out, "decay_delta_max", bt.decay_delta_max <= 0.0 or bt.decay_delta_max > 1.0, "decay_delta_max ∈ (0, 1]")
 	_nf(out, "split_max_generation", bt.split_max_generation <= 0, "split_max_generation > 0（E-01）")
 	_nf(out, "split_max_children", bt.split_max_children <= 0, "split_max_children > 0（E-01）")

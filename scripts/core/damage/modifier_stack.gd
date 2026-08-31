@@ -14,6 +14,7 @@ var mult_pools: Dictionary = {}
 var resolved_mults: Array[Dictionary] = []
 var product_clamped: float = 1.0              # min(∏ M_p, cap_prod)（F9）
 var local_product: float = 1.0                # ∏ L_l（独立段）
+var chip_product: float = 1.0                 # v0.7.0：1 + Σchip（cap_chip_zone 钳后；独立乘区段）
 var audit: DamageAudit = null                 # 审计（只记录不改结果）
 
 
@@ -160,3 +161,21 @@ func aggregate_local(entries: Array[Dictionary]) -> void:
 			agg = cap
 		product *= 1.0 + agg
 	local_product = product
+
+
+# ── 步骤 6b：芯片独立乘区段聚合（v0.7.0，A6 §3） ────────────────────
+# entries 每项：{stat: StringName, contrib: float}。负贡献钳 0（芯片无诅咒语义）；
+# Σ > p_cap → 截断 + audit.clamped_chip；chip_product = 1 + Σ_clamped。
+# 与乘区段互相独立：不入名额、不占 cap_mul_count，联合钳制在管线 _finalize
+#（joint = min(mult_product × chip_product, cap_prod)）。
+func aggregate_chip(entries: Array[Dictionary], p_cap: float) -> void:
+	var total := 0.0
+	for e: Dictionary in entries:
+		total += maxf(float(e.get("contrib", 0.0)), 0.0)
+	if total > p_cap:
+		total = p_cap
+		if audit != null:
+			audit.clamped_chip = true
+	chip_product = 1.0 + total
+	if audit != null:
+		audit.chip_product = chip_product

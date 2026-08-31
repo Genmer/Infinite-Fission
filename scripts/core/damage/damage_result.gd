@@ -14,6 +14,7 @@ var pos: Vector2 = Vector2.ZERO               # 跳字位置
 var panel_snapshot: float = 0.0               # S（面板段终值；反应/DOT 快照源）
 var mult_product: float = 1.0                 # 钳制后乘区段
 var local_product: float = 1.0
+var chip_product: float = 1.0                 # v0.7.0：芯片独立乘区段（1 + Σchip 钳后）
 var target_factor: float = 1.0                # (1−r) × 状态修正
 var pool_breakdown: Dictionary = {}           # pool_id -> agg（乘区明细，M2 HUD 峰值统计）
 var feel_level: int = 0                       # GameConst.FeelLevel（HIT/CRIT/CATALYST）
