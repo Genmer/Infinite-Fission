@@ -23,4 +23,5 @@ proc_chance = 1.0
 cooldown = 0.0
 rarity = 1
 tags = 0
+required_weapon = &"W8_orbit_field"
 condition = {}

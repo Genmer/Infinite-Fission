@@ -99,9 +99,14 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 		CardKind.TRAIT, CardKind.FALLBACK:
 			var data: TraitData = p_card.get("data")
 			if data != null:
-				var weapon := _primary_weapon(p_player)
-				if weapon != null:
-					weapon.attach_trait(data)
+				# v0.6.0 武器门槛防御（A4 §6）：候选漏网（如遗物回响复制路径）时拒绝挂载
+				if data.required_weapon != &"" and not _player_holds_weapon(p_player, data.required_weapon):
+					push_warning("[CardGenerator] 武器门槛词条拒绝挂载：%s 需 %s（未持有）"
+						% [String(data.id), String(data.required_weapon)])
+				else:
+					var weapon := _primary_weapon(p_player)
+					if weapon != null:
+						weapon.attach_trait(data)
 		CardKind.RELIC:
 			var rid := StringName(String(p_card.get("id", "")))
 			if rid != &"" and not owned_relics.has(rid):
@@ -162,8 +167,24 @@ func _trait_candidates(p_category: String, p_player: Node, p_picked: Array[Strin
 			continue
 		if used_layers.get(tid, 0) >= t.stack_max:
 			continue                            # 叠层上限（§6.4）
+		# v0.6.0 武器门槛（A4 §6）：required_weapon 非空且未持有 → 移出候选池
+		if t.required_weapon != &"" and not _player_holds_weapon(p_player, t.required_weapon):
+			continue
 		out.append(tid)
 	return out
+
+
+func _player_holds_weapon(p_player: Node, p_id: StringName) -> bool:
+	# 玩家是否持有指定 id 武器（全槽 data.id 比对；武器门槛词条/武器卡去重共用）
+	if p_player == null:
+		return false
+	var slots: Array = p_player.get("weapon_slots")
+	for w in slots:
+		if w is WeaponBase and is_instance_valid(w):
+			var wd: WeaponData = w.get("data")
+			if wd != null and wd.id == p_id:
+				return true
+	return false
 
 
 func _mastery_candidates(p_player: Node) -> Array:

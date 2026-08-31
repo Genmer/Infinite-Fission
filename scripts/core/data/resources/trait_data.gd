@@ -29,5 +29,7 @@ extends Resource
 @export var cooldown: float = 0.0                   # ≥0（词条触发冷却）
 @export var rarity: int = 0                         # 白/蓝/紫/金
 @export var tags: int = 0                           # TAG 位（CURSE 等，F-23 净化通道占位）
+# v0.6.0 武器门槛（A4 §6）：非空 = 未持有该 id 武器时候选池过滤 + apply 挂载防御拒绝
+@export var required_weapon: StringName = &""
 # MULT 类条件 {condition_id, params}（见 SynergyRuleData）
 @export var condition: Dictionary = {}
