@@ -66,25 +66,27 @@ func _teardown_game_loop() -> void:
 		_gl = null
 
 
-# ── A / T1：DataRegistry 加载 68 资源 0 剔除 ──────────────────────
+# ── A / T1：DataRegistry 加载 76 资源 0 剔除 ──────────────────────
+# （v0.6.0 基线 68；v0.7.0 增 chips 类目 8 枚 → 76。预期值随数据类目合法增量修正，断言数不变）
 func _test_registry_68() -> void:
-	print("── A/T1 DataRegistry 68 资源 0 剔除 ──")
+	print("── A/T1 DataRegistry 76 资源 0 剔除 ──")
 	var reg := _gl.registry
 	var rep: Dictionary = reg.report
-	_check("校验报告：total = 68 且 rejected = 0",
-		int(rep.get("total", -1)) == 68 and int(rep.get("rejected", -1)) == 0,
+	_check("校验报告：total = 76 且 rejected = 0",
+		int(rep.get("total", -1)) == 76 and int(rep.get("rejected", -1)) == 0,
 		"total=%s rejected=%s" % [str(rep.get("total")), str(rep.get("rejected"))])
-	# 独立对账（文件系统口径：resources/* + data/gamefeel 的 .tres 计数 9/8/30/11/8/1/1）
+	# 独立对账（文件系统口径：resources/* + data/gamefeel 的 .tres 计数 9/8/30/11/8/8/1/1）
 	_check("对账 weapons = 9", reg.weapons.size() == 9, str(reg.weapons.size()))
 	_check("对账 enemies = 8", reg.enemies.size() == 8, str(reg.enemies.size()))
 	_check("对账 traits = 30", reg.traits.size() == 30, str(reg.traits.size()))
 	_check("对账 relics = 11", reg.relics.size() == 11, str(reg.relics.size()))
 	_check("对账 synergies = 8", reg.synergies.size() == 8, str(reg.synergies.size()))
+	_check("对账 chips = 8（v0.7.0）", reg.chips.size() == 8, str(reg.chips.size()))
 	_check("对账 wave_table / game_feel 各 1（单件类目）",
 		reg.wave_table != null and reg.game_feel != null)
 	var table_sum: int = reg.weapons.size() + reg.enemies.size() + reg.traits.size() \
-		+ reg.relics.size() + reg.synergies.size() + 2
-	_check("表尺寸合计 = 68（与 report.total 互证）", table_sum == 68
+		+ reg.relics.size() + reg.synergies.size() + reg.chips.size() + 2
+	_check("表尺寸合计 = 76（与 report.total 互证）", table_sum == 76
 		and int(rep.get("total", -1)) == table_sum, "sum=%d" % table_sum)
 
 

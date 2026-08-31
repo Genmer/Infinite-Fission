@@ -10,6 +10,7 @@ var enemies: Dictionary = {}                  # StringName(id) -> EnemyData
 var traits: Dictionary = {}                   # StringName(id) -> TraitData
 var relics: Dictionary = {}
 var synergies: Dictionary = {}
+var chips: Dictionary = {}                    # v0.7.0：StringName(id) -> ChipData
 var wave_table: WaveTableData = null
 var game_feel: GameFeelConfig = null
 var report: Dictionary = {}                   # 校验报告（剔除清单 + 错误明细）
@@ -30,6 +31,7 @@ func load_all(manifest: String) -> float:
 	_scan_category(&"traits", cfg, "traits", TraitData, traits)
 	_scan_category(&"relics", cfg, "relics", RelicData, relics)
 	_scan_category(&"synergies", cfg, "synergies", SynergyRuleData, synergies)
+	_scan_category(&"chips", cfg, "chips", ChipData, chips)   # v0.7.0：芯片类目
 	_scan_single(&"wave_table", cfg, "waves", WaveTableData)
 	_scan_single(&"game_feel", cfg, "gamefeel", GameFeelConfig)
 	_validate_and_report()
@@ -55,6 +57,11 @@ func get_relic(id: StringName) -> RelicData:
 
 func get_synergy(id: StringName) -> SynergyRuleData:
 	return synergies.get(id)
+
+
+func get_chip(id: StringName) -> ChipData:
+	# v0.7.0：芯片查询（未命中返回 null，调用方 fail-fast）
+	return chips.get(id)
 
 
 func get_wave_table() -> WaveTableData:
@@ -163,6 +170,8 @@ func _validate_and_report() -> void:
 				relics.erase(rid)
 			&"synergies":
 				synergies.erase(rid)
+			&"chips":
+				chips.erase(rid)
 			&"wave_table":
 				wave_table = null
 			&"game_feel":

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ChipData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/chip_data.gd" id="1_cd"]
+
+[resource]
+script = ExtResource("1_cd")
+id = &"CHIP_GOLD"
+display_name = "贪婪金币"
+description = "金币获取 +10%~40%（按档位）"
+stat_key = &"gold_gain"
+values = [0.1, 0.18, 0.28, 0.4]

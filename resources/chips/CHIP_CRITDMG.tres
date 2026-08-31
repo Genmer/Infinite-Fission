@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ChipData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/chip_data.gd" id="1_cd"]
+
+[resource]
+script = ExtResource("1_cd")
+id = &"CHIP_CRITDMG"
+display_name = "暴伤放大器"
+description = "暴击伤害加算 +15%~60%（按档位）"
+stat_key = &"crit_dmg"
+values = [0.15, 0.25, 0.4, 0.6]

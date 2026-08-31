@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ChipData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/chip_data.gd" id="1_cd"]
+
+[resource]
+script = ExtResource("1_cd")
+id = &"CHIP_ATTACH"
+display_name = "元素共鸣器"
+description = "元素附着强度 +15%~50%（按档位）"
+stat_key = &"attach_strength"
+values = [0.15, 0.25, 0.35, 0.5]

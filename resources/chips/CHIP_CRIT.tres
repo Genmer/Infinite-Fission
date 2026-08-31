@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ChipData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/chip_data.gd" id="1_cd"]
+
+[resource]
+script = ExtResource("1_cd")
+id = &"CHIP_CRIT"
+display_name = "精准校准"
+description = "暴击率加算 +5%~18%（按档位）"
+stat_key = &"crit_rate"
+values = [0.05, 0.08, 0.12, 0.18]

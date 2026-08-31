@@ -21,6 +21,13 @@ enum ConditionId {                                        # 乘区条件封闭�
 	NONE,
 }
 
+# v0.7.0 芯片 stat_key 封闭注册表（A6 §1；ChipData.stat_key / validator 双源镜像——
+# 悬空 stat_key → 剔除宿主；消费点：ChipHandler.stat_bonus / 武器面板 crit 折算）
+const CHIP_STAT_KEYS: Array[StringName] = [
+	&"atk_pct", &"rof", &"crit_rate", &"crit_dmg",
+	&"attach_strength", &"gold_gain", &"max_hp", &"xp_gain",
+]
+
 # DamageContext.hit_flags 位标志
 const HIT_IS_BOUNCE := 1            # 本次命中发生在反弹之后
 const HIT_AFTER_PIERCE := 2         # 穿透序数 ≥2 的命中

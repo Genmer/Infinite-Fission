@@ -59,6 +59,7 @@ func validate_all(registry: DataRegistry) -> Dictionary:
 	total += _run_category(registry, &"traits", registry.traits, "validate_trait", rejected, errors, warnings)
 	total += _run_category(registry, &"relics", registry.relics, "validate_relic", rejected, errors, warnings)
 	total += _run_category(registry, &"synergies", registry.synergies, "validate_synergy", rejected, errors, warnings)
+	total += _run_category(registry, &"chips", registry.chips, "validate_chip", rejected, errors, warnings)
 	# 单件类目：波表 / GameFeel（条目级问题已就地降级；字段级错误 → 剔除整件）
 	if registry.wave_table != null:
 		total += 1
@@ -214,6 +215,23 @@ func validate_synergy(s: SynergyRuleData) -> Array:
 	_err(out, &"contribution_expr", not CONTRIBUTION_EXPRS.has(s.contribution_expr),
 		"contribution_expr ∈ 白名单模板（禁运行时 Expression）：%s" % s.contribution_expr)
 	_err(out, &"cap_pool_p", s.cap_pool_p <= 0.0, "cap_pool_p > 0 必填（F-14）")
+	return out
+
+
+func validate_chip(c: ChipData) -> Array:
+	# v0.7.0 单类校验（A6 §1）：id 非空 / stat_key ∈ CHIP_STAT_KEYS / values 恰好 4 档
+	# 且全 >0 单调不减；display_name 空 → warning。
+	var out: Array = []
+	_err(out, &"id", c.id == &"", "id 非空")
+	_err(out, &"stat_key", c.stat_key == &"" or not GameConst.CHIP_STAT_KEYS.has(c.stat_key),
+		"stat_key ∈ GameConst.CHIP_STAT_KEYS（悬空 → 剔除）：%s" % String(c.stat_key))
+	_err(out, &"values", c.values.size() != 4, "values 恰好 4 档（白/蓝/紫/金），当前 %d 项" % c.values.size())
+	for i in range(c.values.size()):
+		_err(out, StringName("values[%d]" % i), c.values[i] <= 0.0, "values[%d] > 0" % i)
+		if i > 0:
+			_err(out, StringName("values[%d]" % i), c.values[i] < c.values[i - 1],
+				"values 单调不减（values[%d] < values[%d]）" % [i, i - 1])
+	_warn(out, &"display_name", c.display_name == "", "display_name 为空（仅告警）")
 	return out
 
 

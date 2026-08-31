@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ChipData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/chip_data.gd" id="1_cd"]
+
+[resource]
+script = ExtResource("1_cd")
+id = &"CHIP_ATK"
+display_name = "攻击核心"
+description = "直击伤害独立乘区 +10%~35%（按档位）"
+stat_key = &"atk_pct"
+values = [0.1, 0.16, 0.24, 0.35]
