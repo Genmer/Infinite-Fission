@@ -586,6 +586,9 @@ func _boot_build_actors() -> void:
 	# ★ v0.6.0 金币掉落订阅紧邻 xp 掉落连接点之后（连接序 = 派发序纪律同上：
 	#   掉落侧读取 data.gold_drop/position 必须先于 spawner 死亡归还清零，A4 §3）
 	EventBus.enemy_killed.connect(_on_enemy_killed_drop_gold)
+	# ★ v0.7.0 U6 芯片掉落订阅（连接序 = 派发序纪律同 xp/gold/relic 先例：
+	#   掉落侧读取 enemy.tags/spawn_wave 必须先于 spawner 死亡归还清零）
+	EventBus.enemy_killed.connect(_on_enemy_killed_drop_chip)
 	pipeline = DamagePipelineStub.get_pipeline()
 	relic_handler = RelicHandler.new()
 	relic_handler.name = "RelicHandler"
@@ -767,6 +770,32 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 	if chip_handler != null:
 		value *= 1.0 + maxf(chip_handler.stat_bonus(&"xp_gain"), 0.0)
 	_spawn_xp_shard(p_enemy.global_position, value)
+
+
+# ── 芯片掉落（v0.7.0 U6：Boss 击杀 → grant_boss_chip；文本跳字反馈） ──
+func _on_enemy_killed_drop_chip(p_enemy: Node2D) -> void:
+	# TAG_BOSS 判定（连接序保证 tags 读取先于 spawner 归还清零）→ grant_boss_chip(出生波)。
+	# granted → 跳字"芯片 [名] 已装备"；否则转金币（converted_gold 经 _add_gold 入账，
+	# 正增量随 K_gold 缩放）+ 跳字"芯片满 → +N 金币"。
+	if not (p_enemy is Enemy):
+		return                                  # 裸实体探针/非敌事件防御（同 xp/gold 口径）
+	var enemy := p_enemy as Enemy
+	if (enemy.tags & GameConst.TAG_BOSS) == 0:
+		return
+	var drop := chip_handler.grant_boss_chip(enemy.spawn_wave())
+	var pos := enemy.global_position
+	if bool(drop.get("granted")):
+		var chip_data := chip_handler.registry.get_chip(
+			StringName(String(drop.get("chip_id", "")))) if chip_handler.registry != null else null
+		var chip_name := chip_data.display_name if chip_data != null else String(drop.get("chip_id", ""))
+		if popup_manager != null:
+			popup_manager.show_text_popup(pos + Vector2(0.0, -42.0), "芯片 [%s] 已装备" % chip_name)
+	else:
+		var gold := int(drop.get("converted_gold", 0))
+		if gold > 0:
+			_add_gold(gold)
+			if popup_manager != null:
+				popup_manager.show_text_popup(pos + Vector2(0.0, -42.0), "芯片满 → +%d 金币" % gold)
 
 
 func _spawn_xp_shard(p_pos: Vector2, p_value: float) -> void:

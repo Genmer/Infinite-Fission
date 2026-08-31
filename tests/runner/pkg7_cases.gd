@@ -24,6 +24,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_u12_u13_u14()                           # U12+U13+U14
 	_test_gold_rush()                             # U5
 	_test_shop_chips()                            # U4+U7
+	_test_boss_chip_drop()                        # U6
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -851,3 +852,55 @@ func _test_shop_chips() -> void:
 		_gl.state == GameConst.GameStatus.PLAYING and _gl.chip_handler.equipped.size() >= 2)
 	# 还原夹具
 	_gl.chip_handler.reset_run()
+
+
+# ══ U6：Boss 芯片掉落（连接序 + granted/转金币双路 + 非敌门控） ════
+func _test_boss_chip_drop() -> void:
+	print("── U6 Boss 芯片掉落 ──")
+	var h := _gl.chip_handler
+	var pool := _gl.pools[&"enemy"] as EnemyPool
+	# granted 路径：空槽 Boss 死亡 → 装备 + 跳字（连接序功能性验证：tags 先于归还清零）
+	h.reset_run()
+	var granted0 := h.chips_granted
+	var boss1: Enemy = pool.acquire() as Enemy
+	boss1.spawn(_gl.registry.get_enemy(&"E6_boss1"), 10, GameConst.TAG_BOSS)
+	boss1.global_position = Vector2(360.0, 240.0)
+	boss1._on_died()                              # enemy_killed → chip/gold/xp 掉落 + 归还
+	_check("Boss 死亡 → 芯片装备（granted 路径）",
+		h.chips_granted == granted0 + 1 and h.equipped.size() == 1)
+	_check("跳字「芯片 [名] 已装备」", _popup_prefix_seen("芯片 ["))
+	# 转金币路径：槽满 Boss 死亡 → converted_gold 经 _add_gold + 跳字
+	h.reset_run()
+	h.unlocked_slots = 3
+	h.equip(&"CHIP_ATK", 0)
+	h.equip(&"CHIP_ROF", 0)
+	h.equip(&"CHIP_CRIT", 0)                      # 无 gold 芯片 → K_gold=0（金额精确）
+	var conv0 := h.chips_converted
+	var g0 := _gl.gold
+	var boss2: Enemy = pool.acquire() as Enemy
+	boss2.spawn(_gl.registry.get_enemy(&"E6_boss2"), 20, GameConst.TAG_BOSS)
+	boss2.global_position = Vector2(360.0, 240.0)
+	boss2._on_died()
+	_check("Boss 死亡 → 槽满转金币（granted=false + 入账 20~110）",
+		h.chips_converted == conv0 + 1 and _gl.gold == g0 + h.gold_from_convert
+		and h.gold_from_convert > 0)
+	_check("跳字「芯片满 → +N 金币」", _popup_prefix_seen("芯片满 → +"))
+	h.reset_run()
+	# 非 Boss 门控：普通敌死亡不掉芯片
+	var equipped0 := h.equipped.size()
+	var grunt: Enemy = pool.acquire() as Enemy
+	grunt.spawn(_gl.registry.get_enemy(&"E1_grunt"), 1, 0)
+	grunt.global_position = Vector2(360.0, 800.0)
+	grunt._on_died()
+	_check("普通敌死亡不掉芯片（TAG_BOSS 门控）", h.equipped.size() == equipped0)
+	# 直接调用门控（非 Enemy 载荷静默跳过）
+	var before := h.chips_granted
+	_gl._on_enemy_killed_drop_chip(null)
+	_check("非敌载荷静默跳过", h.chips_granted == before)
+
+
+func _popup_prefix_seen(p_prefix: String) -> bool:
+	for popup in _gl.popup_manager._active_list:
+		if is_instance_valid(popup) and String((popup as DamagePopup)._label.text).begins_with(p_prefix):
+			return true
+	return false
