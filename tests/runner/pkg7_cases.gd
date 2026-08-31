@@ -26,6 +26,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_shop_chips()                            # U4+U7
 	_test_boss_chip_drop()                        # U6
 	_test_reaction_presentation()                 # U8+U9+U10
+	_test_weapon_pity()                           # U11
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -1025,3 +1026,75 @@ func _emit_reaction_result(p_rxn: int, p_value: float) -> void:
 	r.popup_style = GameConst.PopupStyle.REACTION
 	r.element = p_rxn                             # 反应通道 element 承载 ReactionType（管线契约）
 	EventBus.emit_damage_resolved(r)
+
+
+# ══ U11：首件武器保底（weapon_weight_mult + 发牌计数） ═════════════
+func _test_weapon_pity() -> void:
+	print("── U11 首件武器保底 ──")
+	var gen := _gl.card_generator
+	var weights_snapshot: Dictionary = gen.CATEGORY_WEIGHTS.duplicate()
+	# 权重表镜像零改动（静态表 + 实例表）
+	_check("夹具：CATEGORY_WEIGHTS 静态表未被改动（和=100）",
+		is_equal_approx(_gen_weights_sum(gen.CATEGORY_WEIGHTS), 100.0))
+	# mult=2.0 时 _roll_one 不改实例权重表
+	gen.rng.seed = 9021
+	var player := _gl.player
+	gen._roll_one(player, 10, [], false, 2.0)
+	_check("U11：_roll_one(mult=2) 不改实例权重表",
+		is_equal_approx(_gen_weights_sum(gen.category_weights), 100.0)
+		and is_equal_approx(float(gen.category_weights.get("WEAPON", 0.0)), 8.0))
+	# 统计：mult=2.0 下 WEAPON 类别份额上移（固定种子确定性对比）
+	gen.rng.seed = 4242
+	var w0 := 0
+	for i in range(1500):
+		gen.rng.seed = 4242 + i                   # 逐抽独立种子（对比不受序列耦合影响）
+		var c := gen._roll_one(player, 10, [], false, 1.0)
+		if int(c.get("kind", -1)) == CardGenerator.CardKind.WEAPON:
+			w0 += 1
+	var w2 := 0
+	for i in range(1500):
+		gen.rng.seed = 4242 + i
+		var c2 := gen._roll_one(player, 10, [], false, 2.0)
+		if int(c2.get("kind", -1)) == CardGenerator.CardKind.WEAPON:
+			w2 += 1
+	_check("U11：WEAPON 权重 ×2 → 类别份额上移（%d → %d / 1500）" % [w0, w2], w2 > w0,
+		"base=%d pity=%d" % [w0, w2])
+	# pity 判定：已装备 <2 且 发牌数 ≤3
+	_gl.upgrade_cards_dealt = 0
+	var held0 := 0
+	for w in player.weapon_slots:
+		if w != null and is_instance_valid(w):
+			held0 += 1
+	_gl.upgrade_cards_dealt = 2
+	_check("U11：单武器 + dealt=2 → pity active",
+		held0 < 2 and _gl._weapon_pity_active())
+	_gl.upgrade_cards_dealt = 4
+	_check("U11：dealt=4 → pity 关闭", not _gl._weapon_pity_active())
+	_gl.upgrade_cards_dealt = 2
+	var w2_data := _gl.registry.get_weapon(&"W2_smg")
+	var weapon: WeaponBase = _gl.add_weapon(w2_data)
+	if weapon == null:
+		player.unlock_slot(2)
+		weapon = player.add_weapon(w2_data)
+	_check("夹具：第二把武器装入", weapon != null)
+	_check("U11：双武器 → pity 关闭（即便 dealt ≤3）", not _gl._weapon_pity_active())
+	# 发牌计数：_open_card_flow +1
+	_gl.upgrade_cards_dealt = 0
+	_gl._open_card_flow(player.level)
+	_check("U11：_open_card_flow → 发牌计数 +1", _gl.upgrade_cards_dealt == 1)
+	# 还原：闭选卡回 PLAYING + 卸第二把武器
+	_gl.card_select_ui.close()
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+	for i in range(player.weapon_slots.size()):
+		var w: WeaponBase = player.weapon_slots[i]
+		if w != null and is_instance_valid(w) and i > 0:
+			w.free()
+			player.weapon_slots[i] = null
+	_gl.upgrade_cards_dealt = 0
+
+
+func _gen_weights_sum(p_weights: Dictionary) -> float:
+	var total := 0.0
+	for key in p_weights:
+		total += float(p_weights[key])
+	return total

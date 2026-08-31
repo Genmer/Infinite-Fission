@@ -60,6 +60,8 @@ func generate_candidates(p_context: Dictionary) -> Array[Dictionary]:
 	#   fixed_rarities    → REL_WORDS_TIDE 重随保序（逐位覆盖稀有度 roll，保留原 roll 序列）
 	#   curse_last        → REL_GAMBLER 末位卡必带诅咒（A3 §9.3-10 净化占位）
 	#   shop_exclude_weapon → v0.6.0 商店卡架专用：跳过 WEAPON 类别（防武器混入卡价，A4 §5）
+	#   weapon_weight_mult → v0.7.0 U11 首件武器保底：WEAPON 类别权重乘数（默认 1.0）；
+	#                        仅调用点 duplicate 权重表改 WEAPON 键——静态表与镜像零改动
 	var player: Node = p_context.get("player")
 	var wave := int(p_context.get("wave", 1))
 	var deal := clampi(int(p_context.get("deal_count", CANDIDATE_COUNT)),
@@ -67,10 +69,11 @@ func generate_candidates(p_context: Dictionary) -> Array[Dictionary]:
 	var floor_rarity := int(p_context.get("min_rarity_floor", -1))
 	var fixed_rarities: Variant = p_context.get("fixed_rarities", [])
 	var no_weapon := bool(p_context.get("shop_exclude_weapon", false))
+	var weapon_mult := float(p_context.get("weapon_weight_mult", 1.0))
 	var out: Array[Dictionary] = []
 	var picked_ids: Array[StringName] = []       # 同批去重（同 ID 不重复上货架）
 	for i in range(deal):
-		var card := _roll_one(player, wave, picked_ids, no_weapon)
+		var card := _roll_one(player, wave, picked_ids, no_weapon, weapon_mult)
 		if card.is_empty():
 			card = _fallback_stat_card()
 		if card["kind"] != CardKind.FALLBACK:
@@ -143,12 +146,18 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 
 # ── 内部：roll 链 ─────────────────────────────────────────────────
 func _roll_one(p_player: Node, p_wave: int, p_picked: Array[StringName],
-		p_exclude_weapon: bool = false) -> Dictionary:
-	# 单张：类别 roll（池空重 roll）→ 稀有度 roll → 候选过滤 → 随机抽 1
+		p_exclude_weapon: bool = false, p_weapon_mult: float = 1.0) -> Dictionary:
+	# 单张：类别 roll（池空重 roll）→ 稀有度 roll → 候选过滤 → 随机抽 1。
+	# v0.7.0 U11：p_weapon_mult ≠ 1 时 duplicate 权重表仅乘 WEAPON 键（静态表与
+	# BalanceTables/三处镜像零改动——pkg6 断言锁定）。
 	var relic_available := _unowned_relic_ids().size() > 0
 	var weapon_pool := _weapon_candidates(p_player, p_picked)
+	var roll_weights := category_weights
+	if p_weapon_mult != 1.0:
+		roll_weights = category_weights.duplicate()
+		roll_weights["WEAPON"] = float(roll_weights.get("WEAPON", 0.0)) * p_weapon_mult
 	for attempt in range(8):
-		var category: Variant = _weighted_key(category_weights)
+		var category: Variant = _weighted_key(roll_weights)
 		if p_exclude_weapon and category == "WEAPON":
 			continue                            # 商店卡架专用：跳过 WEAPON 类别（A4 §5）
 		if category == "RELIC" and not relic_available:

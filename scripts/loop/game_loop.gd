@@ -81,6 +81,7 @@ var current_candidates: Array[Dictionary] = []   # 当前货架（测试观测�
 var active_shards: Array[XpShard] = []        # 场上经验碎片（掉落/吸附/归还管理，B.1）
 var gold: int = 0                             # v0.6.0 金币余额（唯一真源；变更走 _add_gold → gold_changed）
 var active_coins: Array[GoldCoin] = []        # 场上金币（掉落/吸附/入账/归还管理，A4 §3）
+var upgrade_cards_dealt: int = 0              # v0.7.0 U11：本局升级发牌数（首件武器保底计数）
 var stage_probe_enabled: bool = false         # 分阶段采样开关（架构 §5.5：P95 超线按阶段定位）
 var stage_probe_us: Dictionary = {}           # {StringName 阶段: 累计 usec}（仅 PLAYING 帧，逐帧重建）
 
@@ -281,6 +282,7 @@ func _open_card_flow(p_new_level: int) -> void:
 	# 三选一流程：roll 3 张 → LEVEL_UP（暂停战斗）→ 选卡界面打开。
 	# 集成包 B.2：遗物改写发牌参数（GAMBLER 四选一+诅咒 / OVERCLOCK 稀有度保底），
 	# WORDS_TIDE 每波一次重随货架（保留稀有度 roll 序列）
+	upgrade_cards_dealt += 1                     # v0.7.0 U11：发牌计数（保底窗口 ≤3）
 	var context := {
 		"player": player,
 		"wave": wave_director.current_wave,
@@ -288,6 +290,7 @@ func _open_card_flow(p_new_level: int) -> void:
 		"deal_count": relic_handler.deal_count(),
 		"curse_last": relic_handler.curse_requested(),
 		"min_rarity_floor": relic_handler.take_rarity_floor(),
+		"weapon_weight_mult": 2.0 if _weapon_pity_active() else 1.0,   # U11 保底
 	}
 	current_candidates = card_generator.generate_candidates(context)
 	if relic_handler.consume_reroll():
@@ -347,6 +350,15 @@ func _open_shop_flow(p_wave: int, p_black_market: bool) -> bool:
 	shop_ui.set_chip_slots(chip_handler.slot_snapshot())
 	shop_ui.set_player_full_hp(player.hp >= player.max_hp)   # v0.7.0 U7：heal 预禁用回写
 	return true
+
+
+func _weapon_pity_active() -> bool:
+	# v0.7.0 U11：首件武器保底（已装备武器 <2 且 本局发牌数 ≤3 → WEAPON 权重 ×2）
+	var held := 0
+	for w in player.weapon_slots:
+		if w != null and is_instance_valid(w):
+			held += 1
+	return held < 2 and upgrade_cards_dealt <= 3
 
 
 func _close_shop() -> void:
@@ -987,6 +999,7 @@ func _reset_run_state() -> void:
 	active_coins.clear()
 	_add_gold(-gold)
 	_deferred_shop_wave = 0                       # v0.6.0：暂存商店波清零
+	upgrade_cards_dealt = 0                       # v0.7.0 U11：发牌计数随局清零
 	if shop_ui != null:
 		shop_ui.close()                           # v0.6.0：强制收起商店（重开净化）
 	if wave_director != null:
