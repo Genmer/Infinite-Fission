@@ -21,7 +21,7 @@ const ABSORB_DISTANCE := 24.0                 # 吸收判定距离 px（玩家 h
 const MAGNET_SPEED := 520.0                   # 磁吸飞行速度 px/s（A3 未给吸附速度——手感占位值）
 const TEX_SIZE := 12                          # 占位碎片纹理边长
 static var _shared_texture: ImageTexture = null
-const SHARD_COLOR := Color(1.0, 0.85, 0.3)    # 金黄色占位（经验碎片识别色）
+const SHARD_COLOR := Color(0.35, 0.8, 1.0)    # 青蓝占位（经验碎片识别色；v0.6.0 金色让位金币，A4 §7）
 
 
 func _ready() -> void:

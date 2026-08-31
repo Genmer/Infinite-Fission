@@ -22,6 +22,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_gold_trait_data()                       # T4
 	_test_gold_chain()                            # T3
 	_test_weapon_cards()                          # T5
+	_test_hud_layout_and_banner()                 # T2
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -406,6 +407,84 @@ func _weapon_count(p_player: Node) -> int:
 		if w is WeaponBase and is_instance_valid(w):
 			n += 1
 	return n
+
+
+# ── T2：HUD 布局（layout_rects 不相交 / 横幅时序 / 配色 / 描边） ────
+func _test_hud_layout_and_banner() -> void:
+	print("── T2 HUD 布局/横幅 ──")
+	var hud := _gl.hud
+	# ① 顶部信息区矩形两两不相交（金币标签 vs XP 条让位契约——XP 条宽 560）
+	var rects := hud.layout_rects()
+	_check("layout_rects 数量 = 8（双条 + 六标签）", rects.size() == 8, str(rects.size()))
+	var disjoint := true
+	var bad_pair := ""
+	for i in range(rects.size()):
+		for j in range(i + 1, rects.size()):
+			if rects[i].intersects(rects[j]):
+				disjoint = false
+				bad_pair = "%d×%d" % [i, j]
+	_check("layout_rects 两两 intersects()==false", disjoint, bad_pair)
+	_check("XP 条宽 560（金币标签让位，A4 §7）",
+		hud.XP_BAR_SIZE == Vector2(560.0, 12.0) and hud.HP_BAR_SIZE == Vector2(600.0, 22.0))
+	_check("金币标签色 = Color(1.0,0.83,0.25)",
+		hud._gold_label.get_theme_color("font_color") == Color(1.0, 0.83, 0.25))
+	_check("全文本描边（outline_size 4 / 黑 0.9）",
+		hud._gold_label.get_theme_constant("outline_size") == 4
+		and hud._build_label.get_theme_color("font_outline_color") == Color(0.0, 0.0, 0.0, 0.9))
+	# ② 经验碎片配色让位（青蓝）+ 金币亮金
+	_check("SHARD_COLOR = 青蓝（金色让位金币）", XpShard.SHARD_COLOR == Color(0.35, 0.8, 1.0))
+	_check("COIN_COLOR = 亮金", GoldCoin.COIN_COLOR == Color(1.0, 0.78, 0.15))
+	# ③ 跳字 CRIT 描边（其余样式 outline 0）
+	var pm := _gl.popup_manager
+	pm.tick(10.0)                                  # 清场
+	var rc := DamageResult.new()
+	rc.final_value = 9.0
+	rc.target_uid = 7001
+	rc.pos = Vector2(100, 100)
+	rc.popup_style = GameConst.PopupStyle.CRIT
+	pm.on_damage_resolved(rc)
+	var crit_popup: DamagePopup = pm._active_list[0]
+	_check("跳字 CRIT：outline_size 4 + 黑描边",
+		crit_popup._label.get_theme_constant("outline_size") == 4
+		and crit_popup._label.get_theme_color("font_outline_color") == Color(0.0, 0.0, 0.0, 0.9))
+	var rn := DamageResult.new()
+	rn.final_value = 3.0
+	rn.target_uid = 7002
+	rn.pos = Vector2(120, 100)
+	rn.popup_style = GameConst.PopupStyle.NORMAL
+	pm.on_damage_resolved(rn)
+	var normal_popup: DamagePopup = pm._active_list[1]
+	_check("跳字 NORMAL：outline 0", normal_popup._label.get_theme_constant("outline_size") == 0)
+	pm.tick(10.0)
+	# ④ 横幅 2.0s 三段时序（@120Hz 帧数分段断言：30 / 180 / 30 帧，±2 帧容差）
+	EventBus.emit_wave_started(7)
+	_check("wave_started → 横幅 WAVE 7", hud.banner_visible() and hud._banner_label.text == "WAVE 7")
+	_check("横幅初值：alpha≈0 / y=442",
+		hud._banner_label.modulate.a <= 0.05
+		and absf(hud._banner_label.position.y - 442.0) <= 0.5)
+	for i in range(15):                            # t=0.125s：淡入中段
+		hud.tick(DT)
+	_check("淡入中段（15 帧）：alpha≈0.5 / y≈436",
+		absf(hud._banner_label.modulate.a - 0.5) <= 0.1
+		and absf(hud._banner_label.position.y - 436.0) <= 1.0,
+		"a=%s y=%s" % [str(hud._banner_label.modulate.a), str(hud._banner_label.position.y)])
+	for i in range(15):                            # t=0.25s：淡入完成
+		hud.tick(DT)
+	_check("淡入完成（30 帧）：alpha≈1 / y=430",
+		hud._banner_label.modulate.a >= 0.95
+		and absf(hud._banner_label.position.y - 430.0) <= 0.5)
+	for i in range(180):                           # t=1.75s：保持段结束
+		hud.tick(DT)
+	_check("保持段（至 210 帧）：可见且 alpha=1",
+		hud.banner_visible() and hud._banner_label.modulate.a >= 0.99)
+	for i in range(24):                            # t=1.95s：淡出中段
+		hud.tick(DT)
+	_check("淡出中段（234 帧）：alpha∈(0,1)", hud.banner_visible()
+		and hud._banner_label.modulate.a > 0.0 and hud._banner_label.modulate.a < 1.0)
+	for i in range(10):                            # t≥2.0s：收起
+		hud.tick(DT)
+	_check("2.0s 到时收起（banner_visible()==false）", not hud.banner_visible()
+		and not hud._banner_label.visible)
 
 
 # ── 断言 ──────────────────────────────────────────────────────────

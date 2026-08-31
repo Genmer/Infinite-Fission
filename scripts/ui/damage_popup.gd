@@ -87,9 +87,13 @@ func _reset_state() -> void:
 
 
 func _refresh_label() -> void:
-	# 数值 + 样式刷新（CRIT 加大字号——占位分级）
+	# 数值 + 样式刷新（CRIT 加大字号 + 描边——v0.6.0 可读性分级；其余样式描边 0）
 	if _label == null:
 		return
+	var crit := style == GameConst.PopupStyle.CRIT
 	_label.text = str(int(round(merged_value)))
 	_label.self_modulate = STYLE_COLORS.get(style, Color.WHITE)
-	_label.scale = Vector2.ONE * (1.35 if style == GameConst.PopupStyle.CRIT else 1.0)
+	_label.scale = Vector2.ONE * (1.35 if crit else 1.0)
+	_label.add_theme_constant_override("outline_size", 4 if crit else 0)
+	_label.add_theme_color_override("font_outline_color",
+		Color(0.0, 0.0, 0.0, 0.9) if crit else Color(0.0, 0.0, 0.0, 0.0))
