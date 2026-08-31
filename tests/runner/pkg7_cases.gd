@@ -25,6 +25,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_gold_rush()                             # U5
 	_test_shop_chips()                            # U4+U7
 	_test_boss_chip_drop()                        # U6
+	_test_reaction_presentation()                 # U8+U9+U10
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -904,3 +905,123 @@ func _popup_prefix_seen(p_prefix: String) -> bool:
 		if is_instance_valid(popup) and String((popup as DamagePopup)._label.text).begins_with(p_prefix):
 			return true
 	return false
+
+
+# ══ U8+U9+U10：附着环 / 反应粒子分级 / 反应统计与结算行 ════════════
+func _test_reaction_presentation() -> void:
+	print("── U8 附着环（ElementRing） ──")
+	var es := ElementalSystem.new()
+	var e := Enemy.new()
+	tree.get_root().add_child(e)                  # 入树 → _ready 组装 _ring/_fuse_ring
+	e.spawn(_gl.registry.get_enemy(&"E1_grunt"), 5, 0)
+	e.position = Vector2(360.0, 400.0)
+	_check("U8：spawn 后环隐藏（无附着）", e.ring_visible() == false)
+	es.register_host(e)
+	var st: ElementalState = e.elemental
+	st.gauges[GameConst.Element.FIR] = 60.0
+	e.tick(DT)
+	_check("U8：附着 >1 → 环显示 + FIR 进度 0.6",
+		e.ring_visible() and is_equal_approx(e.ring_progress(GameConst.Element.FIR), 0.6))
+	_check("U8：ICE/LTG 进度 0（快照同帧）",
+		is_equal_approx(e.ring_progress(GameConst.Element.ICE), 0.0)
+		and is_equal_approx(e.ring_progress(GameConst.Element.LTG), 0.0))
+	# 15Hz 降频：显示首拍相位重置为 1/15
+	_check("U8：15Hz 降频相位（重置为 1/15）",
+		is_equal_approx(e._ring_refresh_left, 1.0 / 15.0))
+	# 衰减至 ≤1 → 隐藏
+	st.gauges[GameConst.Element.FIR] = 0.0
+	e.tick(DT)
+	_check("U8：附着归零 → 环隐藏", e.ring_visible() == false)
+	# 归还清零
+	st.gauges[GameConst.Element.ICE] = 80.0
+	e.tick(DT)
+	e._reset_state()
+	_check("U8：_reset_state → 环隐藏 + 快照清零",
+		e.ring_visible() == false and is_equal_approx(e.ring_progress(GameConst.Element.ICE), 0.0))
+	es.free()
+	e.free()
+	print("── U9 反应粒子/分级 ──")
+	# REACTION_SCENE_IDS 三键覆盖
+	_check("U9：REACTION_SCENE_IDS 覆盖三反应",
+		ParticleDirector.REACTION_SCENE_IDS.size() == 3
+		and ParticleDirector.REACTION_SCENE_IDS.has(GameConst.ReactionType.RXN_FIR_ICE)
+		and ParticleDirector.REACTION_SCENE_IDS.has(GameConst.ReactionType.RXN_FIR_LTG)
+		and ParticleDirector.REACTION_SCENE_IDS.has(GameConst.ReactionType.RXN_ICE_LTG))
+	# burst 返回发射器 + 反应材质重指（防串色）
+	var pd := _gl.game_feel.particles
+	var emitter := (_gl.pools[&"particle"] as ParticlePool).burst(
+		&"burst_rxn_shatter", Vector2(100.0, 100.0), ParticleDirector.PRIORITY_CRIT)
+	_check("U9：ParticlePool.burst 返回发射器（源兼容可 null）", emitter != null)
+	(_gl.pools[&"particle"] as ParticlePool).release(emitter)
+	pd.burst(&"burst_rxn_overload", Vector2(120.0, 120.0), ParticleDirector.PRIORITY_CRIT)
+	var mat_ok := false
+	var mat_color := Color.WHITE
+	for pe in (_gl.pools[&"particle"] as ParticlePool).get_children():
+		var gpe := pe as GPUParticles2D
+		if gpe != null and gpe.visible and gpe.get_meta(&"_burst_scene_id", &"") == &"burst_rxn_overload":
+			var m := gpe.process_material as ParticleProcessMaterial
+			if m != null and is_equal_approx(m.color.r, 1.0) and is_equal_approx(m.color.g, 0.9):
+				mat_ok = true
+				mat_color = m.color
+	(_gl.pools[&"particle"] as ParticlePool).release_active_all()
+	_check("U9：反应场景 id → 专属预设材质（过载亮黄）", mat_ok, str(mat_color))
+	# 分级：hit_stop / trauma / ca 缩放（CATALYST 基值 50ms/0.5/0.016）
+	var gf := _gl.game_feel
+	var base_stop := 50.0                          # CATALYST 顿帧基值 ms
+	var base_trauma := 0.5                         # CATALYST trauma 基值
+	var base_ca := 0.004 * 4.0                    # CATALYST 色差基值（base×mult）
+	var scales := {
+		GameConst.ReactionType.RXN_FIR_ICE: {"stop": 1.0, "trauma": 1.0, "ca": 1.0},
+		GameConst.ReactionType.RXN_FIR_LTG: {"stop": 0.8, "trauma": 0.85, "ca": 0.8},
+		GameConst.ReactionType.RXN_ICE_LTG: {"stop": 0.6, "trauma": 0.7, "ca": 0.6},
+	}
+	var scale_ok := true
+	var scale_detail := ""
+	for rxn in scales:
+		gf.hit_stop_left = 0.0
+		gf.hit_stop_active_ms = 0.0
+		gf.shake.trauma = 0.0
+		gf._ca_peak = 0.0                         # 色差峰值重置（同档更强覆盖语义）
+		gf._ca_left = 0.0
+		gf.on_reaction_triggered(int(rxn), Vector2.ZERO, 0)
+		var row: Dictionary = scales[rxn]
+		var exp_stop: float = base_stop * float(row["stop"])
+		var exp_trauma: float = base_trauma * float(row["trauma"])
+		var exp_ca: float = base_ca * float(row["ca"])
+		if not is_equal_approx(gf.hit_stop_active_ms, exp_stop) \
+				or not is_equal_approx(gf.shake.trauma, exp_trauma) \
+				or not is_equal_approx(gf.current_ca_intensity, exp_ca):
+			scale_ok = false
+			scale_detail += "rxn=%d stop=%s/%s trauma=%s/%s ca=%s/%s | " % [int(rxn),
+				str(gf.hit_stop_active_ms), str(exp_stop), str(gf.shake.trauma), str(exp_trauma),
+				str(gf.current_ca_intensity), str(exp_ca)]
+		gf.tick(1.0)
+	_check("U9：碎裂/过载/超导打击感分级（×1.0/×0.8/×0.6）", scale_ok, scale_detail)
+	print("── U10 反应统计与结算行 ──")
+	_gl.hud.reset_reactions()
+	_gl.hud.total_damage = 0.0                    # 夹具：总伤害清零（p% 分母确定性）
+	_emit_reaction_result(GameConst.ReactionType.RXN_FIR_ICE, 120.0)
+	_emit_reaction_result(GameConst.ReactionType.RXN_FIR_ICE, 30.0)
+	_emit_reaction_result(GameConst.ReactionType.RXN_ICE_LTG, 50.0)
+	var stats: Dictionary = _gl.hud.reaction_stats()
+	_check("U10：反应统计（碎裂 2/150 · 超导 1/50）",
+		int((stats["counts"] as Array)[0]) == 2 and is_equal_approx(float((stats["damage"] as Array)[0]), 150.0)
+		and int((stats["counts"] as Array)[2]) == 1)
+	_gl.game_over_screen.show_summary()
+	_check("U10：结算行反应段（碎裂 2/150(75%) / 超导 1/50(25%)）",
+		String(_gl.game_over_screen.reaction_text()).contains("碎裂 2/150(75%)")
+		and String(_gl.game_over_screen.reaction_text()).contains("超导 1/50(25%)"),
+		_gl.game_over_screen.reaction_text())
+	_gl.hud.reset_reactions()
+	_gl.game_over_screen.show_summary()
+	_check("U10：无元素战斗零值占位",
+		String(_gl.game_over_screen.reaction_text()).contains("碎裂 0/0(0%)"))
+	_gl.hud.total_damage = 0.0                    # 还原 HUD 夹具
+
+
+func _emit_reaction_result(p_rxn: int, p_value: float) -> void:
+	var r := DamageResult.new()
+	r.final_value = p_value
+	r.popup_style = GameConst.PopupStyle.REACTION
+	r.element = p_rxn                             # 反应通道 element 承载 ReactionType（管线契约）
+	EventBus.emit_damage_resolved(r)

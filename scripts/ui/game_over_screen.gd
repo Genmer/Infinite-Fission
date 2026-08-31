@@ -11,6 +11,7 @@ var stats_source: Node = null                 # 注入（HUD：kills/wave/total_
 
 var _root: Control = null
 var _summary_label: Label = null
+var _reaction_label: Label = null             # v0.7.0 U10：反应统计行
 
 
 func _ready() -> void:
@@ -25,15 +26,33 @@ func setup(p_stats_source: Node) -> void:
 
 
 func show_summary() -> void:
-	# 显示结算（击杀/波次/总伤害；AC-16.1）
+	# 显示结算（击杀/波次/总伤害；AC-16.1）+ 反应统计行（v0.7.0 U10）
 	if stats_source != null and is_instance_valid(stats_source):
 		var kills: int = stats_source.get("kills")
 		var wave: int = stats_source.get("wave")
 		var dmg: float = stats_source.get("total_damage")
 		_summary_label.text = "击杀 %d　波次 %d　总伤害 %d" % [kills, wave, int(dmg)]
+		_refresh_reaction_label()
 	else:
 		_summary_label.text = "击杀 -　波次 -　总伤害 -"
+		_reaction_label.text = "碎裂 0/0(0%) · 过载 0/0(0%) · 超导 0/0(0%)"
 	_root.visible = true
+
+
+func _refresh_reaction_label() -> void:
+	# v0.7.0 U10：反应结算行——"碎裂 n/dmg(p%) · 过载 … · 超导 …"；
+	# p = 反应承载伤害 / total_damage（0 保护）；无元素战斗零值占位
+	var counts: Array = stats_source.get("reaction_counts")
+	var damages: Array = stats_source.get("reaction_damage")
+	var total: float = stats_source.get("total_damage")
+	var names: Array[String] = ["碎裂", "过载", "超导"]
+	var parts: Array[String] = []
+	for i in range(3):
+		var n := int(counts[i]) if i < counts.size() else 0
+		var d := float(damages[i]) if i < damages.size() else 0.0
+		var p := 0.0 if total <= 0.0 else d / total
+		parts.append("%s %d/%d(%d%%)" % [names[i], n, int(round(d)), int(round(p * 100.0))])
+	_reaction_label.text = " · ".join(parts)
 
 
 func hide_screen() -> void:
@@ -43,6 +62,11 @@ func hide_screen() -> void:
 func summary_text() -> String:
 	# 测试观测口
 	return _summary_label.text
+
+
+func reaction_text() -> String:
+	# v0.7.0 U10 测试观测口
+	return _reaction_label.text
 
 
 func request_restart() -> void:
@@ -83,6 +107,14 @@ func _build_ui() -> void:
 	_summary_label.position = Vector2(0.0, 490.0)
 	_summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_root.add_child(_summary_label)
+	# v0.7.0 U10：反应统计行（y=522 font15 居中；与按钮 (280,560) 不相交）
+	_reaction_label = Label.new()
+	_reaction_label.text = "碎裂 0/0(0%) · 过载 0/0(0%) · 超导 0/0(0%)"
+	_reaction_label.add_theme_font_size_override("font_size", 15)
+	_reaction_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_reaction_label.position = Vector2(0.0, 522.0)
+	_reaction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_root.add_child(_reaction_label)
 	var btn := Button.new()
 	btn.text = "重新开始"
 	btn.add_theme_font_size_override("font_size", 18)

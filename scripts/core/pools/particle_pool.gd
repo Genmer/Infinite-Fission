@@ -16,9 +16,11 @@ func acquire() -> GPUParticles2D:
 	return super.acquire() as GPUParticles2D
 
 
-func burst(scene_id: StringName, pos: Vector2, priority: int) -> void:
+func burst(scene_id: StringName, pos: Vector2, priority: int) -> GPUParticles2D:
 	# 优先级裁剪 + ≤64 发射器（AC-15.5）：满池时抢占最低优先级的活跃发射器（低让高）；
 	# 无可抢占 → 丢弃请求（调用方计数，降级不崩溃）。
+	# v0.7.0 U9：返回值 void → GPUParticles2D（可 null，源兼容——ParticleDirector 重指
+	# 反应材质用；null = 丢弃路径）。
 	var emitter := acquire()
 	if emitter == null:
 		var victim := _lowest_priority_emitter()
@@ -27,7 +29,7 @@ func burst(scene_id: StringName, pos: Vector2, priority: int) -> void:
 			release(victim)
 			emitter = acquire()
 	if emitter == null:
-		return
+		return null
 	_active_priorities[emitter] = priority
 	emitter.set_meta(&"_burst_scene_id", scene_id)
 	emitter.position = pos
@@ -36,6 +38,7 @@ func burst(scene_id: StringName, pos: Vector2, priority: int) -> void:
 	emitter.emitting = true
 	if not emitter.finished.is_connected(_on_emitter_finished):
 		emitter.finished.connect(_on_emitter_finished.bind(emitter))
+	return emitter
 
 
 func release(node: Node) -> void:

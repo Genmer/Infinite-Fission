@@ -973,6 +973,7 @@ func _reset_run_state() -> void:
 	hud.wave = 0
 	hud.total_damage = 0.0
 	hud.run_elapsed = 0.0
+	hud.reset_reactions()                         # v0.7.0 U10：反应统计随局清零
 	card_generator.owned_relics.clear()
 	relic_handler.reset_run()                     # B.2：遗物每场重新获取（owned/常驻位清零）
 	chip_handler.reset_run()                      # v0.7.0：芯片每场重新获取（装备/槽位/遥测清零）

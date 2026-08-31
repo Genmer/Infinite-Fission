@@ -31,6 +31,13 @@ var _chromatic_material: ShaderMaterial = null
 # 粒子场景 id（池模板统一 burst emitter；场景 id 仅作 meta 遥测键）
 const EMITTER_SCENE_ID := &"burst_default"
 
+# v0.7.0 U9：反应打击感分级（以 CATALYST 档为基 × 系数：碎裂 1.0 / 过载 0.8 / 超导 0.6）
+const RXN_FEEL_SCALE: Dictionary = {
+	GameConst.ReactionType.RXN_FIR_ICE: {"stop": 1.0, "trauma": 1.0, "ca": 1.0},
+	GameConst.ReactionType.RXN_FIR_LTG: {"stop": 0.8, "trauma": 0.85, "ca": 0.8},
+	GameConst.ReactionType.RXN_ICE_LTG: {"stop": 0.6, "trauma": 0.7, "ca": 0.6},
+}
+
 
 func early_bind() -> void:
 	# ★ enemy_killed 前置订阅（连接序 = 派发序，审查 Fix 2）：Boss 击杀打击感读取
@@ -89,13 +96,22 @@ func on_enemy_killed(p_enemy: Node2D) -> void:
 		particles.burst(EMITTER_SCENE_ID, pos, ParticleDirector.PRIORITY_KILL)
 
 
-func on_reaction_triggered(_p_rxn: int, p_pos: Vector2, _p_target_uid: int) -> void:
-	# 质变级：50ms + trauma 0.4 + 色差（CATALYST 档）
-	request_hit_stop(_hit_stop_ms_for(GameConst.FeelLevel.CATALYST))
-	add_trauma_for_level(GameConst.FeelLevel.CATALYST)
-	_apply_chromatic(_ca_intensity_for(GameConst.FeelLevel.CATALYST))
+func on_reaction_triggered(p_rxn: int, p_pos: Vector2, _p_target_uid: int) -> void:
+	# 质变级：CATALYST 档基值 × RXN_FEEL_SCALE（v0.7.0 U9 分级：碎裂 1.0/过载 0.8/超导 0.6）；
+	# 粒子走 REACTION_SCENE_IDS 专属预设 @PRIORITY_CRIT
+	var scale: Dictionary = RXN_FEEL_SCALE.get(p_rxn,
+		RXN_FEEL_SCALE[GameConst.ReactionType.RXN_FIR_ICE])
+	var stop_ms := _hit_stop_ms_for(GameConst.FeelLevel.CATALYST) * float(scale["stop"])
+	if stop_ms > 0.0:
+		request_hit_stop(stop_ms)
+	if shake != null and feel_config != null:
+		var base_trauma := float(feel_config.shake_trauma[clampi(
+			GameConst.FeelLevel.CATALYST, 0, feel_config.shake_trauma.size() - 1)])
+		shake.add(base_trauma * float(scale["trauma"]))
+	_apply_chromatic(_ca_intensity_for(GameConst.FeelLevel.CATALYST) * float(scale["ca"]))
 	if particles != null:
-		particles.burst(EMITTER_SCENE_ID, p_pos, ParticleDirector.PRIORITY_CRIT)
+		particles.burst(StringName(String(ParticleDirector.REACTION_SCENE_IDS.get(p_rxn,
+			EMITTER_SCENE_ID))), p_pos, ParticleDirector.PRIORITY_CRIT)
 
 
 func on_player_hit(_p_damage: float, _p_source_uid: int) -> void:

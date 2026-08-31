@@ -64,6 +64,8 @@ const VOLATILE_TRIGGER_SLACK := 4.0      # 接触触发余量 px（命中盒和 
 var _fuse_armed: bool = false                 # 自爆引导激活（接触后置位）
 var _fuse_left: float = 0.0                   # 引爆倒计时（game_delta 通道——顿帧自然冻结）
 var _fuse_ring: FuseRing = null               # 警示圈（程序化绘制）
+var _ring: ElementRing = null                 # v0.7.0 U8：附着环（FIR/ICE/LTG 扇区弧）
+var _ring_refresh_left: float = 0.0           # v0.7.0 U8：附着环 15Hz 降频相位
 
 # ── 内部运行时 ─────────────────────────────────────────────────
 var _hit_area: Area2D = null                  # 接触伤害判定（低频通道）
@@ -108,6 +110,10 @@ func _ready() -> void:
 	_fuse_ring.radius = VOLATILE_BLAST_RADIUS
 	_fuse_ring.visible = false
 	add_child(_fuse_ring)
+	_ring = ElementRing.new()
+	_ring.name = "ElementRing"
+	_ring.visible = false
+	add_child(_ring)
 	visible = false                            # 池内不可见（取出 spawn 后激活）
 
 
@@ -162,6 +168,11 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	_spawn_wave = p_wave
 	_flash_left = 0.0
 	_fade_left = FADE_IN_TIME
+	if _ring != null:                          # v0.7.0 U8：附着环半径 = hitbox + 7px
+		_ring.radius = hitbox_r + 7.0
+		_ring.visible = false
+		_ring.set_gauges([0.0, 0.0, 0.0, 0.0])
+	_ring_refresh_left = 0.0
 	modulate.a = 0.0                          # 入场渐显起点
 	_apply_flash(0.0)
 	visible = true
@@ -182,6 +193,7 @@ func tick(p_game_delta: float) -> void:
 	var sf := 1.0
 	if elemental != null:
 		sf = elemental.get_speed_factor()
+	_tick_element_ring(p_game_delta)           # v0.7.0 U8：附着环驱动（15Hz 降频）
 	var player := _player()
 	match behavior:
 		GameConst.EnemyBehavior.CHASE:
@@ -481,6 +493,41 @@ func _check_boss_phase() -> void:
 			resist[i] = minf(resist[i] + p2, 0.8)
 
 
+# ── v0.7.0 U8：附着环（FIR/ICE/LTG 扇区弧；15Hz 降频快照） ────────
+const RING_REFRESH_HZ := 15.0                  # 附着环刷新频率（降频——绘制成本护栏）
+
+
+func _tick_element_ring(p_game_delta: float) -> void:
+	# max(gauges[1..3]) > 1.0 → 显示 + 15Hz 降频 set_gauges/queue_redraw；否则隐藏（零开销门控）
+	if _ring == null:
+		return
+	var gauges: Array[float] = [0.0, 0.0, 0.0, 0.0]
+	var peak := 0.0
+	if elemental != null:
+		gauges = elemental.gauges
+		if gauges.size() >= 4:
+			peak = maxf(gauges[1], maxf(gauges[2], gauges[3]))
+	if peak > 1.0:
+		if not _ring.visible:
+			_ring.visible = true
+		_ring_refresh_left -= p_game_delta
+		if _ring_refresh_left <= 0.0:
+			_ring_refresh_left = 1.0 / RING_REFRESH_HZ
+			_ring.set_gauges(gauges)
+	elif _ring.visible:
+		_ring.visible = false
+
+
+func ring_visible() -> bool:
+	# v0.7.0 U8 观测口
+	return _ring != null and _ring.visible
+
+
+func ring_progress(p_element: int) -> float:
+	# v0.7.0 U8 观测口：p_element ∈ GameConst.Element（FIR/ICE/LTG）→ 0~1
+	return _ring.progress(p_element) if _ring != null else 0.0
+
+
 func _reset_state() -> void:
 	# 归还清零契约（E-04/E-05：状态容器/行为参数/计时/位标志；uid 保留——同帧网格快照去重依赖）
 	data = null
@@ -522,6 +569,10 @@ func _reset_state() -> void:
 	if _fuse_ring != null:
 		_fuse_ring.visible = false
 		_fuse_ring.progress = 0.0
+	if _ring != null:
+		_ring.visible = false                    # v0.7.0 U8：附着环清零
+		_ring.set_gauges([0.0, 0.0, 0.0, 0.0])
+	_ring_refresh_left = 0.0
 	_flash_left = 0.0
 	_fade_left = 0.0
 	modulate.a = 1.0
@@ -611,3 +662,43 @@ class FuseRing:
 		var fill := Color(1.0, 0.2, 0.15, 0.06 + 0.12 * progress)
 		draw_circle(Vector2.ZERO, radius, fill)
 		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, edge, 3.0, true)
+
+
+# ── v0.7.0 U8 附着环（FIR/ICE/LTG 各占 120° 扇区；程序化占位绘制） ──
+class ElementRing:
+	extends Node2D
+
+	const RING_COLORS: Array[Color] = [
+		Color(1.0, 0.45, 0.2, 0.9),              # FIR 橙
+		Color(0.4, 0.75, 1.0, 0.9),              # ICE 蓝
+		Color(0.75, 0.6, 1.0, 0.9),              # LTG 紫
+	]
+	const SECTOR := TAU / 3.0                    # 每元素 120° 扇区
+	const GAUGE_MAX := 100.0                     # ElementalState.GAUGE_MAX 同值（显示归一）
+
+	var radius: float = 21.0
+	var _gauges: Array[float] = [0.0, 0.0, 0.0]  # FIR/ICE/LTG 快照
+
+	func set_gauges(p: Array[float]) -> void:
+		# 快照（p 为 ElementalState 4 槽 gauges——取 [1..3]）+ 重绘
+		if p.size() >= 4:
+			_gauges = [p[1], p[2], p[3]]
+		else:
+			_gauges = [0.0, 0.0, 0.0]
+		queue_redraw()
+
+	func progress(p_element: int) -> float:
+		# 观测口：p_element ∈ GameConst.Element → 满槽比例 0~1
+		var idx := clampi(p_element - 1, 0, 2)
+		return clampf(_gauges[idx] / GAUGE_MAX, 0.0, 1.0)
+
+	func _draw() -> void:
+		# 每元素 120° 扇区弧：起点 = −PI/2 + idx×120°，扫角 = 120°×clamp(gauge/100)；
+		# 颜色 FIR 橙 / ICE 蓝 / LTG 紫，线宽 3，alpha 0.9
+		for i in range(3):
+			var frac := clampf(_gauges[i] / GAUGE_MAX, 0.0, 1.0)
+			if frac <= 0.0:
+				continue
+			var start := -PI / 2.0 + float(i) * SECTOR
+			draw_arc(Vector2.ZERO, radius, start, start + SECTOR * frac, 24,
+				RING_COLORS[i], 3.0, true)
