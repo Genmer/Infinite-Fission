@@ -352,9 +352,19 @@ func _spawn_boss(p_wave: int) -> void:
 
 
 func _find_boss_data(p_wave: int) -> EnemyData:
-	# Boss 数据选取：TAG_BOSS 敌按 id 排序，逢 10 轮换（10→首、20→次、30→三）
+	# Boss 数据选取：波表 composition 内的 TAG_BOSS 敌优先——composition 即该图 Boss 波
+	# 名额的真源（P1「每图专属 Boss」2026-08-31：frost/demon/grove/swamp w20 各配专属
+	# Boss，rotation 池扩到 7 只后 id 轮换不再与表内一致，以表为准）。表缺/无表/composition
+	# 无 Boss 条目（公式 fallback 波/无尽段）→ 注册表 TAG_BOSS 敌按 id 排序逢 10 轮换
+	#（10→首、20→次、30→三；既有三 Boss 表在此口径下选取结果与旧版逐波一致）。
 	if registry == null:
 		return null
+	var entry := _table_entry(p_wave)
+	if entry != null:
+		for comp in entry.composition:
+			var e := registry.get_enemy(StringName(String(comp.get("enemy_id", ""))))
+			if e != null and (e.tags & GameConst.TAG_BOSS) != 0:
+				return e
 	var bosses: Array[EnemyData] = []
 	for id in registry.enemies:
 		var e: EnemyData = registry.enemies[id]

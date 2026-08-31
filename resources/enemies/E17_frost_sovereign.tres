@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/enemy_data.gd" id="1_ed"]
+
+[resource]
+script = ExtResource("1_ed")
+id = &"E17_frost_sovereign"
+display_name = "霜魄君王"
+behavior = 0
+hp_base = 15800.0
+spd_base = 55.0
+dmg_base = 28.0
+exp_base = 750.0
+tp_cost = 64.0
+resist = [0.0, 0.0, 0.4, 0.0]
+immune_mask = 3
+tags = 2
+hitbox_r = 14.0
+ranged = {}
+elite_mult = {}
+boss = {"phases": 2, "phase2_resist": 0.2, "bullet_patterns": {"interval_s": 4.0, "pattern": "ring", "count": 26, "dmg": 16.0, "speed_mult_phase2": 1.4}, "summons": {"interval_s": 10.0, "mode": "split", "enemy_id": "E9_frostling", "hp_ratio": 0.08, "count": 2, "count_phase2": 3}}
+gold_drop = {"chance": 1.0, "min": 120, "max": 160}

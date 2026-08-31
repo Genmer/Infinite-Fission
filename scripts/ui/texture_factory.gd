@@ -101,7 +101,8 @@ static func enemy_tex(p_kind: StringName, p_angry: bool = false) -> ImageTexture
 	#   bastion=E3 重甲（内芯脸板 / 外甲板 / 裂纹外甲板 三张贴，引擎侧双层错位）/
 	#   volatile=E4 爆虫（calm 好奇 → scared 惊恐 → detonate 闭眼引爆 三段脸）/
 	#   elite=E5 精英（基底 + 金腹徽 + 呆毛，引擎侧加皇冠/悬浮阴影/微光）/
-	#   boss1/2/3=大型聚合体（剪影互异：黏菌冠 / 裂变核独眼 / 多眼裂母；angry=二阶段变脸）。
+	#   boss1~7=大型聚合体（剪影互异：黏菌冠 / 裂变核独眼 / 多眼裂母 / 冰晶冠霜魄 /
+	#   尖角熔核魔尊 / 年轮目古树 / 三头沼龙；angry=二阶段变脸）。
 	# （图层装配拆至 _enemy_layers——lambda 体不以 match 臂收尾，规避 Godot 4.3 解析器限制）
 	var key := "enemy_%s_%s" % [String(p_kind), str(p_angry)]
 	return _cached(key, func() -> ImageTexture:
@@ -254,6 +255,205 @@ static func _enemy_layers(p_kind: StringName, p_angry: bool) -> Array:
 				Vector2(1.5, 8.5), Vector2(5.0, 8.5), Vector2(3.2, 13.5),
 			])), "fill": Color.WHITE, "ow": 0.0})
 			return layers3
+		&"boss4":
+			# Boss4 霜魄君王（寒霜冰原专属）：冰蓝圆核 + 八根冰刺环 + 菱形冰晶冠 + 独眼
+			#（与 boss2 剪影互异：boss2=深红六钝刺无冠小眼辉光环；本型=冰色八利刺+三晶冠大眼；
+			# angry=瞳孔转冷紫 + 冰刺转白变长 + 怒眉张口）
+			var ice := PopPalette.PLAYER.lerp(Color.WHITE, 0.45)
+			var layers4: Array = []
+			var spike_ice := PopPalette.PLAYER.lerp(Color.WHITE, 0.75) if p_angry \
+				else PopPalette.PLAYER.lerp(Color.WHITE, 0.62)
+			for i in range(8):
+				var ang4 := -PI * 0.5 + TAU * float(i) / 8.0
+				var pos4 := Vector2(cos(ang4), sin(ang4)) * 29.0
+				layers4.append({"sd": _box_rot_at(pos4, Vector2(5.5, 11.0 if p_angry else 9.5), 2.4,
+					ang4 + PI * 0.5), "fill": spike_ice, "ow": 4.0})
+			layers4.append({"sd": _circle_at(Vector2.ZERO, 29.0), "fill": ice, "ow": 7.0})
+			# 冰晶冠（顶部三枚菱形晶簇，中晶最高）
+			var crown_big := PackedVector2Array([
+				Vector2(0.0, -46.0), Vector2(6.5, -36.0), Vector2(0.0, -26.0), Vector2(-6.5, -36.0),
+			])
+			var crown_l := PackedVector2Array([
+				Vector2(-15.0, -38.0), Vector2(-9.5, -30.0), Vector2(-19.0, -27.0),
+			])
+			var crown_r := PackedVector2Array([
+				Vector2(15.0, -38.0), Vector2(19.0, -27.0), Vector2(9.5, -30.0),
+			])
+			layers4.append({"sd": _poly_sd(crown_big), "fill": PopPalette.PLAYER.lerp(Color.WHITE, 0.85), "ow": 3.4})
+			layers4.append({"sd": _poly_sd(crown_l), "fill": PopPalette.PLAYER.lerp(Color.WHITE, 0.7), "ow": 3.0})
+			layers4.append({"sd": _poly_sd(crown_r), "fill": PopPalette.PLAYER.lerp(Color.WHITE, 0.7), "ow": 3.0})
+			# 霜纹眉（angry）+ 独眼（大）+ 冷紫瞳（angry）/ 藏青瞳 + 嘴
+			if p_angry:
+				layers4.append({"sd": _box_rot_at(Vector2(-8.5, -12.0), Vector2(6.5, 2.0), 1.0, -0.4),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+				layers4.append({"sd": _box_rot_at(Vector2(8.5, -12.0), Vector2(6.5, 2.0), 1.0, 0.4),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+			layers4.append({"sd": _circle_at(Vector2(0.0, -3.0), 11.0), "fill": Color.WHITE, "ow": 3.6})
+			layers4.append({"sd": _circle_at(Vector2(1.6, -1.4), 5.0),
+				"fill": PopPalette.SHOCK if p_angry else PopPalette.OUTLINE, "ow": 0.0})
+			if p_angry:
+				layers4.append({"sd": _box_at(Vector2(0.0, 13.0), Vector2(6.5, 3.6), 3.0),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+			else:
+				layers4.append({"sd": _box_at(Vector2(0.0, 14.0), Vector2(3.6, 1.4), 1.2),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+			layers4.append({"sd": _circle_at(Vector2(-11.0, 6.0), 2.6),
+				"fill": Color(1.0, 1.0, 1.0, 0.5), "ow": 0.0})
+			return layers4
+		&"boss5":
+			# Boss5 熔核魔尊（紫晶魔域专属）：暗红宽体 + 双弯巨角 + 獠牙 + 熔裂纹
+			#（与 imp/E8 剪影互异：小鬼圆身小角小翼；本型=宽体横霸 + 巨角 + 体表熔岩裂纹；
+			# angry=裂纹加长 + 瞳孔变深红 + 怒眉）
+			var molten := PopPalette.ENEMY.lerp(PopPalette.OUTLINE, 0.28)
+			var horn_l5 := PackedVector2Array([
+				Vector2(-18.0, -20.0), Vector2(-31.0, -44.0), Vector2(-7.0, -27.0),
+			])
+			var horn_r5 := PackedVector2Array([
+				Vector2(18.0, -20.0), Vector2(7.0, -27.0), Vector2(31.0, -44.0),
+			])
+			var wide := _multi_circle_min([
+				[Vector2(-15.0, 4.0), 23.0], [Vector2(15.0, 4.0), 23.0],
+				[Vector2(0.0, -4.0), 25.0], [Vector2(0.0, 12.0), 21.0],
+			])
+			var layers5: Array = [
+				{"sd": _poly_sd(horn_l5), "fill": molten.lerp(PopPalette.OUTLINE, 0.45), "ow": 4.0},
+				{"sd": _poly_sd(horn_r5), "fill": molten.lerp(PopPalette.OUTLINE, 0.45), "ow": 4.0},
+				{"sd": wide, "fill": molten, "ow": 7.5},
+			]
+			# 熔裂纹（体表亮黄裂纹 ×3；angry 加长 ×2）
+			var crack_len := 1.55 if p_angry else 1.0
+			layers5.append({"sd": _box_rot_at(Vector2(-11.0, -8.0), Vector2(5.0 * crack_len, 1.3), 0.6, -0.7),
+				"fill": PopPalette.XP, "ow": 0.0})
+			layers5.append({"sd": _box_rot_at(Vector2(9.0, 2.0), Vector2(5.6 * crack_len, 1.3), 0.6, 0.5),
+				"fill": PopPalette.XP, "ow": 0.0})
+			layers5.append({"sd": _box_rot_at(Vector2(-3.0, 14.0), Vector2(4.2 * crack_len, 1.2), 0.6, -0.15),
+				"fill": PopPalette.XP, "ow": 0.0})
+			if p_angry:
+				layers5.append({"sd": _box_rot_at(Vector2(14.0, -10.0), Vector2(3.6, 1.2), 0.6, 0.9),
+					"fill": PopPalette.XP, "ow": 0.0})
+				layers5.append({"sd": _box_rot_at(Vector2(-8.0, -18.0), Vector2(5.0, 1.8), 0.9, -0.45),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+				layers5.append({"sd": _box_rot_at(Vector2(8.0, -18.0), Vector2(5.0, 1.8), 0.9, 0.45),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+			# 斜吊双目 + 宽嘴 + 双獠牙（上翘白牙）
+			layers5.append({"sd": _box_rot_at(Vector2(-10.0, -6.0), Vector2(6.2, 2.4), 1.2, -0.38),
+				"fill": Color.WHITE, "ow": 0.0})
+			layers5.append({"sd": _box_rot_at(Vector2(10.0, -6.0), Vector2(6.2, 2.4), 1.2, 0.38),
+				"fill": Color.WHITE, "ow": 0.0})
+			layers5.append({"sd": _circle_at(Vector2(-12.0, -4.4), 2.2),
+				"fill": PopPalette.ENEMY_DEEP if p_angry else PopPalette.OUTLINE, "ow": 0.0})
+			layers5.append({"sd": _circle_at(Vector2(12.0, -4.4), 2.2),
+				"fill": PopPalette.ENEMY_DEEP if p_angry else PopPalette.OUTLINE, "ow": 0.0})
+			layers5.append({"sd": _box_at(Vector2(0.0, 10.0), Vector2(11.0, 3.6), 3.4),
+				"fill": PopPalette.OUTLINE, "ow": 0.0})
+			layers5.append({"sd": _poly_sd(PackedVector2Array([
+				Vector2(-8.0, 7.0), Vector2(-4.0, 7.0), Vector2(-6.0, 1.5),
+			])), "fill": Color.WHITE, "ow": 0.0})
+			layers5.append({"sd": _poly_sd(PackedVector2Array([
+				Vector2(4.0, 7.0), Vector2(8.0, 7.0), Vector2(6.0, 1.5),
+			])), "fill": Color.WHITE, "ow": 0.0})
+			return layers5
+		&"boss6":
+			# Boss6 古树守卫（翡翠树海专属）：圆润三瓣树冠 + 树干底座 + 双枝桠臂（叶手）+
+			# 年轮目（同心环大单眼）（与 boss1/3 剪影互异：冠顶平整圆润 + 侧枝臂 + 树干；
+			# angry=年轮瞳转深红 + 枝桠抬刺 + 怒眉）
+			var bark := PopPalette.SUCCESS.lerp(PopPalette.OUTLINE, 0.38)
+			var leaf := PopPalette.SUCCESS
+			var canopy := _multi_circle_min([
+				[Vector2(0.0, -8.0), 26.0], [Vector2(-19.0, 2.0), 18.0],
+				[Vector2(19.0, 2.0), 18.0], [Vector2(0.0, 10.0), 20.0],
+			])
+			var branch_l := PackedVector2Array([
+				Vector2(-24.0, 4.0), Vector2(-40.0, -12.0), Vector2(-34.0, -8.0), Vector2(-22.0, 10.0),
+			])
+			var branch_r := PackedVector2Array([
+				Vector2(24.0, 4.0), Vector2(34.0, -8.0), Vector2(40.0, -12.0), Vector2(22.0, 10.0),
+			])
+			var leaf_l := PackedVector2Array([
+				Vector2(-42.0, -14.0), Vector2(-34.0, -24.0), Vector2(-32.0, -12.0),
+			])
+			var leaf_r := PackedVector2Array([
+				Vector2(42.0, -14.0), Vector2(32.0, -12.0), Vector2(34.0, -24.0),
+			])
+			var layers6: Array = [
+				{"sd": _poly_sd(branch_l), "fill": bark, "ow": 4.0},
+				{"sd": _poly_sd(branch_r), "fill": bark, "ow": 4.0},
+				{"sd": _poly_sd(leaf_l), "fill": leaf.lerp(Color.WHITE, 0.25), "ow": 3.0},
+				{"sd": _poly_sd(leaf_r), "fill": leaf.lerp(Color.WHITE, 0.25), "ow": 3.0},
+				{"sd": _box_at(Vector2(0.0, 34.0), Vector2(8.0, 9.0), 4.0), "fill": bark, "ow": 5.0},
+				{"sd": canopy, "fill": leaf, "ow": 7.5},
+			]
+			# 冠面苔点（浅绿圆点 ×3）
+			layers6.append({"sd": _circle_at(Vector2(-18.0, -14.0), 3.4), "fill": leaf.lerp(Color.WHITE, 0.4), "ow": 0.0})
+			layers6.append({"sd": _circle_at(Vector2(16.0, -18.0), 2.6), "fill": leaf.lerp(Color.WHITE, 0.4), "ow": 0.0})
+			layers6.append({"sd": _circle_at(Vector2(24.0, 2.0), 3.0), "fill": leaf.lerp(Color.WHITE, 0.4), "ow": 0.0})
+			# 年轮目：大眼白 + 同心环 + 瞳（angry 瞳转深红 + 怒眉）
+			if p_angry:
+				layers6.append({"sd": _box_rot_at(Vector2(-10.0, -14.0), Vector2(6.0, 1.9), 1.0, -0.4),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+				layers6.append({"sd": _box_rot_at(Vector2(10.0, -14.0), Vector2(6.0, 1.9), 1.0, 0.4),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+			layers6.append({"sd": _circle_at(Vector2(0.0, -6.0), 10.5), "fill": Color.WHITE, "ow": 3.4})
+			var ring_col6 := PopPalette.ENEMY_DEEP if p_angry else PopPalette.OUTLINE
+			layers6.append({"sd": _ring_at(6.2, 1.5), "fill": ring_col6, "ow": 0.0})
+			layers6.append({"sd": _circle_at(Vector2(1.2, -4.8), 2.8),
+				"fill": PopPalette.ENEMY_DEEP if p_angry else PopPalette.OUTLINE, "ow": 0.0})
+			# 树洞嘴（椭圆洞）+ angry 张洞
+			if p_angry:
+				layers6.append({"sd": _box_at(Vector2(0.0, 12.0), Vector2(7.0, 4.5), 4.0),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+			else:
+				layers6.append({"sd": _box_at(Vector2(0.0, 12.0), Vector2(4.6, 2.0), 2.4),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+			return layers6
+		&"boss7":
+			# Boss7 九头沼龙（翠毒沼泽专属）：三头簇（中间大头 + 两侧小头）+ 三条长颈 +
+			# 沼绿躯体（与 E16 marshmaw 剪影互异：巨口球单头独眼环触手；本型=三头五眼长颈；
+			# angry=五瞳转深红 + 中头 crest 立起 + 怒眉）
+			var hydra := PopPalette.SUCCESS.lerp(PopPalette.OUTLINE, 0.5)
+			var layers7: Array = [
+				{"sd": _box_rot_at(Vector2(-21.0, -6.0), Vector2(4.6, 15.0), 3.0, 0.42),
+					"fill": hydra.lerp(PopPalette.OUTLINE, 0.25), "ow": 4.0},
+				{"sd": _box_rot_at(Vector2(21.0, -6.0), Vector2(4.6, 15.0), 3.0, -0.42),
+					"fill": hydra.lerp(PopPalette.OUTLINE, 0.25), "ow": 4.0},
+				{"sd": _box_at(Vector2(0.0, 6.0), Vector2(5.5, 15.0), 3.4),
+					"fill": hydra.lerp(PopPalette.OUTLINE, 0.25), "ow": 4.0},
+				{"sd": _circle_at(Vector2(0.0, 28.0), 16.0), "fill": hydra.lerp(PopPalette.OUTLINE, 0.2), "ow": 6.0},
+			]
+			# 三头：侧小头（先画，压在中头下）+ 中大头
+			layers7.append({"sd": _circle_at(Vector2(-25.0, -14.0), 9.0), "fill": hydra, "ow": 5.0})
+			layers7.append({"sd": _circle_at(Vector2(25.0, -14.0), 9.0), "fill": hydra, "ow": 5.0})
+			layers7.append({"sd": _circle_at(Vector2(0.0, -20.0), 15.0), "fill": hydra.lerp(Color.WHITE, 0.1), "ow": 6.0})
+			if p_angry:
+				# 中头冠刺 ×3（angry 立起）
+				for i in range(3):
+					var cx := -8.0 + 8.0 * float(i)
+					layers7.append({"sd": _poly_sd(PackedVector2Array([
+						Vector2(cx - 3.0, -32.0), Vector2(cx, -44.0), Vector2(cx + 3.0, -32.0),
+					])), "fill": hydra.lerp(PopPalette.OUTLINE, 0.4), "ow": 2.6})
+				layers7.append({"sd": _box_rot_at(Vector2(-8.0, -24.0), Vector2(5.0, 1.8), 0.9, -0.4),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+				layers7.append({"sd": _box_rot_at(Vector2(8.0, -24.0), Vector2(5.0, 1.8), 0.9, 0.4),
+					"fill": PopPalette.OUTLINE, "ow": 0.0})
+			# 五眼：中头双目 + 侧头各一目（angry 全瞳转深红）+ 中头宽嘴双牙
+			var hydra_eye := PopPalette.ENEMY_DEEP if p_angry else PopPalette.OUTLINE
+			layers7.append({"sd": _circle_at(Vector2(-5.5, -23.0), 4.2), "fill": Color.WHITE, "ow": 1.8})
+			layers7.append({"sd": _circle_at(Vector2(5.5, -23.0), 4.2), "fill": Color.WHITE, "ow": 1.8})
+			layers7.append({"sd": _circle_at(Vector2(-4.6, -22.0), 1.9), "fill": hydra_eye, "ow": 0.0})
+			layers7.append({"sd": _circle_at(Vector2(6.4, -22.0), 1.9), "fill": hydra_eye, "ow": 0.0})
+			layers7.append({"sd": _circle_at(Vector2(-27.0, -16.0), 2.8), "fill": Color.WHITE, "ow": 1.4})
+			layers7.append({"sd": _circle_at(Vector2(-26.2, -15.2), 1.3), "fill": hydra_eye, "ow": 0.0})
+			layers7.append({"sd": _circle_at(Vector2(27.0, -16.0), 2.8), "fill": Color.WHITE, "ow": 1.4})
+			layers7.append({"sd": _circle_at(Vector2(27.8, -15.2), 1.3), "fill": hydra_eye, "ow": 0.0})
+			layers7.append({"sd": _box_at(Vector2(0.0, -12.0), Vector2(8.0, 3.2), 3.0),
+				"fill": PopPalette.OUTLINE, "ow": 0.0})
+			layers7.append({"sd": _poly_sd(PackedVector2Array([
+				Vector2(-5.0, -15.0), Vector2(-1.8, -15.0), Vector2(-3.4, -10.0),
+			])), "fill": Color.WHITE, "ow": 0.0})
+			layers7.append({"sd": _poly_sd(PackedVector2Array([
+				Vector2(1.8, -15.0), Vector2(5.0, -15.0), Vector2(3.4, -10.0),
+			])), "fill": Color.WHITE, "ow": 0.0})
+			return layers7
 		&"spitter":
 			# E7 喷吐者（远程兵）：深红圆球 + 顶生三叶喷口 + 张开的大管嘴 + 斜吊不爽眼
 			var leaf_l := PackedVector2Array([

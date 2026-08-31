@@ -157,7 +157,7 @@ events = []
 [sub_resource type="Resource" id="WaveEntryData_w20"]
 script = ExtResource("2_wed")
 index = 20
-composition = [{"enemy_id": &"E6_boss3", "count": 1}]
+composition = [{"enemy_id": &"E20_swamp_hydra", "count": 1}]
 tp_override = 6.0
 window = 26.0
 events = [&"BOSS"]

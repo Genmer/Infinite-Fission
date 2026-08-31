@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/enemy_data.gd" id="1_ed"]
+
+[resource]
+script = ExtResource("1_ed")
+id = &"E19_grove_warden"
+display_name = "古树守卫"
+behavior = 0
+hp_base = 15320.0
+spd_base = 45.0
+dmg_base = 30.0
+exp_base = 750.0
+tp_cost = 64.0
+resist = [0.2, 0.0, 0.0, 0.0]
+immune_mask = 1
+tags = 2
+hitbox_r = 14.0
+ranged = {}
+elite_mult = {}
+boss = {"phases": 2, "phase2_resist": 0.2, "bullet_patterns": {"interval_s": 4.2, "pattern": "ring", "count": 24, "dmg": 16.0, "speed_mult_phase2": 1.35}, "summons": {"interval_s": 9.0, "mode": "split", "enemy_id": "E12_bogslime", "hp_ratio": 0.08, "count": 2, "count_phase2": 3}}
+gold_drop = {"chance": 1.0, "min": 120, "max": 160}

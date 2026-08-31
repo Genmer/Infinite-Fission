@@ -638,13 +638,22 @@ func _sync_visual() -> void:
 
 func _visual_kind() -> StringName:
 	# 分型判定（tag 优先级 Boss > 精英 > E1~E5 id 前缀约定）：
-	# boss1/2/3 三套剪影互异的大型聚合体；E5 精英 = 金腹徽基底（引擎侧加皇冠/悬浮/微光）
+	# boss1~7 七套剪影互异的大型聚合体（boss4~7 = 每图专属 Boss，P1 2026-08-31）；
+	# E5 精英 = 金腹徽基底（引擎侧加皇冠/悬浮/微光）
 	if is_boss() and data != null:
 		var bid := String(data.id)
 		if bid.begins_with("E6_boss2"):
 			return &"boss2"
 		if bid.begins_with("E6_boss3"):
 			return &"boss3"
+		if bid.begins_with("E17"):
+			return &"boss4"
+		if bid.begins_with("E18"):
+			return &"boss5"
+		if bid.begins_with("E19"):
+			return &"boss6"
+		if bid.begins_with("E20"):
+			return &"boss7"
 		return &"boss1"
 	if is_elite():
 		return &"elite"
@@ -746,10 +755,10 @@ func _ensure_sparkles(p_kind: StringName) -> void:
 
 
 func _ensure_satellites(p_kind: StringName) -> void:
-	# Boss 漂浮小卫星球（boss1=2 颗 / boss2/3=3 颗；白珠公转，运行期只更新位置）
+	# Boss 漂浮小卫星球（boss1=2 颗 / 其余 Boss=3 颗；白珠公转，运行期只更新位置）
 	# 非 Boss 复用时仅隐藏（节点随池实例存活，跨复用零实例化）
 	var want := String(p_kind).begins_with("boss")
-	var count := 3 if _kind == &"boss2" or _kind == &"boss3" else 2
+	var count := 2 if _kind == &"boss1" else 3
 	if want and _satellites.is_empty():
 		for i in range(3):
 			var orb := Sprite2D.new()
@@ -816,7 +825,7 @@ func _tick_visual(p_game_delta: float) -> void:
 			sx = _base_scale * breathe_e
 			sy = _base_scale * (2.0 - breathe_e)
 			_tick_elite_extras(hover)
-		&"boss1", &"boss2", &"boss3":
+		&"boss1", &"boss2", &"boss3", &"boss4", &"boss5", &"boss6", &"boss7":
 			off.y = sin(_anim_t * 1.6) * 4.0 * _base_scale
 			_tick_boss(p_game_delta)
 		_:

@@ -433,6 +433,14 @@ func _form_stat_line(p_wd: WeaponData) -> String:
 func _enemy_icon_tex(p_eid: Variant) -> ImageTexture:
 	# 怪物 id 前缀 → 分型贴图（enemy.gd _visual_kind 同映射的菜单侧轻副本）
 	var sid := String(p_eid)
+	if sid.begins_with("E17"):
+		return TextureFactory.enemy_tex(&"boss4")
+	if sid.begins_with("E18"):
+		return TextureFactory.enemy_tex(&"boss5")
+	if sid.begins_with("E19"):
+		return TextureFactory.enemy_tex(&"boss6")
+	if sid.begins_with("E20"):
+		return TextureFactory.enemy_tex(&"boss7")
 	if sid.begins_with("E6_boss2"):
 		return TextureFactory.enemy_tex(&"boss2")
 	if sid.begins_with("E6_boss3"):

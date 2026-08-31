@@ -43,6 +43,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_economy()
 	_test_polish()
 	_test_p0_fixes()
+	_test_map_bosses()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -842,6 +843,128 @@ func _test_p0_fixes() -> void:
 	_check("数据：W4 laser.pulse_duration=0.5", absf(float(w4d.laser.get("pulse_duration", 0.0)) - 0.5) <= 0.01)
 	var w5d: Resource = _gl.registry.get_weapon(&"W5_prism")
 	_check("数据：W5 无 pulse_duration（常驻口径）", not w5d.laser.has("pulse_duration"))
+
+
+# ── ㉑ 每图专属 Boss（P1：冰原/魔域/树海/沼泽独立 Boss——数据/贴图/分型/波表/怪闸） ──
+func _test_map_bosses() -> void:
+	# 数值真源：E6_boss2 同波位量级（hp_base 16537 → 专属 Boss = 16000±10% 微调）；
+	# schema 键照 boss2/3 先例（phases/bullet_patterns/summons/phase2_resist）。
+	print("── 每图专属 Boss ──")
+	var boss_ids: Array[StringName] = [&"E17_frost_sovereign", &"E18_demon_lord",
+		&"E19_grove_warden", &"E20_swamp_hydra"]
+	var kinds: Array[StringName] = [&"boss4", &"boss5", &"boss6", &"boss7"]
+	# ① 数据加载 + schema（TAG_BOSS + boss 段四键 + hp 量级）
+	var loaded := true
+	var schema_ok := true
+	var hp_ok := true
+	for bid in boss_ids:
+		var bd: EnemyData = _gl.registry.get_enemy(bid)
+		if bd == null:
+			loaded = false
+			continue
+		if int(bd.tags & GameConst.TAG_BOSS) == 0 or bd.boss.is_empty():
+			schema_ok = false
+		else:
+			for key in ["phases", "bullet_patterns", "summons", "phase2_resist"]:
+				if not bd.boss.has(key):
+					schema_ok = false
+		if absf(bd.hp_base - 16000.0) > 1600.0:
+			hp_ok = false
+	_check("数据加载：E17~E20 四专属 Boss 入注册表", loaded)
+	_check("schema：boss 段四键齐 + TAG_BOSS + hp≈16000（boss2 同波位 ±10%）",
+		schema_ok and hp_ok)
+	# ② validator：加载后全量校验 0 剔除（4 Boss 未被数据守门剔除）
+	var validator := DataValidator.new()
+	var report: Dictionary = validator.validate_all(_gl.registry)
+	var all_in := true
+	for bid in boss_ids:
+		if _gl.registry.get_enemy(bid) == null:
+			all_in = false
+	_check("validator：全量校验 0 剔除（4 Boss 存活于注册表）",
+		(report["rejected"] as Array).size() == 0 and all_in)
+	# ③ 贴图：非空 + 96px 画布 + 互异（缓存实例不同——与 boss1~3 剪影互异同口径）
+	var tex_b4 := TextureFactory.enemy_tex(&"boss4")
+	var tex_b5 := TextureFactory.enemy_tex(&"boss5")
+	var tex_b6 := TextureFactory.enemy_tex(&"boss6")
+	var tex_b7 := TextureFactory.enemy_tex(&"boss7")
+	var distinct := tex_b4 != null and tex_b5 != null and tex_b6 != null and tex_b7 != null \
+		and tex_b4.get_width() == 96 and tex_b7.get_height() == 96 \
+		and tex_b4 != tex_b5 and tex_b4 != tex_b6 and tex_b4 != tex_b7 \
+		and tex_b5 != tex_b6 and tex_b5 != tex_b7 and tex_b6 != tex_b7 \
+		and tex_b4 != TextureFactory.enemy_tex(&"boss1") \
+		and tex_b4 != TextureFactory.enemy_tex(&"boss2") \
+		and tex_b4 != TextureFactory.enemy_tex(&"boss3")
+	_check("贴图：boss4~7 非空 + 96px 画布 + 相互/对 boss1~3 互异", distinct)
+	var angry_ok := tex_b4 != TextureFactory.enemy_tex(&"boss4", true) \
+		and tex_b5 != TextureFactory.enemy_tex(&"boss5", true) \
+		and tex_b6 != TextureFactory.enemy_tex(&"boss6", true) \
+		and tex_b7 != TextureFactory.enemy_tex(&"boss7", true)
+	_check("贴图：4 新 Boss 怒相变体就位（angry 缓存独立）", angry_ok)
+	# ④ 分型判定 + 视觉接线 + 巨型化（spawn 4 实体，tags=6 → FINAL x5.0 档）
+	var kind_ok := true
+	var visual_ok := true
+	var scale_ok := true
+	for i in range(4):
+		var en := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+		en.spawn(_gl.registry.get_enemy(boss_ids[i]), 20, GameConst.TAG_FINAL_BOSS)
+		if en.get("_kind") != kinds[i]:
+			kind_ok = false
+		var spr: Sprite2D = en.get("_sprite")
+		if spr == null or spr.texture != TextureFactory.enemy_tex(kinds[i], false):
+			visual_ok = false
+		if absf(float(en.get("_base_scale")) - 14.0 * Enemy.FINAL_BOSS_VISUAL_MULT / Enemy.BOSS_TEX_R) > 0.001:
+			scale_ok = false
+		_gl.pools[&"enemy"].release(en)
+	_check("分型判定：E17~E20 spawn 实体 _kind = boss4~7", kind_ok)
+	_check("视觉接线：sprite 贴图 = 分型缓存同实例", visual_ok)
+	_check("巨型化：TAG_FINAL_BOSS → x5.0 档（hitbox 口径基准）", scale_ok)
+	# ⑤ 波表接入：4 图 w20 composition = 本图专属 Boss + 引擎选取以表内 Boss 优先
+	var pairs: Array = [
+		[&"world_frost", &"E17_frost_sovereign"],
+		[&"world_demon", &"E18_demon_lord"],
+		[&"world_grove", &"E19_grove_warden"],
+		[&"world_swamp", &"E20_swamp_hydra"],
+	]
+	var wave_ok := true
+	var pick_ok := true
+	var saved_table: WaveTableData = _gl.wave_director.wave_table
+	for pr: Array in pairs:
+		var tbl: WaveTableData = MapTable.load_table(pr[0], _gl.registry)
+		if tbl == null or tbl.entries.size() != 20:
+			wave_ok = false
+			continue
+		var w20: WaveEntryData = null
+		for e in tbl.entries:
+			if e.index == 20:
+				w20 = e
+		var found := false
+		if w20 != null:
+			for comp in w20.composition:
+				if StringName(String(comp.get("enemy_id", ""))) == StringName(String(pr[1])):
+					found = true
+		if not found:
+			wave_ok = false
+		_gl.wave_director.wave_table = tbl
+		var pick: EnemyData = _gl.wave_director.call(&"_find_boss_data", 20)
+		if pick == null or pick.id != StringName(String(pr[1])):
+			pick_ok = false
+	_gl.wave_director.wave_table = saved_table
+	_check("波表接入：4 图 w20 composition 编入本图专属 Boss（键序不变）", wave_ok)
+	_check("引擎选取：_find_boss_data 表内 Boss 优先（每图 w20 选对）", pick_ok)
+	# ⑥ 主表轮换不回归（rotation 池扩到 7 只后，主表三 Boss 波选取不变）
+	_gl.wave_director.wave_table = _gl.registry.get_wave_table()
+	var main_ok := true
+	var expects: Array = [[10, &"E6_boss1"], [20, &"E6_boss2"], [30, &"E6_boss3"]]
+	for ex: Array in expects:
+		var mp: EnemyData = _gl.wave_director.call(&"_find_boss_data", ex[0])
+		if mp == null or mp.id != StringName(String(ex[1])):
+			main_ok = false
+	_check("主表轮换：w10/20/30 仍 = boss1/2/3（rotation 不回归）", main_ok)
+	# ⑦ F-19 Boss 波伴怪闸口径：w20 节奏 ×1/2.5s 场上≤12 + Boss 未登场时闸开（口径不回归）
+	var rhythm: Dictionary = _gl.wave_director.call(&"_escort_rhythm", 20)
+	_check("F-19 伴怪闸：w20 节奏 ×1/2.5s 场上≤12 + 未登场闸开（不回归）",
+		absf(float(rhythm["interval"]) - 2.5) <= 0.001 and int(rhythm["cap"]) == 12
+		and bool(_gl.wave_director.call(&"_escort_gate_open")))
 
 
 func _live_children(p_node: Node) -> int:
