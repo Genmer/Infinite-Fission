@@ -26,9 +26,11 @@
 | E 审查+测试（并行） | 独立代码审查 + 运行验证（两轮） | ✅ 完成（一轮：1C+3I 修复；二轮：可交付判定，720/720 终验 PASS） |
 | F 交付报告 | 汇总判定+关键决策清单 | ✅ 完成（判定 = 可交付；见 §5.8 与 §4 裁定记录） |
 
-**仓库当前可编译（0 解析错误），回归 836/836 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，v0.6.0 起新增 pkg6）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~5.6ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志（v0.6.0 前基线记录）。**
+**仓库当前可编译（0 解析错误），回归 836/836 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，另有 pkg6_extra 32 项验收补充 / pkg7 167 项版本增量自测，不计入 836 基线口径）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~5.7ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**
 
 **v0.6.0 增量（2026-08-31，T0~T8）：商店（Boss 前夜 w9/w19/w29）/ 金币经济（掉落+磁吸+HUD）/ 武器卡（CardKind.WEAPON）/ 武器门槛词条（required_weapon）/ Boss 弹幕三形态+召唤 / HUD 720×1280 全量重排+波次横幅。数值与裁定真源 = `docs/analysis/A4_v0.6.0_design.md`；自测 = `tests/runner/test_pkg6.gd`（115 项）。提交序：T1 38ad7ef → T4 a18770d → T3 2db7455 → T5 b7984c7 → T2 57b742f → T6 f7d3f8a → T7 cffa4f5 → T8 本笔。**
+
+**v0.7.0 增量（2026-09-01，U1~U15）：芯片系统（ChipData×8 / ChipHandler 3 槽 / 管线 ⑥b 独立乘区段 cap_chip_zone / 商店芯片货架+槽位面板 / Boss 芯片掉落）/ 金币狂欢关（w6/16/26，0.4×血 rush + 掉落覆写 + 波末比例奖励）/ 双 Boss 修复（w10/20/30 composition 清空）/ 召唤独立计数（summon_active_count 闸）/ 附着环 ElementRing + 反应粒子三预设 + 打击感分级 / 反应统计与结算行 / 首件武器保底（weapon_weight_mult ×2）/ 受击红闪 / 文本跳字通道。数值与裁定真源 = `docs/analysis/A6_v0.7.0_design.md`；自测 = `tests/runner/test_pkg7.gd`（167 项）。提交序：U1 a9573ab → U2 a6377c1 → U3 22465f6 → U12-14 a920214 → U5 cf68ab3 → U4+U7 e74328b → U6 3753072 → U8-10 375dcf9 → U11 f184dac → U15 本笔。**
 
 **阶段 E 关键战果（审查/测试发现并修复）：**
 - 一轮审查 1C+3I：重开不清场（残留战场秒杀重生）→ `_clear_battlefield` 清场序 + respawn 1.5s 无敌；GameFeel 订阅晚于 Spawner 清 tags（Boss 击杀打击感永不触发）→ early_bind；Boss 波伴随怪流水锁死 wave_cleared → `_boss_ref` 存活闸；TH_CRIT_SHARD 全武器声明零实现 + 校验器空承诺 → 补 `trait_effect_crit_shard.gd` + check_references ② 落地
@@ -125,8 +127,9 @@
 - 导入：`"$G" --headless --path "<项目根>" --import`
 - 跑测试：`"$G" --headless --path "<项目根>" -s tests/runner/test_pkg0.gd`（pkg1/pkg2/pkg3 同理）
 - 注意：`-s` 模式下入口脚本编译早于 autoload 注册，测试用「入口引导 + 运行时 load 用例体」两段式（pkg0~pkg3 都是这个模式，新测试照抄）
-- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836；v0.6.0 起 pkg6 为版本增量自测；另有 pkg6_extra 31 项验收补充用例独立 runner，不计入基线口径）**
+- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836；pkg6 为 v0.6.0 增量自测；另有 pkg6_extra 32 项验收补充用例独立 runner 与 pkg7 167 项 v0.7.0 增量自测，不计入 836 基线口径）**
 - v0.6.0 压力复测：**P95 = 5.559ms**（avg 2.191 / P50 1.791 / P99 6.968，判定线 8.3ms PASS）
+- v0.7.0 压力复测：**P95 = 5.714ms**（avg 2.302 / P50 1.912 / P99 6.515，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0）
 - 压力/soak：`tests/stress/test_perf_500p100e.gd`（AC-01.2，headless 逻辑帧口径）与 `tests/stress/test_soak.gd`（AC-14.1，SOAK_FRAMES 常量控时长；10 分钟版预计 ~12 分钟实际，长跑须后台+轮询防会话超时）
 
 ## 8. 冻结契约速查（跨包接口，改动需全包评估）
@@ -167,6 +170,39 @@
 +金币+商店仲裁；WaveDirector 商店间隙调度；Enemy Boss 弹幕；CardGenerator 武器卡与门槛词条；
 HUD 720×1280 重排（金币/描边/波次横幅/layout_rects 契约）；测试新增 pkg6（115 项）并授权更新
 pkg0（ADD 池计数 14）/pkg4（池×7）/pkg5（池×7 + 黑市桥接契约）。
+
+### 8.2 v0.7.0 增量契约（详见 A6_v0.7.0_design.md §13）
+
+1. **EventBus +2 信号**：`chip_slot_unlocked(slot)` / `gold_rush_started(wave)` + emit 包装；
+   DataValidator.EVENT_NAMES 19 → **21**（双源镜像同步）。
+2. **DamageContext +chip_entries**；**ModifierStack +chip_product / aggregate_chip()**；
+   **DamageResult +chip_product**；**DamageAudit +clamped_chip / chip_product**；
+   DamagePipeline resolve 增 ⑥b 芯片段；`_finalize` 终值改 `raw = S × min(M×chip, cap_prod) × L × C × V`
+   （chip_product=1.0 时与 v0.6.0 恒等，fixed-seed 回归共证）。
+   ★ **settle_aoe/DOT/反应不吃芯片 ATK 段**（反应 chip_product 恒 1.0）。
+3. **BalanceTables +cap_chip_zone**（默认 1.0，合法域 (0,4]，.tres 不必改）；validate_balance 非致命同步。
+4. **EnemySpawner.enqueue 可选键 +`gold_rush:bool` / +`summon:bool`**；+`summon_active_count`
+   观测口；Boss 召唤闸改独立计数（原 active_count() 含普通敌——U13 修复）。
+5. **Enemy +字段/接口**：is_summon / gold_rush（spawn 默认 false、_reset_state 清零）、
+   spawn_wave()、static projected_max_hp(data, wave)（HP 成长唯一真源，金币关 0.4×血同源）、
+   ring_visible() / ring_progress(element)（U8 附着环）。
+6. **ShopUI**：open() 五参签名不变（兼容）；+set_chip_shelf / set_chip_slots / set_player_full_hp /
+   layout_rects（11 项）；shelf_state +chips/chip_purchased/chip_free_slots；mark_purchased 扩 0~5；
+   purchase_requested 语义扩 index 4~5（芯片五查仲裁）。
+7. **ParticlePool.burst 返回值** void → GPUParticles2D（可 null，源兼容）——ParticleDirector
+   重指反应预设材质用（每次重指防串色）。
+8. **DamagePopup.show_popup 增可选第 5 参 p_text**；PopupManager +show_text_popup(pos, text)
+   （target_uid=0，不入合并注册表）。
+9. **GameConst**：+CHIP_STAT_KEYS（8 键封闭注册表）、+static card_kind_name(kind)（kind 中文名
+   单源——card_select_ui/shop_ui 两处数组字面量收束）。
+10. **CardGenerator**：+static rarity_weights_for(wave)（稀有度权重单一真源提取，ChipHandler 复用）；
+    generate_candidates 增可选 context 键 **weapon_weight_mult**（首件武器保底 ×2；仅调用点
+    duplicate 改 WEAPON 键，静态表与三处镜像零改动）。
+11. **波表**：w6/16/26 events=[GOLD_RUSH]（金币关）；w10/20/30 composition=[]（**U12 双 Boss
+    修复**——原 composition+BOSS 事件双路径生成两只 Boss）。
+12. **ChipHandler（新类）**：MAX_CHIP_SLOTS=3 / CHIP_RNG_SEED=4242 / CHIP_PRICES{40,70,120,220} /
+    CONVERT_RATIO=0.5；GameLoop 组装序 = relic_handler 之后、spawner add_child 之前；
+    player.setup deps 增键 `"chip_handler"`。
 
 ## 9. 工程铁律（全程有效）
 

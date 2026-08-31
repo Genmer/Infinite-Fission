@@ -1,7 +1,7 @@
 # tests/runner/pkg6_extra_cases.gd
 # v0.6.0 验收补漏用例体（由 test_pkg6_extra.gd 入口在 autoload 就绪后运行时加载编译）。
 # tester 独立验收视角：pkg6 已覆盖项不重复；本文件只补 pkg6 未覆盖的验收口径——
-#   A. T1 DataRegistry 加载 68 资源 0 剔除（report 锁数 + 表尺寸 vs 文件系统独立对账）
+#   A. T1 DataRegistry 加载 76 资源 0 剔除（v0.7.0 +8 chips；report 锁数 + 表尺寸 vs 文件系统独立对账）
 #   B. T4 卡池 500 抽（固定种子）AFF_GOLD_DROP / AFF_GOLD_VALUE 各 ≥1 次
 #   C. T4 apply 掉率词条后 chance=0.06 大批量抽样通过率上移 ≥6.8 个百分点
 #   D. T4 金币词条叠满 stack_max → 移出候选池（§6.4）
