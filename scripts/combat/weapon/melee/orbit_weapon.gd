@@ -59,14 +59,27 @@ func _ensure_orbit_field() -> void:
 	orbit_field.name = "OrbitField"
 	add_child(orbit_field)
 	orbit_field.weapon = self                   # 结算宿主注入（缺失 → OrbitField.tick 判定早退）
-	orbit_field.spawn({
+	orbit_field.spawn(_orbit_params())
+
+
+func _orbit_params() -> Dictionary:
+	# 力场参数集（orbs 含 orbs_bonus 加成——诺亚僚机召唤通道，P2）
+	return {
 		"orbs": _leveled_param("orbs", float(data.melee.get("orbs", 2))) + orbs_bonus,
 		"orbit_radius": _leveled_param("orbit_radius", float(data.melee.get("orbit_radius", 90.0))),
 		"angular_speed": float(data.melee.get("angular_speed", 240.0)),
 		"orb_radius": float(data.melee.get("orb_radius", 16.0)),
 		"hit_cd": float(data.melee.get("hit_cd", 0.5)),
 		"knockback": float(data.melee.get("knockback", 40.0)),
-	})
+	}
+
+
+func refresh_orbit_field() -> void:
+	# 已常驻力场按当前参数重铺（诺亚僚机召唤/还原通道：orbs_bonus 变更即时生效）；
+	# 挥斩形态 / 力场未建（首开火前）→ 无需重铺（orbs_bonus 由 _ensure_orbit_field 自然生效）
+	if _is_slash_mode() or orbit_field == null or not is_instance_valid(orbit_field):
+		return
+	orbit_field.spawn(_orbit_params())
 
 
 func _ensure_arc_slash() -> void:

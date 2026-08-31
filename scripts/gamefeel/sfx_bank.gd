@@ -2,6 +2,11 @@
 # SfxBank（META_ROADMAP §5.8 表现层一期，用户反馈至今全静音）：程序化音效——启动期
 # PCM 合成（正弦/方波/锯齿/噪声 + 包络），零外部素材。静态单例 I 供 UI 直调；
 # 高频事件（命中/击杀）70ms 节流。音量 -14dB，polyphony 4。
+# BGM 环境音通道（P2，META_ROADMAP §5.10「BGM 环境音」）：循环 PCM 启动期一次性预生成
+# （正弦叠加 + 缓慢 LFO，4 小节 8s 无缝循环）——运行期零逐帧生成（用户机器卡顿敏感，
+# 纯循环播放）；战斗态播 pad、Boss 存活期叠加低频脉冲第二循环（同长循环锁相 +
+# stream_paused 拨运输），菜单暂停。音量 -18dB 级别（AudioServer 之外仅 player.volume_db，
+# 不动总线/场景树结构）。
 class_name SfxBank
 extends Node
 
@@ -12,10 +17,25 @@ var _players: Dictionary = {}                  # StringName → AudioStreamPlaye
 var _last_ms: Dictionary = {}                  # StringName → 上次播放 ms（节流）
 const THROTTLE_MS := 70
 
+# ── BGM 环境音参数（数值真源） ────────────────────────────────────
+const BGM_RATE := 11025                        # 采样率（低频 pad 充裕；预生成量/Boot 预算折中）
+const BGM_LOOP_S := 8.0                        # 循环长（4 小节）
+const BGM_PAD_DB := -18.0                      # pad 层音量（-18dB 级别）
+const BGM_BOSS_DB := -16.0                     # Boss 脉冲层音量（略高于 pad，仍在环境级）
+const BGM_LFO_BLOCK := 128                     # LFO 步进块（≈11.6ms——慢 LFO 听感连续）
+
+var _bgm_player: AudioStreamPlayer = null      # pad 循环宿主
+var _bgm_boss_player: AudioStreamPlayer = null # Boss 脉冲层宿主（与 pad 同长锁相）
+var _bgm_active := false                       # 战斗态播放 / 菜单暂停
+var _bgm_boss_on := false                      # Boss 存活期第二循环
+var _bgm_started := false                      # 首次激活起播（此后仅 stream_paused 拨运输）
+var _wt: PackedFloat32Array = PackedFloat32Array()  # 正弦查找表（PCM 预生成提速）
+
 
 func _ready() -> void:
 	I = self
 	_build_all()
+	_build_bgm()
 
 
 func play(p_name: StringName) -> void:
@@ -38,6 +58,9 @@ func _build_all() -> void:
 	_make(&"shield", 0.20, 300.0, 900.0, "sine", 0.26)
 	_make(&"boss", 0.55, 110.0, 70.0, "saw", 0.40)
 	_make(&"buy", 0.12, 700.0, 1050.0, "sine", 0.28)
+	# 量级分档联动音（P2 伤害数字分级）：紫档金属「叮」高频短音 / 金档重击低频
+	_make(&"tier_high", 0.09, 1760.0, 1480.0, "sine", 0.26)
+	_make(&"tier_epic", 0.22, 240.0, 70.0, "saw", 0.34)
 
 
 func _make(p_name: StringName, p_dur: float, p_f0: float, p_f1: float,
@@ -82,4 +105,121 @@ func _synthesize(p_dur: float, p_f0: float, p_f1: float, p_kind: String,
 	wav.mix_rate = rate
 	wav.stereo = false
 	wav.data = data
+	return wav
+
+
+# ── BGM 环境音（P2：预生成 PCM 循环——运行期零逐帧生成） ──────────
+func _build_bgm() -> void:
+	# 查找表 + 双层循环一次性预生成（启动期 ~2×8s@11025Hz；Boot <3s 预算内）
+	_wt.resize(1024)
+	for i in range(1024):
+		_wt[i] = sin(TAU * float(i) / 1024.0)
+	_bgm_player = AudioStreamPlayer.new()
+	_bgm_player.name = "BgmPad"
+	_bgm_player.stream = _synthesize_pad_loop()
+	_bgm_player.volume_db = BGM_PAD_DB
+	add_child(_bgm_player)
+	_bgm_boss_player = AudioStreamPlayer.new()
+	_bgm_boss_player.name = "BgmBoss"
+	_bgm_boss_player.stream = _synthesize_boss_pulse_loop()
+	_bgm_boss_player.volume_db = BGM_BOSS_DB
+	add_child(_bgm_boss_player)
+
+
+func bgm_set_active(p_active: bool) -> void:
+	# 战斗态开关（GameLoop.change_state 驱动：PLAYING → true，MENU → false）
+	_bgm_active = p_active
+	_bgm_transport()
+
+
+func bgm_set_boss_layer(p_on: bool) -> void:
+	# Boss 存活期第二循环开关（boss_spawned / Boss 击杀驱动）
+	_bgm_boss_on = p_on
+	_bgm_transport()
+
+
+func bgm_is_active() -> bool:
+	return _bgm_active
+
+
+func bgm_boss_layer_on() -> bool:
+	return _bgm_boss_on
+
+
+func bgm_loop_seconds() -> float:
+	# 观测口（测试断言 8s 循环）
+	return BGM_LOOP_S
+
+
+func bgm_pad_stream() -> AudioStreamWAV:
+	return _bgm_player.stream as AudioStreamWAV
+
+
+func _bgm_transport() -> void:
+	# 双层同源起播（等长 8s 循环自然锁相）；此后仅 stream_paused 拨运输——零重建零重定位
+	if not _bgm_started:
+		if not _bgm_active:
+			return
+		_bgm_started = true
+		_bgm_player.play()
+		_bgm_boss_player.play()
+	_bgm_player.stream_paused = not _bgm_active
+	_bgm_boss_player.stream_paused = not (_bgm_active and _bgm_boss_on)
+
+
+func _synthesize_pad_loop() -> AudioStreamWAV:
+	# 环境垫（4 小节 8s 无缝循环）：A2 110 / E3 165 / A3 220 三正弦叠加 + 0.125/0.25Hz
+	# 双 LFO 缓慢呼吸。无缝判据：分量频率与 LFO 频率均为「1/8s 的整数倍」→ 循环点相位连续
+	#（110=880/8 · 165=1320/8 · 220=1760/8 · LFO 周期 8s/4s）；幅度头空 ×0.62（Σamp=1.0）
+	var n := int(BGM_LOOP_S * float(BGM_RATE))
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var freqs: Array[float] = [110.0, 165.0, 220.0]
+	var amps: Array[float] = [0.5, 0.28, 0.22]
+	var lfo_hz: Array[float] = [0.125, 0.25]
+	var lfo_phase: Array[float] = [0.0, PI * 0.5]
+	var phases: Array[float] = [0.0, 0.0, 0.0]
+	var lfo_now: Array[float] = [1.0, 1.0]
+	var block_left := 0
+	for i in range(n):
+		if block_left <= 0:
+			block_left = BGM_LFO_BLOCK
+			for k in range(2):
+				lfo_now[k] = 0.78 + 0.22 * sin(
+					TAU * lfo_hz[k] * float(i) / float(BGM_RATE) + lfo_phase[k])
+		block_left -= 1
+		var s := 0.0
+		for j in range(3):
+			phases[j] = fmod(phases[j] + freqs[j] / float(BGM_RATE), 1.0)
+			s += amps[j] * lfo_now[0 if j != 1 else 1] * _wt[int(phases[j] * 1024.0) & 1023]
+		data.encode_s16(i * 2, int(clampf(s * 0.62, -1.0, 1.0) * 32767.0))
+	return _wav_loop(data)
+
+
+func _synthesize_boss_pulse_loop() -> AudioStreamWAV:
+	# Boss 层低频脉冲：55Hz 正弦短噗 ×16（每 0.5s 一发、0.4s 平方衰减尾）——
+	# 16 发 = 8s 整数倍 + 尾音归零后静默至循环点 → 无缝无爆音
+	var n := int(BGM_LOOP_S * float(BGM_RATE))
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i in range(n):
+		var t_in := fmod(float(i) / float(BGM_RATE), 0.5)
+		var s := 0.0
+		if t_in < 0.4:
+			var u := t_in / 0.4
+			s = (1.0 - u) * (1.0 - u) * _wt[int(fmod(55.0 * t_in, 1.0) * 1024.0) & 1023] * 0.9
+		data.encode_s16(i * 2, int(clampf(s, -1.0, 1.0) * 32767.0))
+	return _wav_loop(data)
+
+
+func _wav_loop(p_data: PackedByteArray) -> AudioStreamWAV:
+	# 16bit 单声道循环 wav（LOOP_FORWARD 全段；loop_end 单位 = 帧）
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = BGM_RATE
+	wav.stereo = false
+	wav.data = p_data
+	wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	wav.loop_begin = 0
+	wav.loop_end = p_data.size() / 2
 	return wav

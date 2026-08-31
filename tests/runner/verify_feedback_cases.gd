@@ -46,6 +46,10 @@ func run(p_tree: SceneTree) -> void:
 	_test_map_bosses()
 	_test_map_affixes2()
 	_test_endless_maps()
+	_test_p2_damage_tiers()
+	_test_p2_bgm()
+	_test_p2_daily()
+	_test_p2_characters()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -422,7 +426,8 @@ func _test_meta_systems() -> void:
 	# 大厅 UI：入口 + 面板
 	var menu: MenuScreen = _gl.menu_screen
 	_check("大厅：registry 已注入", menu.registry != null)
-	_check("大厅：五入口按钮就位（图鉴/成就/记录/角色/养成）", menu._lobby_btns.size() == 5)
+	_check("大厅：六入口按钮就位（图鉴/成就/记录/角色/养成/每日——P2 每日挑战入口 +1）",
+		menu._lobby_btns.size() == 6)
 	menu._on_lobby_pressed("codex")
 	_check("大厅：图鉴面板打开且条目 >0",
 		menu._panel_root.visible and menu._panel_list.get_child_count() > 0)
@@ -552,7 +557,7 @@ func _test_swamp_eco() -> void:
 # ── ⑱ 角色系统 + 局外养成（M8 落地验收） ─────────────────────────
 func _test_char_meta() -> void:
 	print("── 角色与局外养成 ──")
-	_check("CharacterTable：6 角色（解锁链完整）", CharacterTable.count() == 6)
+	_check("CharacterTable：8 角色（解锁链完整——P2 薇拉/诺亚 +2）", CharacterTable.count() == 8)
 	# 解锁链：全图通关（测试环境解锁全部角色）
 	for m in MapTable.MAPS:
 		Meta.mark_map_cleared(m.id)
@@ -1208,6 +1213,280 @@ func _test_endless_maps() -> void:
 	# ⑧ HUD 波次号无尽段继续递增
 	EventBus.emit_wave_started(41)
 	_check("HUD：无尽段波次号递增（41）", _gl.hud.wave == 41)
+
+
+# ── P2-1 伤害数字分级（白/蓝/紫/金——大小/颜色/音效三联动） ────────
+func _test_p2_damage_tiers() -> void:
+	print("── P2 伤害数字分级 ──")
+	var pm: PopupManager = _gl.popup_manager
+	pm.tick(10.0)                                  # 清场（归还上批活跃跳字）
+	var base: float = _gl.call(&"_popup_tier_baseline")
+	_check("分级基准：主武器面板 base_atk × crit_mult（>0）", base > 0.0, "base=%s" % str(base))
+	_check("分级音色：紫「叮」/ 金重击已入 sfx_bank",
+		SfxBank.I != null and SfxBank.I._streams.has(&"tier_high")
+		and SfxBank.I._streams.has(&"tier_epic"))
+	var cases := [[0.5, 0], [2.0, 1], [4.0, 2], [8.0, 3]]   # [倍率, 期望档]
+	var uid := 9100
+	for c: Array in cases:
+		var r := DamageResult.new()
+		r.final_value = base * float(c[0])
+		r.target_uid = uid
+		r.pos = Vector2(100, 200)
+		r.popup_style = GameConst.PopupStyle.NORMAL
+		pm.on_damage_resolved(r)
+		uid += 1
+	_check("量级分档：0.5×/2×/4×/8× → 白/蓝/紫/金四档判定", pm.active_popups == 4)
+	for i: int in range(cases.size()):
+		var popup: DamagePopup = pm._active_list[i]
+		var expect_size := roundi(DamagePopup.FONT_SIZE * float(DamagePopup.TIER_SCALES[int(cases[i][1])]))
+		_check("档位 %d：字号 ×%s（%dpx）" % [int(cases[i][1]), str(DamagePopup.TIER_SCALES[int(cases[i][1])]), expect_size],
+			popup.tier == int(cases[i][1])
+			and popup._label.get_theme_font_size("font_size") == expect_size)
+	_check("档位配色：蓝/紫/金 = 稀有度三色（调色板单源）",
+		(pm._active_list[1] as DamagePopup)._label.self_modulate == PopPalette.RARITY_RARE
+		and (pm._active_list[2] as DamagePopup)._label.self_modulate == PopPalette.RARITY_EPIC
+		and (pm._active_list[3] as DamagePopup)._label.self_modulate == PopPalette.RARITY_LEGEND)
+	_check("金档重音 + 轻震动（trauma 复用 hit 档）",
+		_gl.game_feel.shake.trauma > 0.0)
+	pm.tick(10.0)
+	# CRIT 同吃量级档（基础字号 40）；DOT/REACTION 不参与（沿旧观感）
+	var rc := DamageResult.new()
+	rc.final_value = base * 4.0
+	rc.target_uid = 9200
+	rc.popup_style = GameConst.PopupStyle.CRIT
+	pm.on_damage_resolved(rc)
+	_check("暴击量级档：紫档字号 = 40 × 1.35",
+		(pm._active_list[0] as DamagePopup).tier == 2
+		and (pm._active_list[0] as DamagePopup)._label.get_theme_font_size("font_size")
+			== roundi(DamagePopup.FONT_SIZE_CRIT * 1.35))
+	pm.tick(10.0)
+	var rd := DamageResult.new()
+	rd.final_value = base * 100.0
+	rd.target_uid = 9300
+	rd.popup_style = GameConst.PopupStyle.DOT
+	pm.on_damage_resolved(rd)
+	_check("DOT 不吃量级档（配色/字号沿旧）",
+		(pm._active_list[0] as DamagePopup).tier == 0
+		and (pm._active_list[0] as DamagePopup)._label.get_theme_font_size("font_size")
+			== DamagePopup.FONT_SIZE)
+	pm.tick(10.0)
+	# 基准关闭降级：provider 置空 → 全白（安全关闭口径）
+	var saved_provider: Callable = pm.baseline_provider
+	pm.baseline_provider = Callable()
+	var rn := DamageResult.new()
+	rn.final_value = base * 100.0
+	rn.target_uid = 9400
+	rn.popup_style = GameConst.PopupStyle.NORMAL
+	pm.on_damage_resolved(rn)
+	_check("基准缺失 → 分级安全关闭（全白现状字号）",
+		(pm._active_list[0] as DamagePopup).tier == 0
+		and (pm._active_list[0] as DamagePopup)._label.get_theme_font_size("font_size")
+			== DamagePopup.FONT_SIZE)
+	pm.baseline_provider = saved_provider
+	pm.tick(10.0)
+
+
+# ── P2-2 BGM 环境音（预生成 PCM 循环 + 战斗/菜单/Boss 三态） ───────
+func _test_p2_bgm() -> void:
+	print("── P2 BGM 环境音 ──")
+	_check("BGM：SfxBank 单例 + pad 层就绪", SfxBank.I != null
+		and SfxBank.I.bgm_pad_stream() is AudioStreamWAV)
+	var stream: AudioStreamWAV = SfxBank.I.bgm_pad_stream()
+	_check("BGM：8s 循环（4 小节）+ LOOP_FORWARD",
+		absf(stream.get_length() - SfxBank.I.bgm_loop_seconds()) <= 0.01
+		and stream.loop_mode == AudioStreamWAV.LOOP_FORWARD)
+	# 无缝判据：循环首尾样本连续（正弦/LFO 均为 1/8s 整数倍频率——首尾相位连续）
+	var pcm := stream.data
+	var seam := absi(pcm.decode_s16(0) - pcm.decode_s16(pcm.size() - 2))
+	_check("BGM：循环点无缝（首尾样本差 %d < 2500）" % seam, seam < 2500)
+	SfxBank.I.bgm_set_active(true)
+	_check("BGM：战斗态起播（pad 播放中）", SfxBank.I._bgm_player.playing)
+	SfxBank.I.bgm_set_boss_layer(true)
+	_check("BGM：Boss 存活期第二循环解锁（脉冲层播放中）",
+		SfxBank.I._bgm_boss_player.playing
+		and not SfxBank.I._bgm_boss_player.stream_paused)
+	SfxBank.I.bgm_set_active(false)
+	_check("BGM：菜单暂停（双层 stream_paused）",
+		SfxBank.I._bgm_player.stream_paused
+		and SfxBank.I._bgm_boss_player.stream_paused)
+	SfxBank.I.bgm_set_boss_layer(false)
+
+
+# ── P2-3 每日挑战（日期种子 + 当日词缀 + daily_best + 大厅入口） ──
+func _test_p2_daily() -> void:
+	print("── P2 每日挑战 ──")
+	# ① 同日同种子确定性 / 跨日种子必变
+	_check("每日：同日期种子恒同", Meta.daily_seed("20260831") == Meta.daily_seed("20260831"))
+	_check("每日：跨日种子必变", Meta.daily_seed("20260831") != Meta.daily_seed("20260901"))
+	# ② 词缀组合来自日期（确定性 + 形状 + 池内）
+	var a1: Dictionary = Meta.daily_affixes("20260831")
+	var a2: Dictionary = Meta.daily_affixes("20260831")
+	var curses1: Array = a1.get("curses", [])
+	var in_pool := true
+	for cid: Variant in curses1:
+		if not Meta.CURSE_POOL.has(StringName(String(cid))):
+			in_pool = false
+	_check("每日：同日词缀组合恒同（全玩家同日同配置）",
+		str(a1) == str(a2) and curses1.size() == 2 and curses1[0] != curses1[1] and in_pool)
+	_check("每日：祝福 1 条来自祝福池",
+		Meta.BLESS_POOL.has(StringName(String(a1.get("bless", "")))))
+	# ③ 跨日变化（mock 日期参数化——12 个连续日期 ≥3 种组合）
+	var combos := {}
+	for d in range(1, 13):
+		var key := Meta.daily_date_key({"year": 2027, "month": 1, "day": d})
+		var affixes: Dictionary = Meta.daily_affixes(key)
+		combos[str(affixes)] = true
+	_check("每日：跨日词缀轮换（12 日 ≥3 种组合）", combos.size() >= 3, "kinds=%d" % combos.size())
+	# ④ daily_best 写读（波次/击杀各取历史最大）
+	var saved_daily: Dictionary = Meta.daily_records.duplicate()
+	Meta.daily_records = {}
+	Meta.record_daily_result(15, 200)
+	Meta.record_daily_result(10, 300)              # 更低波次 / 更高击杀
+	var rec: Dictionary = Meta.daily_record()
+	_check("每日：daily_best 写读（波次取最大 15 / 击杀取最大 300）",
+		int(rec.get("best_wave", 0)) == 15 and int(rec.get("best_kills", 0)) == 300)
+	# ⑤ 结算分流：daily 局只记 daily_best，不混常规 records
+	var saved_records: Dictionary = Meta.records.duplicate()
+	Meta.set_run_daily(true)
+	Meta._run_max_wave = 21
+	Meta._run_kills = 400
+	Meta._on_state_changed(GameConst.GameStatus.GAME_OVER)
+	var rec2: Dictionary = Meta.daily_record()
+	_check("每日：daily 局结算 → daily_best 更新（波次 21）", int(rec2.get("best_wave", 0)) == 21)
+	_check("每日：daily 局不混常规记录（total_runs/best_wave 不变）",
+		int(Meta.records["total_runs"]) == int(saved_records["total_runs"])
+		and int(Meta.records["best_wave"]) == int(saved_records["best_wave"]))
+	Meta.set_run_daily(false)
+	# ⑥ 持久化：save → 清空 → load 还原
+	Meta._save()
+	Meta.daily_records = {}
+	Meta._load()
+	_check("每日：daily_records 持久化写读", int(Meta.daily_record().get("best_wave", 0)) == 21)
+	Meta.daily_records = saved_daily               # 还原（测试不留痕）
+	Meta._save()
+	# ⑦ 大厅入口 + 当日面板（2 诅 + 1 祝 + 最佳 + 注释 + 出发按钮 = 6 行）
+	var menu: MenuScreen = _gl.menu_screen
+	menu._on_lobby_pressed("daily")
+	var curse_rows := 0
+	var bless_rows := 0
+	for row_node in menu._panel_list.get_children():
+		if row_node.is_queued_for_deletion():
+			continue
+		for sub in (row_node as Node).get_children():
+			if sub is Label:
+				var txt := String((sub as Label).text)
+				if txt == "诅":
+					curse_rows += 1
+				elif txt == "祝":
+					bless_rows += 1
+	_check("每日：大厅面板当日三词缀展示（2 诅 + 1 祝）", curse_rows == 2 and bless_rows == 1)
+	_check("每日：出发挑战按钮就位", menu._panel_list.find_child("DailyStartButton", true, false) != null)
+	menu._on_panel_close()
+
+
+# ── P2-4 角色扩展 ×2（薇拉毒云 / 诺亚僚机 + 解锁门） ──────────────
+func _test_p2_characters() -> void:
+	print("── P2 角色扩展 ──")
+	var p: Node = _gl.player
+	var vera: Dictionary = CharacterTable.get_character(&"vera")
+	var noah: Dictionary = CharacterTable.get_character(&"noah")
+	_check("角色表：薇拉/诺亚就位（cd 120s / 毒云 / 僚机）",
+		String(vera.get("id")) == "vera" and String(noah.get("id")) == "noah"
+		and absf(float(vera.get("cd", 0.0)) - 120.0) <= 0.01
+		and absf(float(noah.get("cd", 0.0)) - 120.0) <= 0.01)
+	# 解锁门：薇拉 = 图鉴累计击杀 500；诺亚 = 任意图无尽深度 ≥5
+	var saved_kills: int = int(Meta.records["total_kills"])
+	var saved_maps: Dictionary = Meta.map_records
+	Meta.records["total_kills"] = 499
+	Meta.map_records = {}
+	_check("解锁门：薇拉 499 杀锁定 / 诺亚深度 0 锁定",
+		not Meta.is_character_unlocked(&"vera") and not Meta.is_character_unlocked(&"noah"))
+	Meta.records["total_kills"] = 500
+	_check("解锁门：薇拉 500 杀解锁", Meta.is_character_unlocked(&"vera"))
+	Meta.records["total_kills"] = saved_kills
+	Meta.map_records = {"world_frost": {"endless_depth": 5}}
+	_check("解锁门：诺亚任意图深度 ≥5 解锁", Meta.is_character_unlocked(&"noah"))
+	Meta.map_records = saved_maps
+	# 薇拉：毒云领域（直结算通道——域内敌每 0.5s 受 8% 主武器 ATK + 减速 20%）
+	_gl.state = GameConst.GameStatus.MENU
+	Meta.records["total_kills"] = maxi(saved_kills, 500)   # 解锁门满足（守卫回落哨兵口径）
+	Meta.map_records = {"world_frost": {"endless_depth": 5}}
+	Meta.character_id = &"vera"
+	p.call(&"set_character", &"vera")
+	_check("角色：薇拉血量 55 + 养成加成",
+		absf(float(p.get("max_hp")) - (55.0 + Meta.hp_bonus())) <= 0.01)
+	var target := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	target.spawn(_fixture_enemy(&"E_P2VERA", 100000.0), 1, 0)
+	target.global_position = (p as Node2D).global_position + Vector2(120.0, 0.0)
+	_gl.elemental.register_host(target)
+	_gl.enemy_grid.rebuild([target])
+	p.set("skill_cd_left", 0.0)
+	p.call(&"activate_skill")
+	_check("技能·毒云：挂场即跳（敌掉血）+ 减速 20% 生效",
+		float(target.get("hp")) < 100000.0 and absf(float(target.get("ext_slow_mult")) - 0.8) <= 0.001)
+	var hp_at_start: float = float(target.get("hp"))
+	for i in range(240):                           # 2s（120Hz）→ 首跳后再 3 跳
+		GameConfig.advance_frame()                 # 真实帧路径：帧号推进（管线幂等键含帧戳）
+		p.call(&"tick", DT, Vector2.ZERO)
+		target.call(&"tick", DT)                   # 敌侧驱动 ext_slow 倒计时（真实路径；Enemy.tick 单参）
+	_check("技能·毒云：0.5s 节拍持续结算（2s 内 ≥3 跳）",
+		float(target.get("hp")) < hp_at_start)
+	for i in range(660):                           # 推进至毒云 6s 到期 + 减速窗 0.6s 过期
+		GameConfig.advance_frame()
+		p.call(&"tick", DT, Vector2.ZERO)
+		target.call(&"tick", DT)
+	var hp_after_cloud: float = float(target.get("hp"))
+	_check("技能·毒云：6s 到期停跳 + 减速还原",
+		absf(float(p.get("_poison_cloud_left"))) <= 0.001
+		and absf(float(target.get("ext_slow_mult")) - 1.0) <= 0.001)
+	for i in range(120):
+		GameConfig.advance_frame()
+		p.call(&"tick", DT, Vector2.ZERO)
+		target.call(&"tick", DT)
+	_check("技能·毒云：到期后不再结算", absf(float(target.get("hp")) - hp_after_cloud) <= 0.001)
+	_gl.elemental.unregister_host(target)
+	(_gl.pools[&"enemy"] as EnemyPool).release(target)
+	# 诺亚：召唤僚机（主武器 orbs_bonus +2 持续 10s 后还原）
+	_gl.state = GameConst.GameStatus.MENU
+	Meta.character_id = &"noah"
+	p.call(&"set_character", &"noah")
+	_check("角色：诺亚血量 50 + 养成加成",
+		absf(float(p.get("max_hp")) - (50.0 + Meta.hp_bonus())) <= 0.01)
+	p.call(&"unlock_slot", 2)
+	var orbit: WeaponBase = p.call(&"add_weapon", _gl.registry.get_weapon(&"W8_orbit_field"))
+	_check("诺亚：环绕武器装配（真件 OrbitWeapon）", orbit is OrbitWeapon)
+	if orbit is OrbitWeapon:
+		(orbit as OrbitWeapon).try_fire()          # 首开火建立力场（基线球数）
+		var base_orbs: int = (orbit as OrbitWeapon).orbit_field.orbs
+		p.set("skill_cd_left", 0.0)
+		p.call(&"activate_skill")
+		_check("技能·僚机：召唤 +2（orbs_bonus 与力场球数同步 +2）",
+			int((orbit as OrbitWeapon).orbs_bonus) == 2
+			and (orbit as OrbitWeapon).orbit_field.orbs == base_orbs + 2)
+		for i in range(600):                       # 5s（仍在持续期）
+			GameConfig.advance_frame()
+			p.call(&"tick", DT, Vector2.ZERO)
+		_check("技能·僚机：持续期保持（5s 时仍 +2）",
+			int((orbit as OrbitWeapon).orbs_bonus) == 2)
+		for i in range(720):                       # 再 6s（10s 到期 + 余量）
+			GameConfig.advance_frame()
+			p.call(&"tick", DT, Vector2.ZERO)
+		_check("技能·僚机：10s 到期还原（orbs_bonus 0 / 球数回落）",
+			int((orbit as OrbitWeapon).orbs_bonus) == 0
+			and (orbit as OrbitWeapon).orbit_field.orbs == base_orbs)
+		var slots: Array = p.get("weapon_slots")
+		slots[slots.find(orbit)] = null            # 先摘槽（有效引用期）再 free——find 对 freed 实例失效
+		(orbit as Node).free()
+	# 选人面板：8 格（锁定态展示——薇拉/诺亚解锁门文案）
+	Meta.records["total_kills"] = saved_kills
+	Meta.map_records = saved_maps                 # 解锁门快照还原（测试不留痕）
+	Meta.character_id = &"sentinel"
+	var menu: MenuScreen = _gl.menu_screen
+	menu._on_lobby_pressed("char")
+	_check("大厅：选人面板 8 格（P2 +2）",
+		_live_children(menu._panel_list) == CharacterTable.count())
+	menu._on_panel_close()
+	p.call(&"set_character", &"sentinel")
 
 
 func _live_children(p_node: Node) -> int:

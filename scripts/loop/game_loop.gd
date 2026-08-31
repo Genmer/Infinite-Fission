@@ -213,6 +213,12 @@ func change_state(p_new: int) -> bool:
 		or p_new == GameConst.GameStatus.LEVEL_UP)
 	if p_new == GameConst.GameStatus.GAME_OVER:
 		time_scale = 1.0                          # 结算屏恢复常态缩放（下一局干净起步）
+	# BGM 环境音拨运输（P2）：战斗态播放 / 菜单暂停（简化口径——PAUSED/LEVEL_UP 沿用
+	# 战斗态不中断；Boss 层随回菜单收起）
+	if sfx != null:
+		sfx.bgm_set_active(p_new == GameConst.GameStatus.PLAYING)
+		if p_new == GameConst.GameStatus.MENU:
+			sfx.bgm_set_boss_layer(false)
 	EventBus.emit_state_changed(p_new)
 	return true
 
@@ -252,21 +258,43 @@ func request_resume() -> bool:
 	return resumed
 
 
-func start_run() -> bool:
-	# MENU → PLAYING：波次 1 开局（当前地图波表 + 主题色 + Meta 记图——M2 多地图）
+func start_run(p_daily_seed: int = -1) -> bool:
+	# MENU → PLAYING：波次 1 开局（当前地图波表 + 主题色 + Meta 记图——M2 多地图）。
+	# p_daily_seed ≥ 0 = 每日挑战（P2）：当日固定种子局部注入卡池+出生流（不改 RNG 全局
+	# 口径）+ 应用当日三词缀；-1 = 常规局（卡池每局随机）
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
 	wave_director.wave_table = MapTable.load_table(current_map_id, registry)
 	Meta.set_run_map(current_map_id)
-	card_generator.rng.randomize()               # 卡池每局随机（固定种子=「选项写死」观感根因；pkg 测试自行定种子）
+	if p_daily_seed >= 0:
+		Meta.set_run_daily(true)
+		card_generator.rng.seed = p_daily_seed    # 每日：确定性卡池（同日同配置口径）
+		spawner.rng.seed = p_daily_seed           # 每日：确定性出生流（挑战内局部注入）
+	else:
+		Meta.set_run_daily(false)
+		card_generator.rng.randomize()            # 卡池每局随机（固定种子=「选项写死」观感根因；pkg 测试自行定种子）
 	player.set_character(Meta.character_id)   # 角色应用（含养成加成——M8/角色系统）
 	var map_def := MapTable.get_map(current_map_id)
 	_apply_map_affixes(map_def)                  # 词缀二期：双词缀注入（祝→玩家 / 诅→敌侧）
+	if p_daily_seed >= 0:
+		# 每日挑战：重置后改施当日三词缀（2 诅咒 + 1 祝福——由日期种子决定，覆盖地图词缀）
+		_reset_affixes()
+		var affixes := Meta.daily_affixes(Meta.daily_date_key())
+		var daily_curses: Array = affixes.get("curses", [])
+		_apply_affix_ids(daily_curses, StringName(String(affixes.get("bless", ""))))
 	if _backdrop != null:
 		_backdrop.modulate = map_def.get("tint", Color.WHITE)   # 分图云层主题色
-	hud.set_map_name(String(map_def.get("name", "")))
+	hud.set_map_name(("每日挑战 · " if p_daily_seed >= 0 else "") + String(map_def.get("name", "")))
 	wave_director.start_wave(1)
 	return true
+
+
+func _on_menu_start_daily() -> void:
+	# 每日挑战启动（大厅「每日挑战」入口；锁定主表 + 当日种子 + 当日三词缀，P2）
+	if state != GameConst.GameStatus.MENU:
+		return
+	current_map_id = MapTable.FIRST_MAP_ID
+	start_run(Meta.daily_seed(Meta.daily_date_key()))
 
 
 func _apply_map_affixes(p_map_def: Dictionary) -> void:
@@ -275,33 +303,46 @@ func _apply_map_affixes(p_map_def: Dictionary) -> void:
 	# 祝福（利好玩家）→ player.map_* 字段——金币（本类掉账）/ 经验（Player.gain_xp）/
 	# 射速（WeaponBase._fire_interval rof 乘区）/ 每波回血（本类 _on_wave_cleared_bless_heal）。
 	# 旧 mod_id 单向词缀键保留兼容（断言锁定），应用口径由本表替代。
+	_reset_affixes()
+	_apply_affix_ids([p_map_def.get("curse_id", "")],
+		StringName(String(p_map_def.get("bless_id", ""))))
+
+
+func _reset_affixes() -> void:
+	# 词缀态复位（地图词缀 / 每日三词缀共用起点——P2 每日覆盖前先归零）
 	spawner.map_mods = {}
 	player.map_xp_mult = 1.0
 	player.map_gold_mult = 1.0
 	player.map_rof_mult = 1.0
 	player.map_wave_heal_pct = 0.0
-	match String(p_map_def.get("curse_id", "")):
-		&"curse_swarm":
-			spawner.map_mods = {"mob_hp_mult": 1.08}    # 虫群（草原）：小怪 HP +8%（Boss 免除）
-		&"curse_frost_armor":
-			spawner.map_mods = {"ice_resist": 0.2}      # 霜甲（冰原）：敌冰抗 +20%（沿用旧值）
-		&"curse_swift_demon":
-			spawner.map_mods = {"spd_mult": 1.10}       # 疾魔（魔域）：敌移速 +10%（沿用旧值）
-		&"curse_toxic_skin":
-			spawner.map_mods = {"contact_mult": 1.08}   # 毒肤（树海）：敌接触伤 +8%
-		&"curse_mire":
-			spawner.map_mods = {"hp_mult": 1.10}        # 泥沼（沼泽）：敌 HP +10%（旧 8% 上调）
-	match String(p_map_def.get("bless_id", "")):
+
+
+func _apply_affix_ids(p_curses: Array, p_bless: StringName) -> void:
+	# 词缀 id → 数值注入核心（地图词缀与每日挑战共用本表；逐条应用、同键后者覆盖——
+	# 5 诅咒键集互斥（mob_hp_mult/ice_resist/spd_mult/contact_mult/hp_mult），不冲突）
+	for curse: Variant in p_curses:
+		match String(curse):
+			&"curse_swarm":
+				spawner.map_mods["mob_hp_mult"] = 1.08    # 虫群：小怪 HP +8%（Boss 免除）
+			&"curse_frost_armor":
+				spawner.map_mods["ice_resist"] = 0.2      # 霜甲：敌冰抗 +20%
+			&"curse_swift_demon":
+				spawner.map_mods["spd_mult"] = 1.10       # 疾魔：敌移速 +10%
+			&"curse_toxic_skin":
+				spawner.map_mods["contact_mult"] = 1.08   # 毒肤：敌接触伤 +8%
+			&"curse_mire":
+				spawner.map_mods["hp_mult"] = 1.10        # 泥沼：敌 HP +10%
+	match String(p_bless):
 		&"bless_harvest":
-			player.map_gold_mult = 1.10                 # 丰饶（草原）：金币 +10%
+			player.map_gold_mult = 1.10                 # 丰饶：金币 +10%
 		&"bless_frost_crystal":
-			player.map_xp_mult = 1.10                   # 寒晶（冰原）：经验 +10%
+			player.map_xp_mult = 1.10                   # 寒晶：经验 +10%
 		&"bless_fervor":
-			player.map_rof_mult = 1.06                  # 狂热（魔域）：射速 +6%
+			player.map_rof_mult = 1.06                  # 狂热：射速 +6%
 		&"bless_nurture":
-			player.map_wave_heal_pct = 0.02             # 滋养（树海）：每波回 2% max_hp
+			player.map_wave_heal_pct = 0.02             # 滋养：每波回 2% max_hp
 		&"bless_rich_vein":
-			player.map_xp_mult = 1.08                   # 富矿（沼泽）：经验 +8% 且金币 +8%
+			player.map_xp_mult = 1.08                   # 富矿：经验 +8% 且金币 +8%
 			player.map_gold_mult = 1.08
 
 
@@ -569,6 +610,10 @@ func _boot_build_presentation() -> void:
 	popup_manager.name = "PopupManager"
 	add_child(popup_manager)
 	popup_manager.setup(pools[&"popup"])
+	# 量级分级注入（P2）：单发基准供给（主武器面板 base_atk × crit_mult）+ 金档轻震动钩子
+	#（trauma 复用既有 hit 档——GameFeelDirector.add_trauma_for_level(0)）
+	popup_manager.baseline_provider = _popup_tier_baseline
+	popup_manager.tier_shake_hook = func() -> void: game_feel.add_trauma_for_level(0)
 	# 方向 C 元素签名特效层（连锁闪电/碎裂冲击环/DOT 火星；事件订阅在其 _ready 自挂）
 	elemental_fx = ElementalFxLayer.new()
 	elemental_fx.name = "ElementalFxLayer"
@@ -600,6 +645,10 @@ func _boot_build_presentation() -> void:
 	EventBus.card_chosen.connect(func(_i: StringName, _k: int) -> void: sfx.play(&"coin"))
 	EventBus.shield_blocked.connect(func(_p: Vector2) -> void: sfx.play(&"shield"))
 	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
+	# BGM Boss 层（P2）：Boss 登场叠加低频脉冲循环 / Boss 击杀收起（tags 读取在
+	# spawner 死亡归还清零前派发——本连接先于 EnemySpawner 入树，连接序 = 派发序）
+	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.bgm_set_boss_layer(true))
+	EventBus.enemy_killed.connect(_on_boss_killed_bgm)
 	EventBus.wave_cleared.connect(_on_wave_cleared_bless_heal)   # 祝福·滋养（词缀二期）
 	boss_bar = BossBar.new()
 	boss_bar.name = "BossBar"
@@ -628,12 +677,31 @@ func _boot_build_presentation() -> void:
 	add_child(menu_screen)
 	menu_screen.start_requested.connect(func() -> void: _on_menu_start(MapTable.FIRST_MAP_ID))
 	menu_screen.start_map_requested.connect(_on_menu_start)   # 选图启动（M2 多地图）
+	menu_screen.start_daily_requested.connect(_on_menu_start_daily)   # 每日挑战启动（P2）
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）
 	EventBus.player_died.connect(_on_player_died)
 	EventBus.level_up.connect(_on_level_up)
 
 
 # ── 帧序支撑 ──────────────────────────────────────────────────────
+func _popup_tier_baseline() -> float:
+	# 跳字量级分级基准（P2 口径真源）：主武器（槽 0）面板 base_atk × crit_mult——
+	# 单发基准伤害，稳定不受瞬时乘区/易伤波动影响；主武器缺失/面板 0 → 0（分级安全关闭）
+	if player == null or not is_instance_valid(player) or player.weapon_slots.is_empty():
+		return 0.0
+	var w: WeaponBase = player.weapon_slots[0]
+	if w == null or not is_instance_valid(w):
+		return 0.0
+	var panel := w.build_panel_snapshot()
+	return float(panel.get("base_atk", 0.0)) * float(panel.get("crit_mult", 2.0))
+
+
+func _on_boss_killed_bgm(p_enemy: Node2D) -> void:
+	# Boss 击杀 → BGM 第二循环收起（tags 判定；连接序先于 spawner 归还清零——见订阅处注释）
+	if sfx != null and (int(p_enemy.get("tags")) & GameConst.TAG_BOSS) != 0:
+		sfx.bgm_set_boss_layer(false)
+
+
 func _tick_projectiles(p_gd: float) -> void:
 	# 投射物逐弹 tick（倒序遍历：tick 内可能回收自身 → release 擦除当前/更早索引安全）
 	var actives := _projectile_pool.active_projectiles()
@@ -825,6 +893,8 @@ func _reset_run_state() -> void:
 	game_feel.hit_stop_left = 0.0
 	game_feel.hit_stop_active_ms = 0.0
 	set_time_scale(1.0, &"reset")
+	if sfx != null:
+		sfx.bgm_set_boss_layer(false)             # 清场收 Boss 层（重开无残留脉冲）
 
 
 func _clear_battlefield() -> void:

@@ -12,6 +12,7 @@ extends CanvasLayer
 
 signal start_requested()                      # → GameLoop.start_run()（MENU → PLAYING，兼容口）
 signal start_map_requested(map_id: StringName)   # 选图启动（M2 多地图 → GameLoop._on_menu_start）
+signal start_daily_requested()                # 每日挑战启动（P2 → GameLoop._on_menu_start_daily）
 
 var registry: DataRegistry = null             # GameLoop Boot 期注入（图鉴全量清单）
 
@@ -264,6 +265,7 @@ func _build_lobby() -> void:
 		{"kind": "records", "text": "记录", "pos": Vector2(486.0, 900.0)},
 		{"kind": "char", "text": "角色", "pos": Vector2(155.0, 988.0)},
 		{"kind": "upgrade", "text": "养成", "pos": Vector2(375.0, 988.0)},
+		{"kind": "daily", "text": "每日挑战", "pos": Vector2(265.0, 1076.0)},
 	]
 	for d in defs:
 		var btn := Button.new()
@@ -292,12 +294,16 @@ func _refresh_lobby_counts() -> void:
 	(_lobby_btns["records"] as Button).text = "记录"
 	(_lobby_btns["char"] as Button).text = "角色"
 	(_lobby_btns["upgrade"] as Button).text = "养成 %d💎" % Meta.crystals
+	var dbest: Dictionary = Meta.daily_record()
+	var dbest_txt := "每日挑战" if dbest.is_empty() \
+		else "每日挑战 %d波" % int(dbest.get("best_wave", 0))
+	(_lobby_btns["daily"] as Button).text = dbest_txt
 
 
 func _on_lobby_pressed(p_kind: String) -> void:
 	_panel_root.visible = true
 	var titles := {"codex": "图鉴", "ach": "成就", "records": "历史记录",
-		"char": "选择角色", "upgrade": "局外养成"}
+		"char": "选择角色", "upgrade": "局外养成", "daily": "每日挑战"}
 	_panel_title.text = String(titles.get(p_kind, ""))
 	for kind: String in _codex_tabs:
 		(_codex_tabs[kind] as Button).visible = p_kind == "codex"
@@ -314,6 +320,9 @@ func _on_lobby_pressed(p_kind: String) -> void:
 		"upgrade":
 			_panel_title.text = "局外养成"
 			_rebuild_upgrades()
+		"daily":
+			_panel_title.text = "每日挑战"
+			_rebuild_daily()
 	StickerTheme.squash_pop(_panel_root.get_node("LobbyPanel") as Control)
 
 
@@ -590,7 +599,12 @@ func _rebuild_char_select() -> void:
 		var unlock_hint := ""
 		if not unlocked:
 			var umap: StringName = def.get("unlock_map", &"")
-			unlock_hint = "　🔒 通关「%s」解锁" % String(MapTable.get_map(umap).get("name", "?"))
+			if umap != &"":
+				unlock_hint = "　🔒 通关「%s」解锁" % String(MapTable.get_map(umap).get("name", "?"))
+			elif int(def.get("unlock_kills", 0)) > 0:
+				unlock_hint = "　🔒 图鉴累计击杀 %d 解锁" % int(def.get("unlock_kills", 0))
+			elif int(def.get("unlock_depth", 0)) > 0:
+				unlock_hint = "　🔒 任意图无尽深度 ≥%d 解锁" % int(def.get("unlock_depth", 0))
 		name_l.text = String(def.name) + ("　✓ 当前" if picked else "") + unlock_hint
 		name_l.position = Vector2(20.0, 12.0)
 		name_l.size = Vector2(460.0, 28.0)
@@ -691,6 +705,73 @@ func _on_buy_upgrade(p_id: StringName) -> void:
 	if Meta.buy_upgrade(p_id):
 		_rebuild_upgrades()
 		_refresh_lobby_counts()
+
+
+# ── 每日挑战（P2：当日固定种子 + 三词缀 + daily_best——全玩家同日同配置口径） ──
+func _rebuild_daily() -> void:
+	for c in _panel_list.get_children():
+		(c as Node).queue_free()
+	var key := Meta.daily_date_key()
+	var date_disp := "%s-%s-%s" % [key.substr(0, 4), key.substr(4, 2), key.substr(6, 2)]
+	var affixes := Meta.daily_affixes(key)
+	# 当日词缀行（诅咒 ×2 珊瑚红 / 祝福 ×1 薄荷绿——名称复用 map_table 单源）
+	for cid: Variant in affixes.get("curses", []):
+		_panel_list.add_child(_make_daily_row("诅",
+			Meta.affix_name(StringName(String(cid))), PopPalette.ENEMY))
+	var bless: StringName = StringName(String(affixes.get("bless", "")))
+	_panel_list.add_child(_make_daily_row("祝", Meta.affix_name(bless), PopPalette.SUCCESS))
+	# 当日最佳（daily_best：波次 + 击杀——独立口径不混常规记录）
+	var best := Meta.daily_record(key)
+	_panel_list.add_child(_make_daily_row("最佳", "波次 %d · 击杀 %d" % [
+		int(best.get("best_wave", 0)), int(best.get("best_kills", 0))], PopPalette.PLAYER))
+	var note := Label.new()
+	StickerTheme.label_sticker(note, 13, PopPalette.INK_SOFT)
+	note.text = "%s · 锁定晴空草原 · 全玩家同日同词缀" % date_disp
+	note.custom_minimum_size = Vector2(576.0, 24.0)
+	note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_panel_list.add_child(note)
+	var go := Button.new()
+	go.name = "DailyStartButton"
+	go.text = "出发挑战"
+	go.add_theme_font_size_override("font_size", 20)
+	go.add_theme_font_override("font", StickerTheme.font_bold())
+	go.custom_minimum_size = Vector2(240.0, 64.0)
+	go.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	go.focus_mode = Control.FOCUS_NONE
+	go.pressed.connect(_on_daily_start)
+	go.button_down.connect(func() -> void: StickerTheme.press_punch(go))
+	_panel_list.add_child(go)
+
+
+func _make_daily_row(p_mark: String, p_text: String, p_color: Color) -> Control:
+	# 每日挑战信息行：字标（诅/祝/最佳）+ 内容
+	var row := Panel.new()
+	row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
+	row.custom_minimum_size = Vector2(576.0, 60.0)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mark := Label.new()
+	StickerTheme.label_sticker(mark, 20, p_color, 0, Color.WHITE, true)
+	mark.text = p_mark
+	mark.position = Vector2(18.0, 15.0)
+	mark.size = Vector2(60.0, 30.0)
+	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(mark)
+	var text_l := Label.new()
+	StickerTheme.label_sticker(text_l, 15, PopPalette.INK)
+	text_l.text = p_text
+	text_l.position = Vector2(86.0, 19.0)
+	text_l.size = Vector2(470.0, 24.0)
+	text_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(text_l)
+	return row
+
+
+func _on_daily_start() -> void:
+	# 出发挑战：关面板 → 申请启动（仲裁权在 GameLoop._on_menu_start_daily，E-16 同源）
+	_panel_root.visible = false
+	start_daily_requested.emit()
 
 
 # ── 记录内容 ──────────────────────────────────────────────────────

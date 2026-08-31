@@ -4,11 +4,15 @@
 # 统一推进——顿帧期间跳字照常，Q-14）。合并：merge() 数值累加 + 重置漂浮计时（E-17）。
 # 样式分级：GameConst.PopupStyle（NORMAL/CRIT/REACTION/DOT/HEAL/XP）——圆胖数字 + 藏青描边
 # （亮底贴纸字：白色描边托底，任何背景可读）。
+# 量级分级（P2，META_ROADMAP §5.10「伤害数字分级」）：单次伤害相对玩家单发基准伤害分
+# 白/蓝/紫/金 4 档——大小/颜色/音效三联动（档位判定在 PopupManager 入口，本实体只承担
+# 表现：字号乘区 + 档位配色；仅 NORMAL/CRIT 直击样式参与，REACTION/DOT/HEAL/XP 沿旧观感）。
 class_name DamagePopup
 extends Node2D
 
 var merged_value: float = 0.0                 # 合并累加值
 var style: int = 0                            # GameConst.PopupStyle
+var tier: int = 0                             # 量级档 0 白/1 蓝/2 紫/3 金（仅 NORMAL/CRIT 生效）
 var target_uid: int = 0                       # 合并窗口判据（同目标）
 var is_active: bool = false                   # 池外活跃标记
 
@@ -35,6 +39,16 @@ const STYLE_COLORS := {
 	GameConst.PopupStyle.XP: PopPalette.INK_SOFT,
 }
 
+# 量级分档表现参数（P2 数值真源：档位阈值在 PopupManager；此处只落规格——
+# 字号乘区 白 1.0 / 蓝 +15% / 紫 +35% / 金 +60%；配色对齐稀有度四色（调色板单源））
+const TIER_SCALES: Array[float] = [1.0, 1.15, 1.35, 1.6]
+const TIER_COLORS: Array[Color] = [
+	Color(1.0, 1.0, 1.0),                        # 白（现状大小/颜色）
+	PopPalette.RARITY_RARE,                      # 蓝（天蓝）
+	PopPalette.RARITY_EPIC,                      # 紫（葡萄紫）
+	PopPalette.RARITY_LEGEND,                    # 金（柠檬金）
+]
+
 
 func _ready() -> void:
 	# 池化实例化期组装：Label 子节点（贴纸字：粗字重 + 藏青描边）
@@ -46,12 +60,14 @@ func _ready() -> void:
 	visible = false
 
 
-func show_popup(p_pos: Vector2, p_value: float, p_style: int, p_target_uid: int = 0) -> void:
-	# 池取出后初始化 + 动画启动
+func show_popup(p_pos: Vector2, p_value: float, p_style: int, p_target_uid: int = 0,
+		p_tier: int = 0) -> void:
+	# 池取出后初始化 + 动画启动（p_tier：量级档，PopupManager 入口判定后传入）
 	position = p_pos
 	_rise_from = p_pos
 	merged_value = maxf(p_value, 0.0)
 	style = p_style
+	tier = clampi(p_tier, 0, TIER_SCALES.size() - 1)
 	target_uid = p_target_uid
 	_life_left = LIFE_TIME
 	_bounce_left = BOUNCE_TIME
@@ -96,6 +112,7 @@ func _reset_state() -> void:
 	# 归还清零契约（E-04/E-05）
 	merged_value = 0.0
 	style = 0
+	tier = 0
 	target_uid = 0
 	is_active = false
 	_life_left = 0.0
@@ -107,12 +124,20 @@ func _reset_state() -> void:
 
 
 func _refresh_label() -> void:
-	# 数值 + 样式刷新（圆胖数字：CRIT 加大字号 + 柠檬金——占位分级升级为贴纸分级）
+	# 数值 + 样式刷新（圆胖数字：CRIT 加大字号；量级档叠乘字号 + 档位配色——
+	# 仅直击样式 NORMAL/CRIT 吃量级档，REACTION/DOT/HEAL/XP 沿既有配色观感）
 	if _label == null:
 		return
 	var crit := style == GameConst.PopupStyle.CRIT
+	var direct := style == GameConst.PopupStyle.NORMAL or crit
+	var base_size := FONT_SIZE_CRIT if crit else FONT_SIZE
 	_label.text = str(int(round(merged_value)))
-	_label.self_modulate = STYLE_COLORS.get(style, Color.WHITE)
-	_label.add_theme_font_size_override("font_size", FONT_SIZE_CRIT if crit else FONT_SIZE)
+	if direct:
+		_label.self_modulate = TIER_COLORS[clampi(tier, 0, TIER_COLORS.size() - 1)]
+		_label.add_theme_font_size_override("font_size",
+			roundi(base_size * float(TIER_SCALES[clampi(tier, 0, TIER_SCALES.size() - 1)])))
+	else:
+		_label.self_modulate = STYLE_COLORS.get(style, Color.WHITE)
+		_label.add_theme_font_size_override("font_size", base_size)
 	_label.reset_size()
 	_label.position = -_label.size * 0.5

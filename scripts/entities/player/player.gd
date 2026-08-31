@@ -29,6 +29,15 @@ var skill_cd_base: float = 30.0
 var skill_cd_left: float = 0.0
 var skill_active_left: float = 0.0            # 增益型技能剩余时长（过载）
 var _skill_shield_left: float = 0.0           # 紧急护盾剩余（表现走护盾泡）
+# 毒云领域（毒系学者·薇拉，P2 数值真源）：以玩家为中心 300px、持续 6s；每 0.5s 对域内敌
+# 结算 8% 主武器 ATK 毒伤 + 减速 20%。直结算通道（不动管线/不挂元素状态——走 AOE_SECONDARY
+# 幂等键，同构 mank 毒沼绽放先例；减速走 Enemy.ext_slow 外部乘区，与元素冰缓正交）
+var _poison_cloud_left: float = 0.0           # 毒云剩余（game_delta 通道）
+var _poison_cloud_tick_left: float = 0.0      # 下一跳倒计时
+# 召唤僚机（召唤师·诺亚，P2 数值真源）：主武器 orbs_bonus +2 持续 10s 后还原
+#（复用 OrbitWeapon orbs 机制，不新建实体；到期/换角色即还原）
+var _summon_left: float = 0.0                 # 僚机剩余（game_delta 通道）
+var _summon_applied: Array[OrbitWeapon] = []  # 已加成的武器（到期逐一还原）
 var invuln_left: float = 0.0                  # 受击无敌帧（contact_tick=0.6s 口径）
 var weapon_slots: Array[WeaponBase] = []      # ≤5（集成包 B.8 第二批收紧：pkg2 用例已迁移 WeaponBase 真件）
 var unlocked_slots: int = 1                   # w3→2 / w7→3 / Boss1→4 / Boss2 或 w21→5（F-19）
@@ -73,6 +82,15 @@ const POD_L := Vector2(-20.0, 34.0)            # 左引擎舱喷口（贴图坐�
 const POD_R := Vector2(20.0, 34.0)             # 右引擎舱喷口
 const SHIELD_PULSE_TIME := 0.32                # 格挡脉冲扩散时长 s（表现层）
 const SHIELD_RING_R := 46.0                    # 力场环贴图基准半径 px（TextureFactory.shield_bubble）
+# ── P2 角色技能参数（数值真源：META_ROADMAP §5.10 角色扩展 ×2） ──
+const POISON_CLOUD_RADIUS := 300.0             # 毒云半径 px
+const POISON_CLOUD_DURATION := 6.0             # 毒云持续 s
+const POISON_CLOUD_TICK := 0.5                 # 结算节拍 s（域内敌每 0.5s 一跳）
+const POISON_CLOUD_ATK_PCT := 0.08             # 每跳伤害 = 8% 主武器 ATK（毒伤，直结算）
+const POISON_CLOUD_SLOW := 0.20                # 减速 20%（ext_slow 乘区 0.8）
+const POISON_SLOW_REFRESH := 0.6               # 减速刷新窗 s（>结算节拍，防 120Hz 边界闪烁）
+const SUMMON_ORBS := 2                         # 僚机数（orbs_bonus 增量）
+const SUMMON_DURATION := 10.0                  # 僚机持续 s
 
 
 func _ready() -> void:
@@ -158,6 +176,18 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 		skill_active_left = maxf(skill_active_left - p_game_delta, 0.0)
 		if skill_active_left <= 0.0:
 			rof_mult = 1.0
+	# 毒云领域节拍（薇拉：剩余推进 + 0.5s 一跳域内结算/减速刷新）
+	if _poison_cloud_left > 0.0:
+		_poison_cloud_left = maxf(_poison_cloud_left - p_game_delta, 0.0)
+		_poison_cloud_tick_left -= p_game_delta
+		if _poison_cloud_tick_left <= 0.0:
+			_poison_cloud_tick_left += POISON_CLOUD_TICK
+			_poison_cloud_pulse()
+	# 僚机到期还原（诺亚：orbs_bonus 撤销 + 力场重铺）
+	if _summon_left > 0.0:
+		_summon_left = maxf(_summon_left - p_game_delta, 0.0)
+		if _summon_left <= 0.0:
+			_summon_restore()
 	# 格挡力场充能（MEC_SHIELD：非就绪期走表，充满置位；未持有词条时 interval=0 短路）
 	if shield_interval > 0.0 and not shield_ready:
 		shield_timer = maxf(shield_timer - p_game_delta, 0.0)
@@ -313,9 +343,10 @@ func set_character(p_id: StringName) -> void:
 	skill_cd_base = float(def.get("cd", 30.0)) * (1.0 - Meta.skill_cdr_pct())
 	skill_cd_left = 0.0
 	rof_mult = 1.0
+	_reset_skill_temp_state()                    # 换角色即时清临时态（毒云/僚机还原）
 	# 攻击修正动态注入（真修：武器面板若只在实例化期定格，大厅买养成/选角后开局不生效）
 	for w in weapon_slots:
-		if w is WeaponBase and is_instance_valid(w):
+		if is_instance_valid(w) and w is WeaponBase:   # freed 实例上评估 is 会报脚本错——判序 valid 在前
 			(w as WeaponBase).meta_atk_pct = Meta.atk_pct() + character_atk_pct
 			(w as WeaponBase).call(&"_invalidate_panel")
 
@@ -375,6 +406,14 @@ func skill_ready() -> bool:
 	return skill_cd_left <= 0.0 and not _dead
 
 
+func _reset_skill_temp_state() -> void:
+	# 技能临时态收口（换角色/重开共用）：毒云清零 + 僚机到期还原（武器可能已被重开清场
+	# 回收——_summon_restore 内有 is_instance_valid 守卫）
+	_poison_cloud_left = 0.0
+	_poison_cloud_tick_left = 0.0
+	_summon_restore()
+
+
 func activate_skill() -> bool:
 	# 角色主动技能（HUD 技能键调用；冷却中 false）
 	if not skill_ready():
@@ -397,8 +436,89 @@ func activate_skill() -> bool:
 			_skill_time_stop()
 		&"mank":
 			_skill_poison_nova()
+		&"vera":
+			_skill_poison_cloud()
+		&"noah":
+			_skill_summon_orbs()
 	DebugStats.count(&"skill_used")
 	return true
+
+
+func _skill_poison_cloud() -> void:
+	# 毒云领域（毒系学者·薇拉）：以玩家为中心 300px 持续 6s，域内敌每 0.5s 受 8% 主武器
+	# ATK 毒伤 + 减速 20%。★ 直结算通道（方案裁定，注释真源）：每跳独立 DamageContext 走
+	# 管线 resolve（AOE_SECONDARY 幂等键——同构 mank 毒沼绽放先例），不挂 ElementalState
+	# 附着（不动元素管线）；减速走 Enemy.ext_slow 外部乘区（与元素冰缓正交、到期自动还原）。
+	_poison_cloud_left = POISON_CLOUD_DURATION
+	_poison_cloud_tick_left = 0.0               # 首跳即刻生效（挂场即有反馈）
+	_poison_cloud_pulse()
+
+
+func _poison_cloud_pulse() -> void:
+	# 毒云单跳：网格圆查询 → 刷新减速窗 + 逐敌结算毒伤（域外敌由 ext_slow_left 到期自愈）
+	var grid: Variant = _deps.get("enemy_grid")
+	var pipeline: Variant = _deps.get("pipeline")
+	var w0: Variant = weapon_slots[0] if weapon_slots.size() > 0 else null
+	if grid == null:
+		return
+	var base := 0.0
+	if is_instance_valid(w0) and w0 is WeaponBase:
+		base = float((w0 as WeaponBase).build_panel_snapshot().get("base_atk", 0.0))
+	for e in (grid as SpaceGrid).query_circle(global_position, POISON_CLOUD_RADIUS):
+		if e == null or bool(e.get("dead")):
+			continue
+		e.set("ext_slow_mult", 1.0 - POISON_CLOUD_SLOW)
+		e.set("ext_slow_left", POISON_SLOW_REFRESH)
+		if base <= 0.0 or pipeline == null or not (pipeline as Object).has_method(&"resolve"):
+			continue
+		var ctx := DamageContext.make()
+		ctx.source_uid = int(get_instance_id())  # 玩家侧幂等键（Player 无 uid 字段——mank 同口径）
+		ctx.target = e
+		ctx.target_uid = int(e.get("uid"))
+		ctx.frame_stamp = GameConfig.frame_stamp
+		ctx.base_atk = base * POISON_CLOUD_ATK_PCT
+		ctx.element = GameConst.Element.FIR      # 毒伤元素口径沿 mank 毒沼绽放先例（FIR 通道）
+		ctx.hit_flags |= GameConst.HIT_IS_AOE_SECONDARY
+		ctx.crit_chance = 0.0                    # 领域 DoT 不暴击（稳定期望口径）
+		ctx.pos = (e as Node2D).global_position
+		pipeline.call(&"resolve", ctx)
+	DebugStats.count(&"poison_cloud_pulse")
+
+
+func _skill_summon_orbs() -> void:
+	# 召唤僚机（召唤师·诺亚）：主武器（槽 0）为环绕形态 → orbs_bonus +2 持续 10s；
+	# 主武器非环绕形态时首个已装备环绕武器承接（最小可用口径——否则技能对纯远程构筑死键）。
+	# 复用 OrbitWeapon orbs 机制（力场重铺即时生效），零新建实体。
+	var target := _summon_target()
+	if target == null:
+		return
+	target.orbs_bonus += SUMMON_ORBS
+	target.refresh_orbit_field()
+	_summon_applied.append(target)
+	_summon_left = SUMMON_DURATION
+	DebugStats.count(&"summon_orbs")
+
+
+func _summon_target() -> OrbitWeapon:
+	# 僚机承接武器：主武器（槽 0）优先；非环绕形态 → 首个已装备环绕武器（都无 → null 空转）
+	var w0: WeaponBase = weapon_slots[0] if weapon_slots.size() > 0 else null
+	if is_instance_valid(w0) and w0 is OrbitWeapon:
+		return w0
+	for w in weapon_slots:
+		if is_instance_valid(w) and w is OrbitWeapon:
+			return w
+	return null
+
+
+func _summon_restore() -> void:
+	# 僚机到期还原：orbs_bonus 撤销（钳 0）+ 力场重铺；武器已回收（重开清场）则跳过
+	_summon_left = 0.0
+	for w in _summon_applied:
+		if w == null or not is_instance_valid(w):
+			continue
+		w.orbs_bonus = maxi(w.orbs_bonus - SUMMON_ORBS, 0)
+		w.refresh_orbit_field()
+	_summon_applied.clear()
 
 
 func _skill_stomp() -> void:
@@ -457,6 +577,7 @@ func respawn() -> void:
 	skill_cd_left = 0.0
 	skill_active_left = 0.0
 	rof_mult = 1.0
+	_reset_skill_temp_state()                   # 临时态（毒云/僚机）还原——set_character 内再收口
 	set_character(Meta.character_id)          # 重开按当前角色+养成重置（M8/角色系统）
 	_flash_left = 0.0                            # 表现态复位（方向 C）
 	_punch_left = 0.0

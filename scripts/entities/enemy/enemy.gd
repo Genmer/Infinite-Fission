@@ -23,6 +23,8 @@ var hitbox_r: float = 14.0                    # 碰撞半径快照（data.hitbox
 var resist: Array[float] = [0.0, 0.0, 0.0, 0.0]  # KIN/FIR/ICE/LTG 快照（超导 −30% 实时改写）
 var immune_mask: int = 0
 var elemental: ElementalState = null          # 状态容器（M-11 注入；包 3 收紧：register_host 挂 ElementalState）
+var ext_slow_mult: float = 1.0                # 外部减速乘区（P2 毒云等直结算通道；与元素冰缓正交）
+var ext_slow_left: float = 0.0                # 外部减速剩余 s（到期自动还原 1.0——免逐敌摘除）
 var dead: bool = false                        # 死亡短路标志（E-06：首次致死立即置位）
 var boss_phase: int = 0                       # Boss 阶段（HP<50% → 2 等）
 var fire_cd_left: float = 0.0                 # RANGED 行为射击冷却
@@ -234,6 +236,13 @@ func tick(p_game_delta: float) -> void:
 	var sf := 1.0
 	if elemental != null:
 		sf = elemental.get_speed_factor()
+	# 外部减速乘区（P2 毒云等直结算通道）：剩余窗推进，到期自动还原——与元素冰缓正交叠乘
+	if ext_slow_left > 0.0:
+		ext_slow_left = maxf(ext_slow_left - p_game_delta, 0.0)
+		if ext_slow_left <= 0.0:
+			ext_slow_mult = 1.0
+		else:
+			sf *= ext_slow_mult
 	var player := _player()
 	match behavior:
 		GameConst.EnemyBehavior.CHASE:
@@ -524,6 +533,8 @@ func _reset_state() -> void:
 	resist = [0.0, 0.0, 0.0, 0.0]
 	immune_mask = 0
 	elemental = null
+	ext_slow_mult = 1.0                       # 外部减速复位（P2：池归还清零契约同口径）
+	ext_slow_left = 0.0
 	dead = true                               # 池内 = 不存在（死亡态短路）：同帧网格快照仍含
 	                                          # 已归还节点，二次命中经 apply_damage 走 dead 短路
 	                                          # /管线 dropped_dead 丢弃——否则会二次死亡广播 +

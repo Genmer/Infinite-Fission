@@ -2,6 +2,8 @@
 # CharacterTable（用户反馈「不同的角色有不同的技能」）：可选角色定义表——基础血量 /
 # 攻击修正 / 主动技能（名称/描述/冷却）。选择持久化在 Meta.character_id；开局由
 # Player.set_character 应用（含局外养成加成——META_ROADMAP M8 同批落地）。
+# 解锁门型（可空多选一，Meta.is_character_unlocked 判定）：unlock_map = 通关某图；
+# unlock_kills = 图鉴累计击杀；unlock_depth = 任意图无尽深度（P2 扩展 ×2）。
 class_name CharacterTable
 extends RefCounted
 
@@ -47,6 +49,20 @@ const CHARACTERS: Array[Dictionary] = [
 		"skill_name": "毒沼绽放", "skill_desc": "全屏毒爆：对所有敌人结算 150% 攻击",
 		"cd": 120.0,
 		"unlock_map": &"world_swamp",       # 通关⑤翠毒沼泽解锁
+	},
+	{
+		"id": &"vera", "name": "毒系学者·薇拉", "desc": "毒理研究员（血 55 / 攻 +8%），领域控场",
+		"hp": 55.0, "atk_pct": 0.08,
+		"skill_name": "毒云领域", "skill_desc": "展开 300px 毒云 6 秒：域内敌人每 0.5 秒受 8% 攻击毒伤并减速 20%",
+		"cd": 120.0,
+		"unlock_kills": 500,                # 图鉴累计击杀 500 只解锁（P2 新门型）
+	},
+	{
+		"id": &"noah", "name": "召唤师·诺亚", "desc": "僚机使役者（血 50 / 攻 +5%），环绕增援",
+		"hp": 50.0, "atk_pct": 0.05,
+		"skill_name": "召唤僚机", "skill_desc": "召唤 2 只环绕僚机，持续 10 秒后离场",
+		"cd": 120.0,
+		"unlock_depth": 5,                  # 任意图无尽深度 ≥5 解锁（P2 新门型）
 	},
 ]
 

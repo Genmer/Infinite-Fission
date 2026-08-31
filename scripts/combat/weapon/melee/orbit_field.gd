@@ -32,7 +32,7 @@ var _flash_idx: int = 0
 
 
 func spawn(p_params: Dictionary) -> void:
-	# 初始化（OrbitWeapon._ensure_orbit_field 构造）
+	# 初始化（OrbitWeapon._ensure_orbit_field 构造 / refresh_orbit_field 重铺——球数增减即改）
 	orbs = clampi(int(p_params.get("orbs", 2)), 1, 16)
 	orbit_radius = maxf(float(p_params.get("orbit_radius", 90.0)), 1.0)
 	angular_speed = float(p_params.get("angular_speed", 240.0))
@@ -44,35 +44,45 @@ func spawn(p_params: Dictionary) -> void:
 	visible = true
 	z_index = 4                                  # 敌/弹（z=0 树序层）之上、元素特效层（z=5）之下
 	_build_visuals()
+	_sync_orb_visibility()
 	queue_redraw()
 
 
 func _build_visuals() -> void:
-	# 表现件预建（spawn 期一次；球数在 spawn 时已定，运行期零实例化）
-	if not _orb_cores.is_empty():
-		return
-	var mint := PopPalette.SUCCESS
-	for i in range(orbs):
+	# 表现件预建（spawn 期一次；球数增长时补建差额——诺亚僚机召唤通道，P2；仅增量实例化）
+	if _orb_cores.is_empty():
+		var mint := PopPalette.SUCCESS
+		var flash_col := mint.lerp(Color.WHITE, 0.25)
+		for i in range(HIT_FLASH_COUNT):
+			var sp := Sprite2D.new()
+			sp.name = "HitFlash%d" % i
+			sp.texture = TextureFactory.ring_tex(flash_col, 48, 4.0)
+			sp.visible = false
+			add_child(sp)
+			_hit_flashes.append({"sprite": sp, "left": 0.0})
+	var mint2 := PopPalette.SUCCESS
+	while _orb_cores.size() < orbs:
+		var i := _orb_cores.size()
 		var glow := Sprite2D.new()
 		glow.name = "OrbGlow%d" % i
 		glow.texture = TextureFactory.soft_dot(64)
-		glow.modulate = Color(mint.r, mint.g, mint.b, 0.42)
+		glow.modulate = Color(mint2.r, mint2.g, mint2.b, 0.42)
 		add_child(glow)
 		_orb_glows.append(glow)
 		var core := Sprite2D.new()
 		core.name = "OrbCore%d" % i
-		core.texture = TextureFactory.bead(mint.lerp(Color.WHITE, 0.55))
+		core.texture = TextureFactory.bead(mint2.lerp(Color.WHITE, 0.55))
 		add_child(core)
 		_orb_cores.append(core)
 		_orb_punch.append(0.0)
-	var flash_col := mint.lerp(Color.WHITE, 0.25)
-	for i in range(HIT_FLASH_COUNT):
-		var sp := Sprite2D.new()
-		sp.name = "HitFlash%d" % i
-		sp.texture = TextureFactory.ring_tex(flash_col, 48, 4.0)
-		sp.visible = false
-		add_child(sp)
-		_hit_flashes.append({"sprite": sp, "left": 0.0})
+
+
+func _sync_orb_visibility() -> void:
+	# 球数收缩（还原通道）：超额球体隐藏（数组保留——再次召唤复用，不反复增删子节点）
+	for i in range(_orb_cores.size()):
+		var on := i < orbs
+		_orb_cores[i].visible = on
+		_orb_glows[i].visible = on
 
 
 func tick(p_game_delta: float, p_center: Vector2) -> void:

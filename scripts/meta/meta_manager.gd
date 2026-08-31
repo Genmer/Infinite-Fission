@@ -41,6 +41,7 @@ var records: Dictionary = {
 }
 var maps_cleared: Dictionary = {}             # map_id(String) → true（通关解锁链，M2）
 var map_records: Dictionary = {}              # map_id(String) → {best_wave, best_kills, best_level, endless_depth}
+var daily_records: Dictionary = {}            # 日期键(YYYYMMDD String) → {best_wave, best_kills}（每日挑战独立口径，P2）
 # 单局计数（GAME_OVER 结算后清零）
 var _run_kills: int = 0
 var _run_max_wave: int = 0
@@ -49,6 +50,7 @@ var _run_weapons_drawn: int = 0
 var _run_traits_drawn: int = 0
 var _run_boss_slain: int = 0
 var _run_map: StringName = MapTable.FIRST_MAP_ID   # 当前局地图（GameLoop.start_run 注入）
+var _run_daily: bool = false                  # 当前局为每日挑战（结算只记 daily_best，P2）
 # 局外养成（META_ROADMAP M8 落地，用户反馈「局外养成」）：裂变结晶 + 永久升级
 var crystals: int = 0                         # 裂变结晶（每局结算产出）
 var upgrades: Dictionary = {}                 # upgrade_id(String) → 等级
@@ -129,12 +131,100 @@ func set_character_id(p_id: StringName) -> void:
 
 func is_character_unlocked(p_id: StringName) -> bool:
 	# 角色解锁链（用户反馈「通关大关解锁，每个大关一个」）：unlock_map 空 = 初始；
-	# 否则 = 对应大关已通关（派生自 maps_cleared——零新增存档字段）
+	# 否则 = 对应大关已通关（派生自 maps_cleared——零新增存档字段）。
+	# P2 扩展两门（CharacterTable 新键，按序判定）：unlock_kills = 图鉴累计击杀门；
+	# unlock_depth = 任意图无尽深度门（读既有 map_records.endless_depth——零新增字段）
 	var def := CharacterTable.get_character(p_id)
 	var unlock_map: StringName = def.get("unlock_map", &"")
-	if unlock_map == &"":
-		return true
-	return is_map_cleared(unlock_map)
+	if unlock_map != &"":
+		return is_map_cleared(unlock_map)
+	var unlock_kills := int(def.get("unlock_kills", 0))
+	if unlock_kills > 0:
+		return int(records["total_kills"]) >= unlock_kills
+	var unlock_depth := int(def.get("unlock_depth", 0))
+	if unlock_depth > 0:
+		return max_endless_depth() >= unlock_depth
+	return true
+
+
+func max_endless_depth() -> int:
+	# 任意图历史无尽深度最大值（P2 角色解锁门；无记录 → 0）
+	var best := 0
+	for key: Variant in map_records:
+		var mr: Variant = map_records[key]
+		if mr is Dictionary:
+			best = maxi(best, int((mr as Dictionary).get("endless_depth", 0)))
+	return best
+
+
+# ── 每日挑战（P2：固定种子 + 当日词缀 + daily_best，不混常规记录） ──
+# 诅咒/祝福池（与 map_table.gd 双词缀同源同值——复用 GameLoop._apply_affix_ids 数值表）
+const CURSE_POOL: Array[StringName] = [&"curse_swarm", &"curse_frost_armor",
+	&"curse_swift_demon", &"curse_toxic_skin", &"curse_mire"]
+const BLESS_POOL: Array[StringName] = [&"bless_harvest", &"bless_frost_crystal",
+	&"bless_fervor", &"bless_nurture", &"bless_rich_vein"]
+
+
+static func daily_date_key(p_ymd: Dictionary = {}) -> String:
+	# 本地日期键 YYYYMMDD（p_ymd = {year,month,day} 参数化供测试 mock 跨日；缺省 = 系统当日）
+	var ymd: Dictionary = p_ymd if not p_ymd.is_empty() else Time.get_date_dict_from_system()
+	return "%04d%02d%02d" % [int(ymd.get("year", 0)), int(ymd.get("month", 0)), int(ymd.get("day", 0))]
+
+
+static func daily_seed(p_date_key: String) -> int:
+	# 当日固定种子（日期字符串哈希）：同日恒同 / 跨日必变——全玩家同日同配置口径
+	return p_date_key.hash()
+
+
+static func daily_affixes(p_date_key: String) -> Dictionary:
+	# 当日词缀组合（由日期种子决定）：日期种子 RNG → 诅咒池不重复抽 2 + 祝福池抽 1
+	#（局部 RandomNumberGenerator，零全局 RNG 副作用）
+	var rng := RandomNumberGenerator.new()
+	rng.seed = daily_seed(p_date_key)
+	var pool := CURSE_POOL.duplicate()
+	var curses: Array[StringName] = []
+	for i in range(2):
+		var idx := rng.randi_range(0, pool.size() - 1)
+		curses.append(pool[idx])
+		pool.remove_at(idx)
+	var bless: StringName = BLESS_POOL[rng.randi_range(0, BLESS_POOL.size() - 1)]
+	return {"curses": curses, "bless": bless}
+
+
+static func affix_name(p_id: StringName) -> String:
+	# 词缀展示名（复用 map_table 双词缀命名——零重复文案源）
+	for m in MapTable.MAPS:
+		if StringName(String(m.get("curse_id", ""))) == p_id:
+			return String(m.get("curse_name", ""))
+		if StringName(String(m.get("bless_id", ""))) == p_id:
+			return String(m.get("bless_name", ""))
+	return String(p_id)
+
+
+func set_run_daily(p_daily: bool) -> void:
+	# 当前局每日标记（GameLoop.start_run 注入；结算分流判据）
+	_run_daily = p_daily
+
+
+func is_run_daily() -> bool:
+	return _run_daily
+
+
+func daily_record(p_date_key: String = "") -> Dictionary:
+	# 当日（或指定日）daily_best：{best_wave, best_kills}；无记录 → 空 Dictionary
+	var key: String = p_date_key if p_date_key != "" else daily_date_key()
+	var rec: Variant = daily_records.get(key, {})
+	return rec if rec is Dictionary else {}
+
+
+func record_daily_result(p_wave: int, p_kills: int) -> void:
+	# daily_best 落账（波次/击杀各取历史最大；随结算落盘）
+	var key := daily_date_key()
+	var rec := daily_record(key)
+	rec["best_wave"] = maxi(int(rec.get("best_wave", 0)), p_wave)
+	rec["best_kills"] = maxi(int(rec.get("best_kills", 0)), p_kills)
+	daily_records[key] = rec
+	_save()
 
 
 func _ready() -> void:
@@ -260,6 +350,12 @@ func _on_level_up(p_level: int) -> void:
 func _on_state_changed(p_state: int) -> void:
 	if p_state != GameConst.GameStatus.GAME_OVER:
 		return
+	# 每日挑战结算分流（P2）：只记 daily_best（波次+击杀）——不混常规 records/map_records/
+	# 结晶/成就（当日独立口径），单局计数复位后即返
+	if _run_daily:
+		record_daily_result(_run_max_wave, _run_kills)
+		_reset_run_counters()
+		return
 	# 局结算：最高记录（全局 + 分图）+ 局数 + 成就 + 落盘 + 单局计数复位
 	records["best_wave"] = maxi(int(records["best_wave"]), _run_max_wave)
 	records["best_kills"] = maxi(int(records["best_kills"]), _run_kills)
@@ -278,6 +374,11 @@ func _on_state_changed(p_state: int) -> void:
 	mr["endless_depth"] = maxi(int(mr.get("endless_depth", 0)), maxi(0, _run_max_wave - final_wave))
 	_check_achievements()
 	_save()
+	_reset_run_counters()
+
+
+func _reset_run_counters() -> void:
+	# 单局计数复位（常规/每日结算共用收尾）
 	_run_kills = 0
 	_run_max_wave = 0
 	_run_max_level = 1
@@ -318,6 +419,7 @@ func _save() -> void:
 		cfg.set_value("records", key, records[key])
 	cfg.set_value("maps", "cleared", maps_cleared.keys())
 	cfg.set_value("maps", "records", map_records)
+	cfg.set_value("daily", "records", daily_records)
 	cfg.set_value("meta", "crystals", crystals)
 	cfg.set_value("meta", "upgrades", upgrades)
 	cfg.set_value("meta", "character", String(character_id))
@@ -344,6 +446,9 @@ func _load() -> void:
 	var mrecords: Variant = cfg.get_value("maps", "records", {})
 	if mrecords is Dictionary:
 		map_records = mrecords
+	var drecords: Variant = cfg.get_value("daily", "records", {})
+	if drecords is Dictionary:
+		daily_records = drecords
 	crystals = int(cfg.get_value("meta", "crystals", 0))
 	var ups: Variant = cfg.get_value("meta", "upgrades", {})
 	if ups is Dictionary:
