@@ -70,6 +70,7 @@ var game_over_screen: GameOverScreen = null
 var card_generator: CardGenerator = null
 var card_select_ui: CardSelectUI = null
 var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处理器
+var chip_handler: ChipHandler = null           # v0.7.0：芯片效果处理器（A6 §2）
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
 var shop_ui: ShopUI = null                    # v0.6.0：Boss 前商店界面（SHOP 态宿主）
@@ -539,6 +540,11 @@ func _boot_build_actors() -> void:
 	# ★ 遗物事件绑定提前至 Boot（连接序 = 派发序）：enemy_killed 的精英 tag/治疗读取
 	#   必须先于 EnemySpawner 的死亡归还清零（_reset_state 置 tags=0），集成包 B.2
 	relic_handler.bind_events()
+	# ★ v0.7.0 芯片处理器组装（relic_handler 之后、spawner add_child 之前——连接序纪律；
+	#   U6 起本节点将订阅 enemy_killed 掉落芯片，同样先于 spawner 入树）
+	chip_handler = ChipHandler.new()
+	chip_handler.name = "ChipHandler"
+	add_child(chip_handler)
 	elemental = ElementalSystem.new()
 	elemental.name = "ElementalSystem"
 	add_child(elemental)
@@ -585,8 +591,11 @@ func _boot_build_actors() -> void:
 		"elemental": elemental,
 		"relic_handler": relic_handler,           # B.2：遗物命中乘区问询通道
 		"wave_director": wave_director,           # B.4：SYN_FIRST_STRIKE 波首命中位
+		"chip_handler": chip_handler,             # v0.7.0：芯片 crit 折算（A6 §3）
 	})
 	relic_handler.setup({"registry": registry, "player": player})
+	chip_handler.setup({"registry": registry, "player": player})
+	chip_handler.bind_events()
 	# Q-4：首发手枪（形态工厂 add_weapon）
 	player.add_weapon(registry.get_weapon(STARTING_WEAPON_ID))
 
@@ -871,6 +880,7 @@ func _reset_run_state() -> void:
 	hud.run_elapsed = 0.0
 	card_generator.owned_relics.clear()
 	relic_handler.reset_run()                     # B.2：遗物每场重新获取（owned/常驻位清零）
+	chip_handler.reset_run()                      # v0.7.0：芯片每场重新获取（装备/槽位/遥测清零）
 	for shard in active_shards:                   # B.1：清场归还经验碎片
 		if is_instance_valid(shard):
 			(pools[&"xp"] as XPPool).release(shard)

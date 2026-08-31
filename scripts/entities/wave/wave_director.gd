@@ -89,6 +89,14 @@ func start_wave(p_wave: int) -> void:
 		if _boss_wave:
 			_spawn_boss(p_wave)
 	EventBus.emit_wave_started(p_wave)
+	# v0.7.0：芯片槽解锁（wave 1/10/20 → 槽 1/2/3；ChipHandler 订阅消费，A6 §2）
+	match p_wave:
+		1:
+			EventBus.emit_chip_slot_unlocked(1)
+		10:
+			EventBus.emit_chip_slot_unlocked(2)
+		20:
+			EventBus.emit_chip_slot_unlocked(3)
 	# F-19：w21 保底解锁武器槽5（Boss2 未击杀兜底；玩家侧 unlock_slot 幂等）
 	if p_wave >= 21:
 		EventBus.emit_slot_unlocked(5)

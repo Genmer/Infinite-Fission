@@ -364,16 +364,22 @@ const CARD_EXTRA_CURSE_PARAMS := {"curse_atk_pct": -0.1}
 
 
 # ── 内部：权重工具 ────────────────────────────────────────────────
+static func rarity_weights_for(p_wave: int) -> Dictionary:
+	# A3 §6.1 稀有度权重纯函数（v0.7.0 自 _roll_rarity 提取——ChipHandler.roll_rarity
+	# 复用单一真源；静态无副作用，不改实例状态）。
+	# w<10 基础 {58,30,10,2}；w≥10 调整公式（收敛于深度列）
+	var weights := {0: 58.0, 1: 30.0, 2: 10.0, 3: 2.0}
+	if p_wave >= 10:
+		weights[0] = maxf(58.0 - 0.7 * float(p_wave), 40.0)
+		weights[1] = minf(30.0 + 0.1 * float(p_wave), 34.0)
+		weights[2] = 10.0 * (1.0 + 0.045 * float(p_wave))
+		weights[3] = 2.0 * (1.0 + 0.075 * float(p_wave))
+	return weights
+
+
 func _roll_rarity(p_wave: int) -> int:
 	# A3 §6.1：w<10 基础 {58,30,10,2}；w≥10 调整公式（收敛于深度列）
-	rarity_weights = {
-		0: 58.0, 1: 30.0, 2: 10.0, 3: 2.0,
-	}
-	if p_wave >= 10:
-		rarity_weights[0] = maxf(58.0 - 0.7 * float(p_wave), 40.0)
-		rarity_weights[1] = minf(30.0 + 0.1 * float(p_wave), 34.0)
-		rarity_weights[2] = 10.0 * (1.0 + 0.045 * float(p_wave))
-		rarity_weights[3] = 2.0 * (1.0 + 0.075 * float(p_wave))
+	rarity_weights = rarity_weights_for(p_wave)
 	return int(_weighted_key(rarity_weights))
 
 

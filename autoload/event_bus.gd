@@ -30,6 +30,8 @@ signal reaction_triggered(rxn: int, pos: Vector2, target_uid: int)
 signal pool_exhausted(pool_id: StringName)                 # 池满降级计数（DebugStats）
 signal chain_fused(depth: int, trait_id: StringName)       # 链式/分叉深度熔断遥测
 signal card_chosen(card_id: StringName, target_kind: int)  # 选卡应用完成（遗物回响等）
+signal chip_slot_unlocked(slot: int)                       # v0.7.0 芯片槽解锁（wave 1/10/20 → 槽 1/2/3）
+signal gold_rush_started(wave: int)                        # v0.7.0 金币狂欢波开始（HUD 横幅覆写）
 
 var _dispatch_count: Dictionary = {}        # StringName(事件) -> int(本帧计数)
 const STORM_WARN_THRESHOLD := 128           # 同事件同帧派发上限（§六.4）
@@ -148,6 +150,16 @@ func emit_chain_fused(depth: int, trait_id: StringName) -> void:
 func emit_card_chosen(card_id: StringName, target_kind: int) -> void:
 	_track_dispatch(&"card_chosen")
 	card_chosen.emit(card_id, target_kind)
+
+
+func emit_chip_slot_unlocked(slot: int) -> void:
+	_track_dispatch(&"chip_slot_unlocked")
+	chip_slot_unlocked.emit(slot)
+
+
+func emit_gold_rush_started(wave: int) -> void:
+	_track_dispatch(&"gold_rush_started")
+	gold_rush_started.emit(wave)
 
 
 # ── 计数 / 风暴防护 / 订阅纪律 ─────────────────────────────────────

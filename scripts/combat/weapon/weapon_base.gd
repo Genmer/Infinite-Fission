@@ -269,6 +269,12 @@ func _invalidate_panel() -> void:
 	_panel_cache = {}
 
 
+func invalidate_panel() -> void:
+	# v0.7.0 公开失效口（ChipHandler.equip 装备/卸下芯片后调用——芯片 crit 折算/atk 段
+	# 在面板快照与管线 ⑥b 段，缓存必须失效重算）
+	_invalidate_panel()
+
+
 func _read_resist(p_target: Node2D) -> float:
 	# 目标抗性快照（KIN 通道；光束/近战为动能伤害）
 	if p_target != null and p_target.has_method(&"get_resist"):
