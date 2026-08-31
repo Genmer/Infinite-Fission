@@ -25,6 +25,13 @@ func _init() -> void:
 	_uid_reaction = GameConst.next_uid()
 
 
+func _ready() -> void:
+	# 点燃蔓延质变（ELE_IGNITE 层 2）：燃烧中的敌死亡 → 半径内传火。★ 连接序纪律（F-19
+	# 同源）：本系统在 Boot actors 段先于 EnemySpawner 入树 → 本连接先于 spawner 的死亡
+	# 归还订阅 → 派发时 elemental 状态仍在（spawner 的 unregister_host 后执行）
+	EventBus.enemy_killed.connect(_on_enemy_killed_spread_burn)
+
+
 func register_host(p_enemy: Node2D) -> void:
 	# 敌人出生时挂载 ElementalState（immune_mask 注入，F-17）
 	if p_enemy == null or _hosts.has(p_enemy):
@@ -219,12 +226,15 @@ func _spread_reaction(p_center: Node2D, p_radius: float, p_snapshot: float, p_co
 
 
 func _dot_tick(p_enemy: Node2D, p_state: ElementalState) -> void:
-	# DOT 跳伤：15%ATK 面板快照 × 层数（HIT_IS_DOT 不掷暴击；走管线主通道）
+	# DOT 跳伤：15%ATK 面板快照 × 层数（HIT_IS_DOT 不掷暴击；走管线主通道）。
+	# 保底 ≥1/层（2026-08-31 用户反馈「烧伤 0」根因修复：早期武器快照 ~6-12 → 15% = 0.9~1.8/
+	# 跳，round 后 0~2 观感即「烧伤 0」——第一关怪火抗全 0 非抗性问题，是纯数值展示问题；
+	# 保底后每层每跳至少烧 1，火卡前期即可读）
 	if pipeline == null:
 		return
 	while p_state.consume_dot_due():
-		var dot := p_state.burn_dot_ratio * p_state.burn_snapshot_atk \
-			* float(p_state.burn_layers)
+		var dot := maxf(p_state.burn_dot_ratio * p_state.burn_snapshot_atk
+			* float(p_state.burn_layers), float(p_state.burn_layers))
 		var ctx := DamageContext.make()
 		ctx.source_uid = _uid_dot
 		ctx.target = p_enemy
@@ -272,7 +282,46 @@ func _shock_chain(p_origin: Node2D, p_hit_damage: float, p_targets_per_hop: int)
 		if next_frontier.is_empty():
 			break
 		frontier = next_frontier
-		damage *= decay                          # 每跳衰减 60%
+		damage *= _shock_decay_of(p_origin)       # 每跳衰减（ELE_SHOCK 层 2 质变 → 0.75）
+
+
+func _shock_decay_of(p_origin: Node2D) -> float:
+	# 感电每跳衰减：宿主状态覆写优先（层 2 质变 0.75）→ 配置默认 0.6
+	var st: Variant = p_origin.get("elemental")
+	if st is ElementalState:
+		return maxf((st as ElementalState).shock_chain_decay, 0.1)
+	return 0.6
+
+
+func _on_enemy_killed_spread_burn(p_enemy: Node2D) -> void:
+	# 点燃蔓延（ELE_IGNITE 层 2 质变「燎原」）：燃烧中的敌死亡 → 半径内至多 3 只敌直接
+	# 满槽点燃（快照继承原燃烧者——火种传递）。表现：原点橙色冲击环 + 各点燃点火星。
+	# 无蔓延半径（0/未投资层 2）→ 零开销短路
+	if enemy_grid == null:
+		return
+	var st: Variant = p_enemy.get("elemental")
+	if not (st is ElementalState):
+		return
+	var s := st as ElementalState
+	if s.burn_timer <= 0.0 or s.burn_spread_radius <= 0.0:
+		return
+	var pos: Vector2 = (p_enemy as Node2D).global_position
+	var radius := s.burn_spread_radius
+	var spread := 0
+	for cand in enemy_grid.query_circle(pos, radius):
+		if cand == p_enemy or bool(cand.get("dead")):
+			continue
+		if pos.distance_to((cand as Node2D).global_position) > radius:
+			continue
+		apply_attach(cand, GameConst.Element.FIR, ElementalState.GAUGE_MAX,
+			{"snapshot": s.burn_snapshot_atk})
+		EventBus.emit_elemental_dot_fired((cand as Node2D).global_position)
+		spread += 1
+		if spread >= 3:
+			break
+	if spread > 0:
+		EventBus.emit_reaction_triggered(GameConst.ReactionType.RXN_FIR_ICE, pos, 0)
+		DebugStats.count(&"burn_spread")
 
 
 func _nearest_targets(p_from: Node2D, p_radius: float, p_dedup: Dictionary,

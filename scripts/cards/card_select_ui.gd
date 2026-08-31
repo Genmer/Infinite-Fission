@@ -9,6 +9,7 @@ class_name CardSelectUI
 extends CanvasLayer
 
 signal choice_made(card: Dictionary)          # → CardGenerator.apply_choice → card_chosen 事件
+signal reroll_requested()                     # → GameLoop 仲裁（消耗刷新次数 + 重新发牌，2026-08-31）
 
 var is_open: bool = false                     # 界面可见状态（GameLoop 状态联动）
 
@@ -17,6 +18,7 @@ var _buttons: Array[Button] = []              # 卡牌宿主按钮（点击域�
 var _cards: Array[Dictionary] = []            # 当前货架（open 注入）
 var _title: Label = null
 var _card_faces: Array[Dictionary] = []       # 卡面子件 {band, stamp, kind, name, desc, dots}
+var _reroll_btn: Button = null                # 换一批按钮（刷新机制；次数由 GameLoop 注入）
 
 const KIND_NAMES: Array[String] = ["精通", "词条", "遗物", "保底", "新武器"]
 const CARD_SIZE := Vector2(600.0, 180.0)
@@ -68,6 +70,28 @@ func _on_pressed(p_index: int) -> void:
 	choose(p_index)
 
 
+func update_reroll(p_charges: int, p_free_left: bool = false) -> void:
+	# 换一批按钮态刷新（GameLoop 注入）：免费态（本局首次）优先显示；0 次 + 无免费 →
+	# 置灰仍可见——刷新机制的可发现性口径
+	if _reroll_btn == null:
+		return
+	if p_free_left:
+		_reroll_btn.text = "换一批（本局首次免费）"
+		_reroll_btn.disabled = false
+	elif p_charges > 0:
+		_reroll_btn.text = "换一批 ×%d" % p_charges
+		_reroll_btn.disabled = false
+	else:
+		_reroll_btn.text = "换一批 ×0"
+		_reroll_btn.disabled = true
+
+
+func _on_reroll_pressed() -> void:
+	# 刷新申请（仲裁在 GameLoop：次数/免费位扣减 + 重新发牌 + 重开本界面）
+	if is_open:
+		reroll_requested.emit()
+
+
 func _setup_button(p_btn: Button, p_card: Dictionary) -> void:
 	# 卡面装配（贴纸装：稀有度顶带 + 类型圆章 + 类别行 + 名称 + 描述 + 层级圆点）
 	var idx := _buttons.find(p_btn)
@@ -98,6 +122,9 @@ func _setup_button(p_btn: Button, p_card: Dictionary) -> void:
 	# 名称 + 描述（高稀有度数值强化 → 描述内已重写真实数值；尾行标注品质倍率作为解释）
 	var name_label: Label = face["name"]
 	name_label.text = String(p_card.get("display_name", ""))
+	# 满层质变卡（2026-08-31）：名称金色高亮（「到什么程度会质变」卡面预览）
+	if bool(p_card.get("milestone", false)):
+		name_label.add_theme_color_override("font_color", PopPalette.GOLD)
 	var desc_label: Label = face["desc"]
 	var desc_text := String(p_card.get("description", ""))
 	var value_scale := float(p_card.get("value_scale", 1.0))
@@ -138,6 +165,20 @@ func _build_ui() -> void:
 	_title.size = Vector2(720.0, 46.0)
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_root.add_child(_title)
+	# 换一批按钮（刷新机制，2026-08-31 用户反馈「新增 buff 刷新机制」）：标题与首卡间右侧；
+	# 次数/免费态由 GameLoop 注入（update_reroll），0 次 + 无免费 → 置灰仍可见（机制可发现）
+	_reroll_btn = Button.new()
+	_reroll_btn.name = "RerollButton"
+	_reroll_btn.text = "换一批"
+	_reroll_btn.add_theme_font_size_override("font_size", 19)
+	_reroll_btn.add_theme_font_override("font", StickerTheme.font_bold())
+	_reroll_btn.position = Vector2(452.0, 198.0)
+	_reroll_btn.size = Vector2(208.0, 56.0)
+	_reroll_btn.pivot_offset = _reroll_btn.size * 0.5
+	_reroll_btn.focus_mode = Control.FOCUS_NONE
+	_reroll_btn.pressed.connect(_on_reroll_pressed)
+	_reroll_btn.button_down.connect(func() -> void: StickerTheme.press_punch(_reroll_btn))
+	_root.add_child(_reroll_btn)
 	# 4 卡槽位（open() 按货架数显隐——三选一时第 4 槽隐藏）
 	for i in range(4):
 		var btn := Button.new()

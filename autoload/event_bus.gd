@@ -31,6 +31,9 @@ signal elemental_dot_fired(pos: Vector2)                    # 点燃 DOT 跳伤�
 signal shield_blocked(pos: Vector2)                         # 格挡力场挡下接触伤害（护盾脉冲涟漪，A3 §4.4）
 signal bullet_nullified(pos: Vector2)                       # 弧斩消弹（W9 NULLIFIED 涟漪，表现层专用）
 signal pool_exhausted(pool_id: StringName)                 # 池满降级计数（DebugStats）
+signal beam_impact(pos: Vector2, dir: Vector2)             # 光束命中点迸裂（脉冲激光每跳结算，表现层专用）
+signal reroll_granted(count: int)                          # 刷新次数获得（HUD toast；选卡刷新机制）
+signal trait_milestone(trait_id: StringName, name: String, mult: float)   # 词条满层质变（HUD 金色 toast）
 signal chain_fused(depth: int, trait_id: StringName)       # 链式/分叉深度熔断遥测
 signal card_chosen(card_id: StringName, target_kind: int)  # 选卡应用完成（遗物回响等）
 
@@ -166,6 +169,21 @@ func emit_chain_fused(depth: int, trait_id: StringName) -> void:
 func emit_card_chosen(card_id: StringName, target_kind: int) -> void:
 	_track_dispatch(&"card_chosen")
 	card_chosen.emit(card_id, target_kind)
+
+
+func emit_beam_impact(pos: Vector2, dir: Vector2) -> void:
+	_track_dispatch(&"beam_impact")
+	beam_impact.emit(pos, dir)
+
+
+func emit_reroll_granted(count: int) -> void:
+	_track_dispatch(&"reroll_granted")
+	reroll_granted.emit(count)
+
+
+func emit_trait_milestone(trait_id: StringName, p_name: String, p_mult: float) -> void:
+	_track_dispatch(&"trait_milestone")
+	trait_milestone.emit(trait_id, p_name, p_mult)
 
 
 # ── 计数 / 风暴防护 / 订阅纪律 ─────────────────────────────────────

@@ -6,13 +6,13 @@
 script = ExtResource("1_td")
 id = &"ELE_IGNITE"
 display_name = "点燃"
-description = "火附着 22/跳；满槽点燃：3s 内每 0.5s 一跳 DOT = 15% 攻击者 ATK；2 层 DOT→22%（A3 §4.5）"
+description = "火附着 22/跳；满槽点燃：3s 内每 0.5s 一跳 DOT = 15% 攻击者 ATK（每层保底 ≥1）；2 层质变：DOT→22% 且燃烧者死亡向 150px 内传火（燎原）"
 pool = 4
 pool_id = &""
 effect_id = &"EF_ELEMENTAL"
 value = 22.0
 value2 = 0.0
-params = {"element": 1, "dot_ratio_lv2": 0.22}
+params = {"element": 1, "dot_ratio_lv2": 0.22, "spread_radius_lv2": 150.0}
 event_hooks = [0, 2]
 stack_max = 2
 decay_delta = 0.0

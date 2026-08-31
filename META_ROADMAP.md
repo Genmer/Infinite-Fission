@@ -102,6 +102,36 @@
 | ~~P3~~ ✅ | ~~设置页~~ | 2026-08-31 已落地：Meta settings 段（sfx/bgm 音量 0~1 默认 0.8/0.6 + 震屏/伤害数字开关，settings() 读口 + set_setting() 写即存，随 user://meta_save.cfg 落盘）+ 贴纸风设置面板（两滑条 HSlider 贴纸化 + 两开关 ✓/✗ 态）+ 双入口（大厅按钮行 + 暂停卡「设置」）+ 接线（SfxBank 音量线性→db 换算 0→-60dB 静音档 / GameFeelDirector.add_trauma_for_level 震屏入口短路（顿帧打击感保留）/ PopupManager.on_damage_resolved 跳字入口短路（结算不受影响）） |
 | P3 | 无尽深度排名 | 每图无尽深度排行（远期联网） |
 
+## 5.11 2026-08-31 三轮试玩反馈批次（已全量落地，验收 293 项全绿）
+
+| 项 | 落地内容 |
+|---|---|
+| ✅ BGM 重制（「电流声/杂音」） | 纯正弦嗡鸣 + 块步进 LFO 边带根因重制：C-G-Am-F 四和弦暖音色 pad（基频+0.35 二次+0.12 三次谐波）+ 五声琶音拨音 + 低音衬底，22.05kHz/16s 无缝循环；Boss 层 55Hz 纯正弦噗 → 180→70Hz 滑频战鼓心跳。附带修复：Boss 击杀收层订阅晚于 spawner 归还清零（tags=0）→ 战鼓层击杀后永不收起的存量 bug（连接前置至 actors 段） |
+| ✅ 选卡刷新机制 | 「换一批」：开局 2 次 + 局外养成「预案推演」+1/级 + 每 5 波 +1 + Boss 击杀 +1；本局首次免费（一次性刷新方向）；CardSelectUI 按钮（0 次置灰可见）+ GameLoop 仲裁重发牌 + HUD 获得 toast |
+| ✅ 满层质变 | ADD 池词条挂至 stack_max → 全层数值 ×1.6（TraitBase.value_mult 聚合消费）+ 卡面「◆质变◆」金色预览（差一层即满时标注）+ HUD 金色 toast + 史诗音效；武器 Lv5 → 「终极形态」播报；元素系：点燃 2 层「燎原」（燃烧者死亡 150px 内传火 ≤3 只）+ 感电 2 层衰减 0.6→0.75 |
+| ✅ 局内存档 | RunSave 单槽 user://run_save.cfg：波次边界自动落盘 + 暂停「回主菜单」存档 + 死亡/重开清档；大厅「继续上次进度」按钮（地图·波次·Lv 摘要）→ continue_run 全量恢复（构筑武器/词条层数/等级/金币/刷新/词缀/每日态）；测试 teardown 统一清档防污染 |
+| ✅ 脉冲激光命中迸裂 | 每跳结算广播 beam_impact → ElementalFxLayer 迸裂池（四角星闪沿束向爆散 + 束色火花反向扇区迸溅，10 槽轮换） |
+| ✅ 射速/冷却口径 | 修复射速强化对激光形态零效果（add_rof 现作用于 tick_rate 跳频）：射速=束内结算跳频 / 冷却(AFF_CDR)=脉冲间隔；两卡描述改写明示 |
+| ✅ 烧伤 0 修复 | 根因=激光快照传单跳值（15%×6≈0.9）+ round 显示：①光束快照改「每燃烧跳间隔伤害」（tick×0.5s）②DOT 保底 ≥1/层 ③DOT 跳字 ceil 显示。第一关怪火抗全 0（非抗性问题，已答复用户） |
+| ✅ 火焰特效 | 我方弹珠元素着色：火=派生橙 / 冰=淡冰蓝 / 电=葡萄紫（抽到元素卡弹幕即时变色） |
+| ✅ 技能图标 | TextureFactory.skill_icon ×8 角色（盾徽/爆发箭/践踏波/瞬步残影/表盘/毒爆/毒云/僚机环）→ HUD 技能键图标化（28% 底图 + 前景亮/灰态 + 冷却数字覆盖层）+ 选人卡行首图标 |
+| ✅ 附带修复 | 卡牌稀有度双重缩放（_make_trait_card 预放大 × _apply_rarity_values 再放大 → 终值单次缩放，金卡 ×2.6 回归测试锁定口径） |
+
+## 5.12 三轮反馈待办（2026-08-31 记录，未实现——供下个会话接手）
+
+> 用户原话归纳 + 已排查线索（文件/根因均已定位，按序施工即可）。
+
+| 优先级 | 项 | 说明与线索 |
+|---|---|---|
+| P0 | 形态专属词条误刷（谐振轨道上手机枪） | MEC_ORBIT_LINK 描述写明「需持有环绕力场武器」但 params 为空、卡池零校验：CardGenerator._random_owned_weapon 随机选目标武器 → 谐振轨道挂上手枪且卡面显示【手枪】。修法：TraitData.params 增加 required_form 键（GameConst.WeaponForm.MELEE=3）→ _trait_candidates/_random_owned_weapon 按「持有该形态武器才上架 + 目标锁定该形态武器」过滤；同类形态专属词条一并排查（MEC 池逐条过） |
+| P0 | 金币数字看不清 + 位置重叠 | HUD gold_pill 在 (24,44,132×36) 与 HP 条 (24,24,340×30) 直接重叠；文字用 PopPalette.XP 柠檬黄印在白底几乎不可读。修法：挪到击杀/计时/护盾行（y=92）末尾（约 x=462），文字改深金派生色 XP.lerp(OUTLINE,0.55) 或 INK |
+| P0 | 波次展示看不见 | 未定位（需实机截图排查）：波次徽章 (598,16,106×106)、波次 toast y=392 均在；怀疑与 HUD 元素叠放序/文案溢出有关（map_name 前缀后 26px 字号在 106px 徽章内换行溢出？）。先截图确认再动 |
+| P1 | 金币相关 buff | 有金币关（战地黑市）但无金币词条。新增 .tres：AFF_GOLD 点金（ADD 池，params.stat="gold_pct"，金币掉率与掉量 ×(1+Σ)，上限钳 chance≤1）+ 可选 MULTI 池「贪婪」；消费点 GameLoop._on_enemy_killed_drop_xp（chance/掉量两处乘区）；Player 加 gold_find_pct() 跨武器聚合（同 map_gold_mult 叠乘）；data/manifest.cfg 词条清单记得登记 |
+| P1 | 每图最终 Boss 前固定商店（不算黑市） | 现在 SHOP 只随波表 events 随机。修法：GameLoop 订阅 wave_cleared → 若 wave+1 == MapTable 当前图 final_wave → 主动 _on_shop_requested(wave)（复用 ShopUi/LEVEL_UP 流，不消耗波表 SHOP 事件位）；shop_ui.open 可加 is_pre_boss 参数改标题「战前补给」 |
+| P1 | 聚合体/Boss 弹幕攻击 | Boss 至今纯追击贴脸。修法：Enemy.tick CHASE 分支加 _tick_boss_barrage（仅 is_boss() 且 data.boss.barrage 非空）：冷却环形/扇形齐射入敌弹池（team=1，bullet_atk_ratio 控伤害）；E6_boss1~3 + E17~20 的 .tres boss 段补 barrage 配置（count/speed/cd/型：ring|aimed_spread）；注意与 fire_range 语义解耦（追击中齐射，不改 behavior） |
+| P1 | 前期构筑太慢 / 无远程刮痧 / 走位单一 | 三管齐下：① 武器卡更早更多——CATEGORY_WEIGHTS.WEAPON 10→14 + 首次升级货架保底 ≥1 张武器卡（generate_candidates 加 early 保证位，w<5 或 level≤3 时）；② 槽位提前——w3 解锁槽2 提前到 w2（WaveDirector tick 内 current_wave==3 的 slot_unlocked(2)）；③ 早期伤害——W1 手枪 L1-2 base_atk 12→14/16（弱加强，观感为主）。远程缺口由 ①② 自然补（W4 激光/W6 微导/W7 集束都在新武器池） |
+| — | （用户流程要求）完工后 git 提交并推送远程 | 本轮起用户明确要求每轮完工推送 origin art/daylight-pop |
+
 ## 6. 落地顺序建议
 
 ```

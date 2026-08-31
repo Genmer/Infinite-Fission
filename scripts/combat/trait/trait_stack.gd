@@ -117,17 +117,19 @@ func collect_mult_pools(p_ctx: TraitContext) -> Array[Dictionary]:
 
 
 func aggregate_panel() -> Dictionary:
-	# 常驻加算聚合（build ctx 时求值）：pool_id → 有效和（F3 衰减 / 整数池线性全额）
+	# 常驻加算聚合（build ctx 时求值）：pool_id → 有效和（F3 衰减 / 整数池线性全额）。
+	# 满层质变乘区 value_mult 乘在词条有效值上（2026-08-31：挂至 stack_max 时 ×1.6）
 	var sums: Dictionary = {}
 	for mounted in traits:
 		if mounted.data.pool != GameConst.PoolClass.ADD:
 			continue
 		var pool_id: StringName = mounted.data.pool_id
+		var effective_value := mounted.data.value * mounted.value_mult
 		var effective := 0.0
 		if LINEAR_ADD_POOLS.has(pool_id):
-			effective = mounted.data.value * float(mounted.layers)
+			effective = effective_value * float(mounted.layers)
 		else:
-			effective = decay_sum(mounted.data.value, mounted.layers, mounted.data.decay_delta)
+			effective = decay_sum(effective_value, mounted.layers, mounted.data.decay_delta)
 		sums[pool_id] = float(sums.get(pool_id, 0.0)) + effective
 	return sums
 
@@ -144,7 +146,7 @@ func aggregate_add_entries() -> Array[Dictionary]:
 			"trait_id": mounted.data.id,
 			"pool_id": mounted.data.pool_id,
 			"layer": mounted.layers,
-			"contrib": mounted.data.value,
+			"contrib": mounted.data.value * mounted.value_mult,
 			"decay_delta": mounted.data.decay_delta,
 			"is_curse": mounted.data.value < 0.0,
 		})
@@ -191,8 +193,9 @@ static func decay_sum(p_value: float, p_layers: int, p_delta: float) -> float:
 
 
 static func _clone_trait(p_source: TraitBase) -> TraitBase:
-	# 定义引用复制 + 层数保留 + 运行时状态重置（E-13：非深拷贝——TraitData 共享只读）
+	# 定义引用复制 + 层数/质变乘区保留 + 运行时状态重置（E-13：非深拷贝——TraitData 共享只读）
 	var instance := TraitBase.new()
 	instance.setup(p_source.data)
 	instance.layers = p_source.layers
+	instance.value_mult = p_source.value_mult
 	return instance

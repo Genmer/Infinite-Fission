@@ -70,7 +70,11 @@ func _spawn_beam(p_origin: Vector2, p_dir: Vector2, p_depth: int, p_dmg_mult: fl
 		"depth": p_depth,
 		"dmg_mult": p_dmg_mult,
 		"tick_atk": get_current_atk(),
-		"tick_rate": _leveled_param("tick_rate", get_stat(&"rof")),
+		# 跳频 = 形态表 tick_rate × (1+ΣAdd_ROF)（射速强化对激光的真实收益——每秒照射
+		# 结算跳数；2026-08-31 修复：此前 add_rof 仅 BallisticWeapon 消费，激光抽到射速卡
+		# 是死卡。用户口径澄清：射速=束内结算跳频；冷却(AFF_CDR)=脉冲间隔 cd 缩短）
+		"tick_rate": clampf(_leveled_param("tick_rate", get_stat(&"rof"))
+			* (1.0 + _add_rof()) * _player_rof_mult(), 0.5, 30.0),
 		"beam_length": float(data.laser.get("beam_length", 560.0)),
 		"beam_width": float(data.laser.get("beam_width", 14.0)),
 		# 脉冲寿命 s（0=常驻——W5 折射棱镜口径不变；W4=0.5 数据键 pulse_duration，
@@ -150,3 +154,11 @@ func _leveled_param(p_key: String, p_default: float) -> float:
 	if levels is Array and level >= 1 and level <= (levels as Array).size():
 		return float((levels as Array)[level - 1])
 	return p_default
+
+
+func _add_rof() -> float:
+	# ΣAdd_ROF（射速强化词条池聚合——与 BallisticWeapon._add_rof 同源同式；激光消费点
+	# = tick_rate 跳频乘区，见 _spawn_beam）
+	if trait_stack == null:
+		return 0.0
+	return float(trait_stack.aggregate_panel().get("add_rof", 0.0))

@@ -21,6 +21,9 @@ var _level_label: Label = null
 var _wave_label: Label = null
 var map_name: String = ""                  # 当前地图名（M2 多地图，HUD 波次前缀）
 var _skill_btn: Button = null              # 角色技能键（右下角；冷却中置灰倒计时）
+var _skill_icon: TextureRect = null        # 技能键底图（28% 印刷感）
+var _skill_icon_fg: TextureRect = null     # 技能键前景图标（就绪亮显 / 冷却压暗）
+var _skill_cd_label: Label = null          # 冷却数字覆盖层（仅冷却中非空）
 var _gold_label: Label = null                 # 金币（战地黑市货币，M7）
 var _boss_banner: Label = null                # Boss 出场横幅（表现层一期）
 var _kill_label: Label = null
@@ -64,6 +67,8 @@ func bind_events() -> void:
 	EventBus.boss_spawned.connect(_on_boss_banner)
 	Meta.achievements_changed.connect(_on_achievement_toast)   # 信号在 Meta（非 EventBus）
 	EventBus.card_chosen.connect(_on_card_chosen_build)
+	EventBus.trait_milestone.connect(_on_trait_milestone_toast)
+	EventBus.reroll_granted.connect(_on_reroll_toast)
 
 
 func setup(p_player: Node2D) -> void:
@@ -108,7 +113,17 @@ func refresh_stats() -> void:
 		var ready_now: bool = bool(player.call(&"skill_ready"))
 		_skill_btn.disabled = not ready_now
 		_skill_btn.modulate.a = 1.0 if ready_now else 0.55
-		_skill_btn.text = "技能" if ready_now else "%ds" % ceili(float(player.get("skill_cd_left")))
+		# 图标随角色切换（选人后开局/继续存档即时同步）
+		var icon := TextureFactory.skill_icon(StringName(String(player.get("character_id"))))
+		if _skill_icon.texture != icon:
+			_skill_icon.texture = icon
+			_skill_icon_fg.texture = icon
+		if ready_now:
+			_skill_cd_label.text = ""
+			_skill_icon_fg.modulate = Color.WHITE
+		else:
+			_skill_cd_label.text = "%ds" % ceili(float(player.get("skill_cd_left")))
+			_skill_icon_fg.modulate = Color(0.72, 0.74, 0.82, 1.0)   # 冷却压灰（图标读感保留）
 	_kill_label.text = "击杀 %d" % kills
 	_time_label.text = "%d:%02d" % [int(run_elapsed) / 60, int(run_elapsed) % 60]
 
@@ -204,6 +219,47 @@ func _on_skill_pressed() -> void:
 	# 角色技能键（仲裁在 player.skill_ready；PLAYING 态才生效）
 	if player != null and is_instance_valid(player) and bool(player.call(&"skill_ready")):
 		player.call(&"activate_skill")
+
+
+func _on_trait_milestone_toast(_p_trait_id: StringName, p_name: String, p_mult: float) -> void:
+	# 质变里程碑 toast（用户反馈 2026-08-31「buff 到什么程度会质变」）：词条满层 ×1.6 /
+	# 武器 Lv5 终极形态（mult=0）——金色大 toast + 史诗音效，爽感节点可视化
+	if SfxBank.I != null:
+		SfxBank.I.play(&"tier_epic")
+	var text := "◆ 质变！%s 数值 ×%.1f" % [p_name, p_mult] if p_mult > 0.0 \
+		else "◆ %s —— 终极形态达成" % p_name
+	var toast := StickerTheme.label_sticker(Label.new(), 22, PopPalette.GOLD, 5, Color.WHITE, true)
+	toast.text = text
+	toast.position = Vector2(90.0, 360.0)
+	toast.size = Vector2(540.0, 34.0)
+	toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast.pivot_offset = toast.size * 0.5
+	add_child(toast)
+	var tw := toast.create_tween()
+	tw.tween_property(toast, "scale", Vector2.ONE * 1.18, 0.12).from(Vector2.ONE * 0.6) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.6)
+	tw.tween_property(toast, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(toast.queue_free)
+
+
+func _on_reroll_toast(p_count: int) -> void:
+	# 刷新次数获得 toast（选卡刷新机制）：小 toast + 金币音——「换一批 ×N」余量可见
+	if SfxBank.I != null:
+		SfxBank.I.play(&"coin")
+	var toast := StickerTheme.label_sticker(Label.new(), 17, PopPalette.PLAYER, 4, Color.WHITE, true)
+	toast.text = "换一批次数 +%d" % p_count
+	toast.position = Vector2(150.0, 300.0)
+	toast.size = Vector2(420.0, 30.0)
+	toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(toast)
+	var tw := toast.create_tween()
+	tw.tween_property(toast, "position:y", 260.0, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.4)
+	tw.tween_property(toast, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(toast.queue_free)
 
 
 func _on_achievement_toast(p_ach_id: StringName) -> void:
@@ -464,12 +520,11 @@ func _build_ui() -> void:
 	_time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	time_pill.add_child(_time_label)
 
-	# 角色技能键（右下角——用户反馈「不同的角色有不同的技能」）：冷却中置灰倒计时
+	# 角色技能键（右下角——用户反馈「不同的角色有不同的技能」；2026-08-31 二轮反馈
+	# 「技能好歹画个对应的图标」→ 图标化：角色专属技能图标 + 冷却数字覆盖层）
 	var skill_btn := Button.new()
 	skill_btn.name = "SkillButton"
-	skill_btn.text = "技能"
-	skill_btn.add_theme_font_size_override("font_size", 20)
-	skill_btn.add_theme_font_override("font", StickerTheme.font_bold())
+	skill_btn.text = ""
 	skill_btn.position = Vector2(610.0, 1112.0)
 	skill_btn.size = Vector2(86.0, 86.0)
 	skill_btn.pivot_offset = skill_btn.size * 0.5
@@ -477,6 +532,33 @@ func _build_ui() -> void:
 	skill_btn.button_down.connect(func() -> void: StickerTheme.press_punch(skill_btn))
 	root.add_child(skill_btn)
 	_skill_btn = skill_btn
+	var skill_icon_rect := TextureRect.new()
+	skill_icon_rect.name = "SkillIcon"
+	skill_icon_rect.texture = TextureFactory.skill_icon(&"sentinel")
+	skill_icon_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	skill_icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	skill_icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	skill_icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	skill_icon_rect.modulate.a = 0.28                     # 白底按钮上 28% 印刷感底图
+	skill_btn.add_child(skill_icon_rect)
+	_skill_icon = skill_icon_rect
+	var skill_fg := TextureRect.new()
+	skill_fg.name = "SkillIconFg"
+	skill_fg.texture = skill_icon_rect.texture
+	skill_fg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	skill_fg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	skill_fg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	skill_fg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	skill_btn.add_child(skill_fg)
+	_skill_icon_fg = skill_fg
+	_skill_cd_label = StickerTheme.label_sticker(Label.new(), 26, PopPalette.INK, 4, Color.WHITE, true)
+	_skill_cd_label.name = "SkillCd"
+	_skill_cd_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_skill_cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_skill_cd_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_skill_cd_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_skill_cd_label.text = ""
+	skill_btn.add_child(_skill_cd_label)
 		# 金币 pill（左上，护盾条同款贴纸风——战地黑市货币）
 	var gold_pill := _sticker_panel(root, Vector2(24.0, 44.0), Vector2(132.0, 36.0), 18.0)
 	gold_pill.name = "GoldPill"

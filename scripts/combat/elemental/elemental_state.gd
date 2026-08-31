@@ -33,6 +33,8 @@ var vuln_timer: float = 0.0                    # 易伤 ×1.25（目标侧独立
 var vuln_mult: float = 1.25
 var shock_chain_cd: float = 0.0
 var shock_chain_targets: int = 3               # ELE_SHOCK 层 2 → 4 覆写
+var shock_chain_decay: float = 0.6             # 感电每跳衰减（ELE_SHOCK 层 2 质变 → 0.75 覆写）
+var burn_spread_radius: float = 0.0            # 点燃蔓延半径（ELE_IGNITE 层 2 质变 → 燃烧者死亡传火；0=未启用）
 var reaction_cd: Dictionary = {}               # rxn -> 剩余（cd_rxn=2s）
 var superconduct_left: float = 0.0             # 超导削抗剩余（−30% 全抗，6s）
 var superconduct_active: bool = false
@@ -164,6 +166,8 @@ func reset() -> void:
 	vuln_mult = 1.25
 	shock_chain_cd = 0.0
 	shock_chain_targets = 3
+	shock_chain_decay = 0.6
+	burn_spread_radius = 0.0
 	reaction_cd.clear()
 	superconduct_left = 0.0
 	superconduct_active = false
@@ -189,6 +193,8 @@ func _trigger(p_element: int, p_overrides: Dictionary) -> int:
 			burn_tick = 0.5
 			burn_timer = 3.0              # 3s（重复命中刷新时长）
 			dot_tick_left = burn_tick
+			# 点燃蔓延质变（ELE_IGNITE 层 2：燃烧者死亡时向半径内传火——覆写键存半径）
+			burn_spread_radius = float(p_overrides.get("spread_radius", 0.0))
 			return TRIGGER_BURN
 		GameConst.Element.ICE:
 			if chill_timer > 0.0 or _chill_from_full:
@@ -207,5 +213,8 @@ func _trigger(p_element: int, p_overrides: Dictionary) -> int:
 			if (immune_mask & GameConst.IMMUNE_SHOCK) != 0:
 				return TRIGGER_NONE
 			shock_chain_targets = int(p_overrides.get("chain_targets", 3))
+			# 感电质变（ELE_SHOCK 层 2：衰减 0.6→0.75——连锁跳得更远更痛）
+			if p_overrides.has("chain_decay"):
+				shock_chain_decay = float(p_overrides["chain_decay"])
 			return TRIGGER_SHOCK
 	return TRIGGER_NONE

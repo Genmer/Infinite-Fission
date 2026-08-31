@@ -66,6 +66,7 @@ const UPGRADES: Array[Dictionary] = [
 	{"id": &"cdr", "name": "技能超频", "desc": "角色技能冷却 -8%/级", "max_lv": 3, "base_cost": 35},
 	{"id": &"xp_gain", "name": "经验萃取", "desc": "经验获取 +8%/级", "max_lv": 3, "base_cost": 30},
 	{"id": &"start_gold", "name": "初始资金", "desc": "开局金币 +20/级", "max_lv": 3, "base_cost": 25},
+	{"id": &"reroll", "name": "预案推演", "desc": "每局选卡「换一批」次数 +1/级", "max_lv": 3, "base_cost": 30},
 	{"id": &"revive", "name": "应急协议", "desc": "每局可复活 1 次/级（满血复活 + 2s 无敌）", "max_lv": 2, "base_cost": 80},
 ]
 
@@ -159,6 +160,10 @@ func xp_pct() -> float:
 
 func start_gold() -> int:
 	return int(upgrade_level(&"start_gold")) * 20
+
+
+func reroll_bonus() -> int:
+	return int(upgrade_level(&"reroll"))
 
 
 func revive_charges() -> int:

@@ -2,11 +2,11 @@
 # SfxBank（META_ROADMAP §5.8 表现层一期，用户反馈至今全静音）：程序化音效——启动期
 # PCM 合成（正弦/方波/锯齿/噪声 + 包络），零外部素材。静态单例 I 供 UI 直调；
 # 高频事件（命中/击杀）70ms 节流。音量 -14dB，polyphony 4。
-# BGM 环境音通道（P2，META_ROADMAP §5.10「BGM 环境音」）：循环 PCM 启动期一次性预生成
-# （正弦叠加 + 缓慢 LFO，4 小节 8s 无缝循环）——运行期零逐帧生成（用户机器卡顿敏感，
-# 纯循环播放）；战斗态播 pad、Boss 存活期叠加低频脉冲第二循环（同长循环锁相 +
-# stream_paused 拨运输），菜单暂停。音量 -18dB 级别（AudioServer 之外仅 player.volume_db，
-# 不动总线/场景树结构）。
+# BGM 环境音通道（P2 起，2026-08-31 用户反馈「电流声/杂音」重制）：循环 PCM 启动期一次性
+# 预生成（音乐化三声部：C-G-Am-F 暖音色和弦 pad + 五声琶音 + Boss 期战鼓心跳层，
+# 16s 无缝循环）——运行期零逐帧生成（用户机器卡顿敏感，纯循环播放）；战斗态播 pad、
+# Boss 存活期叠加战鼓第二循环（同长循环锁相 + stream_paused 拨运输），菜单暂停。
+# 音量 -18dB 级别（AudioServer 之外仅 player.volume_db，不动总线/场景树结构）。
 # 设置页音量接线（P3，META_ROADMAP §5.10「设置页」）：Meta.settings(sfx/bgm_volume)
 # 线性 0~1 → 响度近似 db（linear_to_db(max(v,0.001))，0 → -60dB 静音档）——音量 1.0 =
 # 既有基准档；settings_changed 信号驱动实时应用。
@@ -21,12 +21,25 @@ var _last_ms: Dictionary = {}                  # StringName → 上次播放 ms�
 const THROTTLE_MS := 70
 
 # ── BGM 环境音参数（数值真源） ────────────────────────────────────
-const BGM_RATE := 11025                        # 采样率（低频 pad 充裕；预生成量/Boot 预算折中）
-const BGM_LOOP_S := 8.0                        # 循环长（4 小节）
+# 2026-08-31 用户反馈「BGM 像电流声/杂音」重制：旧版 = 110/165/220Hz 三纯正弦 + 块步进 LFO
+#（纯低频正弦叠加听感即变压器嗡鸣，86Hz 步进边带叠加成电流杂音）。新版为音乐化三声部：
+# ① 和弦 pad：C-G-Am-F 四和弦（每和弦 4s，暖音色 = 基频 + 0.35×二次 + 0.12×三次谐波，
+#    逐采样连续包络，和弦首尾归零 → 无缝无爆音）；② 五声琶音：0.5s 一粒指数衰减拨音；
+# ③ Boss 层：战鼓心跳（180→70Hz 滑频鼓 + 起振噪声瞬态）替代旧 55Hz 纯正弦噗（嗡鸣源之二）。
+const BGM_RATE := 22050                        # 采样率（22.05k：谐波/起振瞬态无混叠）
+const BGM_LOOP_S := 16.0                       # 循环长（4 和弦 × 4s）
 const BGM_PAD_DB := -18.0                      # pad 层音量（-18dB 级别）
 const BGM_BOSS_DB := -16.0                     # Boss 脉冲层音量（略高于 pad，仍在环境级）
-const BGM_LFO_BLOCK := 128                     # LFO 步进块（≈11.6ms——慢 LFO 听感连续）
 const SFX_BASE_DB := -14.0                     # 音效基准音量（既有 -14dB 档；设置音量 1.0 = 此档）
+# 和弦进行（I–V–vi–IV，C 大调暖色进行；频率真源：C3=130.81 G3=196.00 A3=220.00 F3=174.61，
+# 上方声部按纯律三度/五度近似取值——听感为准的圆整值）
+const BGM_CHORDS: Array[Array] = [
+	[130.81, 196.00, 261.63, 329.63],   # C：C3 G3 C4 E4
+	[98.00, 196.00, 246.94, 293.66],    # G：G2 G3 B3 D4
+	[110.00, 220.00, 261.63, 329.63],   # Am：A2 A3 C4 E4
+	[87.31, 174.61, 220.00, 261.63],    # F：F2 F3 A3 C4
+]
+const BGM_ARP_NOTES: Array[float] = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25]   # C 五声琶音池
 
 var _bgm_player: AudioStreamPlayer = null      # pad 循环宿主
 var _bgm_boss_player: AudioStreamPlayer = null # Boss 脉冲层宿主（与 pad 同长锁相）
@@ -199,46 +212,85 @@ func _bgm_transport() -> void:
 
 
 func _synthesize_pad_loop() -> AudioStreamWAV:
-	# 环境垫（4 小节 8s 无缝循环）：A2 110 / E3 165 / A3 220 三正弦叠加 + 0.125/0.25Hz
-	# 双 LFO 缓慢呼吸。无缝判据：分量频率与 LFO 频率均为「1/8s 的整数倍」→ 循环点相位连续
-	#（110=880/8 · 165=1320/8 · 220=1760/8 · LFO 周期 8s/4s）；幅度头空 ×0.62（Σamp=1.0）
+	# 音乐化 pad（16s 循环 = 4 和弦 × 4s）：暖音色和弦声部 + 五声琶音拨音 + 低音衬底。
+	# 无缝判据：每和弦段包络（0.5s attack → 平台 → 0.8s release）在段首/段尾精确归零，
+	# 循环点（末和弦 release 结束 → 首和弦 attack 开始）两侧样本均为 0 → 无爆音无跳变；
+	# 逐采样连续 LFO（0.09Hz 呼吸）——旧版 128 样本块步进的 86Hz 边带（电流杂音源）已消除。
 	var n := int(BGM_LOOP_S * float(BGM_RATE))
+	var chord_len := int(float(n) / float(BGM_CHORDS.size()))
 	var data := PackedByteArray()
 	data.resize(n * 2)
-	var freqs: Array[float] = [110.0, 165.0, 220.0]
-	var amps: Array[float] = [0.5, 0.28, 0.22]
-	var lfo_hz: Array[float] = [0.125, 0.25]
-	var lfo_phase: Array[float] = [0.0, PI * 0.5]
-	var phases: Array[float] = [0.0, 0.0, 0.0]
-	var lfo_now: Array[float] = [1.0, 1.0]
-	var block_left := 0
+	var phases: Array[float] = [0.0, 0.0, 0.0, 0.0]
+	var bass_phase := 0.0
+	var arp_phase := 0.0
+	var arp_left := 0.25
+	var arp_note := 0.0
+	var arp_idx := 0
 	for i in range(n):
-		if block_left <= 0:
-			block_left = BGM_LFO_BLOCK
-			for k in range(2):
-				lfo_now[k] = 0.78 + 0.22 * sin(
-					TAU * lfo_hz[k] * float(i) / float(BGM_RATE) + lfo_phase[k])
-		block_left -= 1
+		var t := float(i) / float(BGM_RATE)
+		# 和弦段包络（段内归零起止）
+		var seg := i / chord_len
+		var seg_t := float(i - seg * chord_len) / float(chord_len)
+		var env := 0.0
+		if seg_t < 0.125:
+			env = seg_t / 0.125                        # 0.5s attack
+		elif seg_t > 0.8:
+			env = maxf(1.0 - (seg_t - 0.8) / 0.2, 0.0)  # 0.8s release
+		else:
+			env = 1.0
+		# 呼吸 LFO（逐采样连续——正弦慢呼吸，无步进边带）
+		var breath := 0.82 + 0.18 * sin(TAU * 0.09 * t + 0.7)
 		var s := 0.0
-		for j in range(3):
-			phases[j] = fmod(phases[j] + freqs[j] / float(BGM_RATE), 1.0)
-			s += amps[j] * lfo_now[0 if j != 1 else 1] * _wt[int(phases[j] * 1024.0) & 1023]
-		data.encode_s16(i * 2, int(clampf(s * 0.62, -1.0, 1.0) * 32767.0))
+		var chord: Array = BGM_CHORDS[mini(seg, BGM_CHORDS.size() - 1)]
+		for j in range(4):
+			phases[j] = fmod(phases[j] + chord[j] / float(BGM_RATE), 1.0)
+			# 暖音色：基频 + 0.35 二次 + 0.12 三次（非纯音——去「电流嗡鸣」感的关键）
+			var tone := _wt[int(phases[j] * 1024.0) & 1023] \
+				+ 0.35 * _wt[int(fmod(phases[j] * 2.0, 1.0) * 1024.0) & 1023] \
+				+ 0.12 * _wt[int(fmod(phases[j] * 3.0, 1.0) * 1024.0) & 1023]
+			s += tone * (0.34 if j == 0 else 0.22)
+		# 低音衬底（根音低八度纯正弦，慢颤音；幅度小于旧版避免嗡鸣）
+		bass_phase = fmod(bass_phase + chord[0] * 0.5 / float(BGM_RATE), 1.0)
+		s += _wt[int(bass_phase * 1024.0) & 1023] * 0.20
+		s *= env * breath
+		# 五声琶音拨音（0.25s 起每 0.5s 一粒，指数衰减 0.42s；调度窗 [0.25, 15.5]——
+		# 末粒 15.25s 起、15.7s 前衰减归零 → 循环点两侧样本为 0，无缝无爆音）
+		if arp_left <= 0.0 and t >= 0.25 and t <= 15.5:
+			arp_left = 0.5
+			arp_note = BGM_ARP_NOTES[arp_idx % BGM_ARP_NOTES.size()]
+			arp_idx += 1
+			arp_phase = 0.0
+		arp_left -= 1.0 / float(BGM_RATE)
+		var arp_t := 0.5 - arp_left
+		if arp_t < 0.42:
+			arp_phase = fmod(arp_phase + arp_note / float(BGM_RATE), 1.0)
+			s += _wt[int(arp_phase * 1024.0) & 1023] \
+				* 0.16 * exp(-arp_t / 0.16)
+		data.encode_s16(i * 2, int(clampf(s * 0.5, -1.0, 1.0) * 32767.0))
 	return _wav_loop(data)
 
 
 func _synthesize_boss_pulse_loop() -> AudioStreamWAV:
-	# Boss 层低频脉冲：55Hz 正弦短噗 ×16（每 0.5s 一发、0.4s 平方衰减尾）——
-	# 16 发 = 8s 整数倍 + 尾音归零后静默至循环点 → 无缝无爆音
+	# Boss 层战鼓心跳（16s 循环）：每 1.0s 一记低鼓（180→70Hz 快速滑频 + 起振噪声瞬态 +
+	# 二次衰减尾），1 拍 = 8s/8 整除 → 循环点尾音归零后静默，无缝无爆音。
+	# （旧版 55Hz 纯正弦短噗每 0.5s ×16——纯正弦低频持续脉冲即「电流嗡鸣」观感，弃用）
 	var n := int(BGM_LOOP_S * float(BGM_RATE))
 	var data := PackedByteArray()
 	data.resize(n * 2)
+	var beats := int(BGM_LOOP_S / 1.0)
+	var beat_len := n / beats
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260831                         # 噪声瞬态确定性（同 Boot 同波形）
 	for i in range(n):
-		var t_in := fmod(float(i) / float(BGM_RATE), 0.5)
+		var b := i / beat_len
+		var t_in := float(i - b * beat_len) / float(BGM_RATE)
 		var s := 0.0
-		if t_in < 0.4:
-			var u := t_in / 0.4
-			s = (1.0 - u) * (1.0 - u) * _wt[int(fmod(55.0 * t_in, 1.0) * 1024.0) & 1023] * 0.9
+		if t_in < 0.42:
+			var u := t_in / 0.42
+			var f := lerpf(180.0, 70.0, minf(u * 3.0, 1.0))   # 起振 0.14s 内滑到鼓底频
+			var body := _wt[int(fmod(f * t_in, 1.0) * 1024.0) & 1023]
+			var attack_noise := (rng.randf() * 2.0 - 1.0) * maxf(1.0 - u * 14.0, 0.0) * 0.22
+			s = (body * (1.0 - u) * (1.0 - u) * 0.85 + attack_noise)
 		data.encode_s16(i * 2, int(clampf(s, -1.0, 1.0) * 32767.0))
 	return _wav_loop(data)
 

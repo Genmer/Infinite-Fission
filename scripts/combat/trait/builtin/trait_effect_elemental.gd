@@ -29,7 +29,9 @@ func _emit_attach_request(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 	var overrides: Dictionary = {}
 	if p_trait.layers >= 2:
 		value = float(p_trait.data.params.get("value_lv2", value))
-		for key in ["dot_ratio", "chain_targets"]:
+		# 层 2 质变覆写键（2026-08-31）：dot_ratio（DOT 15→22%）/ chain_targets（3→4）/
+		# chain_decay（连锁衰减 0.6→0.75，跳得更远）/ spread_radius（点燃蔓延：燃烧者死亡传火）
+		for key in ["dot_ratio", "chain_targets", "chain_decay", "spread_radius"]:
 			if p_trait.data.params.has(String(key) + "_lv2"):
 				overrides[key] = float(p_trait.data.params[String(key) + "_lv2"])
 	p_ctx.attach_request = {"element": element, "value": value, "overrides": overrides}

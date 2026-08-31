@@ -14,11 +14,13 @@ signal start_requested()                      # → GameLoop.start_run()（MENU 
 signal start_map_requested(map_id: StringName)   # 选图启动（M2 多地图 → GameLoop._on_menu_start）
 signal start_daily_requested()                # 每日挑战启动（P2 → GameLoop._on_menu_start_daily）
 signal settings_requested()                   # 设置页打开（P3 → GameLoop 接线 SettingsPanel.open）
+signal continue_requested()                   # 继续上次进度（局内存档 → GameLoop.continue_run，2026-08-31）
 
 var registry: DataRegistry = null             # GameLoop Boot 期注入（图鉴全量清单）
 
 var _root: Control = null
 var _start_btn: Button = null
+var _continue_btn: Button = null              # 继续上次进度（有局内存档时可见，2026-08-31）
 var _pulse_tween: Tween = null                # 出发按钮果冻脉动（隐藏时暂停）
 var _mascot: TextureRect = null
 var _bob_tween: Tween = null                  # 吉祥物漂浮 idle
@@ -45,6 +47,8 @@ func _on_state_changed(p_state: int) -> void:
 	# 仅 MENU 态显示（PLAYING/LEVEL_UP/PAUSED/GAME_OVER 均隐藏）；动效随可见性启停
 	var show := p_state == GameConst.GameStatus.MENU
 	_root.visible = show
+	if show:
+		_refresh_continue_btn()
 	if _pulse_tween != null:
 		if show:
 			_pulse_tween.play()
@@ -150,6 +154,21 @@ func _build_ui() -> void:
 	_root.add_child(_start_btn)
 	_pulse_tween = StickerTheme.pulse(_start_btn, 1.15, 0.045)
 
+	# 继续上次进度（局内存档入口，2026-08-31 用户反馈「回到菜单再进入可选择继续上次进度」）：
+	# 出发按钮上方；有档才可见（文案带地图/波次摘要），点击 → GameLoop.continue_run
+	_continue_btn = Button.new()
+	_continue_btn.name = "ContinueButton"
+	_continue_btn.text = "继续上次进度"
+	_continue_btn.add_theme_font_size_override("font_size", 21)
+	_continue_btn.add_theme_font_override("font", StickerTheme.font_bold())
+	_continue_btn.position = Vector2(210.0, 700.0)
+	_continue_btn.size = Vector2(300.0, 62.0)
+	_continue_btn.pivot_offset = _continue_btn.size * 0.5
+	_continue_btn.pressed.connect(_on_continue_pressed)
+	_continue_btn.button_down.connect(func() -> void: StickerTheme.press_punch(_continue_btn))
+	_continue_btn.visible = false
+	_root.add_child(_continue_btn)
+
 	# 吉祥物漂浮 idle（正弦 bob + 摇摆）
 	_bob_tween = _mascot.create_tween().set_loops()
 	_bob_tween.tween_property(_mascot, "position:y", 440.0, 1.4) \
@@ -173,6 +192,25 @@ func _build_ui() -> void:
 
 func _on_start_pressed() -> void:
 	_open_map_select()                        # 出发 → 选关面板（M2 多地图，用户反馈）
+
+
+func _on_continue_pressed() -> void:
+	# 继续上次进度（仲裁在 GameLoop.continue_run：无档/坏档 false 兜底）
+	continue_requested.emit()
+
+
+func _refresh_continue_btn() -> void:
+	# 有档可见 + 摘要文案（地图 · 第 N 波 · Lv）；无档隐藏
+	if _continue_btn == null:
+		return
+	var data := RunSave.load_run()
+	if data.is_empty():
+		_continue_btn.visible = false
+		return
+	var map_name := String(MapTable.get_map(StringName(String(data.get("map_id", "")))).get("name", "?"))
+	_continue_btn.text = "继续上次进度：%s · 第%d波 · Lv%d" % [map_name,
+		int(data.get("wave", 1)), int(data.get("level", 1))]
+	_continue_btn.visible = true
 
 
 # ── 选关面板（出发按钮打开；通关链解锁——用户反馈「第一大关通关后打后面的」） ──
@@ -600,6 +638,17 @@ func _rebuild_char_select() -> void:
 		row.custom_minimum_size = Vector2(576.0, 118.0)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# 技能图标（2026-08-31 用户反馈「技能好歹画个对应的图标」）：行首 48px 程序化图标
+		var skill_ico := TextureRect.new()
+		skill_ico.name = "SkillIcon"
+		skill_ico.texture = TextureFactory.skill_icon(def.id)
+		skill_ico.position = Vector2(14.0, 24.0)
+		skill_ico.custom_minimum_size = Vector2(48.0, 48.0)
+		skill_ico.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		skill_ico.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		skill_ico.modulate.a = 1.0 if unlocked else 0.3
+		skill_ico.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(skill_ico)
 		var name_l := Label.new()
 		StickerTheme.label_sticker(name_l, 20, PopPalette.PLAYER if picked else (PopPalette.INK if unlocked else PopPalette.INK_SOFT),
 			0, Color.WHITE, true)
@@ -613,24 +662,24 @@ func _rebuild_char_select() -> void:
 			elif int(def.get("unlock_depth", 0)) > 0:
 				unlock_hint = "　🔒 任意图无尽深度 ≥%d 解锁" % int(def.get("unlock_depth", 0))
 		name_l.text = String(def.name) + ("　✓ 当前" if picked else "") + unlock_hint
-		name_l.position = Vector2(20.0, 12.0)
-		name_l.size = Vector2(460.0, 28.0)
+		name_l.position = Vector2(74.0, 12.0)
+		name_l.size = Vector2(406.0, 28.0)
 		name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(name_l)
 		var stat_l := Label.new()
 		StickerTheme.label_sticker(stat_l, 14, PopPalette.INK_SOFT)
 		stat_l.text = "生命 %d　攻击 %s%.0f%%" % [int(def.hp),
 			"+" if float(def.atk_pct) >= 0.0 else "", float(def.atk_pct) * 100.0]
-		stat_l.position = Vector2(20.0, 46.0)
-		stat_l.size = Vector2(400.0, 20.0)
+		stat_l.position = Vector2(74.0, 46.0)
+		stat_l.size = Vector2(346.0, 20.0)
 		stat_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(stat_l)
 		var skill_l := Label.new()
 		StickerTheme.label_sticker(skill_l, 14, PopPalette.ENEMY)
 		skill_l.text = "技能【%s】%s（CD %.0fs）" % [String(def.skill_name),
 			String(def.skill_desc), float(def.cd)]
-		skill_l.position = Vector2(20.0, 72.0)
-		skill_l.size = Vector2(540.0, 20.0)
+		skill_l.position = Vector2(74.0, 72.0)
+		skill_l.size = Vector2(486.0, 20.0)
 		skill_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(skill_l)
 		if not picked and unlocked:

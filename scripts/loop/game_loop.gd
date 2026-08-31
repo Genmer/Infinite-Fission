@@ -92,6 +92,7 @@ var stage_probe_us: Dictionary = {}           # {StringName 阶段: 累计 usec}
 var _projectile_pool: ProjectilePool = null
 var _boot_elapsed_ms: float = 0.0             # Boot 耗时（AC：<3s 预算遥测）
 var _separation_left: float = SEPARATION_INTERVAL   # E-10 分离力 10Hz 相位
+var _free_reroll_used: bool = false            # 本局首次「换一批」免费位（一次性刷新方向）
 
 
 func _ready() -> void:
@@ -368,11 +369,13 @@ func _on_menu_start(p_map_id: StringName) -> void:
 
 func restart_run() -> bool:
 	# GAME_OVER → PLAYING（结算重开）/ PAUSED → PLAYING（暂停面板「重新开始」，
-	# 用户反馈 2026-08-29；PAUSED→PLAYING 为既有合法迁移）：数值重置 + 波次 1 重开
+	# 用户反馈 2026-08-29；PAUSED→PLAYING 为既有合法迁移）：数值重置 + 波次 1 重开。
+	# 重开 = 放弃旧档（局内存档清除——「重新开始」语义下继续入口不再指向被放弃的进度）
 	if state != GameConst.GameStatus.GAME_OVER and state != GameConst.GameStatus.PAUSED:
 		return false
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
+	RunSave.clear()
 	_reset_run_state()
 	wave_director.start_wave(1)
 	return true
@@ -380,9 +383,15 @@ func restart_run() -> bool:
 
 func quit_to_menu() -> bool:
 	# PAUSED → MENU（暂停面板「回主菜单」；新增合法迁移）：回菜单前静默清场 +
-	# 数值复位（等同 restart 口径——防残留敌/弹在下次 start_run 时叠进波次 1）
+	# 数值复位（等同 restart 口径——防残留敌/弹在下次 start_run 时叠进波次 1）。
+	# 局内存档（2026-08-31 用户反馈「回到菜单再进入可选择继续上次进度」）：仅 PAUSED
+	# 主动退出落盘（GAME_OVER → MENU 的同路径退出不存——死亡局已由 _on_player_died
+	# 清档，此处再存会把 hp≤0 的尸体局写进「继续」入口）
+	var was_paused := state == GameConst.GameStatus.PAUSED
 	if not change_state(GameConst.GameStatus.MENU):
 		return false
+	if was_paused:
+		RunSave.save_run(serialize_run())
 	_reset_run_state()
 	return true
 
@@ -403,6 +412,7 @@ func _on_player_died() -> void:
 	if state == GameConst.GameStatus.GAME_OVER or state == GameConst.GameStatus.BOOT \
 			or state == GameConst.GameStatus.MENU:
 		return                                    # 未开局/已结算：忽略
+	RunSave.clear()                             # 局终清档（继续入口随死亡失效）
 	change_state(GameConst.GameStatus.GAME_OVER)
 
 
@@ -442,6 +452,34 @@ func _open_card_flow(p_new_level: int) -> void:
 		current_candidates = card_generator.generate_candidates(reroll_context)
 	change_state(GameConst.GameStatus.LEVEL_UP)
 	card_select_ui.open(current_candidates)
+	card_select_ui.update_reroll(player.reroll_charges, not _free_reroll_used)
+
+
+func _on_card_reroll() -> void:
+	# 换一批仲裁（选卡刷新机制，2026-08-31）：本局首次免费（一次性刷新）→ 之后每次消耗
+	# 1 次刷新次数；重新发牌（保底/诅咒等遗物改写不重复消费——只随首 roll）
+	if state != GameConst.GameStatus.LEVEL_UP or card_select_ui == null \
+			or not card_select_ui.is_open or player == null or not is_instance_valid(player):
+		return
+	if not _free_reroll_used:
+		_free_reroll_used = true               # 免费位扣减（不消耗次数）
+	elif player.reroll_charges <= 0:
+		return
+	else:
+		player.reroll_charges -= 1
+	var context := {
+		"player": player,
+		"wave": wave_director.current_wave,
+		"level": player.level,
+		"deal_count": relic_handler.deal_count(),
+		"curse_last": relic_handler.curse_requested(),
+		"min_rarity_floor": -1,                # 保底已折入首 roll 稀有度序列
+	}
+	current_candidates = card_generator.generate_candidates(context)
+	card_select_ui.open(current_candidates)
+	card_select_ui.update_reroll(player.reroll_charges, not _free_reroll_used)
+	if sfx != null:
+		sfx.play(&"buy")
 
 
 func _on_card_choice(p_card: Dictionary) -> void:
@@ -555,6 +593,13 @@ func _boot_build_actors() -> void:
 	confetti = ConfettiBurst.new()
 	confetti.name = "ConfettiBurst"
 	add_child(confetti)
+	# ★ BGM Boss 层前置订阅（2026-08-31 修复：原连接在 presentation 段——晚于 spawner
+	#   _ready 的 enemy_killed 订阅，派发时 tags 已被死亡归还清零 → Boss 击杀后战鼓层
+	#   永不收起，持续低频脉冲加重「电流嗡鸣」听感）；同处并入刷新次数授予（Boss +1）
+	EventBus.boss_spawned.connect(func(_b: Node2D) -> void:
+		if sfx != null:
+			sfx.bgm_set_boss_layer(true))
+	EventBus.enemy_killed.connect(_on_boss_killed_bgm)
 	spawner = EnemySpawner.new()
 	spawner.name = "EnemySpawner"
 	add_child(spawner)
@@ -646,10 +691,6 @@ func _boot_build_presentation() -> void:
 	EventBus.card_chosen.connect(func(_i: StringName, _k: int) -> void: sfx.play(&"coin"))
 	EventBus.shield_blocked.connect(func(_p: Vector2) -> void: sfx.play(&"shield"))
 	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
-	# BGM Boss 层（P2）：Boss 登场叠加低频脉冲循环 / Boss 击杀收起（tags 读取在
-	# spawner 死亡归还清零前派发——本连接先于 EnemySpawner 入树，连接序 = 派发序）
-	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.bgm_set_boss_layer(true))
-	EventBus.enemy_killed.connect(_on_boss_killed_bgm)
 	EventBus.wave_cleared.connect(_on_wave_cleared_bless_heal)   # 祝福·滋养（词缀二期）
 	boss_bar = BossBar.new()
 	boss_bar.name = "BossBar"
@@ -666,6 +707,7 @@ func _boot_build_presentation() -> void:
 	card_select_ui.name = "CardSelectUI"
 	add_child(card_select_ui)
 	card_select_ui.choice_made.connect(_on_card_choice)
+	card_select_ui.reroll_requested.connect(_on_card_reroll)   # 换一批仲裁（刷新机制）
 	# 集成包 A：震屏宿主相机（trauma² 偏移在 ⑧ raw 通道应用）+ 主菜单屏
 	camera = Camera2D.new()
 	camera.name = "Camera"
@@ -679,6 +721,7 @@ func _boot_build_presentation() -> void:
 	menu_screen.start_requested.connect(func() -> void: _on_menu_start(MapTable.FIRST_MAP_ID))
 	menu_screen.start_map_requested.connect(_on_menu_start)   # 选图启动（M2 多地图）
 	menu_screen.start_daily_requested.connect(_on_menu_start_daily)   # 每日挑战启动（P2）
+	menu_screen.continue_requested.connect(continue_run)   # 继续上次进度（局内存档，2026-08-31）
 	# P3 设置页（META_ROADMAP §5.10）：独立全屏面板（layer 10 盖过菜单/暂停卡），
 	# 大厅按钮行 + 暂停卡「设置」双入口，纯 UI——打开/关闭不改 GameLoop 状态机
 	settings_panel = SettingsPanel.new()
@@ -689,6 +732,8 @@ func _boot_build_presentation() -> void:
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）
 	EventBus.player_died.connect(_on_player_died)
 	EventBus.level_up.connect(_on_level_up)
+	# 每 5 波 +1 刷新次数（获取来源之二；连接序无 tags/状态依赖，位置不限）
+	EventBus.wave_started.connect(_on_wave_started_reroll_grant)
 
 
 # ── 帧序支撑 ──────────────────────────────────────────────────────
@@ -704,10 +749,157 @@ func _popup_tier_baseline() -> float:
 	return float(panel.get("base_atk", 0.0)) * float(panel.get("crit_mult", 2.0))
 
 
+func _on_wave_started_reroll_grant(p_wave: int) -> void:
+	# 波次里程碑授予（选卡刷新机制「获取或许次数」方向）：每 5 波 +1 换一批次数
+	#（MENU 态回流的 wave_started 不存在——⑥ 波次推进仅 PLAYING 驱动；防御性判 player）
+	if p_wave > 0 and p_wave % 5 == 0 and player != null and is_instance_valid(player):
+		player.reroll_charges += 1
+		EventBus.emit_reroll_granted(1)
+	# 局内存档自动落盘（波次边界粒度——2026-08-31 用户反馈「继续上次进度」）：
+	# 仅 PLAYING 存活期写（死亡波的 wave_started 早于 player_died，但死亡时
+	# _on_player_died 的 clear 在其后执行——最终态正确为无档）
+	if state == GameConst.GameStatus.PLAYING and player != null and is_instance_valid(player) \
+			and float(player.get("hp")) > 0.0:
+		RunSave.save_run(serialize_run())
+
+
+# ── 局内存档（RunSave 单槽：序列化 / 继续 / 恢复） ──────────────────
+func serialize_run() -> Dictionary:
+	# 本局快照（波次边界口径）：地图/波次/玩家数值/武器构筑（词条层数）/刷新态
+	if player == null or not is_instance_valid(player):
+		return {}
+	var weapons: Array[Dictionary] = []
+	for w in player.weapon_slots:
+		if w == null or not is_instance_valid(w):
+			continue
+		var traits: Array[Dictionary] = []
+		if w.trait_stack != null:
+			for mounted in w.trait_stack.traits:
+				if mounted.data != null:
+					traits.append({"id": String(mounted.data.id), "layers": mounted.layers})
+		var wid := &""
+		if w.data != null:
+			wid = StringName(String(w.data.id))
+		weapons.append({"id": String(wid), "level": int(w.level), "traits": traits})
+	return {
+		"map_id": String(current_map_id),
+		"daily": Meta.is_run_daily(),
+		"wave": maxi(wave_director.current_wave, 1),
+		"kills": hud.kills,
+		"elapsed": hud.run_elapsed,
+		"character": String(player.character_id),
+		"level": player.level,
+		"xp": player.xp,
+		"hp": player.hp,
+		"max_hp": player.max_hp,
+		"gold": player.gold,
+		"rerolls": player.reroll_charges,
+		"free_reroll": not _free_reroll_used,
+		"unlocked_slots": player.unlocked_slots,
+		"weapons": weapons,
+	}
+
+
+func continue_run() -> bool:
+	# MENU → PLAYING（继续上次进度，2026-08-31 用户反馈）：读 RunSave → 恢复地图/词缀/
+	# 玩家构筑/波次。无档/坏档 → false（菜单「继续」入口本就只在有档时可见，此处为兜底）
+	if state != GameConst.GameStatus.MENU:
+		return false
+	var data := RunSave.load_run()
+	if data.is_empty():
+		return false
+	var map_id := StringName(String(data.get("map_id", "")))
+	if MapTable.get_map(map_id).is_empty():
+		RunSave.clear()
+		return false
+	current_map_id = map_id
+	if not change_state(GameConst.GameStatus.PLAYING):
+		return false
+	wave_director.wave_table = MapTable.load_table(current_map_id, registry)
+	Meta.set_run_map(current_map_id)
+	var is_daily := bool(data.get("daily", false))
+	Meta.set_run_daily(is_daily)
+	card_generator.rng.randomize()            # 继续局卡池重新随机（存档不含 RNG 状态）
+	var map_def := MapTable.get_map(current_map_id)
+	_apply_map_affixes(map_def)               # 词缀恢复（每日局：地图词缀后再施当日三词缀）
+	if is_daily:
+		_reset_affixes()
+		var affixes := Meta.daily_affixes(Meta.daily_date_key())
+		_apply_affix_ids(affixes.get("curses", []), StringName(String(affixes.get("bless", ""))))
+	if _backdrop != null:
+		_backdrop.modulate = map_def.get("tint", Color.WHITE)
+	hud.set_map_name(("每日挑战 · " if is_daily else "") + String(map_def.get("name", "")))
+	_restore_run_state(data)
+	wave_director.start_wave(maxi(int(data.get("wave", 1)), 1))
+	hud.kills = int(data.get("kills", 0))
+	hud.run_elapsed = float(data.get("elapsed", 0.0))
+	hud.refresh_stats()
+	return true
+
+
+func _restore_run_state(p_data: Dictionary) -> void:
+	# 快照 → 玩家/构筑恢复：清场（Quit 后本就干净——防御再清）→ 重建武器（id/等级/
+	# 词条层数）→ 数值覆写（顺序敏感：set_character 与词条挂载都会改 max_hp/gold，
+	# 覆写必须在其后）
+	_clear_battlefield()
+	for i in range(player.weapon_slots.size()):
+		var w: WeaponBase = player.weapon_slots[i] if i < player.weapon_slots.size() else null
+		if w != null and is_instance_valid(w):
+			w.queue_free()
+		player.weapon_slots[i] = null
+	player.unlocked_slots = maxi(int(p_data.get("unlocked_slots", 1)), 1)
+	# 武器重建（空表 → 手枪兜底，恒有槽 0 武器）
+	var weapons: Array = p_data.get("weapons", [])
+	if weapons.is_empty():
+		player.add_weapon(registry.get_weapon(STARTING_WEAPON_ID))
+	else:
+		for entry_v: Variant in weapons:
+			var entry: Dictionary = entry_v if entry_v is Dictionary else {}
+			var wdata := registry.get_weapon(StringName(String(entry.get("id", ""))))
+			if wdata == null:
+				continue
+			var weapon := player.add_weapon(wdata)
+			if weapon == null:
+				break                          # 槽满（快照异常防御）：后续武器丢弃
+			for i in range(maxi(int(entry.get("level", 1)) - 1, 0)):
+				weapon.level_up()             # 等级恢复（含 Lv5 终极形态播报的幂等短路）
+			var traits: Array = entry.get("traits", [])
+			for trait_v: Variant in traits:
+				var tr_entry: Dictionary = trait_v if trait_v is Dictionary else {}
+				var tdata := registry.get_trait(StringName(String(tr_entry.get("id", ""))))
+				if tdata == null:
+					continue
+				for i in range(maxi(int(tr_entry.get("layers", 1)), 1)):
+					weapon.attach_trait(tdata)  # 层数恢复（满层质变在末次挂载自然触发）
+	# 数值覆写（后置：set_character / 词条挂载的 max_hp / gold / 刷新次数均被快照覆盖）
+	player.set_character(StringName(String(p_data.get("character", "sentinel"))))
+	player.level = maxi(int(p_data.get("level", 1)), 1)
+	player.xp = maxf(float(p_data.get("xp", 0.0)), 0.0)
+	player.xp_need = player.call(&"_xp_need_for", player.level)
+	player.max_hp = maxf(float(p_data.get("max_hp", player.max_hp)), 1.0)
+	player.hp = clampf(float(p_data.get("hp", player.max_hp)), 1.0, player.max_hp)
+	player.gold = maxi(int(p_data.get("gold", 0)), 0)
+	player.reroll_charges = maxi(int(p_data.get("rerolls", 0)), 0)
+	_free_reroll_used = not bool(p_data.get("free_reroll", false))
+	player.invuln_left = RESUME_GRACE_S          # 继续局保护帧（重开同口径）
+	player.input_enabled = true
+	pending_level_ups = 0
+	_separation_left = SEPARATION_INTERVAL
+	resume_grace_left = 0.0
+	set_time_scale(1.0, &"continue")
+	if sfx != null:
+		sfx.bgm_set_boss_layer(false)             # 恢复期无 Boss 存活（波次重开）
+
+
 func _on_boss_killed_bgm(p_enemy: Node2D) -> void:
-	# Boss 击杀 → BGM 第二循环收起（tags 判定；连接序先于 spawner 归还清零——见订阅处注释）
+	# Boss 击杀 → BGM 战鼓层收起（tags 判定；连接序先于 spawner 归还清零——2026-08-31
+	# 修复：连接已前置至 actors 段）+ 刷新次数 +1（选卡刷新机制的「获取」来源之一）
 	if sfx != null and (int(p_enemy.get("tags")) & GameConst.TAG_BOSS) != 0:
 		sfx.bgm_set_boss_layer(false)
+	if (int(p_enemy.get("tags")) & GameConst.TAG_BOSS) != 0 and player != null \
+			and is_instance_valid(player):
+		player.reroll_charges += 1
+		EventBus.emit_reroll_granted(1)
 
 
 func _tick_projectiles(p_gd: float) -> void:
@@ -897,6 +1089,7 @@ func _reset_run_state() -> void:
 	_separation_left = SEPARATION_INTERVAL
 	pending_level_ups = 0
 	resume_grace_left = 0.0
+	_free_reroll_used = false                  # 刷新机制：本局首次免费位复位
 	player.input_enabled = true
 	game_feel.hit_stop_left = 0.0
 	game_feel.hit_stop_active_ms = 0.0

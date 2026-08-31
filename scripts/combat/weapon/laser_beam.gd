@@ -336,16 +336,22 @@ func _settle_one_tick(p_hit: Node2D) -> void:
 	if trait_stack != null:
 		trait_stack.dispatch(GameConst.TraitEvent.ON_HIT, tctx)
 	if not tctx.attach_request.is_empty() and weapon != null and weapon.elemental != null:
-		# ELE 词条附着请求（引擎结算后提交——光束路径快照取面板基数）
+		# ELE 词条附着请求（引擎结算后提交）。★ 快照基数 = 单跳 × 跳频 × 0.5s（= 每
+		# 「燃烧跳伤间隔」造成的照射伤害——与弹道武器的「每发快照」口径对齐；旧版直接传
+		# 单跳值 6 → 点燃 DOT 0.9/跳，观感即「烧伤 0」，2026-08-31 修复）
 		var request: Dictionary = tctx.attach_request
 		weapon.elemental.apply_attach(ctx.target, int(request["element"]),
 			float(request["value"]), {
-				"snapshot": ctx.base_atk,
+				"snapshot": ctx.base_atk * tick_rate * 0.5,
 				"hit_damage": 0.0,
 				"overrides": request.get("overrides", {}),
 			})
 	var result: DamageResult = damage_pipeline.call(&"resolve", ctx)
 	settle_count += 1
+	# 命中迸裂表现（用户反馈 2026-08-31「脉冲的命中迸裂没看见特效」）：每跳结算瞬间
+	# 广播命中点 + 束方向（ElementalFxLayer 迸裂星闪 + 火花承接；跳频即特效频率——
+	# 射速强化卡在激光上同时加密迸裂节奏，升级反馈可视化）
+	EventBus.emit_beam_impact(ctx.pos, _aim_dir)
 	if result != null:
 		if popup_due(ctx.target_uid):
 			popup_count += 1

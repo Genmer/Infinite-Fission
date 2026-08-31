@@ -131,7 +131,12 @@ func _refresh_label() -> void:
 	var crit := style == GameConst.PopupStyle.CRIT
 	var direct := style == GameConst.PopupStyle.NORMAL or crit
 	var base_size := FONT_SIZE_CRIT if crit else FONT_SIZE
-	_label.text = str(int(round(merged_value)))
+	# DOT 样式向上取整（2026-08-31「烧伤 0」观感修复：跳伤 0.5~0.9 显示为 1——燃烧中
+	# 永远读得见；直击/暴击维持 round 口径）
+	if style == GameConst.PopupStyle.DOT and merged_value > 0.0:
+		_label.text = str(ceili(merged_value))
+	else:
+		_label.text = str(int(round(merged_value)))
 	if direct:
 		_label.self_modulate = TIER_COLORS[clampi(tier, 0, TIER_COLORS.size() - 1)]
 		_label.add_theme_font_size_override("font_size",

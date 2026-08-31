@@ -573,13 +573,24 @@ func _reset_state() -> void:
 # ── 支撑 ──────────────────────────────────────────────────────────
 func _sync_visual() -> void:
 	# 方向 C 渲染同步：半径等比缩放 + 阵营贴图（我方=蓝亮圆珠白高光 / 敌方=珊瑚圆珠白高光，
-	# 描边+高光烘焙——亮底敌我辨识核心；元素差异由弹道词条表现层承担，弹珠色保持阵营纯色）
+	# 描边+高光烘焙——亮底敌我辨识核心）。元素差异着色（2026-08-31 用户反馈「火焰没啥特效」：
+	# 火弹=橙 / 冰弹=淡冰蓝 / 电弹=葡萄紫——抽到元素卡后弹幕颜色即时反馈构筑）
 	if _sprite == null:
 		return
 	var scale_f := effective_radius() / (TEX_SIZE * 0.5)
 	_sprite.scale = Vector2(scale_f, scale_f)
-	_sprite.texture = TextureFactory.bead(
-		PopPalette.ENEMY if team == 1 else PopPalette.PLAYER, TEX_SIZE)
+	var fill := PopPalette.PLAYER
+	if team == 1:
+		fill = PopPalette.ENEMY
+	else:
+		match element:
+			GameConst.Element.FIR:
+				fill = PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)      # 派生橙（点燃火苗同源）
+			GameConst.Element.ICE:
+				fill = PopPalette.PLAYER.lerp(Color.WHITE, 0.5)        # 淡冰蓝
+			GameConst.Element.LTG:
+				fill = PopPalette.SHOCK                                 # 葡萄紫
+	_sprite.texture = TextureFactory.bead(fill, TEX_SIZE)
 
 
 func _find_player() -> Node2D:

@@ -349,28 +349,48 @@ func _unowned_relic_ids() -> Array[StringName]:
 
 
 func _make_trait_card(p_tid: StringName, p_wave: int, p_target: WeaponBase = null) -> Dictionary:
+	# 数值缩放统一收敛在 _apply_rarity_values（终值稀有度单次缩放——修复 2026-08-31：
+	# 此前本函数按 roll 稀有度预放大一次、_apply_rarity_values 再按终值放大一次，
+	# 蓝卡实际 ×1.96 / 金卡 ×6.76，卡面数字与描述口径漂移）
 	var t := registry.get_trait(p_tid)
 	var rarity := _roll_rarity(p_wave)
-	var scale := float(RARITY_VALUE_SCALE[clampi(rarity, 0, RARITY_VALUE_SCALE.size() - 1)])
 	var data: TraitData = null
-	var desc := ""
 	if t != null:
 		data = t.duplicate() as TraitData
-		if scale > 1.0:
-			data.value = t.value * scale
-			desc = _scaled_description(t.description, scale, rarity)
-			data.description = desc
+	# 满层质变预览（2026-08-31）：本卡若挂上即满层（ADD 池 stack_max ≥2 且现有层 = max−1）
+	# → 卡面标注「质变」，描述补「全部层数 ×1.6」（质变实装在 WeaponBase.attach_trait）
+	var milestone := false
+	if t != null and t.pool == GameConst.PoolClass.ADD and t.stack_max >= 2 \
+			and p_target != null and is_instance_valid(p_target):
+		var cur := 0
+		var tstack: Variant = p_target.get("trait_stack")
+		if tstack != null and tstack.get("traits") != null:
+			for tb: Variant in (tstack.get("traits") as Array):
+				var td: Variant = tb.get("data")
+				if td != null and StringName(str(td.get("id"))) == p_tid:
+					cur = int(tb.get("layers"))
+		milestone = cur + 1 >= t.stack_max
 	var prefix := ("【%s】" % _weapon_short_name(p_target)) if p_target != null else ""
-	return {
+	if milestone:
+		prefix = "◆质变◆" + prefix
+	var card := {
 		"kind": CardKind.TRAIT,
 		"id": p_tid,
 		"rarity": rarity,
-		"value_scale": scale,
+		"value_scale": 1.0,
 		"data": data,
 		"target_weapon": p_target,
 		"display_name": prefix + (t.display_name if t != null else String(p_tid)),
-		"description": desc if desc != "" else (t.description if t != null else ""),
+		"description": (t.description if t != null else ""),
+		"milestone": milestone,
 	}
+	if milestone:
+		var note := "\n◆ 满层质变：该词条全部层数数值 ×1.6！"
+		card["description"] = String(card["description"]) + note
+		if data != null:
+			# 同步写入 data 副本描述（_apply_rarity_values 描述重写以 data.description 为源）
+			data.description = String(data.description) + note
+	return card
 
 
 func _make_mastery_card(p_weapon: Object) -> Dictionary:

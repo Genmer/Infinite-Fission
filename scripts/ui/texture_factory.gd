@@ -1041,6 +1041,110 @@ static func weapon_icon(p_id: StringName) -> ImageTexture:
 		return _render(56, 56, _shade(layers)))
 
 
+static func skill_icon(p_id: StringName) -> ImageTexture:
+	# 角色技能图标（HUD 技能键 + 角色选人卡，2026-08-31 用户反馈「技能好歹画个对应的
+	# 图标」）：8 角色各一枚贴纸风程序化图形，64px 画布——剪影 + 主题色承载辨识度
+	#（哨兵=盾徽蓝 / 薇拉=爆发箭橙 / 磐=践踏波棕红 / 岚=瞬步残影青 / 零=时锶紫 /
+	# 莽=毒爆绿 / 薇拉博士=毒云绿蓝 / 诺亚=僚机环蓝）
+	var key := "skill_icon_%s" % String(p_id)
+	return _cached(key, func() -> ImageTexture:
+		var blue := PopPalette.PLAYER
+		var deep := blue.lerp(PopPalette.OUTLINE, 0.32)
+		var white := Color(1.0, 1.0, 1.0, 0.92)
+		var layers: Array = []
+		match String(p_id):
+			"sentinel":                      # 紧急护盾：盾徽 + 中央十字高光
+				var shield_pts := PackedVector2Array([
+					Vector2(0.0, -20.0), Vector2(15.0, -14.0), Vector2(15.0, 2.0),
+					Vector2(0.0, 20.0), Vector2(-15.0, 2.0), Vector2(-15.0, -14.0),
+				])
+				layers = [
+					{"sd": _poly_sd(shield_pts), "fill": blue, "ow": 4.0},
+					{"sd": _box_at(Vector2(0.0, -3.0), Vector2(3.0, 9.0), 1.6), "fill": white, "ow": 0.0},
+					{"sd": _box_at(Vector2(0.0, -3.0), Vector2(9.0, 3.0), 1.6), "fill": white, "ow": 0.0},
+				]
+			"veles":                          # 过载咆哮：双上箭爆发
+				layers = [
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(0.0, -22.0), Vector2(13.0, -6.0), Vector2(6.0, -6.0),
+						Vector2(6.0, 4.0), Vector2(-6.0, 4.0), Vector2(-6.0, -6.0),
+					])), "fill": PopPalette.ENEMY.lerp(PopPalette.XP, 0.5), "ow": 3.6},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(0.0, -6.0), Vector2(12.0, 8.0), Vector2(5.0, 8.0),
+						Vector2(5.0, 17.0), Vector2(-5.0, 17.0), Vector2(-5.0, 8.0),
+					])), "fill": PopPalette.XP, "ow": 3.2},
+				]
+			"bulwark":                        # 震荡践踏：下压拳 + 双冲击环
+				layers = [
+					{"sd": _box_at(Vector2(0.0, -12.0), Vector2(11.0, 7.0), 4.0),
+						"fill": PopPalette.ENEMY_DEEP, "ow": 3.4},
+					{"sd": _box_at(Vector2(0.0, -1.0), Vector2(5.0, 6.0), 2.0), "fill": deep, "ow": 2.6},
+					{"sd": _ring_at(14.0, 3.4), "fill": PopPalette.ENEMY.lerp(Color.WHITE, 0.3), "ow": 0.0},
+					{"sd": _ring_at(21.0, 2.6), "fill": PopPalette.ENEMY.lerp(Color.WHITE, 0.5), "ow": 0.0},
+				]
+			"ranger":                         # 影袭瞬步：斜向残影三连
+				for i in range(3):
+					var fade := 1.0 - 0.28 * float(i)
+					var xoff := -13.0 + 11.0 * float(i)
+					layers.append({"sd": _poly_sd(PackedVector2Array([
+						Vector2(xoff - 4.0, -18.0 + 4.0 * float(i)),
+						Vector2(xoff + 7.0, -4.0 + 2.0 * float(i)),
+						Vector2(xoff - 1.0, -2.0 + 2.0 * float(i)),
+						Vector2(xoff + 4.0, 18.0 - 2.0 * float(i)),
+						Vector2(xoff - 7.0, 2.0 - 2.0 * float(i)),
+						Vector2(xoff + 1.0, 0.0 - 2.0 * float(i)),
+					])), "fill": Color(blue.r * fade, blue.g * fade + 0.12 * float(i),
+						blue.b, 1.0).lerp(Color.WHITE, 0.12 * float(i)), "ow": 2.4})
+			"zero":                           # 时滞力场：表盘 + 指针 + 外环
+				layers = [
+					{"sd": _ring_at(21.0, 2.8), "fill": PopPalette.SHOCK.lerp(Color.WHITE, 0.35), "ow": 0.0},
+					{"sd": _circle_at(Vector2.ZERO, 16.0), "fill": PopPalette.SHOCK.lerp(Color.WHITE, 0.18), "ow": 3.4},
+					{"sd": _box_rot_at(Vector2(3.5, -3.5), Vector2(2.2, 9.0), 1.0, -0.7),
+						"fill": white, "ow": 0.0},
+					{"sd": _box_rot_at(Vector2(6.0, 2.0), Vector2(2.0, 6.0), 1.0, 1.2),
+						"fill": white, "ow": 0.0},
+					{"sd": _circle_at(Vector2.ZERO, 2.4), "fill": white, "ow": 0.0},
+				]
+			"mank":                           # 毒沼绽放：毒液迸爆滴 + 气泡
+				var blob := PackedVector2Array([
+					Vector2(0.0, -18.0), Vector2(9.0, -6.0), Vector2(13.0, 6.0),
+					Vector2(4.0, 17.0), Vector2(-6.0, 14.0), Vector2(-12.0, 3.0), Vector2(-7.0, -8.0),
+				])
+				layers = [
+					{"sd": _poly_sd(blob), "fill": PopPalette.SUCCESS.lerp(PopPalette.OUTLINE, 0.25), "ow": 3.6},
+					{"sd": _circle_at(Vector2(-4.0, -5.0), 3.0), "fill": Color(1.0, 1.0, 1.0, 0.75), "ow": 0.0},
+					{"sd": _circle_at(Vector2(14.0, -12.0), 3.4), "fill": PopPalette.SUCCESS.lerp(Color.WHITE, 0.4), "ow": 1.6},
+					{"sd": _circle_at(Vector2(-15.0, -9.0), 2.4), "fill": PopPalette.SUCCESS.lerp(Color.WHITE, 0.4), "ow": 1.4},
+				]
+			"vera":                           # 毒云领域：药剂云团 + 下落毒滴
+				layers = [
+					{"sd": _multi_circle_min([
+						[Vector2(-12.0, -8.0), 9.0], [Vector2(0.0, -13.0), 11.0],
+						[Vector2(12.0, -7.0), 9.0], [Vector2(0.0, -4.0), 10.0],
+					]), "fill": PopPalette.SUCCESS.lerp(PopPalette.PLAYER, 0.3), "ow": 3.4},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(0.0, 2.0), Vector2(5.0, 10.0), Vector2(0.0, 18.0), Vector2(-5.0, 10.0),
+					])), "fill": PopPalette.SUCCESS.lerp(PopPalette.OUTLINE, 0.2), "ow": 2.6},
+				]
+			"noah":                           # 召唤僚机：核心 + 双小机环绕
+				layers = [
+					{"sd": _ring_at(17.0, 2.4), "fill": blue.lerp(Color.WHITE, 0.4), "ow": 0.0},
+					{"sd": _circle_at(Vector2.ZERO, 8.0), "fill": blue, "ow": 3.0},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(0.0, -26.0), Vector2(5.0, -18.0), Vector2(0.0, -20.0), Vector2(-5.0, -18.0),
+					])), "fill": deep, "ow": 2.4},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(22.6, 13.0), Vector2(27.0, 20.5), Vector2(21.8, 19.0), Vector2(18.0, 20.5),
+					])), "fill": deep, "ow": 2.4},
+					{"sd": _circle_at(Vector2(0.0, 0.0), 2.4), "fill": white, "ow": 0.0},
+				]
+			_:
+				layers = [
+					{"sd": _poly_sd(_star_pts(16.0, 7.0)), "fill": blue, "ow": 3.0},
+				]
+		return _render(64, 64, _shade(layers)))
+
+
 static func ui_glyph(p_kind: int) -> ImageTexture:
 	# 暂停按钮贴纸图标（白底圆角方 + 藏青描边 + 藏青图形）：0=⏸ 双竖条 / 1=▶ 三角
 	var key := "ui_glyph_%d" % p_kind

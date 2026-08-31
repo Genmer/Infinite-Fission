@@ -9,6 +9,7 @@ extends RefCounted
 
 var data: TraitData = null                    # 定义（.tres，只读共享）
 var layers: int = 1                           # 当前叠层（运行时状态，独立于数据，AC-07.4）
+var value_mult: float = 1.0                   # 满层质变乘区（ADD 池：挂至 stack_max 时 ×1.6——聚合侧消费）
 var cooldown_left: float = 0.0
 var proc_rng: RandomNumberGenerator = null    # 触发概率掷骰流（种子按 id 派生，确定性）
 var frame_triggered: bool = false             # 本帧已触发（E-03 重入标记）
@@ -22,6 +23,7 @@ func setup(p_data: TraitData) -> void:
 	# 绑定定义 + 解析 effect 处理器 + 掷骰流初始化（种子 = hash(id)，可复现）
 	data = p_data
 	layers = 1
+	value_mult = 1.0
 	cooldown_left = 0.0
 	frame_triggered = false
 	in_dispatch = false

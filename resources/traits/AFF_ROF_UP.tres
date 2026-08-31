@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"AFF_ROF_UP"
 display_name = "射速强化"
-description = "射速 +12%，可叠 3 层（A3 §4.2）"
+description = "射速 +12%，可叠 3 层（弹道=开火频率 / 激光=照射结算跳频）"
 pool = 0
 pool_id = &"add_rof"
 effect_id = &"EF_STAT"

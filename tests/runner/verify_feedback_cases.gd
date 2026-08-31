@@ -52,6 +52,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_p2_daily()
 	_test_p2_characters()
 	_test_settings()
+	_test_round2_feedback()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -77,6 +78,7 @@ func _boot_game_loop() -> void:
 
 func _teardown_game_loop() -> void:
 	tree.paused = false
+	RunSave.clear()                          # 局内存档清档（防测试残留污染玩家「继续」入口）
 	if _gl != null:
 		_gl.free()
 	_gl = null
@@ -650,8 +652,8 @@ func _test_char_meta() -> void:
 	for c in menu._panel_list.get_children():
 		c.free()                                  # 立即清（queue_free 无帧迭代不清真——计数口径）
 	menu._on_lobby_pressed("upgrade")
-	_check("大厅：养成面板（结晶头 + 7 升级 + 注释 = 9 行）",
-		_live_children(menu._panel_list) == 9,
+	_check("大厅：养成面板（结晶头 + 8 升级 + 注释 = 10 行（2026-08-31 增「预案推演」））",
+		_live_children(menu._panel_list) == 10,
 		"live=%d" % _live_children(menu._panel_list))
 	menu._on_panel_close()
 	Meta.character_id = &"sentinel"
@@ -1619,3 +1621,180 @@ func _check(p_name: String, p_ok: bool, p_info: String = "") -> void:
 		_fail += 1
 		_failures.append("%s %s" % [p_name, p_info])
 		print("FAIL | %s %s" % [p_name, p_info])
+
+
+# ── 2026-08-31 二轮反馈（BGM 重制 / 刷新机制 / 质变 / 烧伤 / 存档 / 图标） ──
+func _test_round2_feedback() -> void:
+	print("── 二轮反馈（BGM/刷新/质变/烧伤/存档/图标） ──")
+	_test_r2_bgm_musical()
+	_test_r2_reroll()
+	_test_r2_milestone()
+	_test_r2_burn_floor_and_spread()
+	_test_r2_skill_icons()
+	_test_r2_run_save()
+
+
+func _test_r2_bgm_musical() -> void:
+	# BGM 重制：16s 音乐化循环（4 和弦）+ Boss 层等长锁相 + 循环点无缝
+	var stream: AudioStreamWAV = SfxBank.I.bgm_pad_stream()
+	_check("BGM：16s 音乐化循环（4 和弦 × 4s）",
+		absf(stream.get_length() - 16.0) <= 0.02)
+	_check("BGM：采样率 22050（去混叠）", stream.mix_rate == 22050)
+	var data := stream.data
+	var head := absf(data.decode_s16(0))
+	var tail := absf(data.decode_s16(data.size() - 2))
+	_check("BGM：循环点首尾样本归零（和弦包络起止 0）", head <= 40 and tail <= 40)
+
+
+func _test_r2_reroll() -> void:
+	# 刷新机制：开局次数（2 + 养成）→ 首次免费 → 消耗 → 重新发牌 → 波次/Boss 授予
+	var p: Player = _gl.player
+	p.set_character(&"sentinel")             # 养成 0 级 → 基础 2 次
+	_check("刷新：开局次数 = 2（基础）", p.reroll_charges == 2)
+	_gl.start_run()
+	_gl._on_level_up(2)                      # PLAYING → LEVEL_UP 弹卡
+	_check("刷新：选卡界面打开（LEVEL_UP）", _gl.card_select_ui.is_open)
+	var before: Array[Dictionary] = _gl.current_candidates.duplicate()
+	var first_id := String(before[0].get("id", "")) if not before.is_empty() else ""
+	_gl._on_card_reroll()
+	_check("刷新：本局首次免费（次数不扣）", p.reroll_charges == 2)
+	_check("刷新：货架已重发（界面仍开）", _gl.card_select_ui.is_open
+		and _gl.current_candidates.size() >= 3)
+	var changed := false
+	for i in range(mini(before.size(), _gl.current_candidates.size())):
+		if String(before[i].get("id", "")) != String(_gl.current_candidates[i].get("id", "")):
+			changed = true
+	if not changed and first_id != "":
+		changed = String(_gl.current_candidates[0].get("id", "")) != first_id
+	_check("刷新：候选内容变化（重 roll 生效）", changed or before.is_empty())
+	_gl._on_card_reroll()
+	_check("刷新：第二次消耗 1 次（2→1）", p.reroll_charges == 1)
+	_gl._on_card_choice(_gl.current_candidates[0])
+	_check("刷新：选卡后回 PLAYING", _gl.state == GameConst.GameStatus.PLAYING)
+	var charges0: int = p.reroll_charges
+	_gl._on_wave_started_reroll_grant(5)
+	_check("刷新：每 5 波 +1（5 波节点）", p.reroll_charges == charges0 + 1)
+	_gl._on_wave_started_reroll_grant(6)
+	_check("刷新：非 5 倍数波不授予", p.reroll_charges == charges0 + 1)
+	_gl.request_pause()
+	_gl.quit_to_menu()
+	_check("刷新：收尾回菜单（下一用例干净开局）", _gl.state == GameConst.GameStatus.MENU)
+
+
+func _test_r2_milestone() -> void:
+	# 满层质变：ADD 池词条挂至 stack_max → value_mult ×1.6 + 里程碑广播
+	var w := BallisticWeapon.new()
+	_gl.add_child(w)
+	w.setup(_gl.registry.get_weapon(&"W1_pistol"), _gl.player, {})
+	var t: TraitData = _gl.registry.get_trait(&"AFF_ATK_UP")
+	var hits: Array = [0]                   # 容器引用（GDScript lambda 局部变量为值捕获）
+	var cb := func(_tid: StringName, _n: String, _m: float) -> void: hits[0] += 1
+	EventBus.trait_milestone.connect(cb)
+	for i in range(t.stack_max):
+		w.attach_trait(t)
+	_check("质变：挂满层触发里程碑广播（×1.6）", hits[0] == 1, "hits=%d" % hits[0])
+	var mounted: TraitBase = null
+	for tb in w.trait_stack.traits:
+		if tb.data.id == &"AFF_ATK_UP":
+			mounted = tb
+	_check("质变：value_mult = 1.6（挂至 stack_max）",
+		mounted != null and absf(mounted.value_mult - 1.6) <= 0.001)
+	var entry_contrib := 0.0
+	for e in w.trait_stack.aggregate_add_entries():
+		if e.trait_id == &"AFF_ATK_UP":
+			entry_contrib = float(e.contrib)
+	_check("质变：add_entries 单层贡献 ×1.6",
+		absf(entry_contrib - t.value * 1.6) <= 0.001)
+	# 再挂同词条：拒绝（满层）且不重复质变
+	w.attach_trait(t)
+	_check("质变：满层后再挂拒绝（无重复广播）", hits[0] == 1)
+	EventBus.trait_milestone.disconnect(cb)
+	w.queue_free()
+
+
+func _test_r2_burn_floor_and_spread() -> void:
+	# 烧伤保底：快照 4 → 15% = 0.6 → 保底 1/层（跳字 ceil 口径另行）
+	var e := Enemy.new()
+	_gl.add_child(e)
+	e.spawn(_gl.registry.get_enemy(&"E1_grunt"), 1, 0)
+	_gl.elemental.register_host(e)
+	var st := e.elemental
+	st.burn_layers = 1
+	st.burn_dot_ratio = 0.15
+	st.burn_snapshot_atk = 4.0
+	st.burn_timer = 3.0
+	st.burn_tick = 0.5
+	st.dot_tick_left = 0.0
+	var captured := {"v": -1.0}
+	var cb := func(r: DamageResult) -> void: captured["v"] = r.final_value
+	EventBus.damage_resolved.connect(cb)
+	_gl.elemental._dot_tick(e, st)
+	EventBus.damage_resolved.disconnect(cb)
+	_check("烧伤：低快照保底 ≥1（0.6 → 1）", float(captured["v"]) >= 1.0)
+	# 点燃蔓延（层 2 质变）：燃烧者死亡 → 邻敌满槽点燃
+	var e2 := Enemy.new()
+	_gl.add_child(e2)
+	e2.spawn(_gl.registry.get_enemy(&"E1_grunt"), 1, 0)
+	e2.global_position = e.global_position + Vector2(60.0, 0.0)
+	_gl.elemental.register_host(e2)
+	var arr: Array[Node2D] = [e, e2]
+	_gl.enemy_grid.rebuild(arr)
+	st.burn_spread_radius = 150.0
+	st.burn_timer = 3.0
+	_gl.elemental._on_enemy_killed_spread_burn(e)
+	_check("点燃蔓延：燃烧者死亡 → 邻敌直接点燃（满槽）",
+		e2.elemental != null and e2.elemental.burn_timer > 0.0)
+	e.queue_free()
+	e2.queue_free()
+
+
+func _test_r2_skill_icons() -> void:
+	# 技能图标：8 角色各一枚 64px 程序化贴图 + HUD 技能键挂载
+	for cid in ["sentinel", "veles", "bulwark", "ranger", "zero", "mank", "vera", "noah"]:
+		var tex := TextureFactory.skill_icon(StringName(cid))
+		_check("技能图标：%s 64px 贴图就绪" % cid,
+			tex != null and tex.get_width() == 64 and tex.get_height() == 64)
+	var hud: HUD = _gl.hud
+	_check("技能图标：HUD 技能键图标节点就绪",
+		hud.get_node_or_null("Root/SkillButton/SkillIconFg") is TextureRect)
+
+
+func _test_r2_run_save() -> void:
+	# 局内存档：开局 → 改构筑 → 暂停回菜单（落盘）→ 大厅继续 → 构筑/数值/波次恢复
+	RunSave.clear()
+	_gl.start_run()
+	var p: Player = _gl.player
+	p.level = 6
+	p.xp = 3.5
+	p.gold = 88
+	p.reroll_charges = 4
+	var w0: WeaponBase = p.weapon_slots[0]
+	for i in range(2):
+		w0.level_up()
+	w0.attach_trait(_gl.registry.get_trait(&"AFF_ATK_UP"))
+	_gl.wave_director.start_wave(7)
+	_gl.request_pause()
+	_gl.quit_to_menu()
+	_check("存档：暂停回菜单后落盘（RunSave 存在）", RunSave.exists())
+	var snap := RunSave.load_run()
+	_check("存档：波次/等级/金币入档",
+		int(snap.get("wave", 0)) == 7 and int(snap.get("level", 0)) == 6
+		and int(snap.get("gold", 0)) == 88)
+	_check("存档：武器构筑入档（1 把 + 词条层数）",
+		(snap.get("weapons", []) as Array).size() >= 1)
+	_check("存档：继续后回到 PLAYING（第 7 波）",
+		_gl.continue_run() and _gl.state == GameConst.GameStatus.PLAYING
+		and _gl.wave_director.current_wave == 7)
+	_check("存档：玩家数值恢复（等级/金币/刷新）",
+		_gl.player.level == 6 and _gl.player.gold == 88 and _gl.player.reroll_charges == 4)
+	var restored: WeaponBase = _gl.player.weapon_slots[0]
+	var has_trait := false
+	if restored != null and restored.trait_stack != null:
+		for tb in restored.trait_stack.traits:
+			if tb.data.id == &"AFF_ATK_UP":
+				has_trait = tb.layers == 1
+	_check("存档：武器等级与词条层恢复（Lv3 + AFF_ATK_UP×1）",
+		restored != null and int(restored.level) == 3 and has_trait)
+	_gl.request_pause()
+	_gl.quit_to_menu()
+	RunSave.clear()

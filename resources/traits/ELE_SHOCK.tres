@@ -6,13 +6,13 @@
 script = ExtResource("1_td")
 id = &"ELE_SHOCK"
 display_name = "感电"
-description = "雷附着 22/跳；满槽向半径 160 内至多 3 目标传导（每跳 35% 本次伤害，深度 2 衰减 60%）；2 层传导→4 目标（A3 §4.5）"
+description = "雷附着 22/跳；满槽向半径 160 内至多 3 目标传导（每跳 35% 本次伤害，深度 2 衰减 60%）；2 层质变：传导→4 目标且衰减 60%→75%（连锁跳得更远更痛）"
 pool = 4
 pool_id = &""
 effect_id = &"EF_ELEMENTAL"
 value = 22.0
 value2 = 0.0
-params = {"element": 3, "chain_targets_lv2": 4.0}
+params = {"element": 3, "chain_targets_lv2": 4.0, "chain_decay_lv2": 0.75}
 event_hooks = [0, 2]
 stack_max = 2
 decay_delta = 0.0

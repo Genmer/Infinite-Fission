@@ -26,6 +26,9 @@ const ZAP_COUNT := 12                         # 电花碎屑并发池（闪电�
 const ZAP_LIFE := 0.2                         # 电花碎屑时长 s
 const GLOW_COUNT := 8                         # DOT 橙光晕并发池（点燃跳伤瞬间体周闪光）
 const GLOW_LIFE := 0.18                       # 橙光晕时长 s
+const IMPACT_COUNT := 10                      # 光束命中迸裂并发池（脉冲激光每跳，用户反馈 2026-08-31）
+const IMPACT_LIFE := 0.16                     # 迸裂星闪时长 s
+const IMPACT_SPARKS := 3                      # 每次迸裂迸溅火花数（束色圆珠）
 
 var _bolts: Array[Dictionary] = []            # [{root, core, glow, flash, left}]（池条目）
 var _bolt_idx: int = 0
@@ -41,6 +44,8 @@ var _zaps: Array[Dictionary] = []             # [{sprite, vel, rot_vel, left}]�
 var _zap_idx: int = 0
 var _glows: Array[Dictionary] = []            # [{sprite, left}]（DOT 橙光晕池）
 var _glow_idx: int = 0
+var _impacts: Array[Dictionary] = []          # [{flash, sparks[], vels[], left}]（光束命中迸裂池）
+var _impact_idx: int = 0
 
 
 func _ready() -> void:
@@ -52,11 +57,13 @@ func _ready() -> void:
 	_build_ripples()
 	_build_zaps()
 	_build_glows()
+	_build_impacts()
 	EventBus.chain_lightning.connect(_on_chain_lightning)
 	EventBus.elemental_dot_fired.connect(_on_dot_fired)
 	EventBus.reaction_triggered.connect(_on_reaction_triggered)
 	EventBus.shield_blocked.connect(_on_shield_blocked)
 	EventBus.bullet_nullified.connect(_on_bullet_nullified)
+	EventBus.beam_impact.connect(_on_beam_impact)
 
 
 func tick(p_raw_delta: float) -> void:
@@ -67,6 +74,7 @@ func tick(p_raw_delta: float) -> void:
 	_tick_ripples(p_raw_delta)
 	_tick_zaps(p_raw_delta)
 	_tick_glows(p_raw_delta)
+	_tick_impacts(p_raw_delta)
 
 
 # ── 感电连锁主锯齿闪电（签名特效） ────────────────────────────────
@@ -401,3 +409,83 @@ func _tick_glows(p_raw_delta: float) -> void:
 		var t := 1.0 - left / GLOW_LIFE
 		sp.scale = Vector2.ONE * lerpf(0.5, 1.15, t)   # 扩散
 		sp.modulate.a = 0.5 * (1.0 - t)                # 渐隐
+
+
+# ── 光束命中迸裂（脉冲激光每跳结算：星闪 + 束色火花迸溅） ──────────
+func _build_impacts() -> void:
+	# 预建池：每槽 = 四角星闪 ×1 + 圆珠火花 ×3（贴图共享，运行期零实例化）
+	for i in range(IMPACT_COUNT):
+		var root := Node2D.new()
+		root.name = "BeamImpact%d" % i
+		root.visible = false
+		var flash := Sprite2D.new()
+		flash.name = "Flash"
+		flash.texture = TextureFactory.star(44, PopPalette.PLAYER.lerp(Color.WHITE, 0.55))
+		flash.modulate = Color(1.0, 1.0, 1.0, 0.95)
+		root.add_child(flash)
+		var sparks: Array[Sprite2D] = []
+		for j in range(IMPACT_SPARKS):
+			var sp := Sprite2D.new()
+			sp.name = "Spark%d" % j
+			sp.texture = TextureFactory.bead(PopPalette.PLAYER, 24, false)
+			sp.modulate = Color(1.0, 1.0, 1.0, 0.9)
+			root.add_child(sp)
+			sparks.append(sp)
+		add_child(root)
+		_impacts.append({"root": root, "flash": flash, "sparks": sparks,
+			"vels": PackedVector2Array(), "left": 0.0})
+
+
+func _on_beam_impact(p_pos: Vector2, p_dir: Vector2) -> void:
+	# 取池内下一槽（轮换）：星闪原地爆散（旋转 + 快缩）+ 火花朝束反向半球迸溅（快出快停）
+	var impact: Dictionary = _impacts[_impact_idx % IMPACT_COUNT]
+	_impact_idx += 1
+	var root: Node2D = impact["root"]
+	root.position = p_pos
+	root.rotation = p_dir.angle()                   # 星闪沿束向（迸裂方向读感）
+	root.visible = true
+	root.modulate.a = 1.0
+	var flash: Sprite2D = impact["flash"]
+	flash.rotation = randf() * TAU
+	flash.scale = Vector2.ONE * randf_range(0.85, 1.15)
+	var vels := PackedVector2Array()
+	var sparks: Array = impact["sparks"]
+	for j in range(sparks.size()):
+		var sp: Sprite2D = sparks[j]
+		sp.position = Vector2.ZERO
+		sp.scale = Vector2.ONE * randf_range(0.55, 0.85)
+		sp.visible = true
+		# 迸溅向：束反向 ±70° 扇区（打在目标表面弹开的观感）
+		var ang := (-p_dir).angle() + randf_range(-1.2, 1.2)
+		vels.append(Vector2.from_angle(ang) * randf_range(120.0, 240.0))
+	impact["vels"] = vels
+	impact["left"] = IMPACT_LIFE
+
+
+func _tick_impacts(p_raw_delta: float) -> void:
+	for impact: Dictionary in _impacts:
+		var left := float(impact["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		impact["left"] = left
+		var root: Node2D = impact["root"]
+		if left <= 0.0:
+			root.visible = false
+			continue
+		var progress := 1.0 - left / IMPACT_LIFE
+		var flash: Sprite2D = impact["flash"]
+		flash.rotation += p_raw_delta * 18.0
+		flash.scale = flash.scale * maxf(1.0 - progress * 5.0 * p_raw_delta, 0.1)
+		var sparks: Array = impact["sparks"]
+		var vels: PackedVector2Array = impact["vels"]
+		for j in range(sparks.size()):
+			var sp: Sprite2D = sparks[j]
+			if not sp.visible:
+				continue
+			var vel: Vector2 = vels[j]
+			vel *= maxf(1.0 - 7.0 * p_raw_delta, 0.0)
+			vels[j] = vel
+			sp.position += vel * p_raw_delta
+			sp.modulate.a = clampf(left / IMPACT_LIFE * 1.4, 0.0, 1.0)
+		root.modulate.a = clampf(1.2 - progress, 0.0, 1.0)

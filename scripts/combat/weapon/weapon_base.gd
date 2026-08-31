@@ -13,6 +13,7 @@ signal leveled(new_level: int)
 
 const MAX_LEVEL: int = 5                       # L1~L5（升级表终值口径）
 const AIM_FALLBACK := Vector2.UP               # 无目标时的默认指向（全自动开火持续）
+const MILESTONE_VALUE_MULT: float = 1.6         # 满层质变乘区（ADD 池词条挂至 stack_max ×1.6）
 
 var data: WeaponData = null                    # 形态参数（M-14 注入）
 var uid: int = 0
@@ -76,6 +77,20 @@ func attach_trait(p_trait: TraitData) -> bool:
 		return false
 	var attached := trait_stack.attach(p_trait)
 	if attached:
+		# 满层质变（2026-08-31 用户反馈「哪些 buff 到什么程度会质变」）：ADD 池词条挂至
+		# stack_max → 数值乘区 ×1.6（TraitBase.value_mult，聚合侧消费）+ 里程碑广播
+		#（HUD 金色 toast + 音效——「一大波爽感」节点）。幂等：已质变（mult>1）不重触
+		if p_trait.pool == GameConst.PoolClass.ADD and p_trait.stack_max >= 2:
+			for mounted in trait_stack.traits:
+				if mounted.data != null and mounted.data.id == p_trait.id \
+						and mounted.layers >= p_trait.stack_max \
+						and is_equal_approx(mounted.value_mult, 1.0):
+					mounted.value_mult = MILESTONE_VALUE_MULT
+					_invalidate_panel()
+					EventBus.emit_trait_milestone(p_trait.id, p_trait.display_name,
+						MILESTONE_VALUE_MULT)
+					DebugStats.count(&"trait_milestone")
+					break
 		_invalidate_panel()
 		if p_trait.pool == GameConst.PoolClass.ADD \
 				and p_trait.pool_id == &"add_hp" and player != null:
@@ -244,11 +259,15 @@ func muzzle_position() -> Vector2:
 
 
 func level_up() -> void:
-	# 武器精通卡应用 → leveled 信号
+	# 武器精通卡应用 → leveled 信号；Lv5 = 终极形态里程碑（质变播报，mult=0 表纯里程碑）
 	if level < MAX_LEVEL:
 		level += 1
 		_invalidate_panel()
 		leveled.emit(level)
+		if level >= MAX_LEVEL and data != null:
+			EventBus.emit_trait_milestone(StringName("max_%s" % String(data.id)),
+				String(data.display_name) + " · 终极形态", 0.0)
+			DebugStats.count(&"weapon_max_milestone")
 
 
 # ── 内部 ──────────────────────────────────────────────────────────

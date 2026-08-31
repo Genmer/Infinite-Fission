@@ -82,6 +82,7 @@ func _boot_game_loop() -> void:
 
 func _teardown_game_loop() -> void:
 	tree.paused = false
+	RunSave.clear()
 	if _gl != null:
 		_gl.free()
 		_gl = null

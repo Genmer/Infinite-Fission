@@ -15,6 +15,7 @@ var hp: float = 60.0
 var move_speed: float = 280.0                 # 移速（相对拖动 1:1 口径下的调试/键盘备用参数）
 var pickup_radius: float = 120.0
 var gold: int = 0                             # 金币（击杀 gold_drop 掉账；战地黑市货币，M7）
+var reroll_charges: int = 2                   # 选卡刷新次数（换一批；开局 2 + 局外养成，2026-08-31 用户反馈）
 var _last_move_dir: Vector2 = Vector2.UP      # 最近移动方向（游侠闪现取向）
 var revives_left: int = 0                     # 应急协议剩余复活（局外养成，每局重置）
 var map_xp_mult: float = 1.0                  # 地图词缀·经验倍率（GameLoop.start_run 注入）              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
@@ -338,6 +339,7 @@ func set_character(p_id: StringName) -> void:
 	hp = max_hp
 	pickup_radius = 120.0 * (1.0 + Meta.magnet_pct())
 	gold = 30 + Meta.start_gold()                # 开局资金（养成·初始资金，M8 二期）
+	reroll_charges = 2 + Meta.reroll_bonus()     # 刷新次数（基础 2 + 养成·预案推演，选卡刷新机制）
 	revives_left = Meta.revive_charges()         # 应急协议（每局重置）
 	character_atk_pct = float(def.get("atk_pct", 0.0))
 	skill_cd_base = float(def.get("cd", 30.0)) * (1.0 - Meta.skill_cdr_pct())
