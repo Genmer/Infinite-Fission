@@ -23,6 +23,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_gold_chain()                            # T3
 	_test_weapon_cards()                          # T5
 	_test_hud_layout_and_banner()                 # T2
+	_test_shop()                                  # T6
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -485,6 +486,228 @@ func _test_hud_layout_and_banner() -> void:
 		hud.tick(DT)
 	_check("2.0s 到时收起（banner_visible()==false）", not hud.banner_visible()
 		and not hud._banner_label.visible)
+
+
+# ── T6：商店（状态机 / w9 间隙触发 / 零推进 / 购买 / utility / 黑市 / 单间隙单店） ──
+func _test_shop() -> void:
+	print("── T6 商店 ──")
+	var gen := _gl.card_generator
+	var wd := _gl.wave_director
+	var player := _gl.player
+	var shop := _gl.shop_ui
+	_gl.start_run()
+	# ① w9 清空 → BUFFER 尽 → shop_requested(9,false) → 开店（真波表 w9 events=[SHOP]）
+	wd.start_wave(9)
+	wd.window_left = 0.001
+	wd.tick(DT)
+	while not wd.spawner.queue_empty():
+		wd.tick(DT)                               # 节流出队至队列排空
+	for e in wd.spawner.active.duplicate():
+		wd.spawner.on_enemy_killed(e)             # 静默清场（非战斗语义，同 _clear_battlefield）
+	wd.tick(DT)                                   # 清空检测 → wave_cleared(9) → BUFFER
+	_check("w9 清空 → BUFFER 相位", wd._phase == WaveDirector.WavePhase.BUFFER
+		and wd.current_wave == 9)
+	wd.buffer_left = 0.001
+	wd.tick(DT)                                   # 间隙尽 → 商店门控（当前波刚清空）
+	_check("w9 间隙尽 → PLAYING→SHOP + 界面打开（black_market=false）",
+		_gl.state == GameConst.GameStatus.SHOP and shop.is_open
+		and not bool(shop.shelf_state()["black_market"])
+		and int(shop.shelf_state()["wave"]) == 9)
+	_check("商店卡架 3 张（无武器卡混入——shop_exclude_weapon）",
+		(shop.shelf_state()["cards"] as Array).size() == 3)
+	# ② 状态机：SHOP→PAUSED 拒绝（rejected_transitions 计数）
+	var rej0: int = _gl.rejected_transitions
+	_check("非法迁移拒绝：SHOP→PAUSED", not _gl.change_state(GameConst.GameStatus.PAUSED)
+		and _gl.rejected_transitions == rej0 + 1 and _gl.state == GameConst.GameStatus.SHOP)
+	# ③ SHOP 期 wave_director 零推进（帧序仅⑦⑧ + buffer 冻结）
+	var buffer_snap: float = wd.buffer_left
+	for i in range(10):
+		_gl._physics_process(DT)
+	_check("SHOP 期 wave_director 零推进（buffer 冻结 / 波号不变 / 帧序仅⑦⑧）",
+		is_equal_approx(wd.buffer_left, buffer_snap) and wd.current_wave == 9
+		and _gl.frame_order == ([&"feel", &"ui"] as Array[StringName]))
+	# ④ SHOP→GAME_OVER 合法（死亡结算可达）→ 回 PLAYING 重走
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_check("SHOP→GAME_OVER 合法（迁移矩阵）", _gl.state == GameConst.GameStatus.GAME_OVER)
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+	# ⑤ 闭店 → 下帧 start_wave(10)（验收口径：闭店后 wave_started(10)）
+	wd.buffer_left = 0.001
+	_gl._close_shop()
+	_check("闭店 → SHOP→PLAYING + 界面收起", _gl.state == GameConst.GameStatus.PLAYING
+		and not shop.is_open)
+	wd.tick(DT)
+	_check("闭店后下一波 start_wave(10)（wave_started(10)）",
+		wd.current_wave == 10 and _gl.hud.displayed_wave() == 10)
+	wd.spawner.spawn_queue.clear()                # w10 Boss 入队清掉（不实刷）
+	# ⑥ 购买仲裁（crafted 货架，确定性定价）：扣款 + apply
+	player.unlock_slot(2)
+	var cards: Array[Dictionary] = [
+		gen._make_trait_card(&"AFF_HP_UP", 9),
+		gen._make_trait_card(&"AFF_ATK_UP", 9),
+		gen._fallback_stat_card(),
+	]
+	cards[0]["rarity"] = 1                        # 定价锁定：70
+	cards[1]["rarity"] = 1
+	var weapon_card := gen._make_weapon_card(_gl.registry.get_weapon(&"W6_micro_missile"))
+	shop.open(9, false, cards, weapon_card, _gl.gold)
+	_gl.change_state(GameConst.GameStatus.SHOP)
+	_gl._add_gold(500)
+	var gold0: int = _gl.gold
+	var price0 := shop.price_for(0)
+	_check("卡架定价（rarity 1 → 70，A4 §2）", price0 == 70, str(price0))
+	var layers0 := _total_trait_layers(player)
+	_gl._on_shop_purchase(0)
+	_check("购买卡架 0：扣款 70 + 词条生效（层数 +1）",
+		_gl.gold == gold0 - 70 and _total_trait_layers(player) == layers0 + 1)
+	_check("购买后单次购买位（disabled + 已购标记）", bool(shop.shelf_state()["purchased"][0]))
+	# 余额不足拒绝（index 1）
+	_gl._add_gold(-(_gl.gold - 10))
+	var gold_low: int = _gl.gold
+	var layers_low := _total_trait_layers(player)
+	_gl._on_shop_purchase(1)
+	_check("余额不足：静默拒绝不扣款（余额/层数不变）",
+		_gl.gold == gold_low and _total_trait_layers(player) == layers_low
+		and not bool(shop.shelf_state()["purchased"][1]))
+	# 重复购买拒绝
+	_gl._add_gold(400)
+	var gold_rep: int = _gl.gold
+	_gl._on_shop_purchase(0)
+	_check("重复购买拒绝（不重复扣款）", _gl.gold == gold_rep)
+	# 武器架：门控成立（空槽 2）→ 扣 100 + W6 入手
+	var slots0 := _weapon_count(player)
+	_gl._on_shop_purchase(3)
+	_check("武器架购买：扣 100 + weapon_slots +1（W6 入手）",
+		_gl.gold == gold_rep - ShopUI.WEAPON_PRICE and _weapon_count(player) == slots0 + 1
+		and gen._player_holds_weapon(player, &"W6_micro_missile"))
+	# ⑦ utility：maxhp 每店限 1 / heal / reroll
+	var maxhp0: float = player.max_hp
+	_gl._on_shop_utility(&"maxhp")
+	_check("max_hp+10：扣 80 + max_hp +10", _gl.gold == gold_rep - 180
+		and is_equal_approx(player.max_hp, maxhp0 + 10.0))
+	var gold_m: int = _gl.gold
+	_gl._on_shop_utility(&"maxhp")
+	_check("max_hp+10 每店限 1：第二次拒绝", _gl.gold == gold_m
+		and is_equal_approx(player.max_hp, maxhp0 + 10.0))
+	player.hp = 10.0
+	_gl._add_gold(200)
+	var gold_h: int = _gl.gold
+	_gl._on_shop_utility(&"heal")
+	_check("回复 30%max_hp：扣 50 + HP 回复（10 + 0.3×max）",
+		_gl.gold == gold_h - 50
+		and is_equal_approx(player.hp, minf(10.0 + (maxhp0 + 10.0) * 0.3, maxhp0 + 10.0)))
+	var gold_r: int = _gl.gold
+	var reroll_shelf: Array = shop.shelf_state()["cards"]
+	_gl._on_shop_utility(&"reroll")
+	_check("重随券：扣 30 + 货架更换 + 限购位",
+		_gl.gold == gold_r - 30 and bool(shop.shelf_state()["reroll_used"])
+		and not (shop.shelf_state()["cards"] as Array).is_empty()
+		and (shop.shelf_state()["cards"] as Array) != reroll_shelf)
+	var gold_r2: int = _gl.gold
+	_gl._on_shop_utility(&"reroll")
+	_check("重随券每店限 1：第二次拒绝", _gl.gold == gold_r2)
+	_gl._close_shop()
+	# ⑧ 黑市桥接：relic pending → queue_extra_shop → 间隙 black=true → 金卡价 260
+	_gl.relic_handler.pending_shop_waves = 1
+	EventBus.emit_wave_cleared(35)
+	_check("黑市桥接：w35 清空 → pending 消费 + queue_extra_shop 生效",
+		wd._extra_shop_pending and _gl.relic_handler.pending_shop_waves == 0)
+	# 黑市货架：金卡价 260（非黑市 220 对照）
+	var gold_card := gen._make_trait_card(&"AFF_AREA", 30)
+	gold_card["rarity"] = 3
+	var black_cards: Array[Dictionary] = [gold_card, gen._fallback_stat_card(),
+		gen._fallback_stat_card()]
+	shop.open(39, true, black_cards, {}, 500)
+	_check("黑市金卡价 260（A4 §2）", shop.price_for(0) == ShopUI.CARD_PRICE_BLACK_GOLD)
+	shop.open(39, false, black_cards, {}, 500)
+	_check("非黑市金卡价 220（对照）", shop.price_for(0) == 220)
+	shop.close()
+	wd._extra_shop_pending = false
+	# ⑨ 单间隙单店（独立 WaveDirector 环境：常规+黑市同波仅一次开门）
+	_test_shop_single_gap()
+	# 无尽段回退规则：无表项波 w%10==9
+	_check("无尽段商店回退规则：39 开 / 38 不开（无表项）",
+		wd._is_shop_wave(39) and not wd._is_shop_wave(38))
+	# 还原夹具
+	for i in range(player.weapon_slots.size()):
+		var w: WeaponBase = player.weapon_slots[i]
+		if w is WeaponBase and is_instance_valid(w) \
+				and (w.data.id == &"W6_micro_missile"):
+			player.weapon_slots[i] = null
+			w.free()
+	player.unlocked_slots = 2
+	player.max_hp = maxhp0
+	wd._shop_gapped = false
+
+
+func _test_shop_single_gap() -> void:
+	# 独立 WaveDirector（pkg4 escort 环境模式）：内存波表 w1=[SHOP,1 只 E1] → 清空 → 间隙 →
+	# 恰一次 shop_requested（黑市 pending 同波不双开）→ 下一波推进
+	var registry := DataRegistry.new()
+	registry.enemies[&"E1"] = _make_shop_env_enemy(&"E1")
+	var table := WaveTableData.new()
+	var w1 := WaveEntryData.new()
+	w1.index = 1
+	w1.composition = [{"enemy_id": &"E1", "count": 1}]
+	w1.events = [&"SHOP"]
+	table.entries = [w1]
+	var pool := EnemyPool.new()
+	pool.name = "ShopGapPool"
+	tree.get_root().add_child(pool)
+	pool.setup(&"enemy_shopgap", load("res://scenes/combat/enemies/enemy.tscn"), 8)
+	var spawner := EnemySpawner.new()
+	spawner.name = "ShopGapSpawner"
+	tree.get_root().add_child(spawner)
+	spawner.pool = pool
+	spawner.registry = registry
+	var director := WaveDirector.new()
+	director.name = "ShopGapDirector"
+	tree.get_root().add_child(director)
+	director.spawner = spawner
+	director.registry = registry
+	director.wave_table = table
+	var requests: Array = []
+	director.shop_requested.connect(func(w: int, b: bool) -> void: requests.append([w, b]))
+	director.queue_extra_shop()                   # 黑市 pending 同波注入
+	director.start_wave(1)
+	director.window_left = 0.001
+	director.tick(DT)                             # 出队 1 只
+	for e in spawner.active.duplicate():
+		spawner.on_enemy_killed(e)
+	director.tick(DT)                             # 清空 → BUFFER
+	director.buffer_left = 0.001
+	director.tick(DT)                             # 间隙尽 → 开店（black=true）
+	_check("单间隙单店：恰一次 shop_requested(1, black=true)",
+		requests.size() == 1 and (requests[0] as Array)[0] == 1
+		and bool((requests[0] as Array)[1]))
+	director.tick(DT)                             # 闭店语义后：_shop_gapped 闸 → 直推下一波
+	_check("同间隙不双开（第二 tick 推进到 w2）",
+		director.current_wave == 2 and requests.size() == 1)
+	director.free()
+	spawner.free()
+	pool.free()
+
+
+func _make_shop_env_enemy(p_id: StringName) -> EnemyData:
+	var e := EnemyData.new()
+	e.id = p_id
+	e.display_name = String(p_id)
+	e.behavior = GameConst.EnemyBehavior.CHASE
+	e.hp_base = 60.0
+	e.spd_base = 80.0
+	e.dmg_base = 8.0
+	e.exp_base = 3.0
+	e.tp_cost = 1.0
+	e.hitbox_r = 14.0
+	return e
+
+
+func _total_trait_layers(p_player: Node) -> int:
+	var total := 0
+	var slots: Array = p_player.get("weapon_slots")
+	for w in slots:
+		if w is WeaponBase and is_instance_valid(w) and (w as WeaponBase).trait_stack != null:
+			total += (w as WeaponBase).trait_stack.size()
+	return total
 
 
 # ── 断言 ──────────────────────────────────────────────────────────

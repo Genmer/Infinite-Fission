@@ -41,7 +41,7 @@ index = 5
 composition = [{"enemy_id": &"E1_grunt", "count": 20}, {"enemy_id": &"E2_runner", "count": 8}]
 tp_override = 29.6
 window = 20.0
-events = [&"SHOP"]
+events = []
 
 [sub_resource type="Resource" id="WaveEntryData_w6"]
 script = ExtResource("2_wed")
@@ -73,7 +73,7 @@ index = 9
 composition = [{"enemy_id": &"E1_grunt", "count": 22}, {"enemy_id": &"E4_volatile", "count": 6}, {"enemy_id": &"E3_bastion", "count": 2}]
 tp_override = 39.0
 window = 21.6
-events = []
+events = [&"SHOP"]
 
 [sub_resource type="Resource" id="WaveEntryData_w10"]
 script = ExtResource("2_wed")
@@ -121,7 +121,7 @@ index = 15
 composition = [{"enemy_id": &"E1_grunt", "count": 22}, {"enemy_id": &"E2_runner", "count": 10}, {"enemy_id": &"E4_volatile", "count": 9}, {"enemy_id": &"E3_bastion", "count": 3}]
 tp_override = 59.5
 window = 24.0
-events = [&"SHOP"]
+events = []
 
 [sub_resource type="Resource" id="WaveEntryData_w16"]
 script = ExtResource("2_wed")
@@ -153,7 +153,7 @@ index = 19
 composition = [{"enemy_id": &"E1_grunt", "count": 31}, {"enemy_id": &"E2_runner", "count": 14}, {"enemy_id": &"E4_volatile", "count": 11}]
 tp_override = 64.3
 window = 25.6
-events = []
+events = [&"SHOP"]
 
 [sub_resource type="Resource" id="WaveEntryData_w20"]
 script = ExtResource("2_wed")
@@ -201,7 +201,7 @@ index = 25
 composition = [{"enemy_id": &"E1_grunt", "count": 28}, {"enemy_id": &"E2_runner", "count": 16}, {"enemy_id": &"E3_bastion", "count": 5}, {"enemy_id": &"E4_volatile", "count": 9}]
 tp_override = 80.7
 window = 28.0
-events = [&"SHOP"]
+events = []
 
 [sub_resource type="Resource" id="WaveEntryData_w26"]
 script = ExtResource("2_wed")
@@ -233,7 +233,7 @@ index = 29
 composition = [{"enemy_id": &"E1_grunt", "count": 31}, {"enemy_id": &"E2_runner", "count": 18}, {"enemy_id": &"E3_bastion", "count": 5}, {"enemy_id": &"E4_volatile", "count": 11}]
 tp_override = 89.1
 window = 29.6
-events = []
+events = [&"SHOP"]
 
 [sub_resource type="Resource" id="WaveEntryData_w30"]
 script = ExtResource("2_wed")

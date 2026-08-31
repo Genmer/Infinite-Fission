@@ -7,6 +7,8 @@
 class_name WaveDirector
 extends Node
 
+signal shop_requested(wave: int, black_market: bool)   # v0.6.0 商店间隙开门请求（A4 §1）
+
 var wave_table: WaveTableData = null          # M-14 注入（null → 公式 fallback）
 var spawner: EnemySpawner = null
 var registry: DataRegistry = null             # 注入（fallback 构成/敌人 id 解析）
@@ -17,6 +19,8 @@ var window_left: float = 0.0                  # 18 + 0.4w（无尽段 min(30+0.2
 var buffer_left: float = 0.0                  # 波间缓冲 1s + loot_buffer 3s
 var enemies_alive: int = 0
 var wave_first_kill_done: bool = false        # SYN_FIRST_STRIKE 重置位
+var _shop_gapped: bool = false                # v0.6.0 单间隙单店闸（start_wave 复位）
+var _extra_shop_pending: bool = false         # v0.6.0 黑市追加申请（queue_extra_shop 置位）
 
 enum WavePhase { IDLE, SPAWNING, CLEARING, BUFFER }
 
@@ -62,6 +66,7 @@ func start_wave(p_wave: int) -> void:
 	# 读表/公式生成构成 → enqueue → 波窗口/硬上限计时 → wave_started 事件
 	current_wave = p_wave
 	wave_first_kill_done = false
+	_shop_gapped = false                         # v0.6.0：单间隙单店闸随波复位
 	_boss_wave = _is_boss_wave(p_wave)
 	_boss_ref = null
 	_boss_seen = false
@@ -87,6 +92,17 @@ func start_wave(p_wave: int) -> void:
 	# F-19：w21 保底解锁武器槽5（Boss2 未击杀兜底；玩家侧 unlock_slot 幂等）
 	if p_wave >= 21:
 		EventBus.emit_slot_unlocked(5)
+
+
+func queue_extra_shop() -> void:
+	# v0.6.0 黑市追加商店申请（GameLoop._on_wave_cleared_shop_bridge 消费 relic 排程后调用）
+	_extra_shop_pending = true
+
+
+func reset_extra_shop() -> void:
+	# v0.6.0 重开清零（黑市追加申请不跨局——与 relic_handler.reset_run 清 pending_shop_waves
+	# 同口径；GameLoop._reset_run_state 调用）
+	_extra_shop_pending = false
 
 
 func tick(p_game_delta: float) -> void:
@@ -130,6 +146,15 @@ func tick(p_game_delta: float) -> void:
 		WavePhase.BUFFER:
 			buffer_left -= p_game_delta
 			if buffer_left <= 0.0:
+				# v0.6.0 商店间隙（A4 §1，主 Agent 裁定：检查**当前刚清空的波**——该波清空
+				# 后、下一波 Boss 前开门）：单间隙单店闸 _shop_gapped；黑市 pending 消费一次；
+				# 开店帧停留 BUFFER（SHOP 态 tick 冻结——闭店回 PLAYING 后下帧即 start_wave）
+				if not _shop_gapped and _is_shop_wave(current_wave):
+					_shop_gapped = true
+					var black := _extra_shop_pending
+					_extra_shop_pending = false
+					shop_requested.emit(current_wave, black)
+					return
 				start_wave(current_wave + 1)
 		_:
 			pass
@@ -242,6 +267,14 @@ func _is_boss_wave(p_wave: int) -> bool:
 	if entry != null:
 		return entry.events.has(&"BOSS")
 	return p_wave > 0 and p_wave % 10 == 0
+
+
+func _is_shop_wave(p_wave: int) -> bool:
+	# v0.6.0 商店波（A4 §1）：表 events 含 SHOP 优先；表缺波/无表 → 无尽段 w mod 10 == 9
+	var entry := _table_entry(p_wave)
+	if entry != null:
+		return entry.events.has(&"SHOP")
+	return p_wave > 0 and p_wave % 10 == 9
 
 
 func _is_elite_wave(p_wave: int) -> bool:

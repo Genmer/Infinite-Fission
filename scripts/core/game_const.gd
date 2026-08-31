@@ -9,7 +9,7 @@ enum PoolClass { ADD, MULT, LOCAL, MECH, ELEM }           # 词条池归类（B_
 enum TraitEvent { ON_SPAWN, ON_TICK, ON_HIT, ON_PIERCE, ON_BOUNCE, ON_EXPIRE }  # 六大生命周期
 enum WeaponForm { BALLISTIC, LASER, HOMING, MELEE }       # 武器四形态
 enum EnemyBehavior { CHASE, RANGED, DASHER, ORBIT, SENTRY }  # M1 只实现 CHASE/RANGED
-enum GameStatus { BOOT, MENU, PLAYING, PAUSED, LEVEL_UP, GAME_OVER }
+enum GameStatus { BOOT, MENU, PLAYING, PAUSED, LEVEL_UP, GAME_OVER, SHOP }   # v0.6.0 尾部追加 SHOP（值 6，零重编号；A4 §1）
 enum RecycleReason { EXPIRED, PIERCE_DEPLETED, BOUNCE_DEPLETED, NULLIFIED, FORCED }  # 回收五路径
 enum PopupStyle { NORMAL, CRIT, REACTION, DOT, HEAL, XP }
 enum FeelLevel { HIT, CRIT, CATALYST, BOSS_DEATH }        # GameFeel 分级（Q-12）

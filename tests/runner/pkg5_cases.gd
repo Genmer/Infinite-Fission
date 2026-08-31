@@ -514,15 +514,20 @@ func _test_relic_handler() -> void:
 			echoed = true
 			break
 	_check("REL_ECHO：选卡后复制词条到随机武器", echoed)
-	# REL_BLACK_MARKET：w35 起每 10 波排程商店波（A3 §6.5 占位计数；w35/w45 排程、w36 不排程）
-	# 幂等口径（修复 B 双保险）：同 GAMBLER——卡牌流提前抽中时已持有即生效
+	# REL_BLACK_MARKET：w35 起每 10 波排程商店波（A3 §6.5；w35/w45 排程、w36 不排程）。
+	# v0.6.0 授权更新：占位计数改为桥接即时消费（GameLoop._on_wave_cleared_shop_bridge →
+	# wave_director.queue_extra_shop，A4 §1）——每次排程 pending 即回落 0，追加申请挂到
+	# wave_director._extra_shop_pending（单闸去重）
 	_check("REL_BLACK_MARKET：激活（卡牌流提前入场 → 已持有即生效）",
 		h.activate(&"REL_BLACK_MARKET") or h.has_relic(&"REL_BLACK_MARKET"))
+	_gl.wave_director.reset_extra_shop()          # 夹具净化（隔离前序用例的申请位）
 	EventBus.emit_wave_cleared(35)
+	_check("REL_BLACK_MARKET：w35 排程即被桥接消费（pending 0 → queue_extra_shop）",
+		h.pending_shop_waves == 0 and _gl.wave_director._extra_shop_pending)
 	EventBus.emit_wave_cleared(45)
 	EventBus.emit_wave_cleared(36)
-	_check("REL_BLACK_MARKET：w35/w45 排程、w36 不排程（占位计数 2）",
-		h.pending_shop_waves == 2)
+	_check("REL_BLACK_MARKET：w45 排程消费 / w36 不排程（申请位仍单次挂起）",
+		h.pending_shop_waves == 0 and _gl.wave_director._extra_shop_pending)
 	# REL_PHOENIX：致死保留 1 HP + 清屏冲击（每场 1 次）——放最后（含死亡分支）
 	_check("REL_PHOENIX：激活", h.activate(&"REL_PHOENIX"))
 	_gl.player.invuln_left = 0.0

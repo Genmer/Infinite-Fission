@@ -30,16 +30,18 @@ const GOLD_RNG_SEED: int = 42                 # 金币掉落 roll 固定种子�
 const SEPARATION_INTERVAL := 0.1              # 10Hz（架构 §2.11 敌间分离力口径）
 const SEPARATION_MAX_STEP := 4.0              # 单敌单次推移上限 px
 
-# 状态机（复用 GameConst.GameStatus：BOOT/MENU/PLAYING/PAUSED/LEVEL_UP/GAME_OVER）
-# 合法迁移矩阵（冻结；非法迁移 change_state 拒绝 + 计数）
+# 状态机（复用 GameConst.GameStatus：BOOT/MENU/PLAYING/PAUSED/LEVEL_UP/GAME_OVER/SHOP）
+# 合法迁移矩阵（冻结；非法迁移 change_state 拒绝 + 计数）；v0.6.0：PLAYING→SHOP 增边 +
+# SHOP 行（闭店回 PLAYING / 商店期死亡结算 GAME_OVER，A4 §1）
 const TRANSITIONS: Dictionary = {
 	GameConst.GameStatus.BOOT: [GameConst.GameStatus.MENU],
 	GameConst.GameStatus.MENU: [GameConst.GameStatus.PLAYING],
 	GameConst.GameStatus.PLAYING: [GameConst.GameStatus.PAUSED, GameConst.GameStatus.LEVEL_UP,
-		GameConst.GameStatus.GAME_OVER],
+		GameConst.GameStatus.GAME_OVER, GameConst.GameStatus.SHOP],
 	GameConst.GameStatus.PAUSED: [GameConst.GameStatus.PLAYING, GameConst.GameStatus.GAME_OVER],
 	GameConst.GameStatus.LEVEL_UP: [GameConst.GameStatus.PLAYING, GameConst.GameStatus.GAME_OVER],
 	GameConst.GameStatus.GAME_OVER: [GameConst.GameStatus.MENU, GameConst.GameStatus.PLAYING],
+	GameConst.GameStatus.SHOP: [GameConst.GameStatus.PLAYING, GameConst.GameStatus.GAME_OVER],
 }
 
 var state: int = GameConst.GameStatus.BOOT
@@ -70,6 +72,7 @@ var card_select_ui: CardSelectUI = null
 var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处理器
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
+var shop_ui: ShopUI = null                    # v0.6.0：Boss 前商店界面（SHOP 态宿主）
 var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp, gold}
 
 var frame_order: Array[StringName] = []       # 帧序探针（每帧重建；测试断言固定帧序）
@@ -84,6 +87,7 @@ var _projectile_pool: ProjectilePool = null
 var _boot_elapsed_ms: float = 0.0             # Boot 耗时（AC：<3s 预算遥测）
 var _separation_left: float = SEPARATION_INTERVAL   # E-10 分离力 10Hz 相位
 var _gold_rng: RandomNumberGenerator = RandomNumberGenerator.new()   # v0.6.0 金币 roll 流（默认 seed 42）
+var _deferred_shop_wave: int = 0              # v0.6.0 非战斗态暂存商店波（0 = 无；闭店/选卡后排空）
 
 
 func _ready() -> void:
@@ -171,9 +175,9 @@ func _physics_process(p_raw_delta: float) -> void:
 			_tick_ui(p_raw_delta)
 			if stage_probe_enabled:
 				stage_probe_us[&"feel_ui"] = Time.get_ticks_usec() - _probe_t0
-		GameConst.GameStatus.LEVEL_UP, GameConst.GameStatus.PAUSED:
+		GameConst.GameStatus.LEVEL_UP, GameConst.GameStatus.PAUSED, GameConst.GameStatus.SHOP:
 			# tree.paused=true 冻结全部 PAUSABLE 子系统（AC-16.2 战斗完全冻结）；
-			# 仅 ⑦⑧ 以 raw 通道运行（架构帧序契约）
+			# 仅 ⑦⑧ 以 raw 通道运行（架构帧序契约）；v0.6.0 SHOP 合并本分支（帧序不变）
 			frame_order.clear()
 			frame_order.append(&"feel")
 			game_feel.tick(p_raw_delta)
@@ -197,7 +201,8 @@ func change_state(p_new: int) -> bool:
 		return false
 	state = p_new
 	get_tree().paused = (p_new == GameConst.GameStatus.PAUSED
-		or p_new == GameConst.GameStatus.LEVEL_UP)
+		or p_new == GameConst.GameStatus.LEVEL_UP
+		or p_new == GameConst.GameStatus.SHOP)     # v0.6.0：商店期战斗冻结（A4 §1）
 	if p_new == GameConst.GameStatus.GAME_OVER:
 		time_scale = 1.0                          # 结算屏恢复常态缩放（下一局干净起步）
 	EventBus.emit_state_changed(p_new)
@@ -265,6 +270,8 @@ func _on_level_up(p_new_level: int) -> void:
 			_open_card_flow(p_new_level)
 		GameConst.GameStatus.LEVEL_UP:
 			pending_level_ups += 1
+		GameConst.GameStatus.SHOP:
+			pending_level_ups += 1                # v0.6.0 防御：商店期升级请求排队（闭店排空）
 		_:
 			pass                                  # 其余状态（MENU 等）：升级请求不应存在，忽略
 
@@ -304,6 +311,149 @@ func _on_card_choice(p_card: Dictionary) -> void:
 	if pending_level_ups > 0:
 		pending_level_ups -= 1
 		_open_card_flow(player.level)
+		return
+	if _deferred_shop_wave > 0:
+		# v0.6.0：LEVEL_UP 竞态暂存的商店在选卡排空后补开（防波间隙卡死）
+		var wave := _deferred_shop_wave
+		_deferred_shop_wave = 0
+		_open_shop_flow(wave, false)
+
+
+# ── 商店流（v0.6.0，A4 §1/§2：Boss 前商店——开门/购买/utility/闭店仲裁） ──
+func _open_shop_flow(p_wave: int, p_black_market: bool) -> bool:
+	# 开门仲裁：仅 PLAYING 可开（非战斗态 → 波号暂存，闭店/选卡后排空补开）；
+	# 卡架 roll 3 张（shop_exclude_weapon 防武器混入卡价）+ 武器架 1 张随机取一
+	#（无可用武器 → 空架 disabled）。roll 用卡牌 RNG（同种子可复现货架）。
+	if state != GameConst.GameStatus.PLAYING:
+		_deferred_shop_wave = p_wave
+		return false
+	var context := {
+		"player": player,
+		"wave": p_wave,
+		"shop_exclude_weapon": true,
+	}
+	current_candidates = card_generator.generate_candidates(context)
+	var weapon_pool := card_generator._weapon_candidates(player, [])
+	var weapon_card: Dictionary = {}
+	if not weapon_pool.is_empty():
+		weapon_card = card_generator._make_weapon_card(
+			weapon_pool[card_generator.rng.randi_range(0, weapon_pool.size() - 1)])
+	change_state(GameConst.GameStatus.SHOP)
+	shop_ui.open(p_wave, p_black_market, current_candidates, weapon_card, gold)
+	return true
+
+
+func _close_shop() -> void:
+	# 闭店：SHOP → PLAYING（战斗恢复）→ 排空连升队列与暂存商店（A4 §1）
+	if state != GameConst.GameStatus.SHOP:
+		return
+	shop_ui.close()
+	change_state(GameConst.GameStatus.PLAYING)
+	if pending_level_ups > 0:
+		pending_level_ups -= 1
+		_open_card_flow(player.level)
+		return
+	if _deferred_shop_wave > 0:
+		var wave := _deferred_shop_wave
+		_deferred_shop_wave = 0
+		_open_shop_flow(wave, false)
+
+
+func _on_shop_requested(p_wave: int, p_black_market: bool) -> void:
+	# WaveDirector.shop_requested 消费（ BUFFER 间隙触发，A4 §1）
+	_open_shop_flow(p_wave, p_black_market)
+
+
+func _on_wave_cleared_shop_bridge(p_wave: int) -> void:
+	# 黑市桥接（A4 §1）：relic_handler 的 REL_BLACK_MARKET 排程（w35 起每 10 波 pending+1）
+	# → 转 wave_director 额外商店申请（单间隙单店闸去重）。★ 本订阅必须晚于
+	# relic_handler.bind_events 连接（连接序 = 派发序：先排程再桥接）。
+	if relic_handler == null or wave_director == null:
+		return
+	if relic_handler.pending_shop_waves > 0:
+		relic_handler.pending_shop_waves -= 1
+		wave_director.queue_extra_shop()
+
+
+func _on_shop_purchase(p_index: int) -> void:
+	# 购买仲裁（A4 §2）：三查（未购 / 余额足 / 武器架门控仍成立）→ 先验证 → apply → 扣款；
+	# 任一失败静默拒绝 + push_warning 不扣款；apply 失败不扣款。
+	if state != GameConst.GameStatus.SHOP or shop_ui == null or not shop_ui.is_open:
+		return
+	if p_index < 0 or p_index > 3:
+		return
+	var shelf := shop_ui.shelf_state()
+	var purchased: Array = shelf["purchased"]
+	if bool(purchased[p_index]):
+		push_warning("[GameLoop] 商店购买拒绝：已购（index %d）" % p_index)
+		return
+	var card: Dictionary = shelf["weapon"] if p_index == 3 \
+		else (shelf["cards"] as Array)[p_index]
+	if card.is_empty():
+		push_warning("[GameLoop] 商店购买拒绝：空架（index %d）" % p_index)
+		return
+	var price := shop_ui.price_for(p_index)
+	if price < 0 or gold < price:
+		push_warning("[GameLoop] 商店购买拒绝：余额不足（需 %d，有 %d）" % [price, gold])
+		return
+	if p_index == 3:
+		# 武器架门控复查：仍存在已解锁空槽且未持有（A4 §5 门控）
+		var wd: WeaponData = card.get("data")
+		if wd == null or card_generator._weapon_candidates(player, []).is_empty():
+			push_warning("[GameLoop] 武器架门控失效，拒绝购买")
+			return
+	card_generator.apply_choice(card, player)
+	if p_index == 3 and not card_generator._player_holds_weapon(player,
+			StringName(String(card.get("id", "")))):
+		push_warning("[GameLoop] 武器卡 apply 失败，不扣款")
+		return
+	_add_gold(-price)
+	shop_ui.mark_purchased(p_index)
+
+
+func _on_shop_utility(p_util: StringName) -> void:
+	# utility 仲裁（A4 §2）：重随券 30 每店限 1 / 回复 30%max_hp 50 / max_hp+10 80 每店限 1
+	if state != GameConst.GameStatus.SHOP or shop_ui == null or not shop_ui.is_open:
+		return
+	var shelf := shop_ui.shelf_state()
+	match p_util:
+		&"reroll":
+			if bool(shelf["reroll_used"]):
+				push_warning("[GameLoop] 重随券每店限 1 次，拒绝")
+				return
+			if gold < ShopUI.REROLL_PRICE:
+				push_warning("[GameLoop] 余额不足：重随券需 %d" % ShopUI.REROLL_PRICE)
+				return
+			_add_gold(-ShopUI.REROLL_PRICE)
+			shop_ui.update_cards(card_generator.generate_candidates({
+				"player": player,
+				"wave": int(shelf["wave"]),
+				"shop_exclude_weapon": true,
+			}))
+			shop_ui.mark_utility_used(&"reroll")
+		&"heal":
+			var max_hp: float = player.get("max_hp")
+			var hp: float = player.get("hp")
+			if hp >= max_hp:
+				push_warning("[GameLoop] 满血，拒绝购买回复")
+				return
+			if gold < ShopUI.HEAL_PRICE:
+				push_warning("[GameLoop] 余额不足：回复需 %d" % ShopUI.HEAL_PRICE)
+				return
+			_add_gold(-ShopUI.HEAL_PRICE)
+			player.set("hp", minf(hp + max_hp * 0.3, max_hp))
+		&"maxhp":
+			if bool(shelf["maxhp_used"]):
+				push_warning("[GameLoop] max_hp+10 每店限 1 次，拒绝")
+				return
+			if gold < ShopUI.MAXHP_PRICE:
+				push_warning("[GameLoop] 余额不足：max_hp+10 需 %d" % ShopUI.MAXHP_PRICE)
+				return
+			_add_gold(-ShopUI.MAXHP_PRICE)
+			player.max_hp += 10.0
+			shop_ui.mark_utility_used(&"maxhp")
+		_:
+			push_warning("[GameLoop] 未知 utility：%s" % String(p_util))
 
 
 # ── Boot 各段 ─────────────────────────────────────────────────────
@@ -479,6 +629,17 @@ func _boot_build_presentation() -> void:
 	card_select_ui.name = "CardSelectUI"
 	add_child(card_select_ui)
 	card_select_ui.choice_made.connect(_on_card_choice)
+	# v0.6.0 商店界面（A4 §1/§2）+ 黑市桥接（★ 订阅序在 relic_handler.bind_events 之后——
+	# 连接序 = 派发序：wave_cleared 先由 relic 排程 pending，再由桥接转 queue_extra_shop）
+	shop_ui = ShopUI.new()
+	shop_ui.name = "ShopUI"
+	add_child(shop_ui)
+	shop_ui.purchase_requested.connect(_on_shop_purchase)
+	shop_ui.utility_requested.connect(_on_shop_utility)
+	shop_ui.close_requested.connect(_close_shop)
+	EventBus.wave_cleared.connect(_on_wave_cleared_shop_bridge)
+	# 商店开门请求（WaveDirector BUFFER 间隙 → 仲裁）
+	wave_director.shop_requested.connect(_on_shop_requested)
 	# 集成包 A：震屏宿主相机（trauma² 偏移在 ⑧ raw 通道应用）+ 主菜单屏
 	camera = Camera2D.new()
 	camera.name = "Camera"
@@ -719,6 +880,11 @@ func _reset_run_state() -> void:
 			(pools[&"gold"] as GoldPool).release(coin)
 	active_coins.clear()
 	_add_gold(-gold)
+	_deferred_shop_wave = 0                       # v0.6.0：暂存商店波清零
+	if shop_ui != null:
+		shop_ui.close()                           # v0.6.0：强制收起商店（重开净化）
+	if wave_director != null:
+		wave_director.reset_extra_shop()          # v0.6.0：黑市追加申请不跨局（与 relic reset 同口径）
 	_separation_left = SEPARATION_INTERVAL
 	pending_level_ups = 0
 	game_feel.hit_stop_left = 0.0
