@@ -299,7 +299,7 @@ func validate_balance(bt: BalanceTables) -> Array:
 	# —— 致命集 ——
 	if bt.res_logic != Vector2i(720, 1280):
 		out.append({"field": "res_logic", "fatal": true, "message": "res_logic 必须为 720×1280（F-01 裁定），当前 %s" % str(bt.res_logic)})
-	for k in [&"projectile", &"enemy", &"popup", &"particle", &"laser", &"xp"]:
+	for k in [&"projectile", &"enemy", &"popup", &"particle", &"laser", &"xp", &"gold"]:
 		var v = bt.pool_prewarm.get(k)
 		if v == null or int(v) <= 0:
 			out.append({"field": "pool_prewarm", "fatal": true, "message": "pool_prewarm.%s 缺失或 ≤0（致命：拒绝启动）" % String(k)})
