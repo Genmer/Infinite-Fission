@@ -26,7 +26,9 @@
 | E 审查+测试（并行） | 独立代码审查 + 运行验证（两轮） | ✅ 完成（一轮：1C+3I 修复；二轮：可交付判定，720/720 终验 PASS） |
 | F 交付报告 | 汇总判定+关键决策清单 | ✅ 完成（判定 = 可交付；见 §5.8 与 §4 裁定记录） |
 
-**仓库当前可编译（0 解析错误），回归 720/720 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 117）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~5.8ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。全部已推送（HEAD = ff9240d）。**
+**仓库当前可编译（0 解析错误），回归 736/736 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，v0.6.0 起新增 pkg6）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~5.6ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志（v0.6.0 前基线记录）。**
+
+**v0.6.0 增量（2026-08-31，T0~T8）：商店（Boss 前夜 w9/w19/w29）/ 金币经济（掉落+磁吸+HUD）/ 武器卡（CardKind.WEAPON）/ 武器门槛词条（required_weapon）/ Boss 弹幕三形态+召唤 / HUD 720×1280 全量重排+波次横幅。数值与裁定真源 = `docs/analysis/A4_v0.6.0_design.md`；自测 = `tests/runner/test_pkg6.gd`（115 项）。提交序：T1 38ad7ef → T4 a18770d → T3 2db7455 → T5 b7984c7 → T2 57b742f → T6 f7d3f8a → T7 cffa4f5 → T8 本笔。**
 
 **阶段 E 关键战果（审查/测试发现并修复）：**
 - 一轮审查 1C+3I：重开不清场（残留战场秒杀重生）→ `_clear_battlefield` 清场序 + respawn 1.5s 无敌；GameFeel 订阅晚于 Spawner 清 tags（Boss 击杀打击感永不触发）→ early_bind；Boss 波伴随怪流水锁死 wave_cleared → `_boss_ref` 存活闸；TH_CRIT_SHARD 全武器声明零实现 + 校验器空承诺 → 补 `trait_effect_crit_shard.gd` + check_references ② 落地
@@ -117,7 +119,8 @@
 - 导入：`"$G" --headless --path "<项目根>" --import`
 - 跑测试：`"$G" --headless --path "<项目根>" -s tests/runner/test_pkg0.gd`（pkg1/pkg2/pkg3 同理）
 - 注意：`-s` 模式下入口脚本编译早于 autoload 注册，测试用「入口引导 + 运行时 load 用例体」两段式（pkg0~pkg3 都是这个模式，新测试照抄）
-- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 117，全 PASS（共 720）**
+- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 736；v0.6.0 起 pkg6 为版本增量自测）**
+- v0.6.0 压力复测：**P95 = 5.559ms**（avg 2.191 / P50 1.791 / P99 6.968，判定线 8.3ms PASS）
 - 压力/soak：`tests/stress/test_perf_500p100e.gd`（AC-01.2，headless 逻辑帧口径）与 `tests/stress/test_soak.gd`（AC-14.1，SOAK_FRAMES 常量控时长；10 分钟版预计 ~12 分钟实际，长跑须后台+轮询防会话超时）
 
 ## 8. 冻结契约速查（跨包接口，改动需全包评估）
@@ -129,6 +132,35 @@
 5. **SpaceGrid**：`rebuild()/query_circle()/query_nearest()/query_arc()`，128px 桶，弹-敌碰撞主路径（不用 Area2D 回调）
 6. **数值红线**：乘区段整体钳 8.0、×500 保险钳+一局一次告警、δ≤0.92、链式深度≤3、分裂代数≤3/单次≤8/软 1500 硬 2000、单武器射速≤30/s
 7. **顿帧实现**：GameLoop 手动 `game_delta = raw × time_scale` 双时间通道，**禁止写 Engine.time_scale**（架构 §2.17 裁定）
+
+### 8.1 v0.6.0 增量裁定（冻结契约变更清单，详见 A4_v0.6.0_design.md）
+
+1. **GameStatus.SHOP 枚举**：尾部追加值 6（零重编号）；TRANSITIONS 增 PLAYING→SHOP 边与
+   SHOP:[PLAYING, GAME_OVER] 行；SHOP 与 PAUSED/LEVEL_UP 同帧分支（tree.paused=true，仅⑦⑧）。
+2. **spawn enqueue 增量可选键 `hp_override`**（EnemySpawner）：>0 → spawn 后 max_hp=hp=maxf(v,1)；
+   Boss split 召唤由 Enemy._summon_allies 折算 max_hp × hp_ratio 入队。
+3. **EventBus 增信号 `gold_changed(total:int)`** + emit_gold_changed 包装（DataValidator.EVENT_NAMES
+   镜像同步 +1）；金币余额唯一写入口 = GameLoop._add_gold。
+4. **pool_prewarm 增 "gold":96**（BalanceTables 默认 + .tres 双处；池×6→池×7，pkg4/pkg5 断言授权更新）。
+5. **DataValidator.ADD_POOL_IDS 扩项**：+&"add_gold_drop" / +&"add_gold_value"（不入 LINEAR_ADD_POOLS，
+   走 F3 衰减）；validate_enemy 增 warning 级 gold_drop 结构校验（chance∈[0,1]、min≥0、min≤max）。
+6. **CardGenerator.CATEGORY_WEIGHTS 新值**：WEAPON 8.0 + 原五类×0.92 归一（和=100.0；三处同值：
+   常量 / BalanceTables 默认 / balance_tables.tres，pkg6 锁定）；CardKind 尾部追加 WEAPON=4；
+   generate_candidates 增可选 context 键 `shop_exclude_weapon`。
+7. **WaveDirector 增 `shop_requested(wave, black_market)` 信号 + `queue_extra_shop()` /
+   `reset_extra_shop()`**；BUFFER 间隙开店语义 = **当前刚清空的波**（该波清空后、下一波 Boss 前），
+   单间隙单店闸 `_shop_gapped`（start_wave 复位）；波表迁移 w5/w15/w25→w9/w19/w29 events=[SHOP]。
+8. **TraitData 增字段 `required_weapon:StringName`**（A4 §6）：候选过滤 + apply 挂载防御拒绝；
+   首个消费者 MEC_ORBIT_LINK → W8_orbit_field。
+9. **Enemy 增 Boss 弹幕/召唤契约**：bullet_patterns/summons 快照（duplicate）+ 半冷却计时 +
+   fan/ring/spiral 三形态（P2 键 count_phase2 / speed_mult_phase2）；伤害只走
+   panel_snapshot.base_atk → take_contact_damage 单点（禁 DamagePipeline/settle_aoe）；
+   BOSS_SUMMON_ACTIVE_CAP=12；Boss3 charge/phase3/laser_sweep defer 不消费。
+
+**变更摘要 v0.6.0**：新增 GoldCoin/GoldPool/ShopUI 三个类与 gold_coin.tscn 场景；GameLoop 状态机
++金币+商店仲裁；WaveDirector 商店间隙调度；Enemy Boss 弹幕；CardGenerator 武器卡与门槛词条；
+HUD 720×1280 重排（金币/描边/波次横幅/layout_rects 契约）；测试新增 pkg6（115 项）并授权更新
+pkg0（ADD 池计数 14）/pkg4（池×7）/pkg5（池×7 + 黑市桥接契约）。
 
 ## 9. 工程铁律（全程有效）
 
