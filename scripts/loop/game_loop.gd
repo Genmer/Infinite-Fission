@@ -339,8 +339,12 @@ func _open_shop_flow(p_wave: int, p_black_market: bool) -> bool:
 	if not weapon_pool.is_empty():
 		weapon_card = card_generator._make_weapon_card(
 			weapon_pool[card_generator.rng.randi_range(0, weapon_pool.size() - 1)])
+	# v0.7.0 U4+U7：芯片货架 roll（未持有池；wave<10 → 1 格）+ 槽位面板快照
+	var chip_offers := chip_handler.roll_shop_offers(p_wave)
 	change_state(GameConst.GameStatus.SHOP)
 	shop_ui.open(p_wave, p_black_market, current_candidates, weapon_card, gold)
+	shop_ui.set_chip_shelf(chip_offers, chip_handler.free_slots())
+	shop_ui.set_chip_slots(chip_handler.slot_snapshot())
 	shop_ui.set_player_full_hp(player.hp >= player.max_hp)   # v0.7.0 U7：heal 预禁用回写
 	return true
 
@@ -395,16 +399,42 @@ func _on_wave_cleared_gold_rush(p_wave: int) -> void:
 
 
 func _on_shop_purchase(p_index: int) -> void:
-	# 购买仲裁（A4 §2）：三查（未购 / 余额足 / 武器架门控仍成立）→ 先验证 → apply → 扣款；
-	# 任一失败静默拒绝 + push_warning 不扣款；apply 失败不扣款。
+	# 购买仲裁（A4 §2 + v0.7.0 A6 §4）：先验证 → apply → 扣款；任一失败静默拒绝 + push_warning。
+	# index 0~2 卡架 / 3 武器架 / 4~5 芯片架（芯片分支五查：未购/offer 非空/未持有/有空槽/余额足）。
 	if state != GameConst.GameStatus.SHOP or shop_ui == null or not shop_ui.is_open:
 		return
-	if p_index < 0 or p_index > 3:
+	if p_index < 0 or p_index > 5:
 		return
 	var shelf := shop_ui.shelf_state()
 	var purchased: Array = shelf["purchased"]
 	if bool(purchased[p_index]):
 		push_warning("[GameLoop] 商店购买拒绝：已购（index %d）" % p_index)
+		return
+	if p_index >= 4:
+		# ── 芯片分支（v0.7.0 A6 §4 五查）──
+		var chip_offers: Array = shelf["chips"]
+		var offer: Dictionary = chip_offers[p_index - 4] \
+			if (p_index - 4) < chip_offers.size() else {}
+		if offer.is_empty():
+			push_warning("[GameLoop] 商店购买拒绝：芯片空架（index %d）" % p_index)
+			return
+		var chip_id := StringName(String(offer.get("chip_id", "")))
+		if chip_handler.is_equipped(chip_id):
+			push_warning("[GameLoop] 商店购买拒绝：芯片已持有（%s）" % String(chip_id))
+			return
+		if chip_handler.free_slots() <= 0:
+			push_warning("[GameLoop] 商店购买拒绝：芯片槽满")
+			return
+		var chip_price := shop_ui.price_for(p_index)
+		if chip_price < 0 or gold < chip_price:
+			push_warning("[GameLoop] 商店购买拒绝：余额不足（需 %d，有 %d）" % [chip_price, gold])
+			return
+		if not chip_handler.equip(chip_id, int(offer.get("rarity", 0))):
+			push_warning("[GameLoop] 芯片 equip 失败，不扣款")
+			return
+		_add_gold(-chip_price)
+		shop_ui.mark_purchased(p_index)
+		shop_ui.set_chip_slots(chip_handler.slot_snapshot())
 		return
 	var card: Dictionary = shelf["weapon"] if p_index == 3 \
 		else (shelf["cards"] as Array)[p_index]
@@ -449,6 +479,10 @@ func _on_shop_utility(p_util: StringName) -> void:
 				"wave": int(shelf["wave"]),
 				"shop_exclude_weapon": true,
 			}))
+			# v0.7.0 U7：重随全域（卡架 + 芯片架；武器架维持现状）——同帧刷新
+			shop_ui.set_chip_shelf(chip_handler.roll_shop_offers(int(shelf["wave"])),
+				chip_handler.free_slots())
+			shop_ui.set_chip_slots(chip_handler.slot_snapshot())
 			shop_ui.mark_utility_used(&"reroll")
 		&"heal":
 			var max_hp: float = player.get("max_hp")

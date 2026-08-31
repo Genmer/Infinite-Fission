@@ -145,7 +145,8 @@ func slot_snapshot() -> Array[Dictionary]:
 # ── 商店货架 / Boss 掉落 ──────────────────────────────────────────
 func roll_shop_offers(p_wave: int) -> Array[Dictionary]:
 	# 商店芯片货架（未持有池按 id 排序无放回抽取）：格数 = 1（wave<10 或可用 <2）否则 2；
-	# 每格 {chip_id, rarity, price}；池空 → []（空架 disabled）。
+	# 每格 {chip_id, rarity, price}（契约键）+ display_name/value_text（显示装饰键，
+	# ShopUI 无 registry 引用——A6 §4 留痕）；池空 → []（空架 disabled）。
 	var out: Array[Dictionary] = []
 	if registry == null:
 		return out
@@ -163,7 +164,13 @@ func roll_shop_offers(p_wave: int) -> Array[Dictionary]:
 		var chip_id: StringName = remaining[idx]
 		remaining.remove_at(idx)                 # 无放回
 		var rarity := roll_rarity(p_wave)
-		out.append({"chip_id": chip_id, "rarity": rarity, "price": price_for_rarity(rarity)})
+		out.append({
+			"chip_id": chip_id,
+			"rarity": rarity,
+			"price": price_for_rarity(rarity),
+			"display_name": _chip_display_name(chip_id),
+			"value_text": _chip_value_text(chip_id, rarity),
+		})
 	return out
 
 
@@ -239,6 +246,23 @@ func _convert(p_rarity: int) -> int:
 	DebugStats.count(&"chip_converted")
 	DebugStats.count(&"chip_convert_gold", gold)   # v0.7.0 U5：转金币面值遥测
 	return gold
+
+
+func _chip_display_name(p_chip_id: StringName) -> String:
+	# 货架显示名（registry 直查；悬空 id → id 字面量降级）
+	var data := registry.get_chip(p_chip_id) if registry != null else null
+	return data.display_name if data != null else String(p_chip_id)
+
+
+func _chip_value_text(p_chip_id: StringName, p_rarity: int) -> String:
+	# 货架档位值文本（与 slot_snapshot 同口径）
+	var data := registry.get_chip(p_chip_id) if registry != null else null
+	if data == null or data.values.is_empty():
+		return ""
+	var rarity := clampi(p_rarity, 0, data.values.size() - 1)
+	if data.stat_key == &"max_hp":
+		return "+%d" % int(round(data.values[rarity]))
+	return "+%d%%" % int(round(data.values[rarity] * 100.0))
 
 
 func _weighted_key(p_weights: Dictionary) -> Variant:

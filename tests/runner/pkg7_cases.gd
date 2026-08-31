@@ -23,6 +23,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_chip_pipeline()                         # U3
 	_test_u12_u13_u14()                           # U12+U13+U14
 	_test_gold_rush()                             # U5
+	_test_shop_chips()                            # U4+U7
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -747,3 +748,106 @@ func _popup_text_seen(p_manager: PopupManager, p_text: String) -> bool:
 		if is_instance_valid(popup) and String(popup._label.text) == p_text:
 			return true
 	return false
+
+
+# ══ U4+U7：商店全量重排 + 芯片货架/槽位面板 + 仲裁扩展 ═════════════
+func _test_shop_chips() -> void:
+	print("── U4+U7 商店芯片 ──")
+	var shop := _gl.shop_ui
+	# 布局契约：rects 两两无交集 + 屏内
+	var rects := shop.layout_rects()
+	_check("layout_rects：10 项（卡3+武器+芯片2+utility3+面板+离开）", rects.size() == 11,
+		str(rects.size()))
+	var pairwise := true
+	for i in range(rects.size()):
+		var r1: Rect2 = rects[i]
+		if r1.position.x < 0.0 or r1.position.y < 0.0 \
+				or r1.end.x > 720.0 or r1.end.y > 1280.0:
+			pairwise = false
+		for j in range(rects.size()):
+			if i != j and r1.intersects(rects[j] as Rect2):
+				pairwise = false
+	_check("layout_rects：两两无交集 + 全部屏内（720×1280）", pairwise)
+	# 全量重排坐标锚点抽查
+	_check("坐标表：标题 y=96 / 离开 (60,980,600x80)",
+		is_equal_approx(shop._title.position.y, 96.0)
+		and is_equal_approx((shop._card_buttons[3] as Button).position.y, 478.0)
+		and is_equal_approx((shop._chip_buttons[0] as Button).position.y, 584.0)
+		and is_equal_approx((shop._util_buttons[&"heal"] as Button).size.y, 84.0)
+		and is_equal_approx((shop._slot_labels[0] as Label).get_parent().size.x, 188.0))
+	# 槽位面板注入：空槽占位 / 已装备显示
+	shop.set_chip_slots([{"chip_id": &"CHIP_ATK", "display_name": "攻击核心",
+		"stat_key": &"atk_pct", "rarity": 3, "value_text": "+35%"}, {}, {}])
+	_check("set_chip_slots：已装备 [金]+value / 空槽占位",
+		String((shop._slot_labels[0] as Label).text).contains("攻击核心")
+		and String((shop._slot_labels[1] as Label).text) == "空槽")
+	# 芯片货架注入 + 四态（空架 / 槽满 / 余额不足 / 可购）
+	shop.open(12, false, [], {}, 1000)
+	shop.set_chip_shelf([
+		{"chip_id": &"CHIP_ATK", "rarity": 3, "price": 220, "display_name": "攻击核心", "value_text": "+35%"},
+	], 0)
+	_check("芯片架：free_slots=0 → disabled +（槽满）后缀",
+		(shop._chip_buttons[0] as Button).disabled
+		and String((shop._chip_buttons[0] as Button).text).contains("槽满"))
+	shop.set_chip_shelf([], 3)
+	_check("芯片架：空 offer → disabled + 空架",
+		(shop._chip_buttons[0] as Button).disabled
+		and String((shop._chip_buttons[0] as Button).text) == "空架")
+	shop.set_chip_shelf([
+		{"chip_id": &"CHIP_ATK", "rarity": 3, "price": 220, "display_name": "攻击核心", "value_text": "+35%"},
+		{"chip_id": &"CHIP_ROF", "rarity": 0, "price": 40, "display_name": "超频模块", "value_text": "+25%"},
+	], 2)
+	_check("芯片架：余额足可购 / price_for(4/5) 读 offer",
+		not (shop._chip_buttons[0] as Button).disabled
+		and shop.price_for(4) == 220 and shop.price_for(5) == 40)
+	shop.refresh_gold(30)
+	_check("芯片架：余额不足 disabled（gold 30 < 40）", (shop._chip_buttons[1] as Button).disabled)
+	# shelf_state 新键
+	var st: Dictionary = shop.shelf_state()
+	_check("shelf_state 增键 chips/chip_purchased/chip_free_slots",
+		(st["chips"] as Array).size() == 2 and (st["chip_purchased"] as Array).size() == 2
+		and int(st["chip_free_slots"]) == 2)
+	shop.close()
+	# 购买仲裁全链（五查 + 扣款 + 槽位刷新）
+	_gl.start_run()
+	_gl.chip_handler.reset_run()
+	_gl.gold = 0
+	_gl._add_gold(1000)
+	_check("夹具：_open_shop_flow 开店（SHOP 态 + 芯片架已注入）",
+		_gl._open_shop_flow(12, false) and _gl.state == GameConst.GameStatus.SHOP
+		and (_gl.shop_ui.shelf_state()["chips"] as Array).size() == 2)
+	var offer4: Dictionary = (_gl.shop_ui.shelf_state()["chips"] as Array)[0]
+	var price4 := int(offer4.get("price", 0))
+	var gold0 := _gl.gold
+	var equipped0: int = _gl.chip_handler.equipped.size()
+	_gl._on_shop_purchase(4)
+	_check("购买芯片：扣款 %d + equip + 槽位面板刷新" % price4,
+		_gl.gold == gold0 - price4 and _gl.chip_handler.equipped.size() == equipped0 + 1
+		and _gl.chip_handler.is_equipped(StringName(String(offer4.get("chip_id", ""))))
+		and bool((_gl.shop_ui.shelf_state()["purchased"] as Array)[4]))
+	_gl._on_shop_purchase(4)
+	_check("五查·已购：重复购买拒绝（余额不变）", _gl.gold == gold0 - price4)
+	# 余额不足分支：余额直清零（绕开 K_gold 缩放）后买 index 5 → 拒绝不扣款
+	_gl.gold = 0
+	var g_before := _gl.gold
+	_gl._on_shop_purchase(5)
+	_check("五查·余额不足：拒绝且不扣款", _gl.gold == g_before and _gl.gold == 0)
+	_gl._add_gold(1000)
+	_gl._on_shop_purchase(5)
+	_check("余额回补后 index5 可购（第二格）",
+		_gl.chip_handler.equipped.size() == equipped0 + 2)
+	# reroll 全域：卡架 + 芯片架刷新（武器架维持）；余额直赋值（绕开 K_gold 缩放）
+	_gl.gold = 100
+	var chips_before: Array = _gl.shop_ui.shelf_state()["chips"]
+	_gl._on_shop_utility(&"reroll")
+	_check("reroll：卡架+芯片架同帧刷新（chip 购买位复位）",
+		bool(_gl.shop_ui.shelf_state()["reroll_used"])
+		and (_gl.shop_ui.shelf_state()["chips"] as Array).size() >= 1
+		and not bool((_gl.shop_ui.shelf_state()["purchased"] as Array)[4]))
+	_check("reroll：扣款 30", _gl.gold == 70)
+	# 闭店回 PLAYING
+	_gl._close_shop()
+	_check("闭店 → PLAYING（芯片状态保留）",
+		_gl.state == GameConst.GameStatus.PLAYING and _gl.chip_handler.equipped.size() >= 2)
+	# 还原夹具
+	_gl.chip_handler.reset_run()
