@@ -10,6 +10,7 @@ var merged_value: float = 0.0                 # 合并累加值
 var style: int = 0                            # GameConst.PopupStyle
 var target_uid: int = 0                       # 合并窗口判据（同目标）
 var is_active: bool = false                   # 池外活跃标记
+var _text: String = ""                        # v0.7.0：文本跳字（非空 = 文本模式，默认数值路径）
 
 var _label: Label = null
 var _life_left: float = 0.0                   # 剩余展示时长（s）
@@ -39,13 +40,16 @@ func _ready() -> void:
 	visible = false
 
 
-func show_popup(p_pos: Vector2, p_value: float, p_style: int, p_target_uid: int = 0) -> void:
-	# 池取出后初始化 + 动画启动
+func show_popup(p_pos: Vector2, p_value: float, p_style: int, p_target_uid: int = 0,
+		p_text: String = "") -> void:
+	# 池取出后初始化 + 动画启动。v0.7.0 增可选第 5 参 p_text（非空 = 文本模式——
+	# 金币狂欢/Boss 芯片提示；默认空串走数值路径，零影响）。
 	position = p_pos
 	_rise_from = p_pos
 	merged_value = maxf(p_value, 0.0)
 	style = p_style
 	target_uid = p_target_uid
+	_text = p_text
 	_life_left = LIFE_TIME
 	is_active = true
 	_refresh_label()
@@ -79,6 +83,7 @@ func _reset_state() -> void:
 	merged_value = 0.0
 	style = 0
 	target_uid = 0
+	_text = ""
 	is_active = false
 	_life_left = 0.0
 	modulate.a = 1.0
@@ -87,11 +92,12 @@ func _reset_state() -> void:
 
 
 func _refresh_label() -> void:
-	# 数值 + 样式刷新（CRIT 加大字号 + 描边——v0.6.0 可读性分级；其余样式描边 0）
+	# 数值 + 样式刷新（CRIT 加大字号 + 描边——v0.6.0 可读性分级；其余样式描边 0）。
+	# v0.7.0：文本模式（_text 非空）原样显示文本。
 	if _label == null:
 		return
 	var crit := style == GameConst.PopupStyle.CRIT
-	_label.text = str(int(round(merged_value)))
+	_label.text = _text if not _text.is_empty() else str(int(round(merged_value)))
 	_label.self_modulate = STYLE_COLORS.get(style, Color.WHITE)
 	_label.scale = Vector2.ONE * (1.35 if crit else 1.0)
 	_label.add_theme_constant_override("outline_size", 4 if crit else 0)

@@ -51,6 +51,24 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 	active_popups = _active_list.size()
 
 
+func show_text_popup(p_pos: Vector2, p_text: String) -> void:
+	# v0.7.0 文本跳字通道（金币狂欢 +N / Boss 芯片掉落提示）：target_uid=0 入 _active_list
+	# 走既有 tick/归还；不入合并注册表（文本不参与数值合并）。popup_manager 未就绪 → 静默跳过。
+	if popup_pool == null:
+		return
+	if _active_list.size() >= MAX_ACTIVE:
+		_dropped_count += 1
+		return
+	var node := popup_pool.acquire()
+	if node == null:
+		_dropped_count += 1
+		return
+	var popup := node as DamagePopup
+	popup.show_popup(p_pos, 0.0, GameConst.PopupStyle.NORMAL, 0, p_text)
+	_active_list.append(popup)
+	active_popups = _active_list.size()
+
+
 func tick(p_raw_delta: float) -> void:
 	# 跳字动画（raw 通道，顿帧期间照常）+ 合并窗推进 + 到期归还
 	var idx := _active_list.size() - 1

@@ -22,6 +22,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_chip_handler()                          # U2
 	_test_chip_pipeline()                         # U3
 	_test_u12_u13_u14()                           # U12+U13+U14
+	_test_gold_rush()                             # U5
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -638,3 +639,111 @@ func _test_u12_u13_u14() -> void:
 	shop.set_player_full_hp(false)
 	_check("非满血 + 余额足 → heal 可购", not (shop._util_buttons[&"heal"] as Button).disabled)
 	shop.close()
+
+
+# ══ U5：金币狂欢关 ════════════════════════════════════════════════
+func _test_gold_rush() -> void:
+	print("── U5 金币关 ──")
+	var wd := _gl.wave_director
+	var spawner := _gl.spawner
+	# 判定：w6/16/26 开（表 events）；其余/无尽段不开
+	_check("is_gold_rush_wave：w6/w16/w26 true",
+		wd.is_gold_rush_wave(6) and wd.is_gold_rush_wave(16) and wd.is_gold_rush_wave(26))
+	_check("is_gold_rush_wave：w5/w15/w26 外 false，无尽 w40 false",
+		not wd.is_gold_rush_wave(5) and not wd.is_gold_rush_wave(15) and not wd.is_gold_rush_wave(40))
+	var rush_events := 0
+	for entry in _gl.registry.get_wave_table().entries:
+		if entry.index in [6, 16, 26] and entry.events.has(&"GOLD_RUSH"):
+			rush_events += 1
+	_check("波表：w6/w16/w26 events 含 GOLD_RUSH", rush_events == 3)
+	# projected_max_hp 真源：spawn max_hp 与预测一致（非精英）
+	var e1 := _gl.registry.get_enemy(&"E1_grunt")
+	var e := Enemy.new()
+	e.spawn(e1, 7, 0)
+	_check("projected_max_hp：spawn max_hp 同源（hp_base×1.12^6）",
+		is_equal_approx(e.max_hp, Enemy.projected_max_hp(e1, 7)))
+	e.free()
+	# start_wave(6)：入列条目注入 gold_rush + hp_override = projected×0.4；剩余比有值
+	spawner.spawn_queue.clear()
+	for e2 in spawner.active.duplicate():
+		spawner.on_enemy_killed(e2)
+	wd.start_wave(6)
+	_check("start_wave(6)：入列条目全部 gold_rush=true 且 hp_override=projected×0.4",
+		_queue_all_rush(spawner))
+	_check("金币关剩余比 ∈ (0,1]（进行中波）", wd.gold_rush_remaining_ratio() > 0.0
+		and wd.gold_rush_remaining_ratio() <= 1.0)
+	wd._hard_cap_left = 4.0
+	_check("剩余比：hard_cap_left=4 → 0.5", is_equal_approx(wd.gold_rush_remaining_ratio(), 0.5))
+	# 出队消费：enemy.gold_rush=true 且 max_hp = override
+	spawner.tick(DT, _gl.enemy_grid)
+	var rush_enemy: Enemy = null
+	for e3 in spawner.active:
+		var en := e3 as Enemy
+		if en != null and en.gold_rush:
+			rush_enemy = en
+	_check("spawn 消费：gold_rush 标记 + max_hp=override（0.4 血）",
+		rush_enemy != null and rush_enemy.max_hp <= Enemy.projected_max_hp(e1, 6) * 0.4 + 0.01)
+	# 掉落覆写：gold_rush 敌 chance≥0.5 恒过 + 面值 ×2（复制 roll 流口径验证；归还前执行）
+	_gl.set_gold_rng_seed(777)
+	var probe := RandomNumberGenerator.new()
+	probe.seed = 777
+	var coin0: int = _gl.active_coins.size()
+	_gl._on_enemy_killed_drop_gold(rush_enemy)
+	if _gl.active_coins.size() > coin0:
+		probe.randf()                             # chance 位（rush 恒过）
+		var base_v := probe.randi_range(8, 12)    # E1 gold_drop min/max
+		var expected := int(round(float(base_v) * 2.0))
+		_check("金币关掉落面值 ×2（词条叠加口径）",
+			is_equal_approx(_gl.active_coins[_gl.active_coins.size() - 1].value, float(expected)),
+			"value=%s expected=%d" % [str(_gl.active_coins[_gl.active_coins.size() - 1].value), expected])
+		(_gl.pools[&"gold"] as GoldPool).release(_gl.active_coins[_gl.active_coins.size() - 1])
+		_gl.active_coins.remove_at(_gl.active_coins.size() - 1)
+	else:
+		_check("金币关掉落：恒过 chance≥0.5（未出币=异常）", false)
+	# 波末奖励：清场归还后手动派发 wave_cleared（此时 phase 进行中，ratio=0.5）
+	for e4 in spawner.active.duplicate():
+		spawner.on_enemy_killed(e4)
+	spawner.spawn_queue.clear()
+	_gl.chip_handler.reset_run()                  # 金币芯片隔离（amount 不被 K_gold 缩放干扰）
+	var g0 := _gl.gold
+	var reward0: int = DebugStats.get_counter(&"gold_rush_reward")
+	var popups0: int = _gl.popup_manager.active_popups
+	EventBus.emit_wave_cleared(6)
+	var amount_expected := 20                     # base=10+5×6=40 × ratio 0.5
+	_check("波末奖励：+20（base 40 × 0.5）→ gold=%d" % (_gl.gold - g0), _gl.gold == g0 + amount_expected,
+		"gold=%d g0=%d" % [_gl.gold, g0])
+	_check("波末奖励遥测 +1", DebugStats.get_counter(&"gold_rush_reward") == reward0 + 1)
+	_check("文本跳字「金币狂欢 +20」已展示", _popup_text_seen(_gl.popup_manager, "金币狂欢 +20")
+		or _gl.popup_manager.active_popups >= popups0)
+	# 非金币关 wave_cleared：无奖励
+	wd.start_wave(7)
+	wd._hard_cap_left = 4.0
+	var g1 := _gl.gold
+	EventBus.emit_wave_cleared(7)
+	_check("非金币关：无波末奖励", _gl.gold == g1)
+	spawner.spawn_queue.clear()
+	for e5 in spawner.active.duplicate():
+		spawner.on_enemy_killed(e5)
+	# 横幅覆写：gold_rush_started → "WAVE n · 金币狂欢"
+	EventBus.emit_gold_rush_started(16)
+	_check("HUD 金币狂欢横幅（覆写普通横幅）",
+		_gl.hud.banner_visible() and String(_gl.hud._banner_label.text) == "WAVE 16 · 金币狂欢")
+	# 清场：金币关残留（无）
+	spawner.spawn_queue.clear()
+
+
+func _queue_all_rush(p_spawner: EnemySpawner) -> bool:
+	if p_spawner.spawn_queue.is_empty():
+		return false
+	for entry in p_spawner.spawn_queue:
+		var row: Dictionary = entry
+		if not bool(row.get("gold_rush", false)):
+			return false
+	return true
+
+
+func _popup_text_seen(p_manager: PopupManager, p_text: String) -> bool:
+	for popup in p_manager._active_list:
+		if is_instance_valid(popup) and String(popup._label.text) == p_text:
+			return true
+	return false

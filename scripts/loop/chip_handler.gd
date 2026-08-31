@@ -237,6 +237,7 @@ func _convert(p_rarity: int) -> int:
 	chips_converted += 1
 	gold_from_convert += gold
 	DebugStats.count(&"chip_converted")
+	DebugStats.count(&"chip_convert_gold", gold)   # v0.7.0 U5：转金币面值遥测
 	return gold
 
 

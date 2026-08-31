@@ -84,11 +84,22 @@ func start_wave(p_wave: int) -> void:
 	_phase = WavePhase.SPAWNING
 	if spawner != null:
 		var composition := _roll_composition(p_wave)
+		var rush := is_gold_rush_wave(p_wave)     # v0.7.0 U5：金币关逐敌注入（0.4 血 + 标记）
 		for entry in composition:
+			if rush:
+				var edata: EnemyData = null
+				if registry != null:
+					edata = registry.get_enemy(StringName(String(entry.get("data_id", ""))))
+				if edata != null:
+					entry["hp_override"] = Enemy.projected_max_hp(edata, p_wave) * 0.4
+				entry["gold_rush"] = true
 			spawner.enqueue(entry)
 		if _boss_wave:
 			_spawn_boss(p_wave)
 	EventBus.emit_wave_started(p_wave)
+	# v0.7.0 U5：金币狂欢横幅（HUD 覆写普通波次横幅）
+	if is_gold_rush_wave(p_wave):
+		EventBus.emit_gold_rush_started(p_wave)
 	# v0.7.0：芯片槽解锁（wave 1/10/20 → 槽 1/2/3；ChipHandler 订阅消费，A6 §2）
 	match p_wave:
 		1:
@@ -283,6 +294,22 @@ func _is_shop_wave(p_wave: int) -> bool:
 	if entry != null:
 		return entry.events.has(&"SHOP")
 	return p_wave > 0 and p_wave % 10 == 9
+
+
+func is_gold_rush_wave(p_wave: int) -> bool:
+	# v0.7.0 U5：金币狂欢波（表 events 含 GOLD_RUSH；表缺波/无表 → false——无尽段不开）
+	var entry := _table_entry(p_wave)
+	if entry != null:
+		return entry.events.has(&"GOLD_RUSH")
+	return false
+
+
+func gold_rush_remaining_ratio() -> float:
+	# v0.7.0 U5：金币关剩余时间比 = 硬上限剩余 / HARD_CAP_BONUS（钳 [0,1]）；
+	# 非 SPAWNING/CLEARING 进行中波 → 0（BUFFER/IDLE 无奖励）
+	if _phase != WavePhase.SPAWNING and _phase != WavePhase.CLEARING:
+		return 0.0
+	return clampf(_hard_cap_left / HARD_CAP_BONUS, 0.0, 1.0)
 
 
 func _is_elite_wave(p_wave: int) -> bool:

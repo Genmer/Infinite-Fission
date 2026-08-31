@@ -56,6 +56,7 @@ func bind_events() -> void:
 	EventBus.xp_gained.connect(_on_xp_gained)
 	EventBus.gold_changed.connect(_on_gold_changed)
 	EventBus.wave_started.connect(_on_wave_started)
+	EventBus.gold_rush_started.connect(_on_gold_rush_started)   # v0.7.0 U5：金币狂欢横幅
 	EventBus.enemy_killed.connect(_on_enemy_killed)
 	EventBus.state_changed.connect(_on_state_changed)
 	EventBus.damage_resolved.connect(_on_damage_resolved)
@@ -195,6 +196,11 @@ func _on_wave_started(p_wave: int) -> void:
 	wave = p_wave
 	show_banner("WAVE %d" % p_wave)           # v0.6.0：波次横幅（2.0s 三段动画）
 	refresh_stats()
+
+
+func _on_gold_rush_started(p_wave: int) -> void:
+	# v0.7.0 U5：金币狂欢横幅（覆写普通波次横幅——gold_rush_started 晚于 wave_started 派发）
+	show_banner("WAVE %d · 金币狂欢" % p_wave)
 
 
 func _on_enemy_killed(_p_enemy: Node2D) -> void:

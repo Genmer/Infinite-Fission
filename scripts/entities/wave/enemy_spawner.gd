@@ -66,6 +66,9 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		if bool(entry.get("summon", false)):
 			enemy.is_summon = true
 			summon_active_count += 1
+		# v0.7.0 U5 可选键 gold_rush:bool：金币关标记（掉落覆写消费）
+		if bool(entry.get("gold_rush", false)):
+			enemy.gold_rush = true
 		if elemental_system != null:
 			elemental_system.register_host(enemy)   # 包 4：出生挂元素状态容器（帧序⑤宿主）
 		# v0.6.0 增量键 hp_override（A4 §7）：>0 → spawn 后覆写 max_hp/hp（Boss split 子代血量）

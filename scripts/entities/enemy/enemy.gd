@@ -127,11 +127,11 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 		e_exp = float(data.elite_mult.get("exp", 1.0))
 	var bal := GameConfig.balance
 	var w := float(maxi(p_wave, 1))
-	var hp_growth := 1.12 if bal == null else bal.hp_growth_per_wave
 	var dmg_growth := 1.06 if bal == null else bal.dmg_growth_per_wave
 	var spd_growth := 0.008 if bal == null else bal.spd_growth_per_wave
 	var exp_growth := 1.085 if bal == null else bal.exp_inflation_per_wave
-	max_hp = data.hp_base * pow(hp_growth, w - 1.0) * e_hp
+	# v0.7.0 U5：HP 成长真源统一走 projected_max_hp（消除公式双写——金币关 hp_override 同源）
+	max_hp = projected_max_hp(data, p_wave) * e_hp
 	hp = max_hp
 	speed = data.spd_base * (1.0 + spd_growth * (w - 1.0)) * e_spd
 	contact_dmg = data.dmg_base * pow(dmg_growth, w - 1.0) * e_dmg
@@ -312,6 +312,14 @@ func is_elite() -> bool:
 func spawn_wave() -> int:
 	# v0.7.0 观测口：出生波号快照（U6 Boss 芯片掉落按出生波 roll；_spawn_wave spawn 期已记录）
 	return _spawn_wave
+
+
+static func projected_max_hp(p_data: EnemyData, p_wave: int) -> float:
+	# v0.7.0 U5：波次成长 HP 预测真源 = hp_base × hp_growth^(w−1)（精英/覆盖乘区不在本口径——
+	# 调用方自行乘）。spawn 内改调本真源 + WaveDirector 金币关 hp_override 同源（消除双写）。
+	var bal := GameConfig.balance
+	var hp_growth := 1.12 if bal == null else bal.hp_growth_per_wave
+	return p_data.hp_base * pow(hp_growth, float(maxi(p_wave, 1)) - 1.0)
 
 
 func _on_died() -> void:

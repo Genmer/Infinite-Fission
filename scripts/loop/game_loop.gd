@@ -377,6 +377,23 @@ func _on_wave_cleared_shop_bridge(p_wave: int) -> void:
 		wave_director.queue_extra_shop()
 
 
+func _on_wave_cleared_gold_rush(p_wave: int) -> void:
+	# v0.7.0 U5：金币关波末奖励（wave_cleared 派发于 BUFFER 前——此刻 _hard_cap_left 有值）。
+	# base = 10 + 5×wave，amount = round(base × 剩余时间比)；>0 才入账 + 文本跳字。
+	if wave_director == null or not wave_director.is_gold_rush_wave(p_wave):
+		return
+	var ratio := wave_director.gold_rush_remaining_ratio()
+	var base := int(round(10.0 + 5.0 * float(p_wave)))
+	var amount := int(round(float(base) * ratio))
+	if amount <= 0:
+		return
+	_add_gold(amount)
+	DebugStats.count(&"gold_rush_reward")
+	if popup_manager != null and player != null and is_instance_valid(player):
+		popup_manager.show_text_popup(player.global_position + Vector2(0.0, -60.0),
+			"金币狂欢 +%d" % amount)
+
+
 func _on_shop_purchase(p_index: int) -> void:
 	# 购买仲裁（A4 §2）：三查（未购 / 余额足 / 武器架门控仍成立）→ 先验证 → apply → 扣款；
 	# 任一失败静默拒绝 + push_warning 不扣款；apply 失败不扣款。
@@ -650,6 +667,7 @@ func _boot_build_presentation() -> void:
 	shop_ui.utility_requested.connect(_on_shop_utility)
 	shop_ui.close_requested.connect(_close_shop)
 	EventBus.wave_cleared.connect(_on_wave_cleared_shop_bridge)
+	EventBus.wave_cleared.connect(_on_wave_cleared_gold_rush)   # v0.7.0 U5：金币关波末奖励
 	# 商店开门请求（WaveDirector BUFFER 间隙 → 仲裁）
 	wave_director.shop_requested.connect(_on_shop_requested)
 	# 集成包 A：震屏宿主相机（trauma² 偏移在 ⑧ raw 通道应用）+ 主菜单屏
@@ -760,10 +778,14 @@ func _on_enemy_killed_drop_gold(p_enemy: Node2D) -> void:
 	if max_v < min_v:
 		max_v = min_v                           # 坏序防御（randi_range 前提 min ≤ max）
 	var chance := clampf(float(drop.get("chance", 0.0)) + _gold_add_sum(&"add_gold_drop"), 0.0, 1.0)
+	# v0.7.0 U5：金币关掉率下限 50%（词条正常叠加；非金币关零影响）
+	if enemy.gold_rush:
+		chance = maxf(chance, 0.5)
 	if chance <= 0.0 or _gold_rng.randf() > chance:
 		return                                  # 零概率 / roll 未中
 	var base := _gold_rng.randi_range(int(min_v), int(max_v))
-	var amount := int(round(float(base) * (1.0 + _gold_add_sum(&"add_gold_value"))))
+	var rush_mult := 2.0 if enemy.gold_rush else 1.0   # v0.7.0 U5：金币关面值 ×2
+	var amount := int(round(float(base) * rush_mult * (1.0 + _gold_add_sum(&"add_gold_value"))))
 	_spawn_gold_coin(enemy.global_position, amount)
 
 
