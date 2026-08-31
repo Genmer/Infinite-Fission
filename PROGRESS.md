@@ -100,6 +100,12 @@
 5. pkg2/pkg5 退出泄漏三元组（ObjectDB leaked WARNING + resources in use）为测试入口基建既有现象，核对一次测试退出释放
 6. W5 L5 refract_depth=3（A3）与引擎 MAX=2 双硬闸矛盾、爆虫自爆 EnemyData schema 字段化、精英敌类型差异（速度/行为）、Boss 波伴随怪构成差异全量表达——均已按裁定从波表/常量口径实现，正式美术/数值迭代时统一回收
 7. PopupPool/LaserBeamPool acquire() 返回值仍是 Node2D（第二批收紧未授权的两处）
+8. **w10 双 Boss 既有 bug**：波表 w10 composition 含无 TAG_BOSS 的 E6_boss1 + `_spawn_boss` 再入队带标 Boss = 每轮实刷两只（一只无 Boss 逻辑）；pkg2 冻结用例依赖现行为，修复需同步授权改 pkg2 断言（v0.6.0 coder 发现，A5-D1）
+9. Boss3 召唤被伴随流水压制：BOSS_SUMMON_ACTIVE_CAP=12 用 spawner 总活跃数，w30+ 伴随 cap=14 时 Boss3 召唤几乎不触发——改召唤单位独立计数（A5-E1，reviewer Q1）
+10. `_gold_add_sum` 每击杀对每武器重建 aggregate_panel 字典——击杀潮分配频率上升，按帧缓存（A5-E2，当前规模无实测压力）
+11. ShopUI heal 满血不禁用（点击后才被仲裁拒绝）；卡面 kind 中文名在 card_select_ui/shop_ui 两处重复维护（A5-E3/E4）
+12. v0.6.0 defer 项：Boss3 charge/laser_sweep 未消费（laser 依赖 §11.7 收紧+新预警通道，A5-D2/D3）；金币经济数值不干预待试玩回收（A4 §8 假设清单）
+13. **玩法迭代池与元素反应长期课题**：`docs/analysis/A5_v0.6.x_exploration.md`（开局武器三选一/首件武器保底/冲刺/金币关/利息/武器专属词条扩容/元素反应三期路线：表现→双轨数值→第 4 元素+破盾）
 
 ## 6. 关键文档地图（全部在工作区 docs/）
 
