@@ -108,7 +108,6 @@ func spawn(p_params: Dictionary) -> void:
 			_hit_exclusions[int(uid_v)] = true
 	_tick_left = 1.0 / tick_rate
 	_time_alive = 0.0
-	lifetime = 0.0
 	popup_count = 0
 	settle_count = 0
 	_live = true

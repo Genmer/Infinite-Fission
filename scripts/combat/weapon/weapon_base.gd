@@ -89,9 +89,14 @@ func attach_trait(p_trait: TraitData) -> bool:
 			elemental.register_reaction_mult(uid, float(p_trait.params["reaction_mult"]))
 		if p_trait.id == &"MEC_SHIELD" and player != null:
 			# MEC_SHIELD 消费点接线（A3 §4.4 格挡力场：每 interval_s 护盾挡 1 次接触伤害，
-			# 2 层 → 5.5s；原「包 4 接线」遗留——2026-08-29 用户反馈补齐）。挂载收束口：
-			# 选卡与 REL_ECHO 回响复制共用本路径；重开时 respawn 复位后随武器重建重挂。
-			player.call(&"apply_shield_trait", p_trait.layers, p_trait.params)
+			# 2 层 → 5.5s）。层数取挂载后的 TraitBase（p_trait 是 TraitData 定义，无 layers
+			# 运行时字段——2026-08-31 P0 修复：直读 p_trait.layers 运行时崩溃致护盾条不显示）。
+			var shield_layers := 0
+			for mounted in trait_stack.traits:
+				if mounted.data != null and mounted.data.id == p_trait.id:
+					shield_layers = mounted.layers
+			if shield_layers > 0:
+				player.call(&"apply_shield_trait", shield_layers, p_trait.params)
 	return attached
 
 

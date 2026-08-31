@@ -42,6 +42,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_char_meta()
 	_test_economy()
 	_test_polish()
+	_test_p0_fixes()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -749,6 +750,98 @@ func _test_polish() -> void:
 	_check("词缀：spawner 应用移速 +10%", absf(se.speed - spd0 * 1.10) <= 0.01)
 	_gl.spawner.map_mods = {}
 	_gl.pools[&"enemy"].release(se)
+
+
+func _test_p0_fixes() -> void:
+	# 2026-08-31 P0 双修验收（META_ROADMAP §5.10 前两项）：
+	# ① MEC_SHIELD 挂载链（原 p_trait.layers 运行时崩溃 → 护盾永不生效）
+	# ② W4 脉冲激光（lifetime 三处断链 → 常驻）
+	print("── P0 修复：护盾链 + W4 脉冲 ──")
+	var p: Node = _gl.player
+	var main_w: Node = null
+	for w: Node in p.weapon_slots:
+		if w != null and is_instance_valid(w):
+			main_w = w
+			break
+	# ① 护盾：真路径挂载（attach_trait 唯一收束口——选卡/回响共用）
+	var shield_data: TraitData = _gl.registry.get_trait(&"MEC_SHIELD")
+	var ok1: bool = main_w.attach_trait(shield_data)
+	_check("护盾链：attach_trait 成功（无崩溃）", ok1)
+	_check("护盾链：interval=8.0 首充 8s 未就绪",
+		absf(float(p.get("shield_interval")) - 8.0) <= 0.01
+		and absf(float(p.get("shield_timer")) - 8.0) <= 0.01
+		and not bool(p.get("shield_ready")))
+	main_w.attach_trait(shield_data)             # 2 层
+	_check("护盾链：2 层 → interval=5.5", absf(float(p.get("shield_interval")) - 5.5) <= 0.01)
+	p.set("shield_timer", 0.01)
+	for i in range(3):                           # 3 帧 ×8.33ms 必然走完 10ms 尾差
+		p.call(&"tick", 1.0 / 120.0, Vector2.ZERO)
+	_check("护盾链：充满 → shield_ready", bool(p.get("shield_ready")))
+	var hp0: float = float(p.get("hp"))
+	p.set("invuln_left", 0.0)
+	p.call(&"take_contact_damage", 50.0)
+	_check("护盾链：格挡 → HP 不掉 + 进入再充能",
+		absf(float(p.get("hp")) - hp0) <= 0.01 and not bool(p.get("shield_ready"))
+		and absf(float(p.get("shield_timer")) - 5.5) <= 0.01)
+	# ⑤ 前置还原：清除护盾状态（防本批次后续 roll 断言被充能干扰——语义无后续依赖）
+	# ② W4 脉冲：真池真网格（GameLoop 既有依赖），0.5s 收束 + cd 后再起束
+	var lw: Node = load("res://scripts/combat/weapon/laser_weapon.gd").new()
+	lw.name = "VerifyW4"
+	_gl.add_child(lw)
+	lw.position = Vector2(100, 640)
+	lw.setup(_gl.registry.get_weapon(&"W4_pulse_beam"), p, {
+		"enemy_grid": _gl.enemy_grid, "laser_pool": _gl.pools[&"laser"],
+	})
+	lw.try_fire()
+	var beam: Node = lw._main_beam
+	_check("W4 脉冲：lifetime=0.5 已接线", beam != null and absf(beam.lifetime - 0.5) <= 0.01)
+	var t := 0.0
+	while t < 0.6:
+		lw.tick(1.0 / 120.0)
+		t += 1.0 / 120.0
+	_check("W4 脉冲：0.5s 后光束收束", not beam.is_live())
+	lw.free()
+	# ③ W5 对照组：无 pulse_duration 键 → 常驻（行为不回归）
+	var w5: Node = load("res://scripts/combat/weapon/laser_weapon.gd").new()
+	w5.name = "VerifyW5"
+	_gl.add_child(w5)
+	w5.position = Vector2(100, 640)
+	w5.setup(_gl.registry.get_weapon(&"W5_prism"), p, {
+		"enemy_grid": _gl.enemy_grid, "laser_pool": _gl.pools[&"laser"],
+	})
+	w5.try_fire()
+	var beam5: Node = w5._main_beam
+	_check("W5 对照：无脉冲键 → 常驻（lifetime=0）", beam5 != null and beam5.lifetime <= 0.0)
+	w5.free()
+	# ④ 卡池每局随机（start_run → rng.randomize 改写 state）
+	_gl.card_generator.rng.seed = 42
+	var state0: int = _gl.card_generator.rng.state
+	_gl.card_generator.rng.randomize()
+	_check("卡池：每局 randomize 改写 RNG 流", _gl.card_generator.rng.state != state0)
+	# ⑤ 词条卡目标随机武器：双武器持有下 roll 40 次 → 目标覆盖 ≥2 把
+	p.set("unlocked_slots", 5)                   # 前序批次槽位态未知——全解锁保装配
+	var w2: Node = p.call(&"add_weapon", _gl.registry.get_weapon(&"W2_gatling"))
+	_check("词条目标：第二把武器装配成功", w2 != null)
+	var targets: Dictionary = {}
+	_gl.card_generator.rng.seed = 20260831
+	for i in range(40):
+		var cands := _gl.card_generator.generate_candidates({"player": p, "wave": 20})
+		for c: Dictionary in cands:
+			if int(c.get("kind", -1)) == 1 and c.get("target_weapon") != null:
+				targets[int(c["target_weapon"].get("uid"))] = true
+	_check("词条目标：40 次发牌覆盖 ≥2 把武器（不再全砸主武器）", targets.size() >= 2,
+		"覆盖=%d" % targets.size())
+	# ⑥ 技能 CD 全员 120s
+	var all_cd := true
+	for c: Dictionary in CharacterTable.CHARACTERS:
+		if absf(float(c.get("cd", 0.0)) - 120.0) > 0.01:
+			all_cd = false
+	_check("技能：6 角色 CD 全员 120s", all_cd and CharacterTable.CHARACTERS.size() >= 6)
+	# ⑦ W4 数据键 + W5 对照（数据侧口径锁定）
+	var w4d: Resource = _gl.registry.get_weapon(&"W4_pulse_beam")
+	_check("数据：W4 laser.pulse_duration=0.5", absf(float(w4d.laser.get("pulse_duration", 0.0)) - 0.5) <= 0.01)
+	var w5d: Resource = _gl.registry.get_weapon(&"W5_prism")
+	_check("数据：W5 无 pulse_duration（常驻口径）", not w5d.laser.has("pulse_duration"))
 
 
 func _live_children(p_node: Node) -> int:

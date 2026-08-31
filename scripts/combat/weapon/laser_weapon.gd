@@ -73,6 +73,10 @@ func _spawn_beam(p_origin: Vector2, p_dir: Vector2, p_depth: int, p_dmg_mult: fl
 		"tick_rate": _leveled_param("tick_rate", get_stat(&"rof")),
 		"beam_length": float(data.laser.get("beam_length", 560.0)),
 		"beam_width": float(data.laser.get("beam_width", 14.0)),
+		# 脉冲寿命 s（0=常驻——W5 折射棱镜口径不变；W4=0.5 数据键 pulse_duration，
+		# 2026-08-31 P0 修复：commit 38b87f3 宣称脉冲制但 spawn 参数从未传递，实为常驻）
+		"lifetime": _leveled_param("pulse_duration",
+			float(data.laser.get("pulse_duration", 0.0))),
 		"scorch_max_layers": int(_leveled_param("scorch_max_layers",
 			float(data.laser.get("scorch_max_layers", 5)))),
 		"scorch_per_layer": float(data.laser.get("scorch_per_layer", 0.08)),
