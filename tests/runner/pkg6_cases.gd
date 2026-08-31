@@ -21,6 +21,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_weapon_gated_trait()                    # T1
 	_test_gold_trait_data()                       # T4
 	_test_gold_chain()                            # T3
+	_test_weapon_cards()                          # T5
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -303,6 +304,108 @@ func _release_hoard(p_pool: GoldPool, p_hoard: Array[GoldCoin]) -> void:
 	for c in p_hoard:
 		if is_instance_valid(c):
 			p_pool.release(c)
+
+
+# ── T5：武器卡（候选门控 / 权重三处同值 / apply / 商店防混入） ──────
+func _test_weapon_cards() -> void:
+	print("── T5 武器卡 ──")
+	var gen := _gl.card_generator
+	var player := _gl.player
+	# ① 权重表三处同值 + 和 = 100.0（精确断言，浮点容差 1e-6；A4 §5）
+	var weight_sum := 0.0
+	for k in CardGenerator.CATEGORY_WEIGHTS:
+		weight_sum += float(CardGenerator.CATEGORY_WEIGHTS[k])
+	_check("CATEGORY_WEIGHTS 权重和 = 100.0（±1e-6）", absf(weight_sum - 100.0) <= 1e-6,
+		"sum=%s" % str(weight_sum))
+	var bt_default := BalanceTables.new()
+	_check("三处同值①：CardGenerator.CATEGORY_WEIGHTS == BalanceTables 默认",
+		_weights_same(CardGenerator.CATEGORY_WEIGHTS, bt_default.category_weights))
+	_check("三处同值②：CardGenerator.CATEGORY_WEIGHTS == balance_tables.tres",
+		_weights_same(CardGenerator.CATEGORY_WEIGHTS, GameConfig.balance.category_weights))
+	_check("三处同值③：运行时镜像（gen.category_weights）同步",
+		_weights_same(CardGenerator.CATEGORY_WEIGHTS, gen.category_weights))
+	# ② 满槽（1 解锁槽被 W1 占）→ 武器候选池空
+	_check("夹具：仅 W1 在手 / 解锁槽 1", player.unlocked_slots == 1
+		and player.weapon_slots[0] != null and player.weapon_slots[1] == null)
+	_check("满槽 → 武器候选池空（槽位满后不再出现）", gen._weapon_candidates(player, []).is_empty())
+	# ③ 仅 W1 在手 + 1 个已解锁空槽 → 候选恰为 W2~W9 全集（8 个，id 升序确定性）
+	player.unlock_slot(2)
+	var expect: Array[StringName] = [&"W2_gatling", &"W3_shotgun", &"W4_pulse_beam", &"W5_prism",
+		&"W6_micro_missile", &"W7_cluster_rocket", &"W8_orbit_field", &"W9_arc_slash"]
+	var ids: Array[StringName] = []
+	for wd: WeaponData in gen._weapon_candidates(player, []):
+		ids.append(wd.id)
+	_check("候选恰为 W2~W9 全集（W1 排除）", ids == expect, str(ids))
+	# ④ 卡架抽样：无 shop_exclude_weapon 时 WEAPON 卡可达；带键时 200 次零出现
+	gen.rng.seed = 99
+	var seen_weapon := false
+	for i in range(120):
+		for c in gen.generate_candidates({"player": player, "wave": 12}):
+			if int(c["kind"]) == CardGenerator.CardKind.WEAPON:
+				seen_weapon = true
+	_check("常规卡架：WEAPON 卡可达（120 次货架抽样）", seen_weapon)
+	var seen_excl := false
+	for i in range(200):
+		for c in gen.generate_candidates({"player": player, "wave": 12, "shop_exclude_weapon": true}):
+			if int(c["kind"]) == CardGenerator.CardKind.WEAPON:
+				seen_excl = true
+	_check("shop_exclude_weapon：200 次卡架 roll 无武器卡（商店防混入）", not seen_excl)
+	# ⑤ 已持有不重复：先解锁槽 3（保持有空槽门控）→ 装入 W8 → 候选排除 W8（剩 7 个）+ 同批去重
+	player.unlock_slot(3)
+	var w8 := player.add_weapon(_gl.registry.get_weapon(&"W8_orbit_field"))
+	_check("夹具：W8 装入", w8 != null)
+	var held_ids: Array[StringName] = []
+	for wd: WeaponData in gen._weapon_candidates(player, []):
+		held_ids.append(wd.id)
+	_check("已持有 W8 → 候选排除（剩 7 个）", held_ids.size() == 7 and not held_ids.has(&"W8_orbit_field"),
+		str(held_ids))
+	var picked_ids: Array[StringName] = [&"W3_shotgun"] as Array[StringName]
+	_check("同批去重：picked 排除（剩 6 个）", gen._weapon_candidates(player, picked_ids).size() == 6)
+	# ⑥ 武器卡形状 + apply：weapon_slots +1（装入 W3 → 3 槽全满）
+	var wdata: WeaponData = _gl.registry.get_weapon(&"W3_shotgun")
+	var card := gen._make_weapon_card(wdata)
+	_check("武器卡形状：kind=WEAPON / rarity=unlock_rarity=1（蓝卡档）/ 名称前缀",
+		int(card["kind"]) == CardGenerator.CardKind.WEAPON and int(card["rarity"]) == 1
+		and String(card["display_name"]).begins_with("武器："))
+	var slots0 := _weapon_count(player)
+	gen.apply_choice(card, player)
+	_check("apply 后 weapon_slots +1（W3 入手）", _weapon_count(player) == slots0 + 1
+		and gen._player_holds_weapon(player, &"W3_shotgun"))
+	# ⑦ 满槽 apply 降级：槽满 → fallback 词条挂主武器（界面选择不白拿）
+	var primary: WeaponBase = player.weapon_slots[0]
+	var stack0: int = primary.trait_stack.size()
+	gen.apply_choice(gen._make_weapon_card(_gl.registry.get_weapon(&"W5_prism")), player)
+	_check("满槽 apply 降级：主武器栈 +1（fallback 词条）", primary.trait_stack.size() == stack0 + 1)
+	# 还原夹具（卸 W3/W8、清主武器栈、解锁槽数回 1——后续用例基线）
+	for i in range(player.weapon_slots.size()):
+		var w: WeaponBase = player.weapon_slots[i]
+		if w is WeaponBase and is_instance_valid(w) \
+				and (w.data.id == &"W3_shotgun" or w.data.id == &"W8_orbit_field"):
+			player.weapon_slots[i] = null
+			w.free()
+	primary.trait_stack.clear()
+	player.unlocked_slots = 1
+	_check("夹具还原：回到仅 W1 / 解锁槽 1",
+		_weapon_count(player) == 1 and player.unlocked_slots == 1)
+
+
+func _weights_same(p_a: Dictionary, p_b: Dictionary) -> bool:
+	# 权重表逐键同值比对（键集一致 + 每键 is_equal_approx）
+	if p_a.size() != p_b.size():
+		return false
+	for k in p_a:
+		if not p_b.has(k) or not is_equal_approx(float(p_a[k]), float(p_b[k])):
+			return false
+	return true
+
+
+func _weapon_count(p_player: Node) -> int:
+	var n := 0
+	var slots: Array = p_player.get("weapon_slots")
+	for w in slots:
+		if w is WeaponBase and is_instance_valid(w):
+			n += 1
+	return n
 
 
 # ── 断言 ──────────────────────────────────────────────────────────

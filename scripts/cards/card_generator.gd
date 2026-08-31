@@ -3,15 +3,16 @@
 # 掉卡规则真源 A3 §6：
 #   §6.1 稀有度权重（w<10 基础 {白58,蓝30,紫10,金2}；w≥10 调整公式——白 58−0.7w（下限 40）、
 #        蓝 30+0.1w（上限 34）、紫 10×(1+0.045w)、金 2×(1+0.075w)，收敛于 §6.1 深度列）
-#   §6.3 卡池构成（类别 roll）：MASTERY 12 / ADD 40 / MULT 18 / MECH 14 / ELEM 10 / RELIC 6
-#        （遗物唯一，抽空 → 重 roll 为乘区）
+#   §6.3 卡池构成（类别 roll）：v0.6.0 起 WEAPON 8.0 + 原五类×0.92 归一
+#        {MASTERY 11.04 / ADD 36.8 / MULT 16.56 / MECH 12.88 / ELEM 9.2 / RELIC 5.52}（和=100，A4 §5；
+#        A3 §6.3 原值 12/40/18/14/10/6 被 v0.6.0 权重表覆盖，BalanceTables 同源镜像）
 #   §6.4 叠层规则：同 ID 至 stack_max 后该 ID 移出池（过滤依据）
 #   AC-16.4 卡池耗尽 fallback："+5% 攻击"属性卡，界面永不空。
 # RNG 注入（架构 §0.1-5：影响确定性的掷骰走 RandomNumberGenerator 实例流）。
 class_name CardGenerator
 extends RefCounted
 
-enum CardKind { MASTERY, TRAIT, RELIC, FALLBACK }
+enum CardKind { MASTERY, TRAIT, RELIC, FALLBACK, WEAPON }   # v0.6.0 尾部追加 WEAPON（A4 §5）
 
 var registry: DataRegistry = null             # M-14 注入
 var rarity_weights: Dictionary = {}           # {rarity(int) -> weight(float)}（按波次折算）
@@ -30,9 +31,11 @@ func _init() -> void:
 	# 承担，卡牌流不引入额外随机源。
 	rng.seed = RNG_SEED
 
-# 类别权重静态表（A3 §6.3 原值；BalanceTables.category_weights 为同源镜像）
+# 类别权重静态表（v0.6.0：WEAPON 8 + 原五类×0.92 归一，和=100.0，A4 §5；
+# BalanceTables.category_weights 为同源镜像——三处同值，pkg6 断言锁定）
 const CATEGORY_WEIGHTS := {
-	"MASTERY": 12.0, "ADD": 40.0, "MULT": 18.0, "MECH": 14.0, "ELEM": 10.0, "RELIC": 6.0,
+	"MASTERY": 11.04, "ADD": 36.8, "MULT": 16.56, "MECH": 12.88, "ELEM": 9.2, "RELIC": 5.52,
+	"WEAPON": 8.0,
 }
 const CANDIDATE_COUNT := 3                    # 三选一
 const MAX_WEAPON_TRAITS := 12                 # 单武器词条上限（WeaponBase.attach_trait 拒绝线）
@@ -56,16 +59,18 @@ func generate_candidates(p_context: Dictionary) -> Array[Dictionary]:
 	#   min_rarity_floor  → REL_OVERCLOCK 稀有度保底（应用于首张——A3 §5「下一张卡」口径）
 	#   fixed_rarities    → REL_WORDS_TIDE 重随保序（逐位覆盖稀有度 roll，保留原 roll 序列）
 	#   curse_last        → REL_GAMBLER 末位卡必带诅咒（A3 §9.3-10 净化占位）
+	#   shop_exclude_weapon → v0.6.0 商店卡架专用：跳过 WEAPON 类别（防武器混入卡价，A4 §5）
 	var player: Node = p_context.get("player")
 	var wave := int(p_context.get("wave", 1))
 	var deal := clampi(int(p_context.get("deal_count", CANDIDATE_COUNT)),
 		CANDIDATE_COUNT, 8)
 	var floor_rarity := int(p_context.get("min_rarity_floor", -1))
 	var fixed_rarities: Variant = p_context.get("fixed_rarities", [])
+	var no_weapon := bool(p_context.get("shop_exclude_weapon", false))
 	var out: Array[Dictionary] = []
 	var picked_ids: Array[StringName] = []       # 同批去重（同 ID 不重复上货架）
 	for i in range(deal):
-		var card := _roll_one(player, wave, picked_ids)
+		var card := _roll_one(player, wave, picked_ids, no_weapon)
 		if card.is_empty():
 			card = _fallback_stat_card()
 		if card["kind"] != CardKind.FALLBACK:
@@ -111,6 +116,20 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 			var rid := StringName(String(p_card.get("id", "")))
 			if rid != &"" and not owned_relics.has(rid):
 				owned_relics.append(rid)
+		CardKind.WEAPON:
+			# v0.6.0 武器卡应用（A4 §5）：add_weapon 形态工厂；返回 null（无可用槽/未知形态）
+			# → push_warning + 降级挂 fallback 词条到主武器（界面选择不白拿）
+			var wd: WeaponData = p_card.get("data")
+			if wd != null and p_player.has_method(&"add_weapon"):
+				var added: WeaponBase = p_player.call(&"add_weapon", wd)
+				if added == null:
+					push_warning("[CardGenerator] 武器卡降级：%s 装备失败（无可用槽），转 fallback 词条"
+						% String(wd.id))
+					var primary := _primary_weapon(p_player)
+					if primary != null:
+						var fb: Dictionary = _fallback_stat_card()
+						var fb_data: TraitData = fb.get("data")
+						primary.attach_trait(fb_data)
 	if kind == CardKind.FALLBACK:
 		fallback_uses += 1
 	# REL_GAMBLER 诅咒卡（第 4 张）：附加 ATK −10% 诅咒词条（运行期构造 TraitData，
@@ -123,14 +142,21 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 
 
 # ── 内部：roll 链 ─────────────────────────────────────────────────
-func _roll_one(p_player: Node, p_wave: int, p_picked: Array[StringName]) -> Dictionary:
+func _roll_one(p_player: Node, p_wave: int, p_picked: Array[StringName],
+		p_exclude_weapon: bool = false) -> Dictionary:
 	# 单张：类别 roll（池空重 roll）→ 稀有度 roll → 候选过滤 → 随机抽 1
 	var relic_available := _unowned_relic_ids().size() > 0
+	var weapon_pool := _weapon_candidates(p_player, p_picked)
 	for attempt in range(8):
 		var category: Variant = _weighted_key(category_weights)
+		if p_exclude_weapon and category == "WEAPON":
+			continue                            # 商店卡架专用：跳过 WEAPON 类别（A4 §5）
 		if category == "RELIC" and not relic_available:
 			# 遗物抽空 → 重 roll 为乘区（A3 §6.3 原文）
 			category = "MULT"
+		if category == "WEAPON" and weapon_pool.is_empty():
+			# 武器池空（满槽/全持有）→ 重 roll 为精通（A4 §5）
+			category = "MASTERY"
 		match category:
 			"MASTERY":
 				var pool := _mastery_candidates(p_player)
@@ -147,6 +173,10 @@ func _roll_one(p_player: Node, p_wave: int, p_picked: Array[StringName]) -> Dict
 				if not relics.is_empty():
 					var rid: StringName = relics[rng.randi_range(0, relics.size() - 1)]
 					return _make_relic_card(rid, p_wave)
+			"WEAPON":
+				if not weapon_pool.is_empty():
+					var wd: WeaponData = weapon_pool[rng.randi_range(0, weapon_pool.size() - 1)]
+					return _make_weapon_card(wd)
 			_:
 				pass
 	return {}                                   # 全类目空 → 调用方 fallback
@@ -197,6 +227,46 @@ func _mastery_candidates(p_player: Node) -> Array:
 		if w is WeaponBase and is_instance_valid(w) and int(w.get("level")) < WeaponBase.MAX_LEVEL:
 			out.append(w)
 	return out
+
+
+func _weapon_candidates(p_player: Node, p_picked: Array[StringName]) -> Array[WeaponData]:
+	# v0.6.0 武器卡候选（A4 §5）：门控三查——
+	# ① 存在已解锁空槽（首个空槽索引 ≥ unlocked_slots → 槽满 → 池空，"槽位满后不再出现"）
+	# ② 武器未持有（全槽 data.id 比对）
+	# ③ 同批去重（p_picked 含卡 id）
+	var out: Array[WeaponData] = []
+	if registry == null or p_player == null:
+		return out
+	var has_free_slot := false
+	var slots: Array = p_player.get("weapon_slots")
+	var unlocked := int(p_player.get("unlocked_slots"))
+	for i in range(slots.size()):
+		if slots[i] == null:
+			has_free_slot = i < unlocked         # 首个空槽：已解锁 → 有门，未解锁 → 槽满
+			break
+	if not has_free_slot:
+		return out
+	for wid in registry.weapons:
+		var wd: WeaponData = registry.weapons[wid]
+		if wd == null or p_picked.has(wd.id):
+			continue
+		if _player_holds_weapon(p_player, wd.id):
+			continue
+		out.append(wd)
+	out.sort_custom(func(a: WeaponData, b: WeaponData) -> bool: return String(a.id) < String(b.id))
+	return out                                   # 排序 = 确定性（RNG 抽取在调用方）
+
+
+func _make_weapon_card(p_data: WeaponData) -> Dictionary:
+	# 武器卡（A4 §5）：稀有度 = unlock_rarity（当前九武器全 1 = 蓝卡档）
+	return {
+		"kind": CardKind.WEAPON,
+		"id": p_data.id if p_data != null else &"",
+		"rarity": maxi(p_data.unlock_rarity, 0) if p_data != null else 0,
+		"data": p_data,
+		"display_name": "武器：%s" % (p_data.display_name if p_data != null else "?"),
+		"description": "获得新武器（槽位满后不再出现）",
+	}
 
 
 func _unowned_relic_ids() -> Array[StringName]:

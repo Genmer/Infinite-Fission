@@ -38,7 +38,8 @@ extends Resource
 @export var exp_inflation_per_wave: float = 1.085
 @export var xp_curve: Dictionary = {"base": 14.0, "power": 1.4}   # 值 >0
 @export var rarity_weights: Dictionary = {"WHITE": 58, "BLUE": 30, "PURPLE": 10, "GOLD": 2}  # 权重和 >0
-@export var category_weights: Dictionary = {"MASTERY": 12, "ADD": 40, "MULT": 18, "MECH": 14, "ELEM": 10, "RELIC": 6}
+# v0.6.0：WEAPON 8 + 原五类×0.92 归一（和=100.0；与 CardGenerator.CATEGORY_WEIGHTS / .tres 三处同值，A4 §5）
+@export var category_weights: Dictionary = {"MASTERY": 11.04, "ADD": 36.8, "MULT": 16.56, "MECH": 12.88, "ELEM": 9.2, "RELIC": 5.52, "WEAPON": 8.0}
 @export var cd_rxn: float = 2.0                              # 反应 CD（F-34）
 # FIR/ICE/LTG 比例衰减 λ（F-22）
 @export var element_decay_lambda: Array[float] = [0.35, 0.30, 0.40]
