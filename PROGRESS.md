@@ -26,11 +26,11 @@
 | E 审查+测试（并行） | 独立代码审查 + 运行验证（两轮） | ✅ 完成（一轮：1C+3I 修复；二轮：可交付判定，720/720 终验 PASS） |
 | F 交付报告 | 汇总判定+关键决策清单 | ✅ 完成（判定 = 可交付；见 §5.8 与 §4 裁定记录） |
 
-**仓库当前可编译（0 解析错误），回归 836/836 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，另有 pkg6_extra 32 项验收补充 / pkg7 167 项版本增量自测，不计入 836 基线口径）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~5.7ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**
+**仓库当前可编译（0 解析错误），回归 836/836 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，另有 pkg6_extra 32 项验收补充 / pkg7 172 项 v0.7.0 增量自测 / pkg7_extra 56 项验收补充，不计入 836 基线口径；全 runner 合计 1096）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~6.2ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**
 
 **v0.6.0 增量（2026-08-31，T0~T8）：商店（Boss 前夜 w9/w19/w29）/ 金币经济（掉落+磁吸+HUD）/ 武器卡（CardKind.WEAPON）/ 武器门槛词条（required_weapon）/ Boss 弹幕三形态+召唤 / HUD 720×1280 全量重排+波次横幅。数值与裁定真源 = `docs/analysis/A4_v0.6.0_design.md`；自测 = `tests/runner/test_pkg6.gd`（115 项）。提交序：T1 38ad7ef → T4 a18770d → T3 2db7455 → T5 b7984c7 → T2 57b742f → T6 f7d3f8a → T7 cffa4f5 → T8 本笔。**
 
-**v0.7.0 增量（2026-09-01，U1~U15）：芯片系统（ChipData×8 / ChipHandler 3 槽 / 管线 ⑥b 独立乘区段 cap_chip_zone / 商店芯片货架+槽位面板 / Boss 芯片掉落）/ 金币狂欢关（w6/16/26，0.4×血 rush + 掉落覆写 + 波末比例奖励）/ 双 Boss 修复（w10/20/30 composition 清空）/ 召唤独立计数（summon_active_count 闸）/ 附着环 ElementRing + 反应粒子三预设 + 打击感分级 / 反应统计与结算行 / 首件武器保底（weapon_weight_mult ×2）/ 受击红闪 / 文本跳字通道。数值与裁定真源 = `docs/analysis/A6_v0.7.0_design.md`；自测 = `tests/runner/test_pkg7.gd`（167 项）。提交序：U1 a9573ab → U2 a6377c1 → U3 22465f6 → U12-14 a920214 → U5 cf68ab3 → U4+U7 e74328b → U6 3753072 → U8-10 375dcf9 → U11 f184dac → U15 本笔。**
+**v0.7.0 增量（2026-09-01，U1~U15）：芯片系统（ChipData×8 / ChipHandler 3 槽 / 管线 ⑥b 独立乘区段 cap_chip_zone / 商店芯片货架+槽位面板 / Boss 芯片掉落）/ 金币狂欢关（w6/16/26，0.4×血 rush + 掉落覆写 + 波末比例奖励）/ 双 Boss 修复（w10/20/30 composition 清空）/ 召唤独立计数（summon_active_count 闸）/ 附着环 ElementRing + 反应粒子三预设 + 打击感分级 / 反应统计与结算行 / 首件武器保底（weapon_weight_mult ×2）/ 受击红闪 / 文本跳字通道。数值与裁定真源 = `docs/analysis/A6_v0.7.0_design.md`；自测 = `tests/runner/test_pkg7.gd`（172 项；审查后新增槽位门控 2 项 + U11 段武器 id 笔误 W2_smg→W2_gatling 修复后漏计 3 项归位）。提交序：U1 a9573ab → U2 a6377c1 → U3 22465f6 → U12-14 a920214 → U5 cf68ab3 → U4+U7 e74328b → U6 3753072 → U8-10 375dcf9 → U11 f184dac → U15 5dec3f4。**审查后修复批（fix-review）：芯片定价恢复裁定 60/110/180/300（coder 曾擅改卡架同梯度 40/70/120/220——已推翻）；free_slots()=unlocked−equipped 槽位门控真实生效（原为无语义死状态）；heal 预禁用在 maxhp/CHIP_HP 购买后回写；_gold_add_sum 帧缓存试做后回退（帧号失效对同帧 attach 词条路径返回脏数据，pkg6 冻结用例拦截——正确钩子见 §11）；粒子 burst null 守卫恢复；元素环无附着零分配；商店芯片槽满态购买后同步。**
 
 **阶段 E 关键战果（审查/测试发现并修复）：**
 - 一轮审查 1C+3I：重开不清场（残留战场秒杀重生）→ `_clear_battlefield` 清场序 + respawn 1.5s 无敌；GameFeel 订阅晚于 Spawner 清 tags（Boss 击杀打击感永不触发）→ early_bind；Boss 波伴随怪流水锁死 wave_cleared → `_boss_ref` 存活闸；TH_CRIT_SHARD 全武器声明零实现 + 校验器空承诺 → 补 `trait_effect_crit_shard.gd` + check_references ② 落地
@@ -107,7 +107,8 @@
 10. `_gold_add_sum` 每击杀对每武器重建 aggregate_panel 字典——击杀潮分配频率上升，按帧缓存（A5-E2，当前规模无实测压力）
 11. ShopUI heal 满血不禁用（点击后才被仲裁拒绝）；卡面 kind 中文名在 card_select_ui/shop_ui 两处重复维护（A5-E3/E4）
 12. v0.6.0 defer 项：Boss3 charge/laser_sweep 未消费（laser 依赖 §11.7 收紧+新预警通道，A5-D2/D3）；金币经济数值不干预待试玩回收（A4 §8 假设清单）
-13. **玩法迭代池与元素反应长期课题**：`docs/analysis/A5_v0.6.x_exploration.md`（开局武器三选一/首件武器保底/冲刺/金币关/利息/武器专属词条扩容/元素反应三期路线：表现→双轨数值→第 4 元素+破盾）
+13. **玩法迭代池与元素反应长期课题**：`docs/analysis/A5_v0.6.x_exploration.md`（开局武器三选一/首件武器保底✅v0.7.0/冲刺/金币关✅v0.7.0/利息/武器专属词条扩容/元素反应三期路线：表现✅v0.7.0→双轨数值→第 4 元素+破盾）
+14. **_gold_add_sum 聚合缓存（v0.7.0 试做回退）**：帧号失效口径对"同帧 attach 词条后击杀"返回脏数据；正确失效钩子 = EventBus.card_chosen / TraitStack attach 信号（覆盖直挂与卡流两路），待实测压力出现（当前 P95 5.5~6.2ms 远离 8.3ms 线）再做
 
 ## 6. 关键文档地图（全部在工作区 docs/）
 

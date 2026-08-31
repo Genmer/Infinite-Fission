@@ -327,8 +327,10 @@ func spawn_wave() -> int:
 
 
 static func projected_max_hp(p_data: EnemyData, p_wave: int) -> float:
-	# v0.7.0 U5：波次成长 HP 预测真源 = hp_base × hp_growth^(w−1)（精英/覆盖乘区不在本口径——
-	# 调用方自行乘）。spawn 内改调本真源 + WaveDirector 金币关 hp_override 同源（消除双写）。
+	# v0.7.0 U5：波次成长 HP 预测真源 = hp_base × hp_growth^(w−1)。TAG_ELITE 运行期乘区
+	# 不在本口径（波表构成里精英走 E5 模板自带 hp_base——预测已含模板口径；GOLD_RUSH 变体
+	# 按 0.4× 模板基础生效，精英不另乘 = 有意设计，审查 Q3 留痕 A6）。spawn 内改调本真源 +
+	# WaveDirector 金币关 hp_override 同源（消除双写）。
 	var bal := GameConfig.balance
 	var hp_growth := 1.12 if bal == null else bal.hp_growth_per_wave
 	return p_data.hp_base * pow(hp_growth, float(maxi(p_wave, 1)) - 1.0)
@@ -498,23 +500,22 @@ const RING_REFRESH_HZ := 15.0                  # 附着环刷新频率（降频�
 
 
 func _tick_element_ring(p_game_delta: float) -> void:
-	# max(gauges[1..3]) > 1.0 → 显示 + 15Hz 降频 set_gauges/queue_redraw；否则隐藏（零开销门控）
+	# max(gauges[1..3]) > 1.0 → 显示 + 15Hz 降频 set_gauges/queue_redraw；否则隐藏（零开销门控；
+	# 审查 Q4：无附着路径零分配——不再每 tick 构造临时数组）
 	if _ring == null:
 		return
-	var gauges: Array[float] = [0.0, 0.0, 0.0, 0.0]
-	var peak := 0.0
-	if elemental != null:
-		gauges = elemental.gauges
-		if gauges.size() >= 4:
-			peak = maxf(gauges[1], maxf(gauges[2], gauges[3]))
-	if peak > 1.0:
-		if not _ring.visible:
-			_ring.visible = true
-		_ring_refresh_left -= p_game_delta
-		if _ring_refresh_left <= 0.0:
-			_ring_refresh_left = 1.0 / RING_REFRESH_HZ
-			_ring.set_gauges(gauges)
-	elif _ring.visible:
+	if elemental != null and elemental.gauges.size() >= 4:
+		var gauges := elemental.gauges
+		var peak := maxf(gauges[1], maxf(gauges[2], gauges[3]))
+		if peak > 1.0:
+			if not _ring.visible:
+				_ring.visible = true
+			_ring_refresh_left -= p_game_delta
+			if _ring_refresh_left <= 0.0:
+				_ring_refresh_left = 1.0 / RING_REFRESH_HZ
+				_ring.set_gauges(gauges)
+			return
+	if _ring.visible:
 		_ring.visible = false
 
 

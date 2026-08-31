@@ -447,6 +447,8 @@ func _on_shop_purchase(p_index: int) -> void:
 		_add_gold(-chip_price)
 		shop_ui.mark_purchased(p_index)
 		shop_ui.set_chip_slots(chip_handler.slot_snapshot())
+		# CHIP_HP 装备后可能满血 → heal 预禁用状态同步（审查 Fix）
+		shop_ui.set_player_full_hp(player.hp >= player.max_hp)
 		return
 	var card: Dictionary = shelf["weapon"] if p_index == 3 \
 		else (shelf["cards"] as Array)[p_index]
@@ -518,6 +520,8 @@ func _on_shop_utility(p_util: StringName) -> void:
 			_add_gold(-ShopUI.MAXHP_PRICE)
 			player.max_hp += 10.0
 			shop_ui.mark_utility_used(&"maxhp")
+			# 上限抬升后 hp<max_hp → 回复合法化（审查 Fix：heal 预禁用状态同步）
+			shop_ui.set_player_full_hp(player.hp >= player.max_hp)
 		_:
 			push_warning("[GameLoop] 未知 utility：%s" % String(p_util))
 
@@ -902,7 +906,10 @@ func _add_gold(p_delta: int) -> void:
 
 
 func _gold_add_sum(p_pool: StringName) -> float:
-	# Σ 全武器 trait_stack.aggregate_panel()[p_pool]（F3 衰减内含；金币侧唯一消费口径，A4 §4）
+	# Σ 全武器 trait_stack.aggregate_panel()[p_pool]（F3 衰减内含；金币侧唯一消费口径，A4 §4）。
+	# 〔审查后裁定 2026-09-01〕帧缓存回退：帧号失效口径对"同帧 attach 词条后击杀"的合法
+	# 路径返回脏数据（pkg6 冻结用例证实）；正确失效钩子应为 card_chosen/attach_trait 信号，
+	# 待实测压力出现再做（PROGRESS §11）。
 	var total := 0.0
 	if player == null or not is_instance_valid(player):
 		return total

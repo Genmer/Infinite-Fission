@@ -178,13 +178,18 @@ func _test_chip_handler() -> void:
 	var player := _gl.player
 	var h := _gl.chip_handler
 	_check("夹具：GameLoop Boot 组装 ChipHandler（setup 后槽 0/空）",
-		h != null and h.unlocked_slots == 0 and h.free_slots() == 3 and h.equipped.is_empty())
+		h != null and h.unlocked_slots == 0 and h.free_slots() == 0 and h.equipped.is_empty())
 	_check("EventBus 信号可经 emit 包装派发（订阅收到）", _probe_chip_signals())
-	# equip 五门 fail-fast
+	# equip 五门 fail-fast（含未解锁门：free_slots=0；探针已解锁 1 档——改判 unlocked 残留）
 	var h_null := ChipHandler.new()
 	_check("equip 五门：registry null → false", h_null.equip(&"CHIP_ATK", 0) == false)
 	h_null.free()
 	_check("equip 五门：get_chip 悬空 id → false", h.equip(&"CHIP_NOPE", 0) == false)
+	h.unlocked_slots = 0
+	_check("equip 五门：未解锁 → false（门控生效）", h.equip(&"CHIP_ATK", 0) == false)
+	EventBus.emit_chip_slot_unlocked(3)
+	_check("解锁后 free_slots()==3（w20 满槽档）",
+		h.unlocked_slots == 3 and h.free_slots() == 3)
 	_check("equip：合法装备 CHIP_ATK 白 → true", h.equip(&"CHIP_ATK", 0) == true)
 	_check("equip 五门：同 id 重复 → false", h.equip(&"CHIP_ATK", 2) == false)
 	_check("装备后 stat_bonus(atk_pct)=0.10（白档）", is_equal_approx(h.stat_bonus(&"atk_pct"), 0.10))
@@ -223,10 +228,10 @@ func _test_chip_handler() -> void:
 	_check("roll_shop_offers：price 与 price_for_rarity 一致",
 		int((w12[0] as Dictionary).get("price", 0)) == h.price_for_rarity(int((w12[0] as Dictionary).get("rarity", 0))))
 	# 同 id 定价/转金币梯度
-	_check("price_for_rarity 梯度 40/70/120/220", h.price_for_rarity(0) == 40 and h.price_for_rarity(1) == 70
-		and h.price_for_rarity(2) == 120 and h.price_for_rarity(3) == 220)
-	_check("convert_gold = round(price×0.5)", h.convert_gold(0) == 20 and h.convert_gold(1) == 35
-		and h.convert_gold(2) == 60 and h.convert_gold(3) == 110)
+	_check("price_for_rarity 梯度 60/110/180/300", h.price_for_rarity(0) == 60 and h.price_for_rarity(1) == 110
+		and h.price_for_rarity(2) == 180 and h.price_for_rarity(3) == 300)
+	_check("convert_gold = round(price×0.5)", h.convert_gold(0) == 30 and h.convert_gold(1) == 55
+		and h.convert_gold(2) == 90 and h.convert_gold(3) == 150)
 	# 已持有池排除：装备 3 枚（3 槽满）后 offer 不含已持有；多余 equip 拒绝
 	h.reset_run()
 	h.unlocked_slots = 3
@@ -249,11 +254,12 @@ func _test_chip_handler() -> void:
 	mini_reg.chips[&"CHIP_SOLO"] = solo
 	var h2 := ChipHandler.new()
 	h2.setup({"registry": mini_reg, "player": null})
+	h2.unlocked_slots = 3                        # 门控夹具：解锁后 equip 可达
 	h2.equip(&"CHIP_SOLO", 0)
 	_check("roll_shop_offers：全持有 → []（池空空架）", h2.roll_shop_offers(12).is_empty())
 	_check("grant_boss_chip：池空 → 转金币（granted=false）",
 		bool(h2.grant_boss_chip(12).get("granted")) == false
-		and h2.chips_converted == 1 and h2.gold_from_convert >= 20)
+		and h2.chips_converted == 1 and h2.gold_from_convert >= 30)
 	h2.free()
 	# grant_boss_chip：槽满 → 转金币（granted=false + converted_gold + 遥测）
 	h.reset_run()
@@ -266,7 +272,7 @@ func _test_chip_handler() -> void:
 	var drop := h.grant_boss_chip(15)
 	_check("grant_boss_chip：槽满 → 转金币（granted=false/converted_gold=110 范围）",
 		bool(drop.get("granted")) == false and int(drop.get("converted_gold", 0)) == h.convert_gold(int(drop.get("rarity", 0))))
-	_check("转金币遥测累计", h.chips_converted == conv0 + 1 and h.gold_from_convert >= gconv0 + 20)
+	_check("转金币遥测累计", h.chips_converted == conv0 + 1 and h.gold_from_convert >= gconv0 + 30)
 	# grant_boss_chip：空槽 → granted 且已装备
 	h.reset_run()
 	h.set_rng_seed(4242)
@@ -442,6 +448,7 @@ func _test_chip_pipeline() -> void:
 	# 武器面板折算（crit_rate/crit_mult/chip_atk_pct）+ 装备后失效
 	var h := _gl.chip_handler
 	h.reset_run()
+	h.unlocked_slots = 3                   # 门控夹具：解锁后 equip 可达
 	var weapon: WeaponBase = _gl.player.weapon_slots[0]
 	weapon.invalidate_panel()
 	var snap0 := weapon.build_panel_snapshot()
@@ -474,6 +481,7 @@ func _test_chip_pipeline() -> void:
 	target.free()
 	# 射速：BALLISTIC rof × (1+K_rof)；非 BALLISTIC interval = cd×(1−cdr)/(1+K_rof)
 	h.reset_run()
+	h.unlocked_slots = 3                   # 门控夹具
 	var bw := BallisticWeapon.new()
 	bw.setup(_gl.registry.get_weapon(&"W1_pistol"), _gl.player, {"chip_handler": h})
 	var rof_base: float = bw.get_stat(&"rof")
@@ -492,6 +500,7 @@ func _test_chip_pipeline() -> void:
 	lw.setup(laser_data, _gl.player, {"chip_handler": h})
 	var cd_base: float = lw.get_stat(&"cd")
 	h.reset_run()                                 # 先归零（BALLISTIC 段遗留 rof 芯片）
+	h.unlocked_slots = 3                   # 门控夹具
 	var interval_no := lw._fire_interval()
 	h.equip(&"CHIP_ROF", 3)
 	var interval_chip := lw._fire_interval()
@@ -499,6 +508,7 @@ func _test_chip_pipeline() -> void:
 		is_equal_approx(interval_no, cd_base) and is_equal_approx(interval_chip, cd_base / 1.25))
 	lw.free()
 	h.reset_run()
+	h.unlocked_slots = 3                   # 门控夹具
 	# 消费点：金币 ×(1+K_gold)（负数不缩放）/ 经验 ×(1+K_xp) / 附着 ×(1+K_attach)
 	h.equip(&"CHIP_GOLD", 3)                      # 金档 0.40
 	var g0 := _gl.gold
@@ -508,6 +518,7 @@ func _test_chip_pipeline() -> void:
 	_check("_add_gold 负增量不缩放 → -40", _gl.gold == g0 + 100)
 	_gl._add_gold(-(g0 + 100 - g0))               # 还原余额（净 -100）
 	h.reset_run()
+	h.unlocked_slots = 3                   # 门控夹具
 	h.equip(&"CHIP_XP", 0)                        # 白档 0.08
 	var xp_enemy := Enemy.new()
 	xp_enemy.exp_value = 10.0
@@ -522,6 +533,7 @@ func _test_chip_pipeline() -> void:
 	_check("经验掉落 ×1.08（K_xp 白档）", shard_ok)
 	xp_enemy.free()
 	h.reset_run()
+	h.unlocked_slots = 3                   # 门控夹具
 	h.equip(&"CHIP_ATTACH", 2)                    # 紫档 0.35
 	var es := ElementalSystem.new()
 	es.chip_handler = h
@@ -787,7 +799,7 @@ func _test_shop_chips() -> void:
 	# 芯片货架注入 + 四态（空架 / 槽满 / 余额不足 / 可购）
 	shop.open(12, false, [], {}, 1000)
 	shop.set_chip_shelf([
-		{"chip_id": &"CHIP_ATK", "rarity": 3, "price": 220, "display_name": "攻击核心", "value_text": "+35%"},
+		{"chip_id": &"CHIP_ATK", "rarity": 3, "price": 300, "display_name": "攻击核心", "value_text": "+35%"},
 	], 0)
 	_check("芯片架：free_slots=0 → disabled +（槽满）后缀",
 		(shop._chip_buttons[0] as Button).disabled
@@ -797,14 +809,14 @@ func _test_shop_chips() -> void:
 		(shop._chip_buttons[0] as Button).disabled
 		and String((shop._chip_buttons[0] as Button).text) == "空架")
 	shop.set_chip_shelf([
-		{"chip_id": &"CHIP_ATK", "rarity": 3, "price": 220, "display_name": "攻击核心", "value_text": "+35%"},
-		{"chip_id": &"CHIP_ROF", "rarity": 0, "price": 40, "display_name": "超频模块", "value_text": "+25%"},
+		{"chip_id": &"CHIP_ATK", "rarity": 3, "price": 300, "display_name": "攻击核心", "value_text": "+35%"},
+		{"chip_id": &"CHIP_ROF", "rarity": 0, "price": 60, "display_name": "超频模块", "value_text": "+25%"},
 	], 2)
 	_check("芯片架：余额足可购 / price_for(4/5) 读 offer",
 		not (shop._chip_buttons[0] as Button).disabled
-		and shop.price_for(4) == 220 and shop.price_for(5) == 40)
+		and shop.price_for(4) == 300 and shop.price_for(5) == 60)
 	shop.refresh_gold(30)
-	_check("芯片架：余额不足 disabled（gold 30 < 40）", (shop._chip_buttons[1] as Button).disabled)
+	_check("芯片架：余额不足 disabled（gold 30 < 60）", (shop._chip_buttons[1] as Button).disabled)
 	# shelf_state 新键
 	var st: Dictionary = shop.shelf_state()
 	_check("shelf_state 增键 chips/chip_purchased/chip_free_slots",
@@ -814,6 +826,7 @@ func _test_shop_chips() -> void:
 	# 购买仲裁全链（五查 + 扣款 + 槽位刷新）
 	_gl.start_run()
 	_gl.chip_handler.reset_run()
+	_gl.chip_handler.unlocked_slots = 3          # 门控夹具：解锁满槽（free_slots 语义审查裁定）
 	_gl.gold = 0
 	_gl._add_gold(1000)
 	_check("夹具：_open_shop_flow 开店（SHOP 态 + 芯片架已注入）",
@@ -863,6 +876,7 @@ func _test_boss_chip_drop() -> void:
 	var pool := _gl.pools[&"enemy"] as EnemyPool
 	# granted 路径：空槽 Boss 死亡 → 装备 + 跳字（连接序功能性验证：tags 先于归还清零）
 	h.reset_run()
+	h.unlocked_slots = 3                          # 门控夹具：解锁后 granted 路径可达
 	var granted0 := h.chips_granted
 	var boss1: Enemy = pool.acquire() as Enemy
 	boss1.spawn(_gl.registry.get_enemy(&"E6_boss1"), 10, GameConst.TAG_BOSS)
@@ -883,7 +897,7 @@ func _test_boss_chip_drop() -> void:
 	boss2.spawn(_gl.registry.get_enemy(&"E6_boss2"), 20, GameConst.TAG_BOSS)
 	boss2.global_position = Vector2(360.0, 240.0)
 	boss2._on_died()
-	_check("Boss 死亡 → 槽满转金币（granted=false + 入账 20~110）",
+	_check("Boss 死亡 → 槽满转金币（granted=false + 入账 30~150）",
 		h.chips_converted == conv0 + 1 and _gl.gold == g0 + h.gold_from_convert
 		and h.gold_from_convert > 0)
 	_check("跳字「芯片满 → +N 金币」", _popup_prefix_seen("芯片满 → +"))
@@ -1071,11 +1085,9 @@ func _test_weapon_pity() -> void:
 	_gl.upgrade_cards_dealt = 4
 	_check("U11：dealt=4 → pity 关闭", not _gl._weapon_pity_active())
 	_gl.upgrade_cards_dealt = 2
-	var w2_data := _gl.registry.get_weapon(&"W2_smg")
-	var weapon: WeaponBase = _gl.add_weapon(w2_data)
-	if weapon == null:
-		player.unlock_slot(2)
-		weapon = player.add_weapon(w2_data)
+	var w2_data := _gl.registry.get_weapon(&"W2_gatling")
+	player.unlock_slot(2)
+	var weapon: WeaponBase = player.add_weapon(w2_data)
 	_check("夹具：第二把武器装入", weapon != null)
 	_check("U11：双武器 → pity 关闭（即便 dealt ≤3）", not _gl._weapon_pity_active())
 	# 发牌计数：_open_card_flow +1

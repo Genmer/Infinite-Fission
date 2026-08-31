@@ -66,7 +66,8 @@ func burst(p_scene_id: StringName, p_pos: Vector2, p_priority: int) -> void:
 	# 优先级裁剪（击杀 > 暴击 > 普命中 > 环境），≤64 由池承担（AC-15.5）。
 	# v0.7.0 U9：burst 返回发射器（可 null）→ 反应场景 id 重指对应预设材质；
 	# 默认 scene_id → shared；★ 每次重指防串色（池化发射器材质复用）。
-	var emitter := particle_pool.burst(p_scene_id, p_pos, p_priority)
+	var emitter := particle_pool.burst(p_scene_id, p_pos, p_priority) \
+		if particle_pool != null else null   # 审查 Q2：保留未 setup 守卫（防御回退）
 	burst_requests += 1
 	if emitter == null:
 		dropped_requests += 1                   # 满池且无可抢占 → 丢弃（原 misses 判据等价）

@@ -165,6 +165,8 @@ func mark_purchased(p_index: int) -> void:
 	if p_index < 0 or p_index >= _purchased.size():
 		return
 	_purchased[p_index] = true
+	if p_index >= 4 and _chip_free_slots > 0:
+		_chip_free_slots -= 1               # 芯片购买后空槽同步（审查 Fix：防槽满按钮态残留）
 	_refresh_shelf()
 
 

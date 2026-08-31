@@ -15,8 +15,8 @@ extends Node
 const MAX_CHIP_SLOTS: int = 3
 const CHIP_RNG_SEED: int = 4242
 const CONVERT_RATIO: float = 0.5               # Boss 掉落转金币 = round(定价 × 0.5)
-# 芯片定价（A6 §4 裁定：与商店卡架 CARD_PRICES 同稀有度梯度 白40/蓝70/紫120/金220）
-const CHIP_PRICES: Dictionary = {0: 40, 1: 70, 2: 120, 3: 220}
+# 芯片定价（主 Agent 裁定 2026-09-01：独立于卡架的更高档——常驻件定价 白60/蓝110/紫180/金300）
+const CHIP_PRICES: Dictionary = {0: 60, 1: 110, 2: 180, 3: 300}
 
 var registry: DataRegistry = null              # 注入（chip id → ChipData）
 var player: Node2D = null                      # 注入（max_hp 键宿主 / 全武器面板失效宿主）
@@ -69,7 +69,9 @@ func _on_chip_slot_unlocked(p_slot: int) -> void:
 
 # ── 查询 ──────────────────────────────────────────────────────────
 func free_slots() -> int:
-	return maxi(MAX_CHIP_SLOTS - equipped.size(), 0)
+	# 空槽 = 已解锁槽 − 已装备（审查裁定 2026-09-01：解锁门控真实生效——
+	# 未解锁即 0 空槽，w1/w10/w20 节奏约束商店购买与 Boss 掉落转金币）
+	return maxi(unlocked_slots - equipped.size(), 0)
 
 
 func is_equipped(p_chip_id: StringName) -> bool:
