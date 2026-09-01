@@ -133,7 +133,8 @@ func aggregate_panel() -> Dictionary:
 
 
 func aggregate_add_entries() -> Array[Dictionary]:
-	# add_atk 池 → DamageContext.add_entries（管线步骤 3 F3 衰减真源；面板段唯一入列池）
+	# add_atk 池 → DamageContext.add_entries（管线步骤 3 F3 衰减真源；面板段唯一入列池）。
+	# v0.8.0：is_curse 判定单源 is_curse_trait（params.is_curse 退役装饰）
 	var out: Array[Dictionary] = []
 	for mounted in traits:
 		if mounted.data.pool != GameConst.PoolClass.ADD:
@@ -146,9 +147,89 @@ func aggregate_add_entries() -> Array[Dictionary]:
 			"layer": mounted.layers,
 			"contrib": mounted.data.value,
 			"decay_delta": mounted.data.decay_delta,
-			"is_curse": mounted.data.value < 0.0,
+			"is_curse": is_curse_trait(mounted.data),
 		})
 	return out
+
+
+# ── v0.8.0 V9 词条移除（商店移除/净化仲裁底座） ───────────────────
+static func is_curse_trait(p_data: TraitData) -> bool:
+	# ★ 诅咒词条唯一判定：ADD 池 + 负贡献（value<0）。params.is_curse 退役装饰——
+	# aggregate_add_entries / peek_last / detach_last 全部经此单源。
+	return p_data != null and p_data.pool == GameConst.PoolClass.ADD and p_data.value < 0.0
+
+
+func peek_last(p_skip_curse: bool) -> Dictionary:
+	# 末位词条窥视（不移除）：p_skip_curse=true 跳过诅咒词条（V9 移除口径——只摘非诅咒）。
+	# 空栈 / 全被跳过 → {ok:false}。
+	for i in range(traits.size() - 1, -1, -1):
+		var mounted := traits[i]
+		if p_skip_curse and is_curse_trait(mounted.data):
+			continue
+		return _peek_dict(mounted)
+	return _empty_peek()
+
+
+func detach_last(p_skip_curse: bool) -> Dictionary:
+	# 末位词条摘层：p_skip_curse=true 跳过诅咒词条；layers−1，0 摘实例（挂载序保持）。
+	# 调用方负责宿主武器 invalidate_panel()。空栈 / 全被跳过 → {ok:false}。
+	for i in range(traits.size() - 1, -1, -1):
+		var mounted := traits[i]
+		if p_skip_curse and is_curse_trait(mounted.data):
+			continue
+		return _detach_at(i, 1)
+	return _empty_peek()
+
+
+func detach_by_id(p_trait_id: StringName, p_layers: int = 1) -> Dictionary:
+	# 同 id 词条摘层（末次挂载优先；净化 GAMBLER_CURSE 消费口）。无命中 / 已无层 → {ok:false}。
+	for i in range(traits.size() - 1, -1, -1):
+		var mounted := traits[i]
+		if mounted.data.id != p_trait_id or mounted.layers <= 0:
+			continue
+		var actual: int = mini(p_layers, mounted.layers)
+		if actual <= 0:
+			continue
+		return _detach_at(i, actual)
+	return _empty_peek()
+
+
+# ── 内部：摘层共享底座 ────────────────────────────────────────────
+func _detach_at(p_index: int, p_layers: int) -> Dictionary:
+	# 摘层单点（peek/detach_last/detach_by_id 共用）：layers−n，0 摘实例（保持挂载序）
+	var mounted := traits[p_index]
+	mounted.layers = maxi(mounted.layers - p_layers, 0)
+	if mounted.layers == 0:
+		traits.remove_at(p_index)
+	var out := _peek_dict(mounted)
+	out["ok"] = true
+	out["layers_left"] = mounted.layers
+	out.erase("layers")
+	return out
+
+
+func _peek_dict(p_mounted: TraitBase) -> Dictionary:
+	return {
+		"ok": true,
+		"trait_id": p_mounted.data.id,
+		"display_name": p_mounted.data.display_name,
+		"layers": p_mounted.layers,
+		"value": p_mounted.data.value,
+		"pool_id": p_mounted.data.pool_id,
+		"is_curse": is_curse_trait(p_mounted.data),
+	}
+
+
+func _empty_peek() -> Dictionary:
+	return {
+		"ok": false,
+		"trait_id": &"",
+		"display_name": "",
+		"layers": 0,
+		"value": 0.0,
+		"pool_id": &"",
+		"is_curse": false,
+	}
 
 
 func advance_cooldowns(p_game_delta: float) -> void:

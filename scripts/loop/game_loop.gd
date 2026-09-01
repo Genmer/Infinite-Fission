@@ -535,6 +535,62 @@ func _on_shop_utility(p_util: StringName) -> void:
 			shop_ui.mark_utility_used(&"maxhp")
 			# 上限抬升后 hp<max_hp → 回复合法化（审查 Fix：heal 预禁用状态同步）
 			shop_ui.set_player_full_hp(player.hp >= player.max_hp)
+		&"strip":
+			# v0.8.0 V9 移除词条（60 金/店限 1）：主武器最后挂载非诅咒词条 1 层
+			if bool(shelf.get("strip_used", false)):
+				push_warning("[GameLoop] 移除词条每店限 1 次，拒绝")
+				return
+			if gold < ShopUI.STRIP_PRICE:
+				push_warning("[GameLoop] 余额不足：移除词条需 %d" % ShopUI.STRIP_PRICE)
+				return
+			var primary := card_generator._primary_weapon(player)
+			if primary == null or primary.trait_stack == null:
+				push_warning("[GameLoop] 移除词条拒绝：无主武器")
+				return
+			if not bool(primary.trait_stack.peek_last(true).get("ok", false)):
+				push_warning("[GameLoop] 移除词条拒绝：无非诅咒词条")
+				return
+			var detached: Dictionary = primary.trait_stack.detach_last(true)
+			primary.invalidate_panel()             # 调用方失效宿主（TraitStack 不回查宿主）
+			_add_gold(-ShopUI.STRIP_PRICE)
+			shop_ui.mark_utility_used(&"strip")
+			if popup_manager != null and is_instance_valid(player):
+				popup_manager.show_text_popup(player.global_position + Vector2(0.0, -60.0),
+					"移除词条：%s" % String(detached.get("display_name", "")))
+		&"purify":
+			# v0.8.0 V9 净化（80 金/店限 1）：主武器栈含 GAMBLER_CURSE → detach_by_id 优先，
+			# 否则深渊诅咒层 −1；皆无 → 拒绝
+			if bool(shelf.get("purify_used", false)):
+				push_warning("[GameLoop] 净化每店限 1 次，拒绝")
+				return
+			if gold < ShopUI.PURIFY_PRICE:
+				push_warning("[GameLoop] 余额不足：净化需 %d" % ShopUI.PURIFY_PRICE)
+				return
+			var purged := ""
+			var pweapon := card_generator._primary_weapon(player)
+			var had_curse_trait := false
+			if pweapon != null and pweapon.trait_stack != null:
+				for tb in pweapon.trait_stack.traits:
+					if (tb as TraitBase).data.id == &"GAMBLER_CURSE":
+						had_curse_trait = true
+						break
+			if had_curse_trait:
+				var d: Dictionary = pweapon.trait_stack.detach_by_id(&"GAMBLER_CURSE", 1)
+				if not bool(d.get("ok", false)):
+					push_warning("[GameLoop] 净化拒绝：GAMBLER_CURSE 摘层失败")
+					return
+				pweapon.invalidate_panel()
+				purged = "词条"
+			elif curse_handler != null and curse_handler.remove_curse(1) > 0:
+				purged = "深渊层"
+			else:
+				push_warning("[GameLoop] 净化拒绝：无 GAMBLER_CURSE 词条且无深渊层")
+				return
+			_add_gold(-ShopUI.PURIFY_PRICE)
+			shop_ui.mark_utility_used(&"purify")
+			if popup_manager != null and is_instance_valid(player):
+				popup_manager.show_text_popup(player.global_position + Vector2(0.0, -60.0),
+					"净化完成（%s −1）" % purged)
 		_:
 			push_warning("[GameLoop] 未知 utility：%s" % String(p_util))
 

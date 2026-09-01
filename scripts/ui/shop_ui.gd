@@ -24,6 +24,10 @@ const WEAPON_PRICE := 100
 const REROLL_PRICE := 30
 const HEAL_PRICE := 50
 const MAXHP_PRICE := 80
+# v0.8.0 V9/V10/V11：移除词条 60（店限 1）/ 净化 80（店限 1）/ 深渊契约 +1 层换 120 金（店限 1）
+const STRIP_PRICE := 60
+const PURIFY_PRICE := 80
+const CONTRACT_GOLD := 120
 const OUTLINE_COLOR := Color(0.0, 0.0, 0.0, 0.9)
 const OUTLINE_SIZE := 4
 # v0.7.0 A6 §4 布局坐标表（720×1280）

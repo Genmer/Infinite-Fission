@@ -21,6 +21,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_v14_substats()                          # V14 副词条
 	_test_v15_set_bonus()                         # V15 套装
 	_test_v6_curse()                              # V6 诅咒运行时
+	_test_v9_detach()                             # V9 词条移除/净化
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -328,6 +329,121 @@ func _test_v6_curse() -> void:
 	_gl.restart_run()
 	_check("restart：诅咒层数/遥测随局清零",
 		c.curse_count == 0 and c.curses_taken == 0 and c.curses_purged == 0)
+
+
+# ══ V9：词条移除（TraitStack 三 API / is_curse 单源 / strip+purify 仲裁） ════
+func _test_v9_detach() -> void:
+	print("── V9 词条移除 ──")
+	# is_curse_trait 唯一判定
+	var curse_data := TraitData.new()
+	curse_data.id = &"TEST_CURSE"
+	curse_data.pool = GameConst.PoolClass.ADD
+	curse_data.pool_id = &"add_atk"
+	curse_data.value = -0.1
+	curse_data.params = {"stat": "atk_pct"}      # 无 is_curse 装饰（退役键）
+	curse_data.stack_max = 99
+	var ok_data := TraitData.new()
+	ok_data.id = &"TEST_OK"
+	ok_data.pool = GameConst.PoolClass.ADD
+	ok_data.pool_id = &"add_atk"
+	ok_data.value = 0.2
+	ok_data.stack_max = 99
+	var mult_neg := TraitData.new()
+	mult_neg.id = &"TEST_MULT_NEG"
+	mult_neg.pool = GameConst.PoolClass.MULT
+	mult_neg.value = -0.1
+	_check("is_curse_trait：ADD 负值=true / ADD 正值=false / MULT 负值=false",
+		TraitStack.is_curse_trait(curse_data) and not TraitStack.is_curse_trait(ok_data)
+		and not TraitStack.is_curse_trait(mult_neg))
+	# 栈操作：peek/detach_last(skip_curse) / detach_by_id
+	var stack := TraitStack.new()
+	stack.attach(curse_data)
+	stack.attach(curse_data)                      # 同 id 叠层 ×2
+	stack.attach(ok_data)
+	var peek_ok: Dictionary = stack.peek_last(true)
+	_check("peek_last(true)：跳过诅咒 → 末位非诅咒 TEST_OK",
+		bool(peek_ok.get("ok")) and StringName(String(peek_ok.get("trait_id"))) == &"TEST_OK"
+		and int(peek_ok.get("layers")) == 1 and not bool(peek_ok.get("is_curse")))
+	var det: Dictionary = stack.detach_last(true)
+	_check("detach_last(true)：摘 TEST_OK 1 层 → layers_left=0",
+		bool(det.get("ok")) and StringName(String(det.get("trait_id"))) == &"TEST_OK"
+		and int(det.get("layers_left")) == 0 and stack.size() == 1)
+	var peek_curse: Dictionary = stack.peek_last(false)
+	_check("peek_last(false)：末位含诅咒 + is_curse 标记（单源）",
+		bool(peek_curse.get("ok")) and bool(peek_curse.get("is_curse")))
+	_check("detach_last(true)：仅剩诅咒 → ok=false",
+		not bool(stack.detach_last(true).get("ok")))
+	var d1: Dictionary = stack.detach_by_id(&"TEST_CURSE", 1)
+	_check("detach_by_id：诅咒 2→1 层 → layers_left=1（实例保留）",
+		bool(d1.get("ok")) and int(d1.get("layers_left")) == 1 and stack.size() == 1)
+	var d2: Dictionary = stack.detach_by_id(&"TEST_CURSE", 1)
+	_check("detach_by_id：最后一层 → layers_left=0（实例摘除）",
+		bool(d2.get("ok")) and int(d2.get("layers_left")) == 0 and stack.is_empty())
+	_check("detach_by_id：无命中 → ok=false", not bool(stack.detach_by_id(&"TEST_CURSE").get("ok")))
+	# aggregate_add_entries is_curse 单源（params 无 is_curse 仍判诅咒）
+	stack.attach(curse_data)
+	var entries := stack.aggregate_add_entries()
+	_check("aggregate_add_entries：is_curse 单源判定（params 退役）",
+		(entries as Array).size() == 1 and bool((entries[0] as Dictionary).get("is_curse")))
+	# GameLoop strip/purify 仲裁（真武器 + 商店夹具）
+	_gl.start_run()
+	_gl.change_state(GameConst.GameStatus.SHOP)
+	_gl.shop_ui.open(9, false, [], {}, 0)
+	_gl.gold = 1000
+	var weapon := _gl.player.weapon_slots[0]
+	weapon.attach_trait(ok_data)
+	var layers0 := _stack_layers(weapon.trait_stack)
+	_gl._on_shop_utility(&"strip")
+	_check("strip：扣 60 + 非诅咒词条 −1 层",
+		_gl.gold == 940 and _stack_layers(weapon.trait_stack) == layers0 - 1,
+		"gold=%d layers=%d" % [_gl.gold, _stack_layers(weapon.trait_stack)])
+	# strip 拒绝：无非诅咒词条
+	var g0: int = _gl.gold
+	weapon.trait_stack.clear()
+	_gl._on_shop_utility(&"strip")
+	_check("strip：无非诅咒词条 → 拒绝不扣款", _gl.gold == g0)
+	# purify：GAMBLER_CURSE 词条优先
+	var gambler := TraitData.new()
+	gambler.id = &"GAMBLER_CURSE"
+	gambler.pool = GameConst.PoolClass.ADD
+	gambler.pool_id = &"add_atk"
+	gambler.value = -0.1
+	gambler.stack_max = 99
+	weapon.attach_trait(gambler)
+	_gl.curse_handler.reset_run()                 # 隔离深渊层（确保走词条分支）
+	var g1: int = _gl.gold
+	_gl._on_shop_utility(&"purify")
+	_check("purify：GAMBLER_CURSE 词条摘除（80 金）",
+		_gl.gold == g1 - 80 and not stack_has_id(weapon.trait_stack, &"GAMBLER_CURSE"))
+	# purify：无词条诅咒 → 深渊层 −1
+	_gl.curse_handler.reset_run()
+	_gl.curse_handler.add_curse(2)
+	var g2: int = _gl.gold
+	_gl._on_shop_utility(&"purify")
+	_check("purify：深渊层 −1（80 金）",
+		_gl.gold == g2 - 80 and _gl.curse_handler.curse_count == 1)
+	# purify 拒绝：皆无
+	_gl.curse_handler.reset_run()
+	var g3: int = _gl.gold
+	_gl._on_shop_utility(&"purify")
+	_check("purify：无词条无深渊层 → 拒绝不扣款",
+		_gl.gold == g3 and _gl.curse_handler.curse_count == 0)
+	_gl.shop_ui.close()
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+
+
+func _stack_layers(p_stack: TraitStack) -> int:
+	var total := 0
+	for tb in p_stack.traits:
+		total += int((tb as TraitBase).layers)
+	return total
+
+
+func stack_has_id(p_stack: TraitStack, p_id: StringName) -> bool:
+	for tb in p_stack.traits:
+		if (tb as TraitBase).data.id == p_id:
+			return true
+	return false
 
 
 func _roll_substats_snapshot(p_h: ChipHandler) -> Array:
