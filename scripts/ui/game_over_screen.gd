@@ -13,6 +13,7 @@ var stats_source: Node = null                 # 注入（HUD：kills/wave/total_
 var _root: Control = null
 var _summary_label: Label = null
 var _reaction_label: Label = null             # v0.7.0 U10：反应统计行
+var _crystal_label: Label = null              # v1.0.0：结晶获得行（A9，set_crystal_gain 回写）
 
 
 func _ready() -> void:
@@ -80,6 +81,17 @@ func request_menu() -> void:
 	menu_requested.emit()
 
 
+func crystal_text() -> String:
+	# v1.0.0（A9）测试观测口
+	return _crystal_label.text
+
+
+func set_crystal_gain(p_gain: int) -> void:
+	# v1.0.0（A9）：本局结晶获得回写（GameLoop._settle_run 死亡结转消费——
+	# 先于 GAME_OVER 状态切换调用，结算屏显示时即为终值）
+	_crystal_label.text = "结晶 +%d" % p_gain
+
+
 func _on_state_changed(p_state: int) -> void:
 	if p_state == GameConst.GameStatus.GAME_OVER:
 		show_summary()
@@ -138,3 +150,11 @@ func _build_ui() -> void:
 	btn_menu.size = Vector2(220.0, 52.0)
 	btn_menu.pressed.connect(request_menu)
 	_root.add_child(btn_menu)
+	# v1.0.0（A9）：结晶获得行（y=624 f16 居中——按钮区 560~612 下方，无交集）
+	_crystal_label = Label.new()
+	_crystal_label.text = "结晶 +0"
+	_crystal_label.add_theme_font_size_override("font_size", 16)
+	_crystal_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_crystal_label.position = Vector2(0.0, 624.0)
+	_crystal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_root.add_child(_crystal_label)

@@ -76,6 +76,8 @@ var event_director: EventDirector = null       # v0.8.0：事件效果处理器�
 var event_ui: EventUI = null                   # v0.8.0：事件界面（复用 SHOP 态宿主）
 var blessing_handler: BlessingHandler = null   # v0.9.0：波次赐福处理器（A8 §1）
 var blessing_ui: BlessingUI = null             # v0.9.0：赐福界面（复用 SHOP 态宿主）
+var meta_store: MetaStore = null               # v1.0.0：局外成长存档层（A9，boot 首位组装）
+var meta_panel: MetaPanel = null               # v1.0.0：结晶强化面板（MENU 态宿主，A9）
 var current_character: CharacterData = null    # v0.8.0：本局选中角色（null = 默认兜底）
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
@@ -99,6 +101,7 @@ var _deferred_shop_wave: int = 0              # v0.6.0 非战斗态暂存商店�
 var _deferred_event_wave: int = 0             # v0.8.0：非战斗态暂存事件波（0 = 无）
 var _deferred_event_index: int = -1           # v0.8.0：暂存事件索引（配对 _deferred_event_wave）
 var _deferred_blessing: bool = false          # v0.9.0：非战斗态暂存赐福（排空补开，A8）
+var _settled_this_run: bool = false           # v1.0.0：局外结转一次闸（A9，_reset_run_state 复位）
 
 
 func _ready() -> void:
@@ -291,7 +294,25 @@ func _on_player_died() -> void:
 	if state == GameConst.GameStatus.GAME_OVER or state == GameConst.GameStatus.BOOT \
 			or state == GameConst.GameStatus.MENU:
 		return                                    # 未开局/已结算：忽略
+	_settle_run()                                # v1.0.0（A9）：局外结转（一次闸），先于状态切换
 	change_state(GameConst.GameStatus.GAME_OVER)
+
+
+func _settle_run() -> void:
+	# v1.0.0（A9）死亡结转单点：本局金币 → 结晶 + 战绩入档 + 写盘（失败仅告警）。
+	# ★ 一次闸 _settled_this_run——重入不重复入账；meta_store 缺失 → 降级 set_crystal_gain(0)。
+	if _settled_this_run:
+		return
+	_settled_this_run = true
+	var gain := maxi(gold, 0)
+	if meta_store == null:
+		game_over_screen.set_crystal_gain(0)      # 降级：无存档层 → 结晶 +0，不入档
+		return
+	meta_store.add_crystal(gain)
+	meta_store.record_run(hud.kills, hud.wave)
+	meta_store.save()                            # 失败仅告警（MetaStore 内 push_warning）
+	game_over_screen.set_crystal_gain(gain)
+	_refresh_menu_meta()
 
 
 func _on_level_up(p_new_level: int) -> void:
@@ -856,6 +877,11 @@ func _boot_build_grids() -> void:
 
 
 func _boot_build_actors() -> void:
+	# v1.0.0（A9）：MetaStore 首位组装（先于一切战斗子系统——结转/注入四通道的存档层就绪序）
+	meta_store = MetaStore.new()
+	meta_store.name = "MetaStore"
+	add_child(meta_store)
+	meta_store.load_save()
 	# 管线（工厂自动切真件）→ 遗物处理器 → 敌波（spawner/wave_director）→ 玩家 → 元素系统
 	# ★ 经验掉落订阅必须先于 EnemySpawner 入树（信号连接序 = 派发序：掉落侧读取
 	#   exp_value/position 必须先于 spawner 的死亡归还清零，集成包 B.1）
@@ -1043,9 +1069,56 @@ func _boot_build_presentation() -> void:
 	add_child(menu_screen)
 	menu_screen.setup(registry)                   # v0.8.0：选角表注入（A7 §V18）
 	menu_screen.start_requested.connect(start_run)
+	# v1.0.0 结晶强化面板（A9）：★menu_screen 之后 add_child → 同层绘制在上遮挡成立；
+	# 回写菜单统计行（boot 载档后首刷）
+	meta_panel = MetaPanel.new()
+	meta_panel.name = "MetaPanel"
+	add_child(meta_panel)
+	meta_panel.purchase_requested.connect(_on_meta_purchase)
+	meta_panel.close_requested.connect(_close_meta_panel)
+	menu_screen.meta_requested.connect(_on_meta_requested)
+	_refresh_menu_meta()
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）
 	EventBus.player_died.connect(_on_player_died)
 	EventBus.level_up.connect(_on_level_up)
+
+
+# ── 结晶强化面板流（v1.0.0，A9：仅 MENU 态仲裁——不占状态机迁移） ──
+func _on_meta_requested() -> void:
+	# 菜单入口申请：仅 MENU 态且存档层就绪可开（互斥由全屏 dim STOP 遮挡保证）
+	if state != GameConst.GameStatus.MENU or meta_store == null:
+		return
+	meta_panel.open(meta_store)
+
+
+func _on_meta_purchase(p_id: StringName) -> void:
+	# 购买仲裁：仅 MENU 态且面板开启；MetaStore.purchase 失败（未知/满级/余额不足）静默拒绝；
+	# 成功 → 面板全量刷新 + 菜单统计行回写
+	if state != GameConst.GameStatus.MENU or meta_store == null \
+			or meta_panel == null or not meta_panel.is_open():
+		return
+	if not meta_store.purchase(p_id):
+		return
+	meta_panel.refresh()
+	_refresh_menu_meta()
+
+
+func _close_meta_panel() -> void:
+	# 返回钮收起 + 菜单统计行回写（购买后余额/战绩同源）
+	if meta_panel != null:
+		meta_panel.close()
+	_refresh_menu_meta()
+
+
+func _refresh_menu_meta() -> void:
+	# 菜单统计行回写（meta_store 未就绪 → 全 0 占位）
+	var summary: Dictionary = {"best_wave": 0, "total_runs": 0, "total_kills": 0, "crystal": 0}
+	if meta_store != null:
+		summary = meta_store.meta_summary()
+	if menu_screen != null:
+		menu_screen.set_meta_summary(int(summary.get("best_wave", 0)),
+			int(summary.get("total_runs", 0)), int(summary.get("total_kills", 0)),
+			int(summary.get("crystal", 0)))
 
 
 # ── 帧序支撑 ──────────────────────────────────────────────────────
@@ -1097,6 +1170,9 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 		* player.character_xp_mult()
 	if chip_handler != null:
 		value *= 1.0 + maxf(chip_handler.stat_bonus(&"xp_gain"), 0.0)
+	# v1.0.0（A9）：meta xp 第 4 因子（与芯片 xp_gain 分立防双算；0 级 → ×1.0 恒等）
+	if meta_store != null:
+		value *= meta_store.xp_mult()
 	_spawn_xp_shard(p_enemy.global_position, value)
 
 
@@ -1314,6 +1390,9 @@ func _reset_run_state() -> void:
 	relic_handler.reset_run()                     # B.2：遗物每场重新获取（owned/常驻位清零）
 	chip_handler.reset_run()                      # v0.7.0：芯片每场重新获取（装备/槽位/遥测清零）
 	if curse_handler != null:
+		# v1.0.0（A9）：meta hpg 注入★先于 reset——reset 内 recompute_max_hp 收口生效
+		if meta_store != null:
+			curse_handler.meta_hp_flat = meta_store.meta_hp_flat()
 		curse_handler.reset_run()                 # v0.8.0：诅咒层数/遥测清零 + max_hp 重导出（A7 §V6）
 	if event_director != null:
 		event_director.reset_run()                # v0.8.0：事件遥测清零 + rng 重播种（A7 §V2）
@@ -1326,6 +1405,15 @@ func _reset_run_state() -> void:
 			(pools[&"gold"] as GoldPool).release(coin)
 	active_coins.clear()
 	_add_gold(-gold)
+	if meta_store != null:
+		# v1.0.0（A9）①：局外 meta 段注入芯片处理器（先载入，覆盖上一局残留——
+		# chip reset_run 有意不清 meta_stats，A9 冻结语义）
+		chip_handler.set_meta_stats(meta_store.meta_stats_snapshot())
+		# ② 开局金直注入：★不经 _add_gold——greed 不放大开局金（A9 冻结语义）
+		var seed_gold := meta_store.starting_gold()
+		if seed_gold > 0:
+			gold += seed_gold
+			EventBus.emit_gold_changed(gold)
 	_deferred_shop_wave = 0                       # v0.6.0：暂存商店波清零
 	upgrade_cards_dealt = 0                       # v0.7.0 U11：发牌计数随局清零
 	if shop_ui != null:
@@ -1347,6 +1435,7 @@ func _reset_run_state() -> void:
 	game_feel.hit_stop_left = 0.0
 	game_feel.hit_stop_active_ms = 0.0
 	set_time_scale(1.0, &"reset")
+	_settled_this_run = false                    # v1.0.0：结转一次闸随局复位（A9）
 
 
 func _clear_battlefield() -> void:

@@ -7,11 +7,14 @@
 #（名 f20 + 描述 autowrap f13；registry.characters 空 → 单「默认」卡 selected=&""）；
 # 点击 = set_selection（选中高亮）；selected_character_id() = 当前选中（id 排序首为默认）。
 # 布局：标题 y200 / 副标题 y260 / 开始按钮 (280,640) 文案「开始出击」。
+# v1.0.0（A9）：局外战绩统计行 (0,712) f14 + 结晶强化入口钮 (280,752) 160x56
+#「结晶强化」→ meta_requested（GameLoop 仅 MENU 态仲裁开 MetaPanel）。
 # 可见性绑定 state_changed（仅 MENU 显示）；process_mode = ALWAYS（Q-14）。
 class_name MenuScreen
 extends CanvasLayer
 
 signal start_requested()                      # → GameLoop.start_run()（MENU → PLAYING）
+signal meta_requested()                       # v1.0.0：结晶强化面板申请（A9，GameLoop 仲裁）
 
 const OUTLINE_COLOR := Color(0.0, 0.0, 0.0, 0.9)
 const OUTLINE_SIZE := 4
@@ -25,6 +28,8 @@ const IDLE_COLOR := Color(0.62, 0.62, 0.68)
 var _registry: DataRegistry = null            # setup 注入（角色 id → CharacterData）
 var _root: Control = null
 var _start_btn: Button = null
+var _stats_label: Label = null                # v1.0.0：局外战绩统计行（set_meta_summary 回写）
+var _meta_btn: Button = null                  # v1.0.0：结晶强化入口钮
 var _card_buttons: Array[Button] = []         # 角色卡（index 与 _ids 对齐）
 var _ids: Array[StringName] = []              # 卡序（registry.characters 按 id 排序；空表 → [&""]）
 var _selected: int = 0                        # 当前选中卡 index
@@ -67,6 +72,12 @@ func set_selection(p_index: int) -> void:
 	_refresh_cards()
 
 
+func set_meta_summary(p_best_wave: int, p_total_runs: int, p_total_kills: int, p_crystal: int) -> void:
+	# v1.0.0（A9）：局外统计行回写（GameLoop._refresh_menu_meta 消费；四段文本契约）
+	_stats_label.text = "最佳波次 %d · 总局数 %d · 累计击杀 %d · 结晶 %d" \
+		% [p_best_wave, p_total_runs, p_total_kills, p_crystal]
+
+
 func _on_state_changed(p_state: int) -> void:
 	# 仅 MENU 态显示（PLAYING/LEVEL_UP/PAUSED/GAME_OVER 均隐藏）
 	_root.visible = p_state == GameConst.GameStatus.MENU
@@ -106,6 +117,22 @@ func _build_ui() -> void:
 	_start_btn.size = Vector2(160.0, 60.0)
 	_start_btn.pressed.connect(_on_start_pressed)
 	_root.add_child(_start_btn)
+	# v1.0.0（A9）：局外战绩统计行（开始钮 640~700 下方）+ 结晶强化入口钮
+	_stats_label = Label.new()
+	_stats_label.text = "最佳波次 %d · 总局数 %d · 累计击杀 %d · 结晶 %d" % [0, 0, 0, 0]
+	_stats_label.add_theme_font_size_override("font_size", 14)
+	_stats_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_stats_label.position = Vector2(0.0, 712.0)
+	_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stats_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_stats_label)
+	_meta_btn = Button.new()
+	_meta_btn.text = "结晶强化"
+	_meta_btn.add_theme_font_size_override("font_size", 16)
+	_meta_btn.position = Vector2(280.0, 752.0)
+	_meta_btn.size = Vector2(160.0, 56.0)
+	_meta_btn.pressed.connect(func() -> void: meta_requested.emit())
+	_root.add_child(_meta_btn)
 
 
 func _rebuild_cards() -> void:
