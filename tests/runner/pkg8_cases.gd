@@ -25,6 +25,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_v10_v11_shop_expand()                   # V10/V11 商店扩容
 	_test_v1_v4_events()                          # V1~V4 事件链
 	_test_v17_characters()                        # V17 角色数据
+	_test_v18_v19_character_flow()                # V18/V19 角色链
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -839,3 +840,78 @@ func _has_error(p_verdicts: Array) -> bool:
 		if String(v.get("severity", DataValidator.SEV_ERROR)) == DataValidator.SEV_ERROR:
 			return true
 	return false
+
+
+# ══ V18/V19：角色链（MenuScreen 选角 / start_run / goto_menu / apply_character / 首发武器） ══
+func _test_v18_v19_character_flow() -> void:
+	print("── V18/V19 角色链 ──")
+	var menu := _gl.menu_screen
+	var player := _gl.player
+	# MenuScreen：默认选中 = id 排序首（COURIER < SCHOLAR < VANGUARD）
+	_check("菜单选角：默认 id 排序首 = CHAR_COURIER",
+		menu.selected_character_id() == &"CHAR_COURIER", String(menu.selected_character_id()))
+	menu.set_selection(1)
+	_check("菜单选角：set_selection(1) → CHAR_SCHOLAR",
+		menu.selected_character_id() == &"CHAR_SCHOLAR")
+	menu.set_selection(99)
+	_check("菜单选角：越界钳末位 → CHAR_VANGUARD",
+		menu.selected_character_id() == &"CHAR_VANGUARD")
+	menu.set_selection(-5)
+	_check("菜单选角：越界钳首位 → CHAR_COURIER",
+		menu.selected_character_id() == &"CHAR_COURIER")
+	# start_run 空参读菜单选中（无参 emit 兼容路径）→ apply_character 全链
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_check("goto_menu：GAME_OVER → MENU（合法边）", _gl.goto_menu()
+		and _gl.state == GameConst.GameStatus.MENU)
+	_gl.start_run()
+	_check("start_run 空参：current_character = 菜单选中（COURIER）",
+		_gl.current_character != null and _gl.current_character.id == &"CHAR_COURIER")
+	_check("apply_character：移速 280×1.10 / 拾取 120+40 / max_hp 公式（char_pct=0 → 100）",
+		is_equal_approx(player.move_speed, 308.0)
+		and is_equal_approx(player.pickup_radius, 160.0)
+		and is_equal_approx(player.max_hp, 100.0)
+		and is_equal_approx(player.hp, 100.0))
+	_check("首发武器：COURIER → W1_pistol",
+		String((player.weapon_slots[0] as WeaponBase).data.id) == "W1_pistol")
+	# 重开：restart_run 角色感知（同一角色重开——语义零改动验证）
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_check("restart_run：角色保持（COURIER）+ 数值重开",
+		_gl.restart_run() and _gl.current_character.id == &"CHAR_COURIER"
+		and is_equal_approx(player.move_speed, 308.0)
+		and String((player.weapon_slots[0] as WeaponBase).data.id) == "W1_pistol")
+	# 显式角色：SCHOLAR（W4 / xp×1.15 / max_hp 90）与 VANGUARD（W3 / max_hp 130）
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_gl.goto_menu()
+	_gl.start_run(&"CHAR_SCHOLAR")
+	_check("start_run 显式 SCHOLAR：首发 W4_pulse_beam + xp 乘子 1.15 + max_hp 90（−10%）",
+		String((player.weapon_slots[0] as WeaponBase).data.id) == "W4_pulse_beam"
+		and is_equal_approx(player.character_xp_mult(), 1.15)
+		and is_equal_approx(player.max_hp, 90.0))
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_gl.goto_menu()
+	_gl.start_run(&"CHAR_VANGUARD")
+	_check("start_run 显式 VANGUARD：首发 W3_shotgun + max_hp 130（+30%）+ 移速 266",
+		String((player.weapon_slots[0] as WeaponBase).data.id) == "W3_shotgun"
+		and is_equal_approx(player.max_hp, 130.0)
+		and is_equal_approx(player.move_speed, 266.0))
+	# 未命中兜底：悬空 id → null 角色 + 默认首发 + 基线 max_hp
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_gl.goto_menu()
+	_gl.start_run(&"CHAR_NOPE")
+	_check("start_run 悬空 id：角色 null 兜底 + 默认首发 W1 + max_hp 100（move_speed 残留前值——null 跳过冻结语义）",
+		_gl.current_character == null and player.character == null
+		and String((player.weapon_slots[0] as WeaponBase).data.id) == "W1_pistol"
+		and is_equal_approx(player.max_hp, 100.0)
+		and is_equal_approx(player.move_speed, 266.0))
+	# xp 三乘子结构（遗物 × 角色 × (1+K_chip)——访问器侧验证）
+	_check("xp 三乘子：character_xp_mult() null 兜底 1.0",
+		is_equal_approx(player.character_xp_mult(), 1.0))
+	# GameOverScreen 双按钮信号
+	var menu_fired: Array = []
+	var cb_menu := func() -> void: menu_fired.append(true)
+	_gl.game_over_screen.menu_requested.connect(cb_menu)
+	_gl.game_over_screen.request_menu()
+	_gl.game_over_screen.menu_requested.disconnect(cb_menu)
+	_check("GameOverScreen：menu_requested 信号连通", (menu_fired as Array).size() == 1)
+	# 复位：默认角色（COURIER 菜单选中态回默认，避免污染后续段）
+	menu.set_selection(0)

@@ -99,6 +99,9 @@ func _test_state_machine() -> void:
 	_check("request_resume：PAUSED→PLAYING + 恢复运行",
 		_gl.request_resume() and _gl.state == GameConst.GameStatus.PLAYING and not tree.paused)
 	# E-16：player_died 优先级最高（PLAYING → GAME_OVER，真实受击路径）
+	# v0.8.0 夹具适配：start_run 现经 _reset_run_state（角色感知重排）→ respawn 赋 1.5s
+	# 重生无敌——必死一击前先令其失效（E-16 仲裁语义断言本身零改动）
+	_gl.player.invuln_left = 0.0
 	var hp0: float = _gl.player.hp
 	_gl.player.take_contact_damage(hp0 + 1.0)     # 必死一击（简化路径 Q-16 → player_died）
 	_check("死亡仲裁：PLAYING→GAME_OVER（E-16 最高优先）",

@@ -6,6 +6,7 @@ class_name GameOverScreen
 extends CanvasLayer
 
 signal restart_requested()                    # → GameLoop 重开申请（迁移矩阵仲裁）
+signal menu_requested()                       # v0.8.0：返回选角申请（GAME_OVER → MENU，迁移矩阵仲裁）
 
 var stats_source: Node = null                 # 注入（HUD：kills/wave/total_damage）
 
@@ -74,6 +75,11 @@ func request_restart() -> void:
 	restart_requested.emit()
 
 
+func request_menu() -> void:
+	# v0.8.0：返回选角按钮回调（GameLoop.goto_menu 仲裁）
+	menu_requested.emit()
+
+
 func _on_state_changed(p_state: int) -> void:
 	if p_state == GameConst.GameStatus.GAME_OVER:
 		show_summary()
@@ -115,10 +121,20 @@ func _build_ui() -> void:
 	_reaction_label.position = Vector2(0.0, 522.0)
 	_reaction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_root.add_child(_reaction_label)
-	var btn := Button.new()
-	btn.text = "重新开始"
-	btn.add_theme_font_size_override("font_size", 18)
-	btn.position = Vector2(280.0, 560.0)
-	btn.size = Vector2(160.0, 52.0)
-	btn.pressed.connect(request_restart)
-	_root.add_child(btn)
+	# v0.8.0：双按钮（A7 §V19）——「再次出击」(100,560) 220x52 /「返回选角」(400,560) 220x52。
+	# ★「再次出击」语义 = restart_run（pkg4:114/pkg5:200,544,827/pkg6:268/pkg6_extra:258 冻结断言
+	# 兼容——restart_run 数值重置口径零改动）
+	var btn_again := Button.new()
+	btn_again.text = "再次出击"
+	btn_again.add_theme_font_size_override("font_size", 18)
+	btn_again.position = Vector2(100.0, 560.0)
+	btn_again.size = Vector2(220.0, 52.0)
+	btn_again.pressed.connect(request_restart)
+	_root.add_child(btn_again)
+	var btn_menu := Button.new()
+	btn_menu.text = "返回选角"
+	btn_menu.add_theme_font_size_override("font_size", 18)
+	btn_menu.position = Vector2(400.0, 560.0)
+	btn_menu.size = Vector2(220.0, 52.0)
+	btn_menu.pressed.connect(request_menu)
+	_root.add_child(btn_menu)

@@ -1059,6 +1059,9 @@ func _test_weapon_pity() -> void:
 		is_equal_approx(_gen_weights_sum(gen.category_weights), 100.0)
 		and is_equal_approx(float(gen.category_weights.get("WEAPON", 0.0)), 8.0))
 	# 统计：mult=2.0 下 WEAPON 类别份额上移（固定种子确定性对比）
+	# v0.8.0 夹具适配：start_run 现经 _reset_run_state（角色感知重排）→ 槽位回 1 解锁 1 持有
+	# W1——解锁槽 2 保证武器候选池非空（w2 > w0 冻结断言零改动）
+	player.unlocked_slots = maxi(player.unlocked_slots, 2)
 	gen.rng.seed = 4242
 	var w0 := 0
 	for i in range(1500):

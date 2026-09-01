@@ -74,6 +74,7 @@ var chip_handler: ChipHandler = null           # v0.7.0：芯片效果处理器�
 var curse_handler: CurseHandler = null         # v0.8.0：诅咒效果处理器（A7 §V6）
 var event_director: EventDirector = null       # v0.8.0：事件效果处理器（A7 §V2）
 var event_ui: EventUI = null                   # v0.8.0：事件界面（复用 SHOP 态宿主）
+var current_character: CharacterData = null    # v0.8.0：本局选中角色（null = 默认兜底）
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
 var shop_ui: ShopUI = null                    # v0.6.0：Boss 前商店界面（SHOP 态宿主）
@@ -225,16 +226,25 @@ func request_resume() -> bool:
 	return change_state(GameConst.GameStatus.PLAYING)
 
 
-func start_run() -> bool:
-	# MENU → PLAYING：波次 1 开局
+func start_run(p_character_id: StringName = &"") -> bool:
+	# MENU → PLAYING：波次 1 开局。v0.8.0（A7 §V18）：p_character_id 空参读菜单选中
+	#（start_requested 无参 emit 冻结兼容）；未命中 registry → null 兜底（STARTING_WEAPON_ID
+	# 口径由 _starting_weapon_id 承担）。★ 重排：角色应用与首发武器装载并入 _reset_run_state
+	#（restart_run 同路径——角色感知重开零分支）。
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
+	var requested: StringName = p_character_id
+	if requested == &"" and menu_screen != null:
+		requested = menu_screen.selected_character_id()
+	current_character = registry.get_character(requested) if requested != &"" else null
+	_reset_run_state()
 	wave_director.start_wave(1)
 	return true
 
 
 func restart_run() -> bool:
-	# GAME_OVER → PLAYING（重开）：数值重置 + 波次 1 重开
+	# GAME_OVER → PLAYING（重开）：数值重置 + 波次 1 重开（★ 语义零改动——pkg4/pkg5/pkg6
+	# 冻结断言兼容；v0.8.0 角色感知由 _reset_run_state 内部 apply_character 承担）
 	if state != GameConst.GameStatus.GAME_OVER:
 		return false
 	if not change_state(GameConst.GameStatus.PLAYING):
@@ -242,6 +252,19 @@ func restart_run() -> bool:
 	_reset_run_state()
 	wave_director.start_wave(1)
 	return true
+
+
+func goto_menu() -> bool:
+	# v0.8.0：GAME_OVER → MENU（返回选角；迁移矩阵合法边，仲裁后生效）
+	return change_state(GameConst.GameStatus.MENU)
+
+
+func _starting_weapon_id() -> StringName:
+	# v0.8.0（A7 §V18）：首发武器 id = 选中角色?.starting_weapon_id ?? STARTING_WEAPON_ID
+	#（boot 组装 / _reset_run_state 两处共用单点）
+	if current_character != null and current_character.starting_weapon_id != &"":
+		return current_character.starting_weapon_id
+	return STARTING_WEAPON_ID
 
 
 func set_time_scale(p_value: float, p_source: StringName) -> void:
@@ -853,8 +876,8 @@ func _boot_build_actors() -> void:
 	chip_handler.setup({"registry": registry, "player": player, "curse_handler": curse_handler})
 	chip_handler.bind_events()
 	curse_handler.setup({"player": player, "chip_handler": chip_handler})   # v0.8.0（A7 §V6）
-	# Q-4：首发手枪（形态工厂 add_weapon）
-	player.add_weapon(registry.get_weapon(STARTING_WEAPON_ID))
+	# Q-4：首发手枪（形态工厂 add_weapon；v0.8.0：id 经 _starting_weapon_id 单点——boot 期无角色 = 默认）
+	player.add_weapon(registry.get_weapon(_starting_weapon_id()))
 
 
 func _boot_build_presentation() -> void:
@@ -889,6 +912,7 @@ func _boot_build_presentation() -> void:
 	add_child(game_over_screen)
 	game_over_screen.setup(hud)
 	game_over_screen.restart_requested.connect(restart_run)
+	game_over_screen.menu_requested.connect(goto_menu)   # v0.8.0：返回选角（A7 §V19）
 	card_generator = CardGenerator.new()
 	card_generator.setup(registry)
 	card_select_ui = CardSelectUI.new()
@@ -937,6 +961,7 @@ func _boot_build_presentation() -> void:
 	menu_screen = MenuScreen.new()
 	menu_screen.name = "MenuScreen"
 	add_child(menu_screen)
+	menu_screen.setup(registry)                   # v0.8.0：选角表注入（A7 §V18）
 	menu_screen.start_requested.connect(start_run)
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）
 	EventBus.player_died.connect(_on_player_died)
@@ -987,7 +1012,9 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 	# × (1+K_xp)（v0.7.0 芯片 xp_gain，A6 §3）
 	if not (p_enemy is Enemy):
 		return                                  # 裸实体探针/非敌事件防御
-	var value := (p_enemy as Enemy).exp_value * relic_handler.xp_mult()
+	# v0.8.0（A7 §V18）：xp 三乘子 = 遗物 × 角色 × (1+K_chip)（顺序冻结；芯片行保持其后）
+	var value := (p_enemy as Enemy).exp_value * relic_handler.xp_mult() \
+		* player.character_xp_mult()
 	if chip_handler != null:
 		value *= 1.0 + maxf(chip_handler.stat_bonus(&"xp_gain"), 0.0)
 	_spawn_xp_shard(p_enemy.global_position, value)
@@ -1187,13 +1214,17 @@ func _reset_run_state() -> void:
 	# 新波次 1、残留敌弹重生首帧秒杀，审查 Fix 1 Critical）→ 玩家（复活含死亡短路清除/
 	# HP/经验/槽位解锁）/ HUD 统计 / 卡牌流 / 顿帧态
 	_clear_battlefield()
+	# v0.8.0（A7 §V18）：角色应用先于 respawn——max_hp 基线 = respawn → compute_max_hp
+	# (char_pct,0,0,0) 公式承载。★ 无条件调用：current_character=null（默认/悬空 id 兜底）时
+	# apply_character 内部跳过属性应用但清引用——防上一局角色 char_pct/xp 残留进本局
+	player.apply_character(current_character)
 	player.respawn()
 	for i in range(player.weapon_slots.size()):
 		var w: WeaponBase = player.weapon_slots[i] if i < player.weapon_slots.size() else null
 		if w != null and is_instance_valid(w):
 			w.queue_free()
 		player.weapon_slots[i] = null
-	player.add_weapon(registry.get_weapon(STARTING_WEAPON_ID))
+	player.add_weapon(registry.get_weapon(_starting_weapon_id()))   # v0.8.0：角色感知首发武器
 	hud.kills = 0
 	hud.wave = 0
 	hud.total_damage = 0.0

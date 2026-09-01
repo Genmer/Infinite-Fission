@@ -20,7 +20,7 @@ var xp: float = 0.0
 var xp_need: float = 14.0                     # 14 × lv^1.4
 var hitbox_radius: float = 16.0               # 命中盒半径（敌弹距离判定口径）
 var max_hp_bonus_flat: float = 0.0            # v0.8.0 商店 maxhp flat 池（recompute_max_hp 口径）
-var character: Resource = null                # v0.8.0 角色数据（V18 起 narrow 为 CharacterData）
+var character: CharacterData = null           # v0.8.0 角色数据（apply_character 注入；null = 默认）
 
 var _dead: bool = false
 var _drag_accum: Vector2 = Vector2.ZERO       # 相对拖动采样累计（E-15）
@@ -92,14 +92,31 @@ func char_max_hp_pct() -> float:
 	# 角色 max_hp% 加成（character null → 0.0 兜底；CharacterData.max_hp_pct）
 	if character == null:
 		return 0.0
-	return float(character.get("max_hp_pct"))
+	return character.max_hp_pct
 
 
 func character_xp_mult() -> float:
 	# 角色经验乘子（character null → 1.0 兜底；CharacterData.xp_mult）
 	if character == null:
 		return 1.0
-	return float(character.get("xp_mult"))
+	return character.xp_mult
+
+
+func apply_character(p_data: CharacterData) -> void:
+	# v0.8.0 角色应用（GameLoop._reset_run_state 在 respawn 前调用；A7 §V18）：
+	# move_speed = 基速×乘数 / pickup_radius = 基准+增量（同步 _pickup_shape）；
+	# ★ max_hp 不直改——由 respawn → compute_max_hp(char_pct,…) 公式承载。
+	character = p_data
+	if p_data == null:
+		return
+	var base_speed: float = GameConfig.get_constant(&"player_base_speed", 280.0)
+	move_speed = base_speed * p_data.move_speed_mult
+	var base_radius: float = GameConfig.balance.pickup_radius if GameConfig.balance != null else 120.0
+	pickup_radius = base_radius + p_data.pickup_radius_add
+	if _pickup_shape != null:
+		var circle := _pickup_shape.shape as CircleShape2D
+		if circle != null:
+			circle.radius = pickup_radius
 
 
 func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
