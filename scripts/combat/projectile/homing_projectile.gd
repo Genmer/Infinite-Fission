@@ -147,6 +147,9 @@ func _on_settled(p_target: Node2D, p_result: DamageResult, p_tctx: TraitContext 
 	if impact_hook.is_valid():
 		impact_hook.call(global_position, blast_radius)
 	_blast_secondaries(p_target)
+	# v1.1.0 增幅消耗（A10 §2）：主目标结算成功且未 dead → 清反向附着（重判同条件幂等）
+	if elemental != null and p_result != null and not p_result.killed:
+		elemental.consume_amplify(p_target, element)
 	_apply_elemental(p_target, p_result, p_tctx)
 	_recycle(GameConst.RecycleReason.PIERCE_DEPLETED)
 
@@ -175,3 +178,6 @@ func _blast_secondaries(p_primary: Node2D) -> void:
 		ctx.base_atk *= scale
 		var result: DamageResult = damage_pipeline.call(&"resolve", ctx)
 		_apply_result_to(cand, result)
+		# v1.1.0 增幅消耗（A10 §2）：次级结算成功且未 dead → 清反向附着（穿透链各目标独立）
+		if elemental != null and result != null and not result.killed:
+			elemental.consume_amplify(cand, element)

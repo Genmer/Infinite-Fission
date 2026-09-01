@@ -300,6 +300,18 @@ func _build_damage_ctx(p_target: Node2D) -> DamageContext:
 	if chip_pct > 0.0:
 		ctx.chip_entries.append({"stat": &"atk_pct", "contrib": chip_pct})
 	ctx.element = element
+	# v1.1.0 增幅双轨（A10 §2）：FIR/ICE 直击且目标带反向附着 → amplify 乘区池注入
+	#（字段逐字对齐 vuln 池先例；KIN/LTG/光束/近战/settle_aoe/DOT/连锁跳不经此门——天然排除）
+	if elemental != null and (element == GameConst.Element.FIR or element == GameConst.Element.ICE):
+		var amp := elemental.try_amplify_factor(p_target, element)
+		if amp > 1.0:
+			ctx.mult_pools.append({
+				"pool_id": &"amplify",
+				"source_uid": uid,
+				"contrib": amp - 1.0,
+				"cap_pool": amp - 1.0,
+				"priority": 0,
+			})
 	ctx.hit_flags = _hit_flags()
 	if p_target.has_method(&"get_resist"):
 		ctx.target_resist = float(p_target.call(&"get_resist", element))
@@ -340,6 +352,9 @@ func _on_settled(p_target: Node2D, p_result: DamageResult, p_tctx: TraitContext 
 	if p_result != null:
 		killed_target = killed_target or p_result.killed
 		last_hit_pos = global_position
+	# v1.1.0 增幅消耗（A10 §2）：结算成功且目标未 dead → 清反向附着（重判同条件幂等）
+	if elemental != null and p_result != null and not p_result.killed:
+		elemental.consume_amplify(p_target, element)
 	_apply_elemental(p_target, p_result, p_tctx)
 	pierce_left -= 1
 	if pierce_left > 0:

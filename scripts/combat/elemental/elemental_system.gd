@@ -10,6 +10,11 @@
 class_name ElementalSystem
 extends Node
 
+# v1.1.0 增幅双轨（A10 §2）：融化 = ICE 附着 + FIR 直击 ×1.5 / 蒸发 = FIR 附着 + ICE 直击 ×2.0
+#（模块常量待升格 BalanceTables——A10 §7 假设 E-AMP-2）
+const AMP_MELT_FACTOR := 1.5
+const AMP_VAPOR_FACTOR := 2.0
+
 var pipeline: RefCounted = null                # 注入（DamagePipeline 或桩；独立结算通道）
 var enemy_grid: SpaceGrid = null               # 注入（连锁传导/范围扩散目标查询）
 var chip_handler: ChipHandler = null           # 注入（v0.7.0 A6 §3：附着强度芯片 ×(1+K_attach)）
@@ -59,6 +64,45 @@ func reaction_mult() -> float:
 	for key in _reaction_mults:
 		product *= float(_reaction_mults[key])
 	return product
+
+
+# ── v1.1.0 增幅双轨（A10 §2：直击通道只读判定 + 结算后幂等消耗） ──
+func try_amplify_factor(p_target: Node2D, p_hit_element: int) -> float:
+	# 增幅系数试算（只读快照，无副作用）：融化/蒸发命中因子（无触发 → 1.0）。
+	# 消耗由弹侧在结算成功且目标未 dead 后调 consume_amplify（重判同条件，幂等）。
+	return maxf(_amplify_snapshot(p_target, p_hit_element), 1.0)
+
+
+func consume_amplify(p_target: Node2D, p_hit_element: int) -> void:
+	# 增幅消耗：重判同条件（已清则 no-op）→ clear_element(反向) 全清 + 分键遥测
+	if p_target == null or bool(p_target.get("dead")):
+		return
+	var state: Variant = p_target.get("elemental")
+	if not (state is ElementalState):
+		return
+	var st := state as ElementalState
+	if p_hit_element == GameConst.Element.FIR and st.gauges[GameConst.Element.ICE] > 0.0:
+		st.clear_element(GameConst.Element.ICE)
+		DebugStats.count(&"amplify_melt")
+	elif p_hit_element == GameConst.Element.ICE and st.gauges[GameConst.Element.FIR] > 0.0:
+		st.clear_element(GameConst.Element.FIR)
+		DebugStats.count(&"amplify_vapor")
+
+
+func _amplify_snapshot(p_target: Node2D, p_hit_element: int) -> float:
+	# 增幅快照判定（只读）：反向附着非零才触发；×reaction_mult() 与剧变同源消费。
+	# KIN/LTG 直击、null/无状态宿主 → 0.0（= 不触发）；immune_mask 不查（吃附着计量）。
+	if p_target == null:
+		return 0.0
+	var state: Variant = p_target.get("elemental")
+	if not (state is ElementalState):
+		return 0.0
+	var st := state as ElementalState
+	if p_hit_element == GameConst.Element.FIR and st.gauges[GameConst.Element.ICE] > 0.0:
+		return AMP_MELT_FACTOR * reaction_mult()
+	if p_hit_element == GameConst.Element.ICE and st.gauges[GameConst.Element.FIR] > 0.0:
+		return AMP_VAPOR_FACTOR * reaction_mult()
+	return 0.0
 
 
 func apply_attach(p_enemy: Node2D, p_element: int, p_value: float,
