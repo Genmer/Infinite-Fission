@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"ELE_MASTERY"
+display_name = "元素精通"
+description = "元素反应效果 +25%/层（剧变与增幅同乘；全局至多 3 层）"
+pool = 4
+pool_id = &""
+effect_id = &"EF_ELEMENTAL"
+value = 0.25
+value2 = 0.0
+params = {"mastery_step": 0.25}
+event_hooks = []
+stack_max = 3
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 2
+tags = 0
+condition = {}
+required_weapon = &""

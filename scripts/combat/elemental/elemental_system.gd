@@ -14,6 +14,7 @@ extends Node
 #（模块常量待升格 BalanceTables——A10 §7 假设 E-AMP-2）
 const AMP_MELT_FACTOR := 1.5
 const AMP_VAPOR_FACTOR := 2.0
+const MASTERY_LAYER_CAP := 3                   # v1.1.0 元素精通全局层数封顶（唯一裁定点）
 
 var pipeline: RefCounted = null                # 注入（DamagePipeline 或桩；独立结算通道）
 var enemy_grid: SpaceGrid = null               # 注入（连锁传导/范围扩散目标查询）
@@ -21,6 +22,8 @@ var chip_handler: ChipHandler = null           # 注入（v0.7.0 A6 §3：附着
 var _hosts: Array[Node2D] = []                 # 已挂载状态容器的敌人（§1.3-3 白名单：状态宿主）
 
 var _reaction_mults: Dictionary = {}           # source_uid -> mult（ELE_REACTION_VOID ×1.8 聚合）
+var _mastery_reg: Dictionary = {}              # source_uid -> int 层数（v1.1.0 ELE_MASTERY 跨武器注册）
+var _mastery_step := 0.0                       # 精通每层步长（后写覆盖）
 var _uid_dot: int = 0                          # DOT 结算幂等键 source_uid（分流）
 var _uid_chain: int = 0                        # 连锁跳伤 source_uid
 var _uid_reaction: int = 0                     # 反应结算 source_uid
@@ -59,11 +62,33 @@ func register_reaction_mult(p_source_uid: int, p_mult: float) -> void:
 
 
 func reaction_mult() -> float:
-	# 反应强化聚合（多源连乘；金卡唯一 → 实际单源 ×1.8）
+	# 反应强化聚合（多源连乘；金卡唯一 → 实际单源 ×1.8）× 精通乘区（v1.1.0 E3：
+	# 1 + step×Σ层，全局 ≤3 层）——剧变与增幅同源消费，同构乘算自动同乘；
+	# 仅 VOID 注册（精通 0 层）时恒等 ×1.8（pkg3 面零改动）
 	var product := 1.0
 	for key in _reaction_mults:
 		product *= float(_reaction_mults[key])
+	var total := mastery_layers()
+	if total > 0:
+		product *= 1.0 + _mastery_step * float(total)
 	return product
+
+
+func register_mastery(p_source_uid: int, p_layers: int, p_step: float) -> void:
+	# v1.1.0 ELE_MASTERY 注册：layers>0 且 step>0 才收（防御零/负值残留）；step 后写覆盖。
+	# 无注销通道（武器不可卸载，A10 §7 E-AMP-1）；attach 期全量重报幂等覆盖。
+	if p_layers <= 0 or p_step <= 0.0:
+		return
+	_mastery_reg[p_source_uid] = p_layers
+	_mastery_step = p_step
+
+
+func mastery_layers() -> int:
+	# 跨武器层数合计 → 全局封顶（mini(total, MASTERY_LAYER_CAP)——唯一裁定点）
+	var total := 0
+	for uid in _mastery_reg:
+		total += int(_mastery_reg[uid])
+	return mini(total, MASTERY_LAYER_CAP)
 
 
 # ── v1.1.0 增幅双轨（A10 §2：直击通道只读判定 + 结算后幂等消耗） ──

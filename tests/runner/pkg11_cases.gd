@@ -43,6 +43,9 @@ func run(p_tree: SceneTree) -> void:
 	_test_v35_cd_split()                          # V35（CD 与反应强化乘区无关）
 	_test_v39_spelling()                          # V39
 	_test_v32_joint_clamp()                       # V32（末位：注册 VOID ×1.8 污染源置末）
+	_test_v33_mastery_register()                  # V33（局部 sys 隔离，不污染共享 _sys）
+	_test_v34_phi_aggregate()                     # V34（局部 sys 隔离）
+	_test_v38_hud_mastery()                       # V38
 	_teardown_world()
 	_summary()
 
@@ -179,12 +182,12 @@ func _panel() -> Dictionary:
 
 
 func _spawn_proj(p_element: int, p_pos: Vector2, p_attach: float = 30.0, p_pierce: int = 1,
-		p_stack: TraitStack = null) -> ProjectileBase:
+		p_stack: TraitStack = null, p_elemental: ElementalSystem = null) -> ProjectileBase:
 	var proj := _proj_pool.acquire() as ProjectileBase
 	proj.damage_pipeline = _pipeline
 	proj.enemy_grid = _grid
 	proj.pool = _proj_pool
-	proj.elemental = _sys
+	proj.elemental = p_elemental if p_elemental != null else _sys
 	proj.spawn({
 		"velocity": Vector2.ZERO,
 		"lifetime": 1.0,
@@ -211,8 +214,10 @@ func _fire_at(p_proj: ProjectileBase) -> void:
 	p_proj.tick(DT)
 
 
-func _gauge(p_enemy: Node2D, p_element: int, p_value: float) -> void:
-	_sys.apply_attach(p_enemy, p_element, p_value)   # 非满槽预置附着（无状态触发）
+func _gauge(p_enemy: Node2D, p_element: int, p_value: float,
+		p_sys: ElementalSystem = null) -> void:
+	var sys := p_sys if p_sys != null else _sys
+	sys.apply_attach(p_enemy, p_element, p_value)    # 非满槽预置附着（无状态触发）
 
 
 func _make_fake_pool_stack(p_ids: Array, p_value: float) -> TraitStack:
@@ -236,6 +241,96 @@ func _read_source(p_path: String) -> String:
 	if f == null:
 		return ""
 	return f.get_as_text()
+
+
+# ── 武器夹具（pkg3 模式；E3 精通注册通道用） ──────────────────────
+var _wd_counter: int = 0                       # WeaponData id 确定性计数器
+
+
+func _merge_dict(p_base: Dictionary, p_over: Dictionary) -> Dictionary:
+	var out := p_base.duplicate(true)
+	for key in p_over:
+		out[key] = p_over[key]
+	return out
+
+
+func _make_weapon_data(p_form: int, p_table: Dictionary = {}, p_segment: Dictionary = {}) -> WeaponData:
+	_wd_counter += 1
+	var d := WeaponData.new()
+	d.id = StringName("W_PKG11_%d" % _wd_counter)
+	d.display_name = "Pkg11 测试武器 %d" % _wd_counter
+	d.form = p_form
+	d.crit_rate = 0.0
+	d.crit_dmg = 2.0
+	d.hitbox_r = 6.0
+	for i in range(5):
+		var ls := WeaponLevelStats.new()
+		ls.base_atk = float(p_table.get("base_atk", 10.0))
+		ls.rof = float(p_table.get("rof", 5.0))
+		ls.cd = float(p_table.get("cd", 0.5))
+		ls.pierce = int(p_table.get("pierce", 1))
+		ls.pellets = int(p_table.get("pellets", 1))
+		d.upgrade_table.append(ls)
+	match p_form:
+		GameConst.WeaponForm.BALLISTIC:
+			d.ballistic = _merge_dict(d.ballistic, p_segment)
+		GameConst.WeaponForm.LASER:
+			d.laser = _merge_dict(d.laser, p_segment)
+		GameConst.WeaponForm.HOMING:
+			d.homing = _merge_dict(d.homing, p_segment)
+		_:
+			d.melee = _merge_dict(d.melee, p_segment)
+	return d
+
+
+func _make_weapon(p_form: int, p_data: WeaponData, p_pos: Vector2,
+		p_elemental: ElementalSystem) -> WeaponBase:
+	var w: WeaponBase
+	match p_form:
+		GameConst.WeaponForm.BALLISTIC:
+			w = BallisticWeapon.new()
+		GameConst.WeaponForm.HOMING:
+			w = HomingWeapon.new()
+		GameConst.WeaponForm.LASER:
+			w = LaserWeapon.new()
+		_:
+			w = OrbitWeapon.new()
+	w.name = "Pkg11Weapon_%d" % _wd_counter
+	tree.get_root().add_child(w)
+	w.position = p_pos
+	w.setup(p_data, null, {
+		"pipeline": _pipeline,
+		"projectile_pool": _proj_pool,
+		"enemy_grid": _grid,
+		"laser_pool": null,
+		"homing_pool": null,
+		"elemental": p_elemental,
+	})
+	return w
+
+
+func _make_mastery_data() -> TraitData:
+	# ELE_MASTERY 镜像定义（与 .tres 同值：step 0.25 / stack_max 3 / hooks 空）
+	var d := TraitData.new()
+	d.id = &"ELE_MASTERY"
+	d.display_name = "元素精通"
+	d.pool = GameConst.PoolClass.ELEM
+	d.pool_id = &""
+	d.effect_id = &"EF_ELEMENTAL"
+	d.value = 0.25
+	d.params = {"mastery_step": 0.25}
+	d.stack_max = 3
+	d.proc_chance = 1.0
+	return d
+
+
+func _first_live_proj_element(p_pool: ProjectilePool) -> int:
+	var live: Variant = p_pool.get("_live_order")
+	if live is Dictionary and not (live as Dictionary).is_empty():
+		var node: Variant = (live as Dictionary).keys()[0]
+		if node is ProjectileBase:
+			return (node as ProjectileBase).element
+	return -1
 
 
 # ── V25 恒等护栏 ──────────────────────────────────────────────────
@@ -550,3 +645,145 @@ func _test_v40_gauge_residue() -> void:
 		and st.gauges[GameConst.Element.ICE] > 0.0
 	_check("V40：gauge 残量 0.001 仍触发融化全清；融后蒸同帧连段合法（FIR 清 / ICE 附着>0）",
 		melt_ok and vapor_ok, "melt=%s vapor=%s" % [str(melt_ok), str(vapor_ok)])
+
+
+# ── V33 精通注册（局部 ElementalSystem 隔离） ─────────────────────
+func _test_v33_mastery_register() -> void:
+	print("── V33 精通注册 ──")
+	var sys := ElementalSystem.new()
+	sys.name = "Pkg11MasterySys"
+	tree.get_root().add_child(sys)
+	var w1 := _make_weapon(GameConst.WeaponForm.BALLISTIC,
+		_make_weapon_data(GameConst.WeaponForm.BALLISTIC), Vector2(100, 100), sys)
+	var mdata := _make_mastery_data()
+	var ok := true
+	var detail := ""
+	if not (w1.attach_trait(mdata) and w1.attach_trait(mdata)):
+		ok = false
+		detail = "×2 attach 失败"
+	if ok and not is_equal_approx(sys.reaction_mult(), 1.5):
+		ok = false
+		detail = "×2 层 mult=%s" % str(sys.reaction_mult())
+	if ok and not (w1.attach_trait(mdata) and is_equal_approx(sys.reaction_mult(), 1.75)):
+		ok = false
+		detail = "×3 层 mult=%s" % str(sys.reaction_mult())
+	# 第 4 层：stack_max=3 → attach 拒绝，精通不增
+	if ok and (w1.attach_trait(mdata) or not is_equal_approx(sys.reaction_mult(), 1.75)):
+		ok = false
+		detail = "第 4 层未被拒绝 mult=%s" % str(sys.reaction_mult())
+	# 跨武器 2+2 → 合计 4 → 全局封顶 3 → 仍 1.75
+	var w2 := _make_weapon(GameConst.WeaponForm.BALLISTIC,
+		_make_weapon_data(GameConst.WeaponForm.BALLISTIC), Vector2(200, 100), sys)
+	if ok and not (w2.attach_trait(mdata) and w2.attach_trait(mdata)):
+		ok = false
+		detail = "跨武器 attach 失败"
+	if ok and not is_equal_approx(sys.reaction_mult(), 1.75):
+		ok = false
+		detail = "跨武器封顶 mult=%s" % str(sys.reaction_mult())
+	# 同挂 ELE_IGNITE：弹元素仍 FIR（精通 hooks 空 → 不派发不覆写弹元素）
+	if ok:
+		var ignite: TraitData = load("res://resources/traits/ELE_IGNITE.tres") as TraitData
+		if ignite == null or not w1.attach_trait(ignite):
+			ok = false
+			detail = "ELE_IGNITE attach 失败"
+		elif not w1.try_fire():
+			ok = false
+			detail = "try_fire 失败"
+		else:
+			var el := _first_live_proj_element(_proj_pool)
+			if el != GameConst.Element.FIR:
+				ok = false
+				detail = "弹元素=%d（期望 FIR=1）" % el
+	w1.free()
+	w2.free()
+	sys.free()
+	_check("V33：精通注册——×2 层 1.5 / ×3 层 1.75 / 跨武器 2+2 仍 1.75 封顶 / 第 4 层拒绝 / 与 ELE_IGNITE 同挂弹元素仍 FIR",
+		ok, detail)
+
+
+# ── V34 φ 聚合（局部 ElementalSystem 隔离） ───────────────────────
+func _test_v34_phi_aggregate() -> void:
+	print("── V34 φ 聚合 ──")
+	var sys := ElementalSystem.new()
+	sys.name = "Pkg11PhiSys"
+	tree.get_root().add_child(sys)
+	sys.pipeline = _pipeline
+	sys.enemy_grid = _grid
+	sys.register_reaction_mult(888801, 1.8)       # VOID ×1.8
+	sys.register_mastery(888802, 3, 0.25)         # 精通 L3 → ×1.75
+	var phi_ok := is_equal_approx(sys.reaction_mult(), 3.15)
+	# 增幅 factor = 2.0 × 3.15 = 6.3：FIR gauge + ICE 直击 → contrib 5.3 落血 630
+	var e1 := _spawn_enemy(_make_enemy_data("V34_A"), Vector2(120, 1100))
+	sys.register_host(e1)
+	_gauge(e1, GameConst.Element.FIR, 30.0, sys)
+	_fire_at(_spawn_proj(GameConst.Element.ICE, e1.global_position, 30.0, 1, null, sys))
+	var r1 := _last_result()
+	var amp_ok: bool = r1 != null \
+		and is_equal_approx(float(r1.pool_breakdown.get(&"amplify", -1.0)), 5.3) \
+		and is_equal_approx(r1.final_value, 630.0)
+	# 碎裂 coef = 2.0 × 3.15 = 6.3 × 剩余 DOT 180（0.15×200×1 层×6 跳）= 1134 落血（hp 866）
+	var e2 := _spawn_enemy(_make_enemy_data("V34_B", 2000.0), Vector2(400, 1100))
+	sys.register_host(e2)
+	sys.apply_attach(e2, GameConst.Element.FIR, 100.0, {"snapshot": 200.0})   # 满槽点燃
+	_gauge(e2, GameConst.Element.FIR, 30.0, sys)
+	_gauge(e2, GameConst.Element.ICE, 30.0, sys)
+	_bump()
+	sys.detect_reactions()
+	var melt_ok := _approx(e2.hp, 866.0, 0.01)
+	sys.free()
+	_check("V34：φ 聚合——VOID+L3 → 3.15；增幅 2.0×3.15=6.3（contrib 5.3 落血 630）；碎裂 2.0×3.15×180=1134（hp 866）",
+		phi_ok and amp_ok and melt_ok,
+		"phi=%s amp=%s melt=%s" % [str(phi_ok), str(amp_ok), str(melt_ok)])
+
+
+# ── V38 HUD 精通层显示 ────────────────────────────────────────────
+func _test_v38_hud_mastery() -> void:
+	print("── V38 HUD MP ──")
+	var hud := HUD.new()
+	hud.name = "Pkg11Hud"
+	tree.get_root().add_child(hud)
+	# 伪玩家/伪武器（带 HUD 探针所需属性；GDScript 运行时构造——Node2D 无自定义属性可 set）
+	var wsrc := GDScript.new()
+	wsrc.source_code = "extends RefCounted\nvar trait_stack: TraitStack = null\n"
+	wsrc.reload()
+	var psrc := GDScript.new()
+	psrc.source_code = "extends Node2D\nvar weapon_slots: Array = []\n"
+	psrc.reload()
+	var player_stub: Node2D = psrc.new()
+	tree.get_root().add_child(player_stub)
+	var mdata := _make_mastery_data()
+	var other := TraitData.new()
+	other.id = &"ADD_ATK_V38"
+	other.display_name = "V38 占位"
+	other.pool = GameConst.PoolClass.ADD
+	other.pool_id = &"add_atk"
+	other.effect_id = &"EF_STAT"
+	other.value = 0.1
+	var s1 := TraitStack.new()
+	s1.attach(mdata)
+	s1.attach(mdata)                              # 层数 2
+	var s2 := TraitStack.new()
+	s2.attach(mdata)
+	s2.attach(mdata)                              # 层数 2（跨武器合计 4）
+	s2.attach(other)
+	var w1: RefCounted = wsrc.new()
+	w1.trait_stack = s1
+	var w2: RefCounted = wsrc.new()
+	w2.trait_stack = s2
+	player_stub.weapon_slots = [w1, w2]
+	hud.player = player_stub
+	var text := hud._build_summary()
+	var capped := text == "Build  W:2 T:3 MP:3"   # 2+2 层 → 全局封顶 3
+	var s0 := TraitStack.new()
+	s0.attach(other)
+	w1.trait_stack = s0
+	w2.trait_stack = TraitStack.new()             # 无精通 → MP:0 恒显
+	var text0 := hud._build_summary()
+	var zero_ok := text0 == "Build  W:2 T:1 MP:0"
+	var rects := hud.layout_rects()
+	var layout_ok := rects.size() == 11           # 布局契约不变
+	hud.free()
+	player_stub.free()
+	_check("V38：HUD Build 串——跨武器 2+2 封顶 MP:3 / 无精通 MP:0 恒显 / layout_rects 仍 11 项",
+		capped and zero_ok and layout_ok,
+		"t1=%s t0=%s rects=%d" % [text, text0, rects.size()])

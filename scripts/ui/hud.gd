@@ -351,19 +351,27 @@ func reset_reactions() -> void:
 
 
 func _build_summary() -> String:
-	# 词条栏：武器数 + 武器词条数（构筑统计占位；正式构筑面板后续迭代）
+	# 词条栏：武器数 + 武器词条数 + 精通层数（v1.1.0 MP：跨武器合计全局封顶 3，0 恒显；
+	# 正式构筑面板后续迭代）
 	if player == null or not is_instance_valid(player):
 		return "Build -"
 	var slots: Array = player.get("weapon_slots")
 	var wcount := 0
 	var tcount := 0
+	var mp := 0
 	for w in slots:
 		if w != null and is_instance_valid(w):
 			wcount += 1
 			var stack: Variant = w.get("trait_stack")
 			if stack != null and stack.get("traits") != null:
-				tcount += (stack.get("traits") as Array).size()
-	return "Build  W:%d T:%d" % [wcount, tcount]
+				var traits: Array = stack.get("traits")
+				tcount += traits.size()
+				for mounted in traits:
+					if mounted is TraitBase:
+						var tb := mounted as TraitBase
+						if tb.data != null and tb.data.id == &"ELE_MASTERY":
+							mp += tb.layers
+	return "Build  W:%d T:%d MP:%d" % [wcount, tcount, mini(mp, 3)]
 
 
 # ── 程序化 UI 组装（v0.6.0 720×1280 全量坐标表，见类头） ──────────
