@@ -170,6 +170,22 @@ func _make_local_sys(p_name: String) -> ElementalSystem:
 	return sys
 
 
+func _mount_stub_player(p_weapons: Array) -> Node2D:
+	# v1.3.0 适配（A12 R1）：attach_trait 注册通道改为 rebuild_registries 全量重算
+	#（扫 player.weapon_slots）——为持 ELEM 词条的测试武器挂 stub 宿主，
+	# 使注册语义与生产路径一致（原夹具 weapon.player = null 仅清空）
+	var psrc := GDScript.new()
+	psrc.source_code = "extends Node2D\nvar weapon_slots: Array = []\n"
+	psrc.reload()
+	var stub: Node2D = psrc.new()
+	tree.get_root().add_child(stub)
+	stub.weapon_slots = p_weapons
+	for w in p_weapons:
+		if w is WeaponBase:
+			(w as WeaponBase).player = stub
+	return stub
+
+
 func _make_weapon_data() -> WeaponData:
 	var d := WeaponData.new()
 	d.id = &"W_PKG11X"
@@ -354,11 +370,13 @@ func _test_xe3_mastery_one_layer() -> void:
 	print("── XE3 精通 1 层 ──")
 	var sys := _make_local_sys("Pkg11xM1Sys")
 	var w1 := _make_weapon(Vector2(100, 100), sys)
+	var host_stub := _mount_stub_player([w1])   # v1.3.0 适配：注册通道 = rebuild 扫 weapon_slots
 	var mdata := _make_mastery_data()
 	var attach_ok: bool = w1.attach_trait(mdata)
 	var mult := sys.reaction_mult()
 	var layers: int = sys.mastery_layers()
 	w1.free()
+	host_stub.free()
 	sys.free()
 	_check("XE3：精通 1 层——reaction_mult φ = 1 + 0.25×1 = 1.25（mastery_layers=1；V33 仅断 2/3 层的缺口补锚）",
 		attach_ok and layers == 1 and _approx(mult, 1.25),
@@ -391,6 +409,7 @@ func _test_xe1_restart_residue() -> void:
 	var sys := _make_local_sys("Pkg11xRestartSys")
 	# 局内：武器 1 挂精通 ×2 → φ=1.5（前置锚）
 	var w1 := _make_weapon(Vector2(100, 200), sys)
+	var host_stub := _mount_stub_player([w1])   # v1.3.0 适配：注册通道 = rebuild 扫 weapon_slots
 	var mdata := _make_mastery_data()
 	var pre_ok: bool = w1.attach_trait(mdata) and w1.attach_trait(mdata) \
 		and is_equal_approx(sys.reaction_mult(), 1.5)
@@ -427,6 +446,7 @@ func _test_xe1_restart_residue() -> void:
 	hud.free()
 	stub_player.free()
 	w2.free()
+	host_stub.free()
 	sys.free()
 	_check("XE1：★重开链——武器销毁重建（新 uid）后 mastery_layers 归零、reaction_mult 回 1.0；HUD MP:0 与实际一致",
 		pre_ok and uid_ok and clean and hud_ok,

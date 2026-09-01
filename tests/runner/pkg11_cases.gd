@@ -336,6 +336,22 @@ func _first_live_proj_element(p_pool: ProjectilePool) -> int:
 	return -1
 
 
+func _mount_stub_player(p_weapons: Array) -> Node2D:
+	# v1.3.0 适配（A12 R1）：attach_trait 注册通道改为 rebuild_registries 全量重算
+	#（扫 player.weapon_slots）——为持 ELEM 词条的测试武器挂 stub 宿主，
+	# 使注册语义与生产路径一致（原夹具 weapon.player = null 仅清空）
+	var psrc := GDScript.new()
+	psrc.source_code = "extends Node2D\nvar weapon_slots: Array = []\n"
+	psrc.reload()
+	var stub: Node2D = psrc.new()
+	tree.get_root().add_child(stub)
+	stub.weapon_slots = p_weapons
+	for w in p_weapons:
+		if w is WeaponBase:
+			(w as WeaponBase).player = stub
+	return stub
+
+
 # ── V25 恒等护栏 ──────────────────────────────────────────────────
 func _test_v25_identity_guard() -> void:
 	print("── V25 恒等护栏 ──")
@@ -658,6 +674,7 @@ func _test_v33_mastery_register() -> void:
 	tree.get_root().add_child(sys)
 	var w1 := _make_weapon(GameConst.WeaponForm.BALLISTIC,
 		_make_weapon_data(GameConst.WeaponForm.BALLISTIC), Vector2(100, 100), sys)
+	var host_stub := _mount_stub_player([w1])   # v1.3.0 适配：注册通道 = rebuild 扫 weapon_slots
 	var mdata := _make_mastery_data()
 	var ok := true
 	var detail := ""
@@ -677,6 +694,8 @@ func _test_v33_mastery_register() -> void:
 	# 跨武器 2+2 → 合计 4 → 全局封顶 3 → 仍 1.75
 	var w2 := _make_weapon(GameConst.WeaponForm.BALLISTIC,
 		_make_weapon_data(GameConst.WeaponForm.BALLISTIC), Vector2(200, 100), sys)
+	host_stub.weapon_slots.append(w2)           # v1.3.0 适配：w2 入 stub 槽位
+	w2.player = host_stub
 	if ok and not (w2.attach_trait(mdata) and w2.attach_trait(mdata)):
 		ok = false
 		detail = "跨武器 attach 失败"
@@ -699,6 +718,7 @@ func _test_v33_mastery_register() -> void:
 				detail = "弹元素=%d（期望 FIR=1）" % el
 	w1.free()
 	w2.free()
+	host_stub.free()
 	sys.free()
 	_check("V33：精通注册——×2 层 1.5 / ×3 层 1.75 / 跨武器 2+2 仍 1.75 封顶 / 第 4 层拒绝 / 与 ELE_IGNITE 同挂弹元素仍 FIR",
 		ok, detail)

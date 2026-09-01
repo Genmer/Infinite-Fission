@@ -15,6 +15,13 @@ extends Node
 #（WAT 附着 + FIR 直击）；因子读取走 _amp_factor（balance 未就绪回退 v1.1.0 常量值）
 const MASTERY_LAYER_CAP := 3                   # v1.1.0 元素精通全局层数封顶（唯一裁定点）
 
+# ── v1.3.0 共鸣（A12 R1）：≥2 把同元素武器 → 附着 ×1.25；≥3 把 → 反应结算 ×1.15 ──
+# 计数真源 = weapon_element_counts 单源扫描器（每武器恰计 1 元素：ELEM 词条中层数最高者，
+# tie 后挂胜）；rebuild_registries 全量重算收口（挂载/装机/摘除统一重扫，无增量注册残留）。
+const RESONANCE_ATTACH_MULT := 1.25            # ≥2 把同元素：附着强度乘区
+const RESONANCE_REACTION_MULT := 1.15          # ≥3 把同元素：反应结算乘区（attach 不吃）
+const RESONANCE_ELEMENT_NAMES: Array[String] = ["动", "火", "冰", "雷", "水"]   # Element 枚举序显示名
+
 var pipeline: RefCounted = null                # 注入（DamagePipeline 或桩；独立结算通道）
 var enemy_grid: SpaceGrid = null               # 注入（连锁传导/范围扩散目标查询）
 var chip_handler: ChipHandler = null           # 注入（v0.7.0 A6 §3：附着强度芯片 ×(1+K_attach)）
@@ -27,6 +34,7 @@ var _uid_dot: int = 0                          # DOT 结算幂等键 source_uid�
 var _uid_chain: int = 0                        # 连锁跳伤 source_uid
 var _uid_reaction: int = 0                     # 反应结算 source_uid
 var _uid_conduct: int = 0                      # v1.2.0 导电连锁跳伤 source_uid（分流，A11 §3）
+var _resonance_counts: Array[int] = [0, 0, 0, 0, 0]   # v1.3.0 共鸣计数（Element 枚举直索引）
 
 
 func _init() -> void:
@@ -102,6 +110,120 @@ func mastery_layers() -> int:
 	return mini(total, MASTERY_LAYER_CAP)
 
 
+# ── v1.3.0 共鸣段（A12 R1）：单源扫描器 + 全量重算收口 ──────────────
+static func weapon_element_counts(p_player: Node2D) -> Array[int]:
+	# 单源扫描器：逐武器恰计 1 元素（_weapon_element）；null/非 Array slots → 全 0。
+	# HUD 共鸣后缀 / rebuild_registries 共用本口径（扫描序 = weapon_slots 序）。
+	var counts: Array[int] = [0, 0, 0, 0, 0]
+	if p_player == null:
+		return counts
+	var slots: Variant = p_player.get("weapon_slots")
+	if not (slots is Array):
+		return counts
+	for w in slots:
+		var element := _weapon_element(w)
+		if element >= 0:
+			counts[element] += 1
+	return counts
+
+
+static func resonance_suffix(p_player: Node2D) -> String:
+	# HUD Build 行后缀：counts[e]>=2 的元素（FIR..WAT 序）拼「火×2」·「·」连接，
+	# 前缀「 共鸣:」；无共鸣 → ""（HUD 串与 v1.2.0 逐位恒等）
+	var counts := weapon_element_counts(p_player)
+	var parts: Array[String] = []
+	for e in range(GameConst.Element.FIR, GameConst.Element.WAT + 1):
+		if counts[e] >= 2:
+			parts.append("%s×%d" % [RESONANCE_ELEMENT_NAMES[e], counts[e]])
+	if parts.is_empty():
+		return ""
+	return " 共鸣:" + "·".join(parts)
+
+
+func resonance_attach_factor(p_element: int) -> float:
+	# 附着共鸣乘区：counts>=2 → ×1.25（越界/KIN → 1.0；无共鸣恒等）
+	if p_element < 0 or p_element >= _resonance_counts.size():
+		return 1.0
+	return RESONANCE_ATTACH_MULT if _resonance_counts[p_element] >= 2 else 1.0
+
+
+func resonance_reaction_factor(p_element: int) -> float:
+	# 反应共鸣乘区：counts>=3 → ×1.15（越界/KIN → 1.0；无共鸣恒等）
+	if p_element < 0 or p_element >= _resonance_counts.size():
+		return 1.0
+	return RESONANCE_REACTION_MULT if _resonance_counts[p_element] >= 3 else 1.0
+
+
+func _pair_resonance(p_a: int, p_b: int) -> float:
+	# 反应双元素臂（A12 假设 H2 连乘口径）：res(a)×res(b)——无共鸣 1.0×1.0 逐位恒等
+	return resonance_reaction_factor(p_a) * resonance_reaction_factor(p_b)
+
+
+func rebuild_registries(p_player: Node2D) -> void:
+	# v1.3.0 全量重算收口：三表清空重建（_reaction_mults / _mastery_reg+_mastery_step /
+	# _resonance_counts）。挂载（attach_trait）/装机（add_weapon/equip_weapon）/摘除（strip）
+	# 统一走本入口重扫 weapon_slots，替代 v1.1.0 增量注册（无注销通道缺口随之消除）；
+	# null player → 仅清空（测试降级路径）。register_* 直调通道原样保留（冻结夹具）。
+	_reaction_mults.clear()
+	_mastery_reg.clear()
+	_mastery_step = 0.0
+	_resonance_counts = [0, 0, 0, 0, 0]
+	if p_player == null:
+		return
+	var slots: Variant = p_player.get("weapon_slots")
+	if not (slots is Array):
+		return
+	for w in slots:
+		if not (w is WeaponBase) or not is_instance_valid(w):
+			continue
+		var weapon := w as WeaponBase
+		if weapon.trait_stack == null:
+			continue
+		for mounted in weapon.trait_stack.traits:
+			var data: TraitData = (mounted as TraitBase).data
+			if data == null or data.pool != GameConst.PoolClass.ELEM:
+				continue
+			if data.params.has("reaction_mult"):
+				# ELE_REACTION_VOID：不乘层（stack_max=1 语义与 register_reaction_mult 一致）
+				_reaction_mults[weapon.uid] = float(data.params["reaction_mult"])
+			if data.params.has("mastery_step"):
+				# ELE_MASTERY：层全量重报 + step 后写覆盖（register_mastery 零/负防御同口径）
+				var step := float(data.params["mastery_step"])
+				if (mounted as TraitBase).layers > 0 and step > 0.0:
+					_mastery_reg[weapon.uid] = (mounted as TraitBase).layers
+					_mastery_step = step
+		var element := _weapon_element(weapon)
+		if element >= 0:
+			_resonance_counts[element] += 1
+
+
+static func _weapon_element(p_weapon: Variant) -> int:
+	# 单武器元素归属：ELEM 词条且 params.element 为 int ∈ [FIR..WAT] 中层数最高者
+	#（tie 后挂胜：挂载序遍历 >= 替换 best）；非 WeaponBase/失效/无栈/无元素 → -1。
+	# 仅 KIN 无法附着不在域内；reaction_mult/mastery_step 词条无 element 键 → 不计。
+	if not (p_weapon is WeaponBase) or not is_instance_valid(p_weapon):
+		return -1
+	var stack: TraitStack = (p_weapon as WeaponBase).trait_stack
+	if stack == null:
+		return -1
+	var best := -1
+	var best_layers := 0
+	for mounted in stack.traits:
+		var data: TraitData = (mounted as TraitBase).data
+		if data == null or data.pool != GameConst.PoolClass.ELEM:
+			continue
+		var el: Variant = data.params.get("element", null)
+		if not (el is int):
+			continue
+		var element := int(el)
+		if element < GameConst.Element.FIR or element > GameConst.Element.WAT:
+			continue
+		if (mounted as TraitBase).layers >= best_layers:
+			best = element
+			best_layers = (mounted as TraitBase).layers
+	return best
+
+
 # ── v1.1.0 增幅双轨（A10 §2：直击通道只读判定 + 结算后幂等消耗） ──
 func try_amplify_factor(p_target: Node2D, p_hit_element: int) -> float:
 	# 增幅系数试算（只读快照，无副作用）：融化/蒸发命中因子（无触发 → 1.0）。
@@ -153,11 +275,16 @@ func _amplify_snapshot(p_target: Node2D, p_hit_element: int) -> float:
 	var st := state as ElementalState
 	if p_hit_element == GameConst.Element.FIR:
 		if st.gauges[GameConst.Element.ICE] > 0.0:
-			return _amp_factor("amp_melt_factor", 1.5) * reaction_mult()
+			# v1.3.0：火直击臂吃火共鸣（melt/quench 同为 FIR 命中元素）
+			return _amp_factor("amp_melt_factor", 1.5) * reaction_mult() \
+				* resonance_reaction_factor(p_hit_element)
 		if st.gauges[GameConst.Element.WAT] > 0.0:
-			return _amp_factor("amp_quench_factor", 1.5) * reaction_mult()
+			return _amp_factor("amp_quench_factor", 1.5) * reaction_mult() \
+				* resonance_reaction_factor(p_hit_element)
 	elif p_hit_element == GameConst.Element.ICE and st.gauges[GameConst.Element.FIR] > 0.0:
-		return _amp_factor("amp_vapor_factor", 2.0) * reaction_mult()
+		# 冰直击蒸发吃冰共鸣
+		return _amp_factor("amp_vapor_factor", 2.0) * reaction_mult() \
+			* resonance_reaction_factor(p_hit_element)
 	return 0.0
 
 
@@ -172,6 +299,8 @@ func apply_attach(p_enemy: Node2D, p_element: int, p_value: float,
 	var value := p_value
 	if chip_handler != null:
 		value *= 1.0 + maxf(chip_handler.stat_bonus(&"attach_strength"), 0.0)
+	# v1.3.0（A12 R1）：共鸣附着乘区（≥2 把同元素 ×1.25；chip 乘区之后追加——无共鸣 ×1.0 恒等）
+	value *= resonance_attach_factor(p_element)
 	var snapshot := float(p_info.get("snapshot", 0.0))
 	var overrides: Dictionary = p_info.get("overrides", {})
 	var code: int = (state as ElementalState).apply(p_element, value, snapshot, overrides)
@@ -204,7 +333,9 @@ func tick(p_game_delta: float) -> void:
 			if GameConfig.balance != null:
 				var frule: Dictionary = GameConfig.balance.reaction_table.get("RXN_WAT_ICE", {})
 				shatter_coef = float(frule.get("shatter_coef", 0.4))
-			_settle_reaction(host, st.freeze_shatter_snapshot, shatter_coef * reaction_mult(),
+			# v1.3.0：破碎结算补乘 (WAT,ICE) 共鸣双元素臂（无共鸣 ×1.0 恒等）
+			_settle_reaction(host, st.freeze_shatter_snapshot, shatter_coef * reaction_mult()
+				* _pair_resonance(GameConst.Element.WAT, GameConst.Element.ICE),
 				GameConst.ReactionType.RXN_WAT_ICE)
 			st.freeze_shatter_snapshot = 0.0
 		if st.consume_superconduct_expired():
@@ -294,7 +425,8 @@ func _trigger_reaction(p_enemy: Node2D, p_state: ElementalState, p_rxn: int) -> 
 			# 碎裂：×2.0 × 点燃剩余 DOT 总额（独立结算，清双槽 + 燃尽）
 			var rule: Dictionary = tables.get("RXN_FIR_ICE", {"coef": 2.0})
 			var base := p_state.remaining_dot_total()
-			var coef := float(rule.get("coef", 2.0)) * rm
+			var coef := float(rule.get("coef", 2.0)) * rm \
+				* _pair_resonance(GameConst.Element.FIR, GameConst.Element.ICE)
 			_settle_reaction(p_enemy, base, coef, GameConst.ReactionType.RXN_FIR_ICE)
 			p_state.clear_element(GameConst.Element.FIR)
 			p_state.clear_element(GameConst.Element.ICE)
@@ -304,7 +436,8 @@ func _trigger_reaction(p_enemy: Node2D, p_state: ElementalState, p_rxn: int) -> 
 			# 过载：120% ATK × 反应强化，半径 90 爆炸（主目标 + 半径内扩散）
 			var rule2: Dictionary = tables.get("RXN_FIR_LTG", {"coef": 1.2, "radius": 90.0})
 			var snapshot := p_state.last_attach_snapshot
-			var coef2 := float(rule2.get("coef", 1.2)) * rm
+			var coef2 := float(rule2.get("coef", 1.2)) * rm \
+				* _pair_resonance(GameConst.Element.FIR, GameConst.Element.LTG)
 			var radius := float(rule2.get("radius", 90.0))
 			_settle_reaction(p_enemy, snapshot, coef2, GameConst.ReactionType.RXN_FIR_LTG)
 			_spread_reaction(p_enemy, radius, snapshot, coef2)
@@ -342,7 +475,8 @@ func _trigger_reaction(p_enemy: Node2D, p_state: ElementalState, p_rxn: int) -> 
 				{"coef": 0.9, "chain_hops": 3, "chain_targets": 3,
 				"chain_radius": 160.0, "chain_decay": 0.6, "cd": 4.0})
 			var snapshot5 := p_state.last_attach_snapshot
-			var coef5 := float(rule5.get("coef", 0.9)) * rm
+			var coef5 := float(rule5.get("coef", 0.9)) * rm \
+				* _pair_resonance(GameConst.Element.WAT, GameConst.Element.LTG)
 			_settle_reaction(p_enemy, snapshot5, coef5, GameConst.ReactionType.RXN_WAT_LTG)
 			_conduct_chain(p_enemy, snapshot5, coef5)
 			p_state.clear_element(GameConst.Element.WAT)
@@ -352,7 +486,8 @@ func _trigger_reaction(p_enemy: Node2D, p_state: ElementalState, p_rxn: int) -> 
 			#（_spread_reaction 显式传 RXN_WAT_FIR；过载调用点传 RXN_FIR_LTG 恒等）；清双槽
 			var rule6: Dictionary = tables.get("RXN_WAT_FIR", {"coef": 0.6, "radius": 80.0})
 			var snapshot6 := p_state.last_attach_snapshot
-			var coef6 := float(rule6.get("coef", 0.6)) * rm
+			var coef6 := float(rule6.get("coef", 0.6)) * rm \
+				* _pair_resonance(GameConst.Element.WAT, GameConst.Element.FIR)
 			var radius6 := float(rule6.get("radius", 80.0))
 			_settle_reaction(p_enemy, snapshot6, coef6, GameConst.ReactionType.RXN_WAT_FIR)
 			_spread_reaction(p_enemy, radius6, snapshot6, coef6,
@@ -426,6 +561,14 @@ func _dot_tick(p_enemy: Node2D, p_state: ElementalState) -> void:
 		if pipeline.has_method(&"resolve"):
 			pipeline.call(&"resolve", ctx)
 		DebugStats.count(&"elemental_dot_tick")
+
+
+func shock_chain_from_crystal(p_origin: Node2D, p_hit_damage: float) -> void:
+	# v1.3.0（A12 R2 水晶 LTG 臂）：水晶雷击连锁入口——<=0 短路；每跳 3 目标
+	#（借用 _shock_chain BFS：深度/衰减/半径走 element_states.shock 表，同周期同目标去重）
+	if p_origin == null or p_hit_damage <= 0.0:
+		return
+	_shock_chain(p_origin, p_hit_damage, 3)
 
 
 func _shock_chain(p_origin: Node2D, p_hit_damage: float, p_targets_per_hop: int) -> void:

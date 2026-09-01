@@ -371,7 +371,9 @@ func _build_summary() -> String:
 						var tb := mounted as TraitBase
 						if tb.data != null and tb.data.id == &"ELE_MASTERY":
 							mp += tb.layers
-	return "Build  W:%d T:%d MP:%d" % [wcount, tcount, mini(mp, 3)]
+	# v1.3.0（A12 R1）：尾追共鸣后缀「 共鸣:火×2·冰×3」（无共鸣 "" 恒等——pkg11 V38 锁定）
+	return "Build  W:%d T:%d MP:%d%s" % [wcount, tcount, mini(mp, 3),
+		ElementalSystem.resonance_suffix(player)]
 
 
 # ── 程序化 UI 组装（v0.6.0 720×1280 全量坐标表，见类头） ──────────

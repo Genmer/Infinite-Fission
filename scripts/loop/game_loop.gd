@@ -745,6 +745,8 @@ func _on_shop_utility(p_util: StringName) -> void:
 				return
 			var detached: Dictionary = primary.trait_stack.detach_last(true)
 			primary.invalidate_panel()             # 调用方失效宿主（TraitStack 不回查宿主）
+			if elemental != null:
+				elemental.rebuild_registries(player)   # v1.3.0 R1：ELEM 摘层后三表全量重算
 			_add_gold(-ShopUI.STRIP_PRICE)
 			shop_ui.mark_utility_used(&"strip")
 			_refresh_shop_availability()
@@ -1385,6 +1387,8 @@ func _reset_run_state() -> void:
 			w.queue_free()
 		player.weapon_slots[i] = null
 	player.add_weapon(registry.get_weapon(_starting_weapon_id()))   # v0.8.0：角色感知首发武器
+	if elemental != null:
+		elemental.rebuild_registries(player)      # v1.3.0 R1：重开三表全量重算（XE1 残留收口）
 	hud.kills = 0
 	hud.wave = 0
 	hud.total_damage = 0.0

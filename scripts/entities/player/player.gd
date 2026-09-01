@@ -227,6 +227,10 @@ func equip_weapon(p_weapon: WeaponBase) -> bool:
 			weapon_slots[i] = p_weapon
 			if p_weapon.get_parent() == null:
 				add_child(p_weapon)
+			# v1.3.0（A12 R1）：装机成功 → 元素三表全量重算（共鸣/精通/反应强化）
+			var elemental: Variant = _deps.get("elemental")
+			if elemental is ElementalSystem:
+				(elemental as ElementalSystem).rebuild_registries(self)
 			return true
 	return false                             # 无空槽
 
@@ -246,6 +250,10 @@ func add_weapon(p_data: WeaponData) -> WeaponBase:
 	weapon_slots[slot] = weapon
 	if weapon.get_parent() == null:
 		add_child(weapon)
+	# v1.3.0（A12 R1）：装机成功 → 元素三表全量重算（共鸣/精通/反应强化）
+	var elemental: Variant = _deps.get("elemental")
+	if elemental is ElementalSystem:
+		(elemental as ElementalSystem).rebuild_registries(self)
 	return weapon
 
 

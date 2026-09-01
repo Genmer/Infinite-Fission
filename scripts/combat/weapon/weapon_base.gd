@@ -78,27 +78,12 @@ func attach_trait(p_trait: TraitData) -> bool:
 	var attached := trait_stack.attach(p_trait)
 	if attached:
 		_invalidate_panel()
-		if p_trait.pool == GameConst.PoolClass.ELEM \
-				and p_trait.params.has("reaction_mult") and elemental != null:
-			# ELE_REACTION_VOID：反应强化注册到 ElementalSystem（全局 ×1.8 聚合）
-			elemental.register_reaction_mult(uid, float(p_trait.params["reaction_mult"]))
-		if p_trait.pool == GameConst.PoolClass.ELEM \
-				and p_trait.params.has("mastery_step") and elemental != null:
-			# v1.1.0 ELE_MASTERY：精通注册（每次 attach 重报全量层数——幂等覆盖；
-			# 武器不可卸载故无注销通道，A10 §7 假设 E-AMP-1）
-			elemental.register_mastery(uid, _trait_layers(p_trait.id),
-				float(p_trait.params["mastery_step"]))
+		if p_trait.pool == GameConst.PoolClass.ELEM and elemental != null:
+			# v1.3.0（A12 R1）全量重算收口：ELEM 词条挂载 → 三表清空重建
+			#（reaction_mult/精通/共鸣统一重扫 weapon_slots，替代 v1.1.0 增量注册——
+			# register_reaction_mult/register_mastery 直调通道保留给冻结夹具）
+			elemental.rebuild_registries(player)
 	return attached
-
-
-func _trait_layers(p_id: StringName) -> int:
-	# v1.1.0：本武器 trait_stack 中 p_id 当前层数（无则 0）——attach 期全量重报用
-	if trait_stack == null:
-		return 0
-	for mounted in trait_stack.traits:
-		if mounted.data != null and mounted.data.id == p_id:
-			return mounted.layers
-	return 0
 
 
 func get_stat(p_key: StringName) -> float:

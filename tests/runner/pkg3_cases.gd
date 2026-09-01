@@ -137,6 +137,22 @@ func _bump_frame() -> void:
 	GameConfig.frame_stamp += 1                    # E-03 帧闸门推进（GameLoop 帧序的测试侧替身）
 
 
+func _mount_stub_player(p_weapons: Array) -> Node2D:
+	# v1.3.0 适配（A12 R1）：attach_trait 注册通道改为 rebuild_registries 全量重算
+	#（扫 player.weapon_slots）——为持 ELEM 词条的测试武器挂 stub 宿主，
+	# 使注册语义与生产路径一致（原夹具 weapon.player = null 仅清空）
+	var psrc := GDScript.new()
+	psrc.source_code = "extends Node2D\nvar weapon_slots: Array = []\n"
+	psrc.reload()
+	var stub: Node2D = psrc.new()
+	tree.get_root().add_child(stub)
+	stub.weapon_slots = p_weapons
+	for w in p_weapons:
+		if w is WeaponBase:
+			(w as WeaponBase).player = stub
+	return stub
+
+
 func _ensure_autoloads() -> void:
 	if tree.get_root().get_node_or_null("EventBus") == null:
 		_install_autoload("EventBus", "res://autoload/event_bus.gd")
@@ -1350,8 +1366,10 @@ func _test_elemental_system() -> void:
 	_check("DOT 跳伤：15%ATK×1 层 = 30/跳 ×2 跳 = 60 落血",
 		_approx(e6.hp, 940.0, 0.01), "hp=%s" % str(e6.hp))
 	# 反应强化 ×1.8（ELE_REACTION_VOID → WeaponBase.attach_trait 注册通道；置末避免污染前组系数）
+	# v1.3.0 适配：attach_trait 改走 rebuild_registries 全量重算（扫 player.weapon_slots）
 	var w_reg := _make_weapon(GameConst.WeaponForm.BALLISTIC,
 		_make_weapon_data(GameConst.WeaponForm.BALLISTIC), Vector2(100, 100), _sys)
+	var reg_stub := _mount_stub_player([w_reg])
 	var d_void := _make_trait_data("TRAIT_RXN_VOID", GameConst.PoolClass.ELEM, &"",
 		&"EF_ELEMENTAL", 0.0, [])
 	d_void.params = {"reaction_mult": 1.8}
@@ -1367,6 +1385,7 @@ func _test_elemental_system() -> void:
 	_check("碎裂 ×反应强化：360 × 1.8 = 648 落血", _approx(e1b.hp, 352.0, 0.01),
 		"hp=%s" % str(e1b.hp))
 	w_reg.free()
+	reg_stub.free()
 
 
 # ── 10. 环绕武器 / 弧斩消弹（要点 10） ────────────────────────────
