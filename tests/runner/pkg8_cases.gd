@@ -19,6 +19,7 @@ func run(p_tree: SceneTree) -> void:
 	_ensure_autoloads()
 	_boot_game_loop()
 	_test_v14_substats()                          # V14 副词条
+	_test_v15_set_bonus()                         # V15 套装
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -159,6 +160,49 @@ func _test_v14_substats() -> void:
 			and _substats_valid(h, gdata.stat_key, drop.get("substats", []))
 	_check("grant_boss_chip：granted 路径带出合法 substats", grant_valid and grant_ok,
 		"chip=%s" % String(grant_chip))
+
+
+# ══ V15：套装（主属性同 stat_key ≥2 枚 → 该键总和 ×1.10；3 枚仍 ×1.10） ══
+func _test_v15_set_bonus() -> void:
+	print("── V15 套装 ──")
+	var h := _gl.chip_handler
+	# 单枚：无套装乘区
+	h.reset_run()
+	h.unlocked_slots = 3
+	h.equip(&"CHIP_ATK", 0)
+	_check("套装单枚：stat_bonus(atk_pct)=0.10（×1）",
+		is_equal_approx(h.stat_bonus(&"atk_pct"), 0.10))
+	# 双 atk_pct（CHIP_ATK 白 0.10 + CHIP_ATK2 白 0.12）：(0.10+0.12)×1.10 = 0.242
+	h.equip(&"CHIP_ATK2", 0)
+	_check("套装双 atk_pct：(0.10+0.12)×1.10 = 0.242",
+		is_equal_approx(h.stat_bonus(&"atk_pct"), 0.242),
+		str(h.stat_bonus(&"atk_pct")))
+	# 双 max_hp（CHIP_HP 白 20 + CHIP_HP2 白 15）：(20+15)×1.10 = 38.5
+	h.reset_run()
+	h.unlocked_slots = 3
+	h.equip(&"CHIP_HP", 0)
+	_check("套装单 max_hp：stat_bonus(max_hp)=20（×1）", is_equal_approx(h.stat_bonus(&"max_hp"), 20.0))
+	h.equip(&"CHIP_HP2", 0)
+	_check("套装双 max_hp：(20+15)×1.10 = 38.5",
+		is_equal_approx(h.stat_bonus(&"max_hp"), 38.5), str(h.stat_bonus(&"max_hp")))
+	# 副词条同键不触发套装（主键计数判据——仅主属性计数）
+	h.reset_run()
+	h.unlocked_slots = 3
+	var sub_atk: Array[Dictionary] = [{"stat": &"atk_pct", "value": 0.02}]
+	h.equip(&"CHIP_ROF", 0, sub_atk)
+	_check("套装判据：主键计数=1（副词条同键不计）→ 不乘 1.10",
+		is_equal_approx(h.stat_bonus(&"atk_pct"), 0.02), str(h.stat_bonus(&"atk_pct")))
+	# 3 枚仍 ×1.10（阈值制非逐枚；同键第三枚直接入列夹具模拟）
+	h.reset_run()
+	h.unlocked_slots = 3
+	h.equip(&"CHIP_ATK", 0)
+	h.equip(&"CHIP_ATK2", 0)
+	var atk := h.registry.get_chip(&"CHIP_ATK")
+	h.equipped.append({"chip": atk, "rarity": 0, "substats": []})
+	_check("套装 3 枚仍 ×1.10：(0.10+0.12+0.10)×1.10 = 0.352",
+		is_equal_approx(h.stat_bonus(&"atk_pct"), 0.352), str(h.stat_bonus(&"atk_pct")))
+	# 异键不互扰：双 atk_pct 不影响 rof 单键
+	_check("套装异键隔离：stat_bonus(rof) 恒 0", is_equal_approx(h.stat_bonus(&"rof"), 0.0))
 
 
 func _roll_substats_snapshot(p_h: ChipHandler) -> Array:

@@ -145,8 +145,10 @@ func roll_substats(p_main_key: StringName) -> Array[Dictionary]:
 
 func stat_bonus(p_stat: StringName) -> float:
 	# Σ 已装备芯片（主值 values[rarity] + 副词条同键小值）——消费点唯一问询口；无装备 → 0.0。
-	# v0.8.0 V14：副词条同键并入求和。（V15 套装 ×1.10 见后）
+	# v0.8.0 V14：副词条同键并入求和；V15 套装：主属性同 stat_key ≥2 枚 → 总和 ×1.10
+	#（3 枚仍 ×1.10，阈值制非逐枚；查询时聚合——装备即时生效，无缓存态）。
 	var total := 0.0
+	var main_count := 0
 	for entry in equipped:
 		var chip: ChipData = entry.get("chip")
 		if chip == null:
@@ -154,10 +156,13 @@ func stat_bonus(p_stat: StringName) -> float:
 		var rarity := clampi(int(entry.get("rarity", 0)), 0, chip.values.size() - 1)
 		if chip.stat_key == p_stat and chip.values.size() > 0:
 			total += chip.values[rarity]
+			main_count += 1
 		var substats: Array = entry.get("substats", [])
 		for sub in substats:
 			if StringName(String(sub.get("stat", ""))) == p_stat:
 				total += float(sub.get("value", 0.0))
+	if main_count >= 2:
+		total *= SET_BONUS_MULT
 	return total
 
 
