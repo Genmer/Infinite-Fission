@@ -417,7 +417,8 @@ func _test_hud_layout_and_banner() -> void:
 	var hud := _gl.hud
 	# ① 顶部信息区矩形两两不相交（金币标签 vs XP 条让位契约——XP 条宽 560）
 	var rects := hud.layout_rects()
-	_check("layout_rects 数量 = 8（双条 + 六标签）", rects.size() == 8, str(rects.size()))
+	_check("layout_rects 数量 = 11（双条 + 六标签 + 诅咒标签 + 冲刺钮×2；v0.8.0 授权更新 8→11）",
+		rects.size() == 11, str(rects.size()))
 	var disjoint := true
 	var bad_pair := ""
 	for i in range(rects.size()):

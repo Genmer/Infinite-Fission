@@ -26,6 +26,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_v1_v4_events()                          # V1~V4 事件链
 	_test_v17_characters()                        # V17 角色数据
 	_test_v18_v19_character_flow()                # V18/V19 角色链
+	_test_v21_v22_dash()                          # V21/22 冲刺 + HUD 冲刺钮/诅咒标签
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -840,6 +841,129 @@ func _has_error(p_verdicts: Array) -> bool:
 		if String(v.get("severity", DataValidator.SEV_ERROR)) == DataValidator.SEV_ERROR:
 			return true
 	return false
+
+
+# ══ V21/22：冲刺（Player dash 四门 / 位移 / 双通道无敌）+ HUD 冲刺钮 / 诅咒标签 ══
+func _test_v21_v22_dash() -> void:
+	print("── V21/22 冲刺 ──")
+	var player := _gl.player
+	var hud := _gl.hud
+	_check("冲刺常量：TIME 0.18 / DISTANCE 220 / INVULN 0.15 / CD 1.5",
+		is_equal_approx(Player.DASH_TIME, 0.18)
+		and is_equal_approx(Player.DASH_DISTANCE, 220.0)
+		and is_equal_approx(Player.DASH_INVULN, 0.15)
+		and is_equal_approx(Player.DASH_CD, 1.5))
+	# 从未移动：不冲刺不进冷却（零方向 fail-fast）
+	player.respawn()
+	_check("try_dash：从未移动（零方向）→ false 且不进冷却",
+		not player.try_dash() and player.dash_left == 0.0 and player.dash_cd_left == 0.0)
+	# 建立方向（tick 消费拖动采样）→ 冲刺成功三计时置位
+	player._drag_accum = Vector2(30.0, 0.0)
+	player.tick(DT, Vector2.ZERO)
+	var pos0: Vector2 = player.global_position
+	_check("try_dash：移动后成功 → 三计时置位",
+		player.try_dash() and is_equal_approx(player.dash_left, Player.DASH_TIME)
+		and is_equal_approx(player.dash_cd_left, Player.DASH_CD)
+		and player.dash_invuln_left > 0.0)
+	# 冲刺位移：0.18s × 速度 1222.2 ≈ 220px（+X 方向）
+	var dash_frames := 22                           # ~0.183s
+	for i in range(dash_frames):
+		player.tick(DT, Vector2.ZERO)
+	var moved: Vector2 = player.global_position - pos0
+	_check("冲刺位移：≈220px（速度 220/0.18）",
+		moved.x > 200.0 and moved.x < 240.0 and absf(moved.y) < 1.0, str(moved))
+	_check("冲刺结束：dash_left 归零但冷却未完",
+		player.dash_left == 0.0 and player.dash_cd_left > 0.0)
+	# 冷却中 fail-fast（不刷新冷却）
+	var cd_snapshot: float = player.dash_cd_left
+	_check("try_dash：冷却中 → false 且不刷新冷却", not player.try_dash()
+		and is_equal_approx(player.dash_cd_left, cd_snapshot))
+	# 冷却自然结束（game_delta 推进 1.5s）
+	for i in range(190):
+		player.tick(DT, Vector2.ZERO)
+	_check("冷却自然结束：1.5s 后可再冲", player.dash_cd_left == 0.0 and player.try_dash())
+	# 双通道无敌：冲刺无敌期受击免伤且不写受击 invuln
+	player.respawn()
+	player._drag_accum = Vector2(30.0, 0.0)
+	player.tick(DT, Vector2.ZERO)
+	player.try_dash()
+	var hp0: float = player.hp
+	var invuln_before_dash_window: float = player.invuln_left
+	player.take_contact_damage(10.0)
+	_check("冲刺无敌通道：受击免伤且 invuln 通道未被写入（互不覆盖）",
+		is_equal_approx(player.hp, hp0) and is_equal_approx(player.invuln_left, invuln_before_dash_window))
+	# Shift 键路径（_unhandled_input → try_dash）
+	player.respawn()
+	player._drag_accum = Vector2(10.0, 0.0)
+	player.tick(DT, Vector2.ZERO)
+	player.dash_left = 0.0                          # 复位（上一 tick 消耗后未冲刺，直接验证按键）
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_SHIFT
+	ev.pressed = true
+	player._unhandled_input(ev)
+	_check("Shift 按键路径：_unhandled_input → try_dash 成功", player.dash_left > 0.0)
+	# ── V22 HUD：冲刺按钮 + 诅咒标签 + 布局 11 项 ──
+	var rects := hud.layout_rects()
+	_check("HUD layout_rects：11 项两两无交集 + 屏内", rects.size() == 11
+		and _rects_disjoint(rects))
+	_check("HUD 冲刺按钮：×2 注册 (24,1152)/(576,1152) 120x104 + STOP",
+		hud._dash_buttons.size() == 2
+		and (hud._dash_buttons[0] as HUD.DashButton).position == Vector2(24.0, 1152.0)
+		and (hud._dash_buttons[1] as HUD.DashButton).position == Vector2(576.0, 1152.0)
+		and (hud._dash_buttons[0] as HUD.DashButton).size == Vector2(120.0, 104.0)
+		and (hud._dash_buttons[0] as HUD.DashButton).mouse_filter == Control.MOUSE_FILTER_STOP)
+	# tap 判定：快速点按（<0.3s 无位移）→ tapped；拖动取消
+	var taps: Array = []
+	var cb_tap := func() -> void: taps.append(true)
+	var btn: HUD.DashButton = hud._dash_buttons[0]
+	btn.tapped.connect(cb_tap)
+	var press := InputEventScreenTouch.new()
+	press.pressed = true
+	press.position = Vector2(50.0, 50.0)
+	btn._gui_input(press)
+	var release := InputEventScreenTouch.new()
+	release.pressed = false
+	release.position = Vector2(55.0, 52.0)
+	btn._gui_input(release)
+	_check("DashButton：快速点按 → tapped 信号", (taps as Array).size() == 1)
+	btn._gui_input(press)
+	var drag := InputEventScreenDrag.new()
+	drag.position = Vector2(120.0, 120.0)
+	btn._gui_input(drag)
+	btn._gui_input(release)
+	_check("DashButton：位移>14px 取消 tap", (taps as Array).size() == 1)
+	btn.tapped.disconnect(cb_tap)
+	# 非 PLAYING 隐藏 / 冷却灰显
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	hud._refresh_dash_buttons()
+	_check("非 PLAYING：冲刺按钮隐藏",
+		not (hud._dash_buttons[0] as HUD.DashButton).visible)
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+	player.respawn()
+	hud._refresh_dash_buttons()
+	_check("PLAYING：冲刺按钮显示 + 满透明度",
+		(hud._dash_buttons[0] as HUD.DashButton).visible
+		and is_equal_approx((hud._dash_buttons[0] as HUD.DashButton).modulate.a, 1.0))
+	player._drag_accum = Vector2(10.0, 0.0)
+	player.tick(DT, Vector2.ZERO)
+	player.try_dash()
+	hud._refresh_dash_buttons()
+	_check("冷却中灰显：modulate.a=0.35",
+		is_equal_approx((hud._dash_buttons[0] as HUD.DashButton).modulate.a, 0.35))
+	# 诅咒标签：n=0 隐藏 / n=2 显示「诅咒 2/5」
+	hud._on_curse_changed(0, 100.0)
+	_check("诅咒标签：n=0 隐藏", not hud._curse_label.visible)
+	hud._on_curse_changed(2, 92.0)
+	_check("诅咒标签：n=2 显示「诅咒 2/5」+ 紫 (0.75,0.4,1.0)",
+		hud._curse_label.visible
+		and String(hud._curse_label.text) == "诅咒 2/5"
+		and hud.CURSE_LABEL_COLOR == Color(0.75, 0.4, 1.0))
+	hud._on_curse_changed(0, 100.0)
+	# ShopUI/EventUI dim STOP（挡 HUD 冲刺键——V22 收尾断言）
+	_check("ShopUI dim mouse_filter=STOP（挡 HUD 冲刺键）",
+		(_gl.shop_ui._root.get_child(0) as ColorRect).mouse_filter == Control.MOUSE_FILTER_STOP)
+	_check("EventUI dim mouse_filter=STOP",
+		(_gl.event_ui._root.get_child(0) as ColorRect).mouse_filter == Control.MOUSE_FILTER_STOP)
 
 
 # ══ V18/V19：角色链（MenuScreen 选角 / start_run / goto_menu / apply_character / 首发武器） ══

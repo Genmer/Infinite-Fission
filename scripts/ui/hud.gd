@@ -8,9 +8,68 @@
 #   HP 条 (24,16) 600×22（HP 文本条内左置 (34,18)）· Lv (634,14) · XP 条 (24,44) 560×12
 #   （宽度从 600 缩到 560 给金币标签让位）· 金币 (596,40) · Wave/Kills/Time y=64 ·
 #   Build (24,88)（上移修复与 BossBar y=118 重叠）· 波次横幅居中 y=430（2.0s 三段动画）。
+# v0.8.0 增量（A7 §V21/§V20）：诅咒标签 (612,64) f14 紫（n=0 隐藏；订阅 curse_changed）；
+#   冲刺按钮 ×2 (24,1152)/(576,1152) 120x104（DashButton 内嵌 Control 类：tap<0.3s 且位移
+#   ≤14px → try_dash；冷却灰显 modulate.a=0.35；非 PLAYING 隐藏）。
 # 全文本加描边（font_outline_color 0.9 黑 + outline_size 4，可读性）。
 class_name HUD
 extends CanvasLayer
+
+
+# v0.8.0 DashButton（内嵌 Control 类；A7 §V21 冻结交互契约）：
+# ScreenTouch pressed 记录时间/位置【不 accept——拖动采样继续流向 Player】/
+# ScreenDrag 位移 >14px 取消 / released 且 <0.3s 未取消 → tapped + accept_event()；
+# MouseButton 左键同构。冷却灰显由宿主 _refresh_dash_buttons 驱动。
+class DashButton extends Control:
+
+	signal tapped()
+
+	const TAP_MAX_TIME := 0.3                    # 判定上限 s
+	const TAP_MAX_DRIFT := 14.0                  # 判定位移上限 px
+
+	var _press_time: float = -1.0                # 按下时刻（ticks_msec/1000；<0 = 无按下态）
+	var _press_pos: Vector2 = Vector2.ZERO
+	var _cancelled: bool = false
+
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_STOP
+
+
+	func _gui_input(p_event: InputEvent) -> void:
+		if p_event is InputEventScreenTouch:
+			var st := p_event as InputEventScreenTouch
+			if st.pressed:
+				_press_time = float(Time.get_ticks_msec()) / 1000.0
+				_press_pos = st.position
+				_cancelled = false              # 【不 accept】拖动采样继续流向 Player
+			elif _press_time >= 0.0 and not _cancelled:
+				if float(Time.get_ticks_msec()) / 1000.0 - _press_time < TAP_MAX_TIME \
+						and st.position.distance_to(_press_pos) <= TAP_MAX_DRIFT:
+					tapped.emit()
+					accept_event()
+				_press_time = -1.0
+		elif p_event is InputEventScreenDrag:
+			if _press_time >= 0.0 \
+					and (p_event as InputEventScreenDrag).position.distance_to(_press_pos) > TAP_MAX_DRIFT:
+				_cancelled = true
+		elif p_event is InputEventMouseButton:
+			var mb := p_event as InputEventMouseButton
+			if mb.button_index == MOUSE_BUTTON_LEFT:
+				if mb.pressed:
+					_press_time = float(Time.get_ticks_msec()) / 1000.0
+					_press_pos = mb.position
+					_cancelled = false
+				elif _press_time >= 0.0 and not _cancelled:
+					if float(Time.get_ticks_msec()) / 1000.0 - _press_time < TAP_MAX_TIME \
+							and mb.position.distance_to(_press_pos) <= TAP_MAX_DRIFT:
+						tapped.emit()
+						accept_event()
+					_press_time = -1.0
+		elif p_event is InputEventMouseMotion:
+			if _press_time >= 0.0 \
+					and (p_event as InputEventMouseMotion).position.distance_to(_press_pos) > TAP_MAX_DRIFT:
+				_cancelled = true
 
 var player: Node2D = null                     # 注入（数值源；Player 宽类型规避循环解析）
 var total_damage: float = 0.0                 # 造成的总伤害（damage_resolved 累计；结算屏数据源）
@@ -25,6 +84,9 @@ var _time_label: Label = null
 var _build_label: Label = null                # 词条栏（武器/词条计数行）
 var _state_label: Label = null                # 状态提示（LEVEL_UP/PAUSED/GAME_OVER）
 var _gold_label: Label = null                 # v0.6.0 金币标签（临时位；T2 全量重排定坐标）
+var _curse_label: Label = null                # v0.8.0 诅咒标签（curse_changed 驱动；n=0 隐藏）
+var _dash_buttons: Array[DashButton] = []     # v0.8.0 冲刺按钮 ×2（左/右下角）
+var _play_state: bool = false                 # v0.8.0：PLAYING 态缓存（非 PLAYING 隐藏冲刺钮）
 
 var kills: int = 0
 var wave: int = 0
@@ -38,6 +100,9 @@ var _banner_left: float = 0.0                 # 横幅剩余时长（raw 通道�
 
 const HP_BAR_SIZE := Vector2(600.0, 22.0)
 const XP_BAR_SIZE := Vector2(560.0, 12.0)     # v0.6.0：600→560（金币标签让位，A4 §7）
+const DASH_BUTTON_SIZE := Vector2(120.0, 104.0)   # v0.8.0 冲刺按钮（A7 §V21）
+const DASH_BUTTON_POSITIONS: Array[Vector2] = [Vector2(24.0, 1152.0), Vector2(576.0, 1152.0)]
+const CURSE_LABEL_COLOR := Color(0.75, 0.4, 1.0)   # v0.8.0 诅咒标签紫（A7 §V20）
 const BANNER_TIME := 2.0                      # 横幅总时长 s（raw 通道三段）
 const BANNER_FADE := 0.25                     # 淡入/淡出段时长 s
 const BANNER_Y := 430.0                       # 横幅驻留 y（PRESET_TOP_WIDE）
@@ -62,11 +127,18 @@ func bind_events() -> void:
 	EventBus.enemy_killed.connect(_on_enemy_killed)
 	EventBus.state_changed.connect(_on_state_changed)
 	EventBus.damage_resolved.connect(_on_damage_resolved)
+	EventBus.curse_changed.connect(_on_curse_changed)   # v0.8.0：诅咒标签（A7 §V20）
 
 
 func setup(p_player: Node2D) -> void:
 	# 数值源注入
 	player = p_player
+
+
+func _on_dash_tapped() -> void:
+	# v0.8.0 冲刺钮 tap（DashButton 判定）→ player.try_dash（fail-fast 在 Player 侧）
+	if player != null and is_instance_valid(player) and player.has_method(&"try_dash"):
+		player.call(&"try_dash")
 
 
 func refresh_stats() -> void:
@@ -89,13 +161,24 @@ func refresh_stats() -> void:
 
 
 func tick(p_raw_delta: float) -> void:
-	# ①~⑧ 帧序 UI 阶段（raw 通道）：计时累计 + 横幅动画 + 1Hz 兜底刷新
+	# ①~⑧ 帧序 UI 阶段（raw 通道）：计时累计 + 横幅动画 + 1Hz 兜底刷新 + 冲刺钮冷却灰显
 	run_elapsed += p_raw_delta
 	_tick_banner(p_raw_delta)
+	_refresh_dash_buttons()                       # v0.8.0：cd>0 → modulate.a=0.35
 	_fallback_timer += p_raw_delta
 	if _fallback_timer >= 1.0:
 		_fallback_timer = 0.0
 		refresh_stats()
+
+
+func _refresh_dash_buttons() -> void:
+	# v0.8.0 冲刺按钮状态（A7 §V21）：冷却中灰显 modulate.a=0.35；非 PLAYING 隐藏
+	var cooling := false
+	if player != null and is_instance_valid(player):
+		cooling = float(player.get("dash_cd_left")) > 0.0
+	for btn in _dash_buttons:
+		btn.modulate.a = 0.35 if cooling else 1.0
+		btn.visible = _play_state
 
 
 # ── 测试观测口（displayed 值，headless 断言用） ────────────────────
@@ -126,7 +209,8 @@ func banner_visible() -> bool:
 
 
 func layout_rects() -> Array[Rect2]:
-	# v0.6.0 顶部信息区占位矩形（布局契约断言口：两两 intersects()==false）。
+	# v0.8.0 布局契约断言口（11 项，pkg6:420 授权更新 8→11）：顶部信息区 + 诅咒标签 +
+	# 冲刺按钮 ×2（两两 intersects()==false）。
 	# HP 文本条内左置（嵌套于 HP 条矩形）不入列；状态提示/横幅为全屏覆盖层不入列。
 	# 标签行高取设计口径（font_size + 8）：headless fallback 字体行高膨胀 ~3×（get_height
 	# 48@size16），与坐标表前提（真实字体 ~1.4×）不符——布局契约按设计口径声明（A4 §7）。
@@ -139,6 +223,9 @@ func layout_rects() -> Array[Rect2]:
 	out.append(_label_rect(_kill_label, 16))
 	out.append(_label_rect(_time_label, 16))
 	out.append(_label_rect(_build_label, 13))
+	out.append(_label_rect(_curse_label, 14))     # v0.8.0 诅咒标签（(612,64) 设计口径）
+	out.append(Rect2(Vector2(24.0, 1152.0), DASH_BUTTON_SIZE))    # v0.8.0 冲刺钮左
+	out.append(Rect2(Vector2(576.0, 1152.0), DASH_BUTTON_SIZE))   # v0.8.0 冲刺钮右
 	return out
 
 
@@ -205,6 +292,15 @@ func _on_gold_rush_started(p_wave: int) -> void:
 	show_banner("WAVE %d · 金币狂欢" % p_wave)
 
 
+func _on_curse_changed(p_count: int, _p_max_hp: float) -> void:
+	# v0.8.0 诅咒标签（A7 §V20）：n=0 隐藏；else「诅咒 n/5」紫字
+	if p_count <= 0:
+		_curse_label.visible = false
+		return
+	_curse_label.text = "诅咒 %d/5" % p_count
+	_curse_label.visible = true
+
+
 func _on_enemy_killed(_p_enemy: Node2D) -> void:
 	kills += 1
 	refresh_stats()
@@ -213,6 +309,7 @@ func _on_enemy_killed(_p_enemy: Node2D) -> void:
 func _on_state_changed(p_state: int) -> void:
 	# 状态提示（LEVEL_UP/PAUSED/GAME_OVER 覆盖显示；PLAYING 隐藏）+ 状态切换刷新
 	# （升级→LEVEL_UP 的 state_changed 晚于 xp_gained——等级数值在此同步）
+	_play_state = p_state == GameConst.GameStatus.PLAYING   # v0.8.0：非 PLAYING 隐藏冲刺钮
 	match p_state:
 		GameConst.GameStatus.LEVEL_UP:
 			_state_label.text = "LEVEL UP - choose a card"
@@ -315,6 +412,32 @@ func _build_ui() -> void:
 	_state_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_state_label.visible = false
+	# v0.8.0 诅咒标签（(612,64) f14 紫；n=0 隐藏——curse_changed 驱动）
+	_curse_label = _add_label(root, Vector2(612.0, 64.0), "诅咒 0/5", 14)
+	_curse_label.add_theme_color_override("font_color", CURSE_LABEL_COLOR)
+	_curse_label.visible = false
+	# v0.8.0 冲刺按钮 ×2（左下/右下角；tap 判定 → player.try_dash；占位文本）
+	for pos in DASH_BUTTON_POSITIONS:
+		var dash_btn := DashButton.new()
+		dash_btn.name = "DashButton%d" % int(pos.x)
+		dash_btn.position = pos
+		dash_btn.size = DASH_BUTTON_SIZE
+		dash_btn.modulate.a = 1.0
+		dash_btn.tapped.connect(_on_dash_tapped)
+		var hint := Label.new()
+		hint.name = "Hint"
+		hint.text = "冲刺"
+		hint.add_theme_font_size_override("font_size", 18)
+		hint.add_theme_color_override("font_outline_color", OUTLINE_COLOR)
+		hint.add_theme_constant_override("outline_size", OUTLINE_SIZE)
+		hint.set_anchors_preset(Control.PRESET_FULL_RECT)
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dash_btn.add_child(hint)
+		root.add_child(dash_btn)
+		_dash_buttons.append(dash_btn)
+	_refresh_dash_buttons()
 	# 波次横幅（居中 y=430；动画由 tick raw 通道驱动）
 	_banner_label = _add_label(root, Vector2(0.0, BANNER_Y), "", 42)
 	_banner_label.set_anchors_preset(Control.PRESET_TOP_WIDE)

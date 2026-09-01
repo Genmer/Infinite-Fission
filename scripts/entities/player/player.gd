@@ -21,6 +21,10 @@ var xp_need: float = 14.0                     # 14 × lv^1.4
 var hitbox_radius: float = 16.0               # 命中盒半径（敌弹距离判定口径）
 var max_hp_bonus_flat: float = 0.0            # v0.8.0 商店 maxhp flat 池（recompute_max_hp 口径）
 var character: CharacterData = null           # v0.8.0 角色数据（apply_character 注入；null = 默认）
+# ── v0.8.0 冲刺（A7 §V21 冻结） ──
+var dash_left: float = 0.0                    # 冲刺剩余时长 s
+var dash_cd_left: float = 0.0                 # 冲刺冷却剩余 s（自激活起计）
+var _last_move_dir: Vector2 = Vector2.ZERO    # 最近非零移动方向（单位向量；零 = 从未移动）
 
 var _dead: bool = false
 var _drag_accum: Vector2 = Vector2.ZERO       # 相对拖动采样累计（E-15）
@@ -32,6 +36,11 @@ var _deps: Dictionary = {}                     # setup 注入位（pipeline/pool
 
 const MAX_SLOTS := 5
 const RESPAWN_INVULN_S := 1.5                 # 重生无敌帧 s（B_spec 无数值 → 主控裁定，见 respawn 注释）
+# v0.8.0 冲刺常量（A7 §V21 冻结）
+const DASH_TIME := 0.18                       # 冲刺时长 s
+const DASH_DISTANCE := 220.0                  # 冲刺总位移 px（速度 = 220/0.18 ≈ 1222 px/s）
+const DASH_INVULN := 0.15                     # 冲刺无敌时长 s（独立通道，与受击 invuln 互不覆盖）
+const DASH_CD := 1.5                          # 冲刺冷却 s（自激活起计）
 const TEX_SIZE := 32
 static var _shared_texture: ImageTexture = null
 const BODY_COLOR := Color(0.35, 0.9, 1.0)
@@ -132,11 +141,27 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 		dash_invuln_left -= p_game_delta
 		if dash_invuln_left < 0.0:
 			dash_invuln_left = 0.0
-	var total := p_move_delta
-	if total == Vector2.ZERO:
-		total = _drag_accum                 # GameLoop 未投递时消费自采样拖动
-	_drag_accum = Vector2.ZERO
-	global_position += total
+	if dash_left > 0.0:
+		dash_left -= p_game_delta
+		if dash_left < 0.0:
+			dash_left = 0.0
+	if dash_cd_left > 0.0:
+		dash_cd_left -= p_game_delta
+		if dash_cd_left < 0.0:
+			dash_cd_left = 0.0
+	# v0.8.0 冲刺位移（A7 §V21）：固定速度 = DASH_DISTANCE/DASH_TIME，方向 = 最近非零方向；
+	# 冲刺期清 _drag_accum（防冲刺结束帧拖动跳变）
+	if dash_left > 0.0:
+		_drag_accum = Vector2.ZERO
+		global_position += _last_move_dir * (DASH_DISTANCE / DASH_TIME) * p_game_delta
+	else:
+		var total := p_move_delta
+		if total == Vector2.ZERO:
+			total = _drag_accum                 # GameLoop 未投递时消费自采样拖动
+		_drag_accum = Vector2.ZERO
+		if total != Vector2.ZERO:
+			_last_move_dir = total.normalized()   # 最近非零方向（单位向量）
+		global_position += total
 	_clamp_to_playfield()
 	# 武器自动开火调度（每帧 tick；集成包 B.8 第二批收紧：weapon_slots 已收窄 WeaponBase——直调）
 	for weapon in weapon_slots:
@@ -152,6 +177,23 @@ func _unhandled_input(p_event: InputEvent) -> void:
 		var mm := p_event as InputEventMouseMotion
 		if (mm.button_mask & MOUSE_BUTTON_LEFT) != 0:
 			_drag_accum += mm.relative
+	elif p_event is InputEventKey:
+		# v0.8.0 冲刺（A7 §V21）：Shift 按下触发（try_dash fail-fast；HUD 冲刺钮共用）
+		var key := p_event as InputEventKey
+		if key.physical_keycode == KEY_SHIFT and key.pressed:
+			try_dash()
+
+
+func try_dash() -> bool:
+	# v0.8.0 冲刺申请（A7 §V21 冻结）：四 fail-fast——死亡 / 冲刺中 / 冷却中 / 从未移动
+	#（零方向）；任一命中 → false 且【不进冷却】。成功 → 三计时置位 + 遥测。
+	if _dead or dash_left > 0.0 or dash_cd_left > 0.0 or _last_move_dir == Vector2.ZERO:
+		return false
+	dash_left = DASH_TIME
+	dash_cd_left = DASH_CD
+	dash_invuln_left = DASH_INVULN
+	DebugStats.count(&"dash_activated")
+	return true
 
 
 func take_contact_damage(p_dmg: float) -> void:
@@ -261,7 +303,10 @@ func respawn() -> void:
 	max_hp = compute_max_hp(char_max_hp_pct(), 0.0, 0.0, 0)
 	hp = max_hp
 	max_hp_bonus_flat = 0.0
+	dash_left = 0.0
+	dash_cd_left = 0.0
 	dash_invuln_left = 0.0
+	_last_move_dir = Vector2.ZERO                # 从未移动语义复位（零方向不冲刺不进冷却）
 	level = 1
 	xp = 0.0
 	xp_need = _xp_need_for(1)
