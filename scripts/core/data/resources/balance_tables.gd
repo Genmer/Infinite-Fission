@@ -52,11 +52,11 @@ extends Resource
 	"freeze": {"chill_slow": 0.4, "chill_dur": 2.5, "freeze_dur": 1.2, "vuln_mult": 1.25, "vuln_dur": 3.0},
 	"shock": {"chain_targets": 3, "chain_radius": 160.0, "chain_ratio": 0.35, "chain_depth": 2, "chain_decay": 0.6},
 }
-# 反应系数 >0（§2.4）
+# 反应系数 >0（§2.4）；v1.1.0 CD 分立：各 rule 携带独立 cd（缺键回退 cd_rxn；.tres 同值镜像）
 @export var reaction_table: Dictionary = {
-	"RXN_FIR_ICE": {"coef": 2.0},
-	"RXN_FIR_LTG": {"coef": 1.2, "radius": 90.0},
-	"RXN_ICE_LTG": {"resist_delta": -0.3, "duration": 6.0},
+	"RXN_FIR_ICE": {"coef": 2.0, "cd": 2.0},
+	"RXN_FIR_LTG": {"coef": 1.2, "radius": 90.0, "cd": 3.0},
+	"RXN_ICE_LTG": {"resist_delta": -0.3, "duration": 6.0, "cd": 6.0},
 }
 # v0.9.0 波次赐福权重镜像（A8 §1）：与 BlessingHandler.BLESSING_WEIGHTS 同值（和=100.0）。
 # 双源镜像纪律同 category_weights（改一处必改两处；.tres 不改——schema 默认即合法）。

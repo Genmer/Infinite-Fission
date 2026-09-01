@@ -33,7 +33,7 @@ var vuln_timer: float = 0.0                    # 易伤 ×1.25（目标侧独立
 var vuln_mult: float = 1.25
 var shock_chain_cd: float = 0.0
 var shock_chain_targets: int = 3               # ELE_SHOCK 层 2 → 4 覆写
-var reaction_cd: Dictionary = {}               # rxn -> 剩余（cd_rxn=2s）
+var reaction_cd: Dictionary = {}               # rxn -> 剩余（v1.1.0 按 rule.cd 分立，缺省回退 cd_rxn）
 var superconduct_left: float = 0.0             # 超导削抗剩余（−30% 全抗，6s）
 var superconduct_active: bool = false
 var last_attach_snapshot: float = 0.0          # 最近一次附着的攻击者面板快照（过载 120%ATK 基数）
@@ -119,7 +119,7 @@ func clear_element(p_element: int) -> void:
 
 
 func remaining_dot_total() -> float:
-	# 碎裂（融化）结算基数：点燃剩余 DOT 总额（剩余跳数 × 每跳伤害）
+	# 碎裂结算基数：点燃剩余 DOT 总额（剩余跳数 × 每跳伤害）
 	if burn_timer <= 0.0 or burn_layers <= 0:
 		return 0.0
 	var ticks_left := ceili(burn_timer / maxf(burn_tick, 0.01))

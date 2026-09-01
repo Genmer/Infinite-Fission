@@ -1281,30 +1281,30 @@ func _test_elemental_system() -> void:
 		_approx(e3.get_resist(GameConst.Element.KIN), 0.3, 0.0001)
 			and (_approx(e3.get_resist(GameConst.Element.FIR), 0.1, 0.0001)
 				and _approx(e3.get_resist(GameConst.Element.LTG), 0.0, 0.0001)))
-	# 反应 CD 2s（F-34）
+	# 反应 CD 分立（v1.1.0 授权更新：超导 rule.cd=6.0；原 cd_rxn=2s 全局口径退役）
 	var st3: ElementalState = e3.get("elemental")
-	var super0: int = DebugStats.get_counter(&"reaction_supercoduct")
+	var super0: int = DebugStats.get_counter(&"reaction_superconduct")
 	_sys.apply_attach(e3, GameConst.Element.ICE, 30.0)
 	_sys.apply_attach(e3, GameConst.Element.LTG, 30.0)
 	_bump_frame()
 	_sys.detect_reactions()
-	_check("反应 CD：触发后 reaction_cd = 2s，期内同反应不再触发",
-		_approx(float(st3.reaction_cd.get(GameConst.ReactionType.RXN_ICE_LTG, 0.0)), 2.0, 0.01)
-			and DebugStats.get_counter(&"reaction_supercoduct") == super0 + 1)
+	_check("反应 CD：触发后 reaction_cd = 6s（超导 rule cd 分立），期内同反应不再触发",
+		_approx(float(st3.reaction_cd.get(GameConst.ReactionType.RXN_ICE_LTG, 0.0)), 6.0, 0.01)
+			and DebugStats.get_counter(&"reaction_superconduct") == super0 + 1)
 	_sys.apply_attach(e3, GameConst.Element.ICE, 30.0)
 	_sys.apply_attach(e3, GameConst.Element.LTG, 30.0)
 	_bump_frame()
 	_sys.detect_reactions()
-	_check("反应 CD：2s 内重附双槽不触发",
-		DebugStats.get_counter(&"reaction_supercoduct") == super0 + 1)
+	_check("反应 CD：6s 内重附双槽不触发",
+		DebugStats.get_counter(&"reaction_superconduct") == super0 + 1)
 	_bump_frame()
-	_sys.tick(2.0)
+	_sys.tick(6.0)
 	_sys.apply_attach(e3, GameConst.Element.ICE, 30.0)
 	_sys.apply_attach(e3, GameConst.Element.LTG, 30.0)
 	_bump_frame()
 	_sys.detect_reactions()
-	_check("反应 CD：cd_rxn=2s 过期后可再次触发",
-		DebugStats.get_counter(&"reaction_supercoduct") == super0 + 2)
+	_check("反应 CD：超导 cd=6.0 过期后可再次触发",
+		DebugStats.get_counter(&"reaction_superconduct") == super0 + 2)
 	# 一帧一反应 + 优先级（碎裂 > 过载 > 超导）
 	var e5 := _spawn_enemy(_make_enemy_data("E_EL5"), Vector2(600, 200))
 	_sys.register_host(e5)

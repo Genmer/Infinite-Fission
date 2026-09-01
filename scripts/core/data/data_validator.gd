@@ -388,11 +388,16 @@ func validate_balance(bt: BalanceTables) -> Array:
 	for k in [&"burn", &"freeze", &"shock"]:
 		_nf(out, "element_states", not bt.element_states.has(String(k)), "element_states 缺状态 %s（§2.10 契约键）" % String(k))
 	var bad_rxn := false
+	var bad_rxn_cd := false
 	for k in bt.reaction_table:
 		var rule: Dictionary = bt.reaction_table[k]
 		if rule.has("coef") and float(rule["coef"]) <= 0.0:
 			bad_rxn = true
+		# v1.1.0 CD 分立：cd 键若存在必须 > 0
+		if rule.has("cd") and float(rule["cd"]) <= 0.0:
+			bad_rxn_cd = true
 	_nf(out, "reaction_table", bad_rxn, "reaction_table 系数 > 0（§2.4）")
+	_nf(out, "reaction_table", bad_rxn_cd, "reaction_table cd 键若存在必须 > 0（v1.1.0 CD 分立）")
 	_nf(out, "event_storm_threshold", bt.event_storm_threshold <= 0, "event_storm_threshold > 0（§六.4）")
 	return out
 

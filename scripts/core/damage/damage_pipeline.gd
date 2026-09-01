@@ -82,8 +82,9 @@ func resolve_reaction(snapshot_atk: float, coefficient: float, p_ctx: DamageCont
 	# · coefficient：χ_rxn × φ（反应系数 × 反应强化乘区，由 ElementalSystem 侧聚合后传入）
 	# · p_ctx：ElementalSystem 预构造（target/pos；element 字段承载 GameConst.ReactionType
 	#   中性 ID，供 reaction_triggered 广播——反应通道专用约定）
-	# 上界：D ≤ S_snap × r_alarm_ratio（独立告警线，同 R_alarm 双闸机制；R_rxn 专用值
-	# 待 A3 落数后在 BalanceTables 扩展字段替换此默认口径）。
+	# 上界：D ≤ S_snap × r_rxn_ratio（R_rxn 反应独立告警线已落 BalanceTables.r_rxn_ratio
+	# 字段——集成包 B.6；双闸语义见 balance_tables.gd R_rxn 注：超线 → 审计 alarm +
+	# 一局一次广播 + 计数）。
 	if not is_finite(snapshot_atk) or not is_finite(coefficient) \
 			or snapshot_atk < 0.0 or coefficient < 0.0:
 		_stats["dropped_invalid"] += 1

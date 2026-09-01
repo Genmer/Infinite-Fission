@@ -3,7 +3,8 @@
 # · tick(delta)：全敌 λ 比例衰减 → 状态计时 → DOT 跳伤调度（HIT_IS_DOT 不掷暴击）
 #   → 超导削抗到期恢复；GameLoop 集成期在敌人阶段后调用（包 4 接线）。
 # · detect_reactions()：帧末统一检测（E-07）：优先级 碎裂>过载>超导；一帧一反应（每敌）；
-#   cd_rxn=2s；反应走 resolve_reaction 独立结算（F20/F21 快照通道）。
+#   v1.1.0 反应 CD 分立（rule.cd 键，缺省回退 cd_rxn）；反应走 resolve_reaction 独立结算
+#   （F20/F21 快照通道）。
 # · _shock_chain：感电连锁 3 目标/160px/35%每跳/深度 2 衰减 60%（同周期同目标去重）。
 # · DOT/连锁跳伤/反应三类结算各持独立 source_uid（管线幂等键分流，防同帧互撞）。
 class_name ElementalSystem
@@ -100,10 +101,13 @@ func tick(p_game_delta: float) -> void:
 
 
 func detect_reactions() -> void:
-	# ★ 帧末统一检测（敌人阶段末调用，E-07）：优先级 碎裂>过载>超导；一帧一反应（每敌）
-	var cd_rxn := 2.0
+	# ★ 帧末统一检测（敌人阶段末调用，E-07）：优先级 碎裂>过载>超导；一帧一反应（每敌）。
+	# v1.1.0 CD 分立：触发前查 rule.cd（reaction_table 同值镜像），缺键回退 cd_rxn（F-34）。
+	var tables: Dictionary = {}
+	var cd_fallback := 2.0
 	if GameConfig.balance != null:
-		cd_rxn = GameConfig.balance.cd_rxn
+		tables = GameConfig.balance.reaction_table
+		cd_fallback = GameConfig.balance.cd_rxn
 	for host in _hosts.duplicate():
 		if host == null or bool(host.get("dead")):
 			continue
@@ -121,9 +125,22 @@ func detect_reactions() -> void:
 				continue
 			if not _reaction_condition(st, rxn):
 				continue
-			st.reaction_cd[rxn] = cd_rxn
+			var rule: Dictionary = tables.get(reaction_key(rxn), {})
+			st.reaction_cd[rxn] = maxf(float(rule.get("cd", cd_fallback)), 0.01)
 			_trigger_reaction(host, st, rxn)
 			break                                 # 一帧一反应
+
+
+static func reaction_key(p_rxn: int) -> String:
+	# v1.1.0 CD 分立：ReactionType 中性 ID → reaction_table 键（唯一映射口）
+	match p_rxn:
+		GameConst.ReactionType.RXN_FIR_ICE:
+			return "RXN_FIR_ICE"
+		GameConst.ReactionType.RXN_FIR_LTG:
+			return "RXN_FIR_LTG"
+		GameConst.ReactionType.RXN_ICE_LTG:
+			return "RXN_ICE_LTG"
+	return ""
 
 
 # ── 内部 ──────────────────────────────────────────────────────────
@@ -148,14 +165,14 @@ func _trigger_reaction(p_enemy: Node2D, p_state: ElementalState, p_rxn: int) -> 
 	var enemy_uid := int(p_enemy.get("uid"))
 	match p_rxn:
 		GameConst.ReactionType.RXN_FIR_ICE:
-			# 碎裂（融化）：×2.0 × 点燃剩余 DOT 总额（独立结算，清双槽 + 燃尽）
+			# 碎裂：×2.0 × 点燃剩余 DOT 总额（独立结算，清双槽 + 燃尽）
 			var rule: Dictionary = tables.get("RXN_FIR_ICE", {"coef": 2.0})
 			var base := p_state.remaining_dot_total()
 			var coef := float(rule.get("coef", 2.0)) * rm
 			_settle_reaction(p_enemy, base, coef, GameConst.ReactionType.RXN_FIR_ICE)
 			p_state.clear_element(GameConst.Element.FIR)
 			p_state.clear_element(GameConst.Element.ICE)
-			p_state.burn_timer = 0.0            # 融化消耗剩余 DOT
+			p_state.burn_timer = 0.0            # 碎裂消耗剩余 DOT
 			p_state.burn_layers = 0
 		GameConst.ReactionType.RXN_FIR_LTG:
 			# 过载：120% ATK × 反应强化，半径 90 爆炸（主目标 + 半径内扩散）
@@ -178,7 +195,7 @@ func _trigger_reaction(p_enemy: Node2D, p_state: ElementalState, p_rxn: int) -> 
 			p_state.clear_element(GameConst.Element.LTG)
 			EventBus.emit_reaction_triggered(GameConst.ReactionType.RXN_ICE_LTG,
 				(p_enemy as Node2D).global_position, enemy_uid)
-			DebugStats.count(&"reaction_supercoduct")
+			DebugStats.count(&"reaction_superconduct")
 	DebugStats.count(&"reaction_triggered")
 
 
