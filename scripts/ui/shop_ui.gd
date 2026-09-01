@@ -6,7 +6,7 @@
 #   180x84（移除词条 60 / 净化 80 / 深渊契约 120 金，均店限 1）/ 芯片槽位面板 (60,884) 600x168
 #  （底板+标题+v0.9.0 6 槽盒 90x120 @(8,36)/(105,36)/(205,36)/(305,36)/(405,36)/(505,36)，A8）/
 #   离开 (60,1064) 600x80。
-#   全部相邻间隙 ≥10px；layout_rects() 断言两两无交集（v0.8.0 11→14 项）。
+#   槽盒相邻间隙 7/10/10/10/10（审查 Important 修正：如实描述）；layout_rects() 断言两两无交集（v0.8.0 11→14 项）。
 # 货架（A4 §2 定价真源 + A6 §4 芯片梯度）：明码卡 3 张（白40/蓝70/紫120/金220；黑市金卡 260）
 # + 武器架 1 张（100，无可用武器则空架 disabled）+ 芯片架 2 张（price_for_rarity 同卡架梯度）
 # + utility 六项（重随券 30 每店限 1 / 回复 30%max_hp 50 / max_hp+10 80 每店限 1 /
@@ -50,7 +50,7 @@ const UTIL2_POSITIONS: Array[Vector2] = [Vector2(60.0, 790.0), Vector2(260.0, 79
 const CHIP_PANEL_POS := Vector2(60.0, 884.0)
 const CHIP_PANEL_SIZE := Vector2(600.0, 168.0)
 const SLOT_SIZE := Vector2(90.0, 120.0)
-# v0.9.0（A8）：6 槽盒（6×90+5×10=590≤600 面板内宽；赐福扩容后 snapshot 恒 6 格）
+# v0.9.0（A8）：6 槽盒（跨度 8→595=587≤600 面板内宽；赐福扩容后 snapshot 恒 6 格）
 const SLOT_POSITIONS: Array[Vector2] = [Vector2(8.0, 36.0), Vector2(105.0, 36.0), Vector2(205.0, 36.0),
 	Vector2(305.0, 36.0), Vector2(405.0, 36.0), Vector2(505.0, 36.0)]
 const LEAVE_POS := Vector2(60.0, 1064.0)

@@ -529,7 +529,9 @@ func _on_blessing_choice(p_index: int) -> void:
 	if p_index < 0 or p_index >= options.size():
 		return
 	var kind := StringName(String((options[p_index] as Dictionary).get("kind", &"")))
-	blessing_handler.apply(kind, wave_director.current_wave if wave_director != null else 0)
+	if not blessing_handler.apply(kind, wave_director.current_wave if wave_director != null else 0):
+		# 审查 Q2 防御：apply 门失败（当前被出牌时过滤覆盖、产品内不可达）——不静默消费选项
+		push_warning("[GameLoop] 赐福 apply 失败（kind=%s），按跳过处理" % String(kind))
 	_close_blessing()
 
 
