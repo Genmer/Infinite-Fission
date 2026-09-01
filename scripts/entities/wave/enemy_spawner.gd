@@ -66,6 +66,7 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		if bool(entry.get("summon", false)):
 			enemy.is_summon = true
 			summon_active_count += 1
+			enemy.strip_shield()                     # v1.2.0 A11 §5：召唤物不继承元素盾
 		# v0.7.0 U5 可选键 gold_rush:bool：金币关标记（掉落覆写消费）
 		if bool(entry.get("gold_rush", false)):
 			enemy.gold_rush = true

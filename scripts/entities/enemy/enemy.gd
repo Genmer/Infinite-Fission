@@ -28,6 +28,11 @@ var summon_spawner: EnemySpawner = null       # v0.6.0 召唤注入（Boss 召�
 var _spawn_wave: int = 1                      # v0.6.0 召唤波号快照（波次成长口径）
 var is_summon: bool = false                   # v0.7.0 U13：Boss 召唤物标记（出生入列键 summon:true）
 var gold_rush: bool = false                   # v0.7.0 U5：金币狂欢波标记（掉落覆写消费）
+# ── v1.2.0 元素盾（A11 §5：拦截层/克环/观测口；环绘制见 ShieldRing 内类） ──
+var shield_element: int = -1                  # 盾元素（Element 枚举；-1 = 无盾）
+var shield_hp: float = 0.0                    # 当前盾血（max_hp × capacity_ratio）
+var shield_max: float = 0.0                   # 盾血上限（破盾不可再生）
+var _shield_ring: ShieldRing = null           # 盾环（程序化绘制；破盾 flash 余韵后隐藏）
 
 # ── v0.6.0 Boss 弹幕/召唤（A4 §7；T7 落地，Boss3 charge/phase3/laser_sweep defer 不消费） ──
 var _boss_pattern: Dictionary = {}            # bullet_patterns 快照（spawn 时 duplicate）
@@ -114,6 +119,10 @@ func _ready() -> void:
 	_ring.name = "ElementRing"
 	_ring.visible = false
 	add_child(_ring)
+	_shield_ring = ShieldRing.new()
+	_shield_ring.name = "ShieldRing"
+	_shield_ring.visible = false
+	add_child(_shield_ring)
 	visible = false                            # 池内不可见（取出 spawn 后激活）
 
 
@@ -172,6 +181,20 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 		_ring.radius = hitbox_r + 7.0
 		_ring.visible = false
 		_ring.set_gauges([0.0, 0.0, 0.0, 0.0, 0.0])
+	# v1.2.0 元素盾（A11 §5）：data.shield 非空 → 盾血 = max_hp × capacity_ratio（max_hp
+	# 波次成长定型后口径）+ 盾环激活；空 → 三字段清零（池复用防残留）
+	if not data.shield.is_empty():
+		shield_element = clampi(int(data.shield.get("element", -1)), 0, 4)
+		shield_max = maxf(float(data.shield.get("capacity_ratio", 0.0)), 0.0) * max_hp
+		shield_hp = shield_max
+		if _shield_ring != null:
+			_shield_ring.setup(shield_element, hitbox_r + 11.0)
+			_shield_ring.visible = true
+			_shield_ring.set_progress(1.0)
+	else:
+		shield_element = -1
+		shield_max = 0.0
+		shield_hp = 0.0
 	_ring_refresh_left = 0.0
 	modulate.a = 0.0                          # 入场渐显起点
 	_apply_flash(0.0)
@@ -197,6 +220,8 @@ func tick(p_game_delta: float) -> void:
 	# 同一 freeze_timer 通道——既有 ICE 满槽冻结同步升级全停）
 	var frozen := elemental != null and elemental.freeze_timer > 0.0
 	_tick_element_ring(p_game_delta)           # v0.7.0 U8：附着环驱动（15Hz 降频）
+	if _shield_ring != null:
+		_shield_ring.tick(p_game_delta)        # v1.2.0：盾环驱动（破盾 flash 余韵/隐藏）
 	var player := _player()
 	match behavior:
 		GameConst.EnemyBehavior.CHASE:
@@ -231,6 +256,10 @@ func take_result(p_result: DamageResult) -> void:
 			and (p_result.popup_style == GameConst.PopupStyle.NORMAL
 				or p_result.popup_style == GameConst.PopupStyle.CRIT):
 		elemental.register_freeze_hit(p_result.panel_snapshot)
+	# v1.2.0 元素盾拦截层（A11 §5，冻结计数后插桩）：吸收 → 不扣血不闪白、killed 恒 false、
+	# result 不改（跳字显终值，盾环表吸收）
+	if _absorb_by_shield(p_result):
+		return
 	apply_damage(p_result.final_value)
 	if not dead:
 		_flash_left = FLASH_TIME
@@ -254,6 +283,57 @@ func get_resist(p_element: int) -> float:
 	if p_element < 0 or p_element >= resist.size():
 		return 0.0
 	return resist[p_element]
+
+
+# ── v1.2.0 元素盾（A11 §5：拦截层/克环/观测口/召唤剥盾） ──────────
+func _absorb_by_shield(p_result: DamageResult) -> bool:
+	# 盾拦截：无盾/盾空 → false（正常落血）；吸收 → true（不扣血不闪白，killed 恒 false）。
+	# ★ popup_style != REACTION 才读 element（ReactionType 中性 ID 与 Element 值域相撞，
+	#   反应结算不判克制——RXN_WAT_LTG=4 打 WAT 盾不吃 ×2）；clampi(0,4) 否则 -1。
+	# 盾伤 = final_value × shield_hit_factor；破盾归 0 无溢出穿透；盾期增幅照乘附着照常。
+	if shield_element < 0 or shield_hp <= 0.0:
+		return false
+	var hit_el := -1
+	if p_result.popup_style != GameConst.PopupStyle.REACTION:
+		hit_el = clampi(p_result.element, 0, GameConst.Element.WAT)
+	shield_hp -= p_result.final_value * GameConst.shield_hit_factor(shield_element, hit_el)
+	if shield_hp <= 0.0:
+		shield_hp = 0.0
+		_break_shield()
+	elif _shield_ring != null:
+		_shield_ring.set_progress(shield_hp / maxf(shield_max, 0.0001))
+	DebugStats.count(&"shield_absorbed")
+	return true
+
+
+func _break_shield() -> void:
+	# 破盾：环 flash（余韵后隐藏，ShieldRing.tick 驱动）+ 遥测；无溢出穿透（余量不落血）
+	if _shield_ring != null:
+		_shield_ring.flash()
+	DebugStats.count(&"shield_broken")
+
+
+func strip_shield() -> void:
+	# 召唤剥盾（enemy_spawner summon 分支 spawn 后调用，同 hp_override 先例）：
+	# 三字段清 -1/0/0 + 环隐藏——Boss 召唤物不继承盾
+	shield_element = -1
+	shield_hp = 0.0
+	shield_max = 0.0
+	if _shield_ring != null:
+		_shield_ring.visible = false
+		_shield_ring.set_progress(0.0)
+
+
+func shield_progress() -> float:
+	# 观测口：盾血余量 0~1（无盾 → 0）
+	if shield_element < 0 or shield_max <= 0.0:
+		return 0.0
+	return clampf(shield_hp / shield_max, 0.0, 1.0)
+
+
+func shield_active() -> bool:
+	# 观测口：盾存在且有血量
+	return shield_element >= 0 and shield_hp > 0.0
 
 
 func get_vuln_factor() -> float:
@@ -567,6 +647,12 @@ func _reset_state() -> void:
 	summon_spawner = null                       # v0.6.0：Boss 弹幕/召唤全量清零（含注入引用）
 	is_summon = false                           # v0.7.0 U13/U5：标记清零
 	gold_rush = false
+	shield_element = -1                          # v1.2.0：元素盾三字段 + 环清零
+	shield_hp = 0.0
+	shield_max = 0.0
+	if _shield_ring != null:
+		_shield_ring.visible = false
+		_shield_ring.set_progress(0.0)
 	_boss_pattern = {}
 	_boss_summons = {}
 	_pattern_cd_left = 0.0
@@ -717,3 +803,63 @@ class ElementRing:
 			var start := -PI / 2.0 + float(i) * SECTOR
 			draw_arc(Vector2.ZERO, radius, start, start + SECTOR * frac, 24,
 				RING_COLORS[i], 3.0, true)
+
+
+# ── v1.2.0 元素盾环（A11 §5；程序化占位绘制，镜像 FuseRing/ElementRing） ──
+class ShieldRing:
+	extends Node2D
+
+	const FLASH_TIME := 0.06                    # 破盾白闪时长
+	const RING_COLORS: Array[Color] = [
+		Color(0.92, 0.92, 0.92),                # KIN（与 ProjectileBase.ELEMENT_COLORS 同值镜像）
+		Color(1.0, 0.45, 0.2),                  # FIR
+		Color(0.4, 0.8, 1.0),                   # ICE
+		Color(0.75, 0.5, 1.0),                  # LTG
+		Color(0.3, 0.75, 0.9),                  # WAT
+	]
+
+	var radius: float = 25.0
+	var _element: int = 0                       # Element 枚举（setup 钳 0..4）
+	var _progress: float = 1.0                  # 盾血余量 0~1
+	var _flash_left: float = 0.0                # 破盾白闪剩余
+
+	func setup(p_element: int, p_radius: float) -> void:
+		# 赋盾初始化（spawn 期）：元素 + 半径（hitbox_r + 11.0）+ 满进度 + 清 flash
+		_element = clampi(p_element, 0, 4)
+		radius = p_radius
+		_progress = 1.0
+		_flash_left = 0.0
+		queue_redraw()
+
+	func set_progress(p: float) -> void:
+		_progress = clampf(p, 0.0, 1.0)
+		queue_redraw()
+
+	func progress() -> float:
+		# 观测口（V52）
+		return _progress
+
+	func flash() -> void:
+		# 破盾白闪（_break_shield 调用；flash 尽且 progress ≤ 0 → tick 隐藏）
+		_flash_left = FLASH_TIME
+		queue_redraw()
+
+	func tick(p_delta: float) -> void:
+		# flash 递减；flash 尽且盾空 → 隐藏（Enemy.tick 驱动）
+		if _flash_left > 0.0:
+			_flash_left = maxf(_flash_left - p_delta, 0.0)
+			if _flash_left <= 0.0 and _progress <= 0.0:
+				visible = false
+			queue_redraw()
+
+	func _draw() -> void:
+		# 底衬淡整圆 alpha 0.25 + 实心弧 sweep=TAU×progress（元素色 alpha 0.9 宽 3）
+		# + flash 期整环白
+		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 0.25), 3.0, true)
+		var col: Color = RING_COLORS[_element]
+		col.a = 0.9
+		if _progress > 0.0:
+			draw_arc(Vector2.ZERO, radius, -PI / 2.0, -PI / 2.0 + TAU * _progress, 48,
+				col, 3.0, true)
+		if _flash_left > 0.0:
+			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 1.0), 3.0, true)

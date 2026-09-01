@@ -25,3 +25,6 @@ extends Resource
 @export var boss: Dictionary = {}
 # {chance, min, max}（M3 商店）
 @export var gold_drop: Dictionary = {}
+# v1.2.0 元素盾（A11 §5）：{element:int(0..4), capacity_ratio:float(0,1]}；空 = 无盾。
+# 盾血 = max_hp × capacity_ratio（波次成长定型后口径）；克制环见 GameConst.SHIELD_COUNTER
+@export var shield: Dictionary = {}

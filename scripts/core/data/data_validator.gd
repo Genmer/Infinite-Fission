@@ -138,6 +138,15 @@ func validate_enemy(e: EnemyData) -> Array:
 	_err(out, &"resist", e.resist.size() != 5, "resist 恰好 5 项（KIN/FIR/ICE/LTG/WAT）")
 	for i in range(e.resist.size()):
 		_err(out, StringName("resist[%d]" % i), e.resist[i] < -0.8 or e.resist[i] > 0.8, "resist[%d] ∈ [-0.8, 0.8]" % i)
+	# v1.2.0 元素盾段（A11 §5）：空 = 无盾（合法）；非空则双键必填 + 域校验（error 级剔除）
+	if not e.shield.is_empty():
+		_err(out, &"shield.element", not e.shield.has("element")
+			or int(e.shield["element"]) < 0 or int(e.shield["element"]) > GameConst.Element.WAT,
+			"shield.element 必填且 ∈ Element 枚举（0..4）")
+		_err(out, &"shield.capacity_ratio", not e.shield.has("capacity_ratio")
+			or float(e.shield["capacity_ratio"]) <= 0.0
+			or float(e.shield["capacity_ratio"]) > 1.0,
+			"shield.capacity_ratio 必填且 ∈ (0, 1]")
 	_err(out, &"immune_mask", e.immune_mask & ~(GameConst.IMMUNE_FREEZE | GameConst.IMMUNE_CHILL | GameConst.IMMUNE_BURN | GameConst.IMMUNE_SHOCK) != 0, "immune_mask 已知位组合（IMMUNE_* 位）")
 	_err(out, &"tags", e.tags & ~(GameConst.TAG_ELITE | GameConst.TAG_BOSS) != 0, "tags 仅 TAG_ELITE/TAG_BOSS 位")
 	_err(out, &"hitbox_r", e.hitbox_r <= 0.0 or e.hitbox_r > 64.0, "hitbox_r ∈ (0, 64]")

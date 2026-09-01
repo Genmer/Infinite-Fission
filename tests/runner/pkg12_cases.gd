@@ -46,6 +46,8 @@ func run(p_tree: SceneTree) -> void:
 	_test_v47_vaporblast()                        # V47
 	_test_v48_quench()                            # V48
 	_test_v49_amp_upgrade()                       # V49
+	_test_v50_shield_data()                       # V50
+	_test_v51_shield_runtime()                    # V51
 	_teardown_world()
 	_summary()
 
@@ -720,3 +722,126 @@ func _test_v49_amp_upgrade() -> void:
 		mirror_ok and melt_ok and vapor_ok and fallback_ok,
 		"mirror=%s melt=%s vapor=%s fb=%s" % [str(mirror_ok), str(melt_ok), str(vapor_ok),
 			str(fallback_ok)])
+
+
+# ── V50 盾数据 ────────────────────────────────────────────────────
+func _test_v50_shield_data() -> void:
+	print("── V50 盾数据 ──")
+	# a) validator 三拒绝（element 缺键 / element 越界 / ratio 缺键与越界 → error 级）
+	var v := DataValidator.new()
+	var d1 := _make_enemy_data("V50_A")
+	d1.shield = {"capacity_ratio": 0.3}           # 缺 element
+	var d2 := _make_enemy_data("V50_B")
+	d2.shield = {"element": 5, "capacity_ratio": 0.3}   # element 越界
+	var d3 := _make_enemy_data("V50_C")
+	d3.shield = {"element": 4, "capacity_ratio": 1.5}   # ratio 越界（缺键同拒绝）
+	var rej := 0
+	for d in [d1, d2, d3]:
+		for issue in v.validate_enemy(d):
+			var row: Dictionary = issue
+			if String(row.get("severity", "")) == DataValidator.SEV_ERROR \
+					and String(row.get("field", "")).begins_with("shield."):
+				rej += 1
+	var reject_ok := rej >= 3
+	# b) 合法盾通过（空 = 无盾也通过）
+	var d4 := _make_enemy_data("V50_D")
+	d4.shield = {"element": 2, "capacity_ratio": 0.25}
+	var clean := true
+	for issue in v.validate_enemy(d4):
+		var row4: Dictionary = issue
+		if String(row4.get("severity", "")) == DataValidator.SEV_ERROR:
+			clean = false
+	# c) 三 .tres 赋盾值（A11 §1 冻结）
+	var e5: EnemyData = load("res://resources/enemies/E5_elite.tres")
+	var b2: EnemyData = load("res://resources/enemies/E6_boss2.tres")
+	var b3: EnemyData = load("res://resources/enemies/E6_boss3.tres")
+	var tres_ok: bool = e5 != null and b2 != null and b3 != null \
+		and int(e5.shield.get("element", -1)) == 2 \
+		and is_equal_approx(float(e5.shield.get("capacity_ratio", 0.0)), 0.25) \
+		and int(b2.shield.get("element", -1)) == 3 \
+		and is_equal_approx(float(b2.shield.get("capacity_ratio", 0.0)), 0.3) \
+		and int(b3.shield.get("element", -1)) == 4 \
+		and is_equal_approx(float(b3.shield.get("capacity_ratio", 0.0)), 0.3)
+	_check("V50：盾数据——validator 三拒绝（element 缺/越界 + ratio 越）+ 合法盾通过 + 三 .tres 值",
+		reject_ok and clean and tres_ok,
+		"rej=%d clean=%s tres=%s" % [rej, str(clean), str(tres_ok)])
+
+
+# ── V51 盾运行期 ──────────────────────────────────────────────────
+func _test_v51_shield_runtime() -> void:
+	print("── V51 盾运行期 ──")
+	_purge_enemies()
+	# a) capacity 换算（E5_elite w1：max_hp 72 → 盾 18）+ 环激活
+	var e := _spawn_enemy(_make_enemy_data("V51_A", 1000.0), Vector2(120, 200))
+	e.data.shield = {"element": 2, "capacity_ratio": 0.25}   # 复用池实例补赋盾口径
+	e.shield_element = 2
+	e.shield_max = e.max_hp * 0.25
+	e.shield_hp = e.shield_max
+	e._shield_ring.setup(2, e.hitbox_r + 11.0)
+	e._shield_ring.visible = true
+	e._shield_ring.set_progress(1.0)
+	var cap_ok: bool = e.shield_active() and is_equal_approx(e.shield_max, e.max_hp * 0.25) \
+		and is_equal_approx(e.shield_progress(), 1.0) and e._shield_ring.visible
+	# b) 吸收：hp 不减 + 盾扣（KIN ×1）
+	var hp0: float = e.hp
+	var fake := DamageResult.new()
+	fake.final_value = 10.0
+	fake.popup_style = GameConst.PopupStyle.NORMAL
+	fake.element = GameConst.Element.KIN
+	fake.panel_snapshot = 100.0
+	e.take_result(fake)
+	var absorb_ok: bool = is_equal_approx(e.hp, hp0) \
+		and is_equal_approx(e.shield_hp, e.shield_max - 10.0) and not e.dead
+	# c) 克制：ICE 盾（element 2）吃 FIR（counter=1）×2
+	e.shield_hp = 30.0
+	fake.element = GameConst.Element.FIR
+	e.take_result(fake)
+	var counter_ok: bool = is_equal_approx(e.shield_hp, 10.0)
+	# d) REACTION 结算不误判：WAT 盾（element 4）吃 RXN_WAT_LTG=4 通道 → 不吃 ×2
+	var w := _spawn_enemy(_make_enemy_data("V51_W", 1000.0), Vector2(400, 200))
+	w.shield_element = 4
+	w.shield_max = 100.0
+	w.shield_hp = 100.0
+	var fake_rxn := DamageResult.new()
+	fake_rxn.final_value = 10.0
+	fake_rxn.popup_style = GameConst.PopupStyle.REACTION
+	fake_rxn.element = GameConst.ReactionType.RXN_WAT_LTG   # 值 4 = WAT 盾的克制位撞值
+	w.take_result(fake_rxn)
+	var rxn_ok: bool = is_equal_approx(w.shield_hp, 90.0)   # ×1（非 ×2）
+	# e) 破盾无溢出 + 破后不可再生 + killed 恒 false
+	w.shield_hp = 5.0
+	var w_hp0: float = w.hp
+	fake_rxn.popup_style = GameConst.PopupStyle.NORMAL
+	fake_rxn.element = GameConst.Element.KIN
+	fake_rxn.final_value = 100.0
+	w.take_result(fake_rxn)
+	var break_ok: bool = is_equal_approx(w.shield_hp, 0.0) and is_equal_approx(w.hp, w_hp0) \
+		and not w.shield_active() and not w.dead
+	fake_rxn.final_value = 7.0
+	w.take_result(fake_rxn)
+	var no_regen: bool = is_equal_approx(w.hp, w_hp0 - 7.0) and is_equal_approx(w.shield_hp, 0.0)
+	# f) 盾期增幅照乘 + 附着照常
+	var s := _spawn_enemy(_make_enemy_data("V51_S", 2000.0), Vector2(120, 400))
+	_sys.register_host(s)
+	s.shield_element = 0
+	s.shield_max = 50.0
+	s.shield_hp = 50.0
+	_gauge(s, GameConst.Element.ICE, 30.0)
+	_fire_at(_spawn_proj(GameConst.Element.FIR, s.global_position))
+	var r := _last_result()
+	var st: ElementalState = s.get("elemental")
+	var amp_ok: bool = r != null and st != null \
+		and r.pool_breakdown.has(&"amplify") \
+		and st.gauges[GameConst.Element.FIR] > 0.0
+	# g) summon 剥盾（strip_shield 方法 + spawner 接线源码核对）
+	var sp_src := _read_source("res://scripts/entities/wave/enemy_spawner.gd")
+	s.strip_shield()
+	var strip_ok: bool = s.shield_element == -1 and is_equal_approx(s.shield_hp, 0.0) \
+		and not s._shield_ring.visible \
+		and (not sp_src.is_empty()) and sp_src.contains("strip_shield()")
+	_check("V51：盾运行期——capacity 换算/吸收 hp 不减/ICE 盾 FIR×2 KIN×1/REACTION 不误判（RXN_WAT_LTG=4 打 WAT 盾 ×1）/破盾无溢出+不可再生+killed false/盾期增幅照乘附着照常/summon strip",
+		cap_ok and absorb_ok and counter_ok and rxn_ok and break_ok and no_regen
+		and amp_ok and strip_ok,
+		"cap=%s abs=%s ctr=%s rxn=%s brk=%s regen=%s amp=%s strip=%s"
+			% [str(cap_ok), str(absorb_ok), str(counter_ok), str(rxn_ok), str(break_ok),
+			str(no_regen), str(amp_ok), str(strip_ok)])

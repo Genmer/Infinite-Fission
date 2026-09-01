@@ -48,6 +48,21 @@ const IMMUNE_SHOCK := 8
 # UID 位宽（§4.1 幂等键位拼接约束：UID < 2^20，帧号 < 2^24）
 const UID_MAX := 0xFFFFF            # 2^20 − 1
 
+# v1.2.0 元素盾克制环（A11 §1/§5 真源）：盾元素 → 克制它的攻击元素
+#（FIR1↔ICE2 / WAT4↔LTG3；KIN 无克制 -1；下标 = Element 枚举直索引）
+const SHIELD_COUNTER: Array[int] = [-1, 2, 1, 4, 3]
+
+
+static func shield_hit_factor(p_shield_element: int, p_hit_element: int) -> float:
+	# 盾伤因子：克制命中 ×2.0，否则 ×1.0（盾元素/命中元素越界 → 1.0；
+	# hit_el = -1 的反应结算/未知通道不判克制——ReactionType ID 撞 Element 值域防线）
+	if p_shield_element < 0 or p_shield_element >= SHIELD_COUNTER.size():
+		return 1.0
+	if p_hit_element >= 0 and p_hit_element < SHIELD_COUNTER.size() \
+			and p_hit_element == SHIELD_COUNTER[p_shield_element]:
+		return 2.0
+	return 1.0
+
 # 分配器计数（静态；单主线程访问，无需线程安全）
 static var _uid_counter: int = 0
 

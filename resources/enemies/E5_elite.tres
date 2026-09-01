@@ -20,3 +20,4 @@ ranged = {}
 elite_mult = {"hp": 4.2, "spd": 0.92, "dmg": 1.5, "exp": 8.0}
 boss = {}
 gold_drop = {"chance": 1.0, "min": 20, "max": 30}
+shield = {"element": 2, "capacity_ratio": 0.25}
