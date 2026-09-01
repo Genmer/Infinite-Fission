@@ -1411,6 +1411,11 @@ func _reset_run_state() -> void:
 	# apply_character 内部跳过属性应用但清引用——防上一局角色 char_pct/xp 残留进本局
 	player.apply_character(current_character)
 	player.respawn()
+	# v1.3.0 审查 Important：确立「reset 全清 → 武器装载(rebuild 重建)」不变式——
+	# reset_run 先行清三张注册表（含 _resonance_counts），随后 add_weapon/rebuild 按新局
+	# 武器栈重建（旧序 rebuild 在前 reset 在后，靠"首发武器无 ELEM 词条"巧合保持正确）
+	if elemental != null:
+		elemental.reset_run()                     # v1.1.0 审查 Critical：反应注册表清零
 	for i in range(player.weapon_slots.size()):
 		var w: WeaponBase = player.weapon_slots[i] if i < player.weapon_slots.size() else null
 		if w != null and is_instance_valid(w):
@@ -1427,9 +1432,6 @@ func _reset_run_state() -> void:
 	card_generator.owned_relics.clear()
 	relic_handler.reset_run()                     # B.2：遗物每场重新获取（owned/常驻位清零）
 	chip_handler.reset_run()                      # v0.7.0：芯片每场重新获取（装备/槽位/遥测清零）
-	if elemental != null:
-		elemental.reset_run()                     # v1.1.0 审查 Critical：反应注册表清零
-		                                         #（×1.8 既有缺口 + 精通层跨局残留，XE1 坐实）
 	if curse_handler != null:
 		# v1.0.0（A9）：meta hpg 注入★先于 reset——reset 内 recompute_max_hp 收口生效
 		if meta_store != null:

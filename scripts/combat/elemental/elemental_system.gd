@@ -78,6 +78,7 @@ func reset_run() -> void:
 	_reaction_mults.clear()
 	_mastery_reg.clear()
 	_mastery_step = 0.0
+	_resonance_counts = [0, 0, 0, 0, 0]   # v1.3.0 审查 Important：第三张表随 reset 清零
 
 
 func reaction_mult() -> float:
@@ -185,7 +186,10 @@ func rebuild_registries(p_player: Node2D) -> void:
 				continue
 			if data.params.has("reaction_mult"):
 				# ELE_REACTION_VOID：不乘层（stack_max=1 语义与 register_reaction_mult 一致）
-				_reaction_mults[weapon.uid] = float(data.params["reaction_mult"])
+				# 审查 Q1：补 >0.0 守卫与 register_reaction_mult 同口径（防脏数据 ×0 归零全部剧变）
+				var rm_val := float(data.params["reaction_mult"])
+				if rm_val > 0.0:
+					_reaction_mults[weapon.uid] = rm_val
 			if data.params.has("mastery_step"):
 				# ELE_MASTERY：层全量重报 + step 后写覆盖（register_mastery 零/负防御同口径）
 				var step := float(data.params["mastery_step"])
