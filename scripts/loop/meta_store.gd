@@ -62,7 +62,8 @@ func load_save() -> void:
 	if not cfg.has_section_key("meta", "save_version"):
 		push_warning("[MetaStore] 存档缺 save_version，按 1 继续")
 	else:
-		var version := int(cfg.get_value("meta", "save_version", SAVE_VERSION))
+		var version := _int_or(cfg.get_value("meta", "save_version", SAVE_VERSION),
+			SAVE_VERSION, "save_version")
 		if version > SAVE_VERSION:
 			push_warning("[MetaStore] 存档版本 %d 高于当前 %d，拒绝降读，按全默认继续"
 				% [version, SAVE_VERSION])
@@ -73,7 +74,7 @@ func load_save() -> void:
 	if not cfg.has_section_key("meta", "crystal"):
 		push_warning("[MetaStore] 存档缺 crystal，按 0 继续")
 	else:
-		var stored_crystal := int(cfg.get_value("meta", "crystal", 0))
+		var stored_crystal := _int_or(cfg.get_value("meta", "crystal", 0), 0, "crystal")
 		if stored_crystal < 0:
 			push_warning("[MetaStore] crystal 负值（%d），钳 0" % stored_crystal)
 		else:
@@ -83,7 +84,7 @@ func load_save() -> void:
 		if not cfg.has_section_key("levels", String(id)):
 			_levels[id] = 0                     # 缺失（旧档/新增条目）→ 0
 			continue
-		var raw := int(cfg.get_value("levels", String(id), 0))
+		var raw := _int_or(cfg.get_value("levels", String(id), 0), 0, String(id))
 		if raw < 0 or raw > max_level:
 			push_warning("[MetaStore] 等级越界（%s=%d），钳 [0,%d]" % [String(id), raw, max_level])
 			_levels[id] = clampi(raw, 0, max_level)
@@ -219,6 +220,21 @@ func meta_summary() -> Dictionary:
 
 
 # ── 内部 ──────────────────────────────────────────────────────────
+static func _int_or(p_value: Variant, p_default: int, p_key: String) -> int:
+	# v1.3.0（R4）档内数值键类型守卫：TYPE_INT 直用；TYPE_FLOAT 且为整数值且 |v|<2^53
+	#（IEEE 安全整数域）→ int；其余脏型（字符串/数组等）→ push_warning + p_default
+	# 单键回退——不整档作废、不写回（与损坏判定树「全回退不写回」口径一致）
+	if typeof(p_value) == TYPE_INT:
+		return int(p_value)
+	if typeof(p_value) == TYPE_FLOAT:
+		var f := float(p_value)
+		if f == floorf(f) and absf(f) < 9007199254740992.0:
+			return int(f)
+	push_warning("[MetaStore] 数值键类型异常（%s=%s），按默认 %d 继续"
+		% [p_key, str(p_value), p_default])
+	return p_default
+
+
 func _reset_memory() -> void:
 	# 内存态全默认（set_save_path / load_save 入口 / wipe 共用）
 	crystal = 0
@@ -240,7 +256,7 @@ func _load_stat(p_cfg: ConfigFile, p_key: String) -> int:
 	# stats 三键读取（缺失 → 0 静默；负值 → 钳 0 + warning——同 levels 缺失/越界口径）
 	if not p_cfg.has_section_key("stats", p_key):
 		return 0
-	var v := int(p_cfg.get_value("stats", p_key, 0))
+	var v := _int_or(p_cfg.get_value("stats", p_key, 0), 0, p_key)
 	if v < 0:
 		push_warning("[MetaStore] 统计 %s 负值（%d），钳 0" % [p_key, v])
 		return 0
