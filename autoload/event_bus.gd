@@ -33,6 +33,7 @@ signal card_chosen(card_id: StringName, target_kind: int)  # 选卡应用完成�
 signal chip_slot_unlocked(slot: int)                       # v0.7.0 芯片槽解锁（wave 1/10/20 → 槽 1/2/3）
 signal gold_rush_started(wave: int)                        # v0.7.0 金币狂欢波开始（HUD 横幅覆写）
 signal curse_changed(count: int, max_hp: float)            # v0.8.0 诅咒层数/max_hp 变更（HUD 诅咒标签）
+signal blessing_granted(kind: StringName, wave: int)       # v0.9.0 波次赐福出牌成功（A8 §1）
 
 var _dispatch_count: Dictionary = {}        # StringName(事件) -> int(本帧计数)
 const STORM_WARN_THRESHOLD := 128           # 同事件同帧派发上限（§六.4）
@@ -166,6 +167,11 @@ func emit_gold_rush_started(wave: int) -> void:
 func emit_curse_changed(count: int, max_hp: float) -> void:
 	_track_dispatch(&"curse_changed")
 	curse_changed.emit(count, max_hp)
+
+
+func emit_blessing_granted(kind: StringName, wave: int) -> void:
+	_track_dispatch(&"blessing_granted")
+	blessing_granted.emit(kind, wave)
 
 
 # ── 计数 / 风暴防护 / 订阅纪律 ─────────────────────────────────────

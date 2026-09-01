@@ -27,7 +27,8 @@ const MULT_POOL_IDS: Array[StringName] = [
 # Local 私有池 id 全集（F-15：当前唯一实例 = 光束灼焦）
 const LOCAL_POOL_IDS: Array[StringName] = [&"scorch"]
 # EventBus 事件名注册表镜像（§2.1 18 信号清单——包 0 冻结；与 autoload/event_bus.gd 信号表双源，改动需同步；
-# v0.6.0 增 gold_changed；v0.7.0 增 chip_slot_unlocked / gold_rush_started；v0.8.0 增 curse_changed，共 22）
+# v0.6.0 增 gold_changed；v0.7.0 增 chip_slot_unlocked / gold_rush_started；v0.8.0 增 curse_changed；
+# v0.9.0 增 blessing_granted，共 23）
 const EVENT_NAMES: Array[StringName] = [
 	&"state_changed", &"config_fatal", &"data_validated", &"damage_resolved", &"damage_alarm",
 	&"enemy_killed", &"boss_spawned", &"player_hit", &"player_died", &"level_up", &"xp_gained",
@@ -36,6 +37,7 @@ const EVENT_NAMES: Array[StringName] = [
 	&"chain_fused", &"card_chosen",
 	&"chip_slot_unlocked", &"gold_rush_started",
 	&"curse_changed",
+	&"blessing_granted",
 ]
 # contribution_expr 白名单模板（§三.5：两个模板，编译期映射；禁运行时 Expression）
 const CONTRIBUTION_EXPRS: Array[String] = ["value", "value * (ctx.pierce_index - 1)"]
