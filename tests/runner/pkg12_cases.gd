@@ -1048,8 +1048,8 @@ func _test_v56_closure() -> void:
 	var version: String = ProjectSettings.get_setting("application/config/version", "")
 	var version_ok := version == "1.2.0"
 	var progress := _read_source("res://PROGRESS.md")
-	var progress_ok := (not progress.is_empty()) and progress.contains("1463") \
-		and progress.contains("pkg12 19") and progress.contains("v1.2.0 增量")
+	var progress_ok := (not progress.is_empty()) and progress.contains("1464") \
+		and progress.contains("pkg12 20") and progress.contains("v1.2.0 增量")
 	var a11 := _read_source("res://docs/analysis/A11_v1.2.0_design.md")
 	var a11_ok := (not a11.is_empty()) and a11.contains("H8") \
 		and a11.contains("RXN_WAT_ICE") and a11.contains("SHIELD_COUNTER")

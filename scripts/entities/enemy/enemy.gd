@@ -228,8 +228,10 @@ func tick(p_game_delta: float) -> void:
 			if player != null:
 				var dir := (player.global_position - global_position).normalized()
 				var spd := speed * sf
-				if _fuse_armed:
-					spd = VOLATILE_CHARGE_SPEED    # 警报后冲刺（A3 §2.2 E4 行；自爆冲刺不受寒滞减速修正口径）
+				if _fuse_armed and not frozen:
+					# 警报后冲刺（A3 §2.2 E4 行）。v1.2.0 审查 Important 修复：冻结全停口径
+					# 收口——冲刺覆写不再绕过 sf=0（引信计时与接触爆炸照常，只停移动）
+					spd = VOLATILE_CHARGE_SPEED
 				global_position += dir * spd * p_game_delta
 				_tick_volatile_fuse(p_game_delta, player)
 		GameConst.EnemyBehavior.RANGED:
