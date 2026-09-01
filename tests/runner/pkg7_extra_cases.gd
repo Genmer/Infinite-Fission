@@ -147,8 +147,8 @@ func _test_u1_validator_idempotent() -> void:
 	for row in (r3["rejected"] as Array):
 		if String((row as Dictionary).get("category", "")) == "chips":
 			chip_reject_3 += 1
-	_check("validate_all：剔除坏件后 chips 类目 0 剔除（8 枚全清洁）",
-		chip_reject_3 == 0 and reg.chips.size() == 8)
+	_check("validate_all：剔除坏件后 chips 类目 0 剔除（12 枚全清洁；v0.8.0 +4 变体授权更新）",
+		chip_reject_3 == 0 and reg.chips.size() == 12)
 
 
 # ══ U3：芯片不占乘区 top-8 名额（10 乘区池 + 芯片全额生效） ═════════

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ChipData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/chip_data.gd" id="1_cd"]
+
+[resource]
+script = ExtResource("1_cd")
+id = &"CHIP_ROF2"
+display_name = "急速引擎"
+description = "武器射速独立乘数 +6~22%（按档位，v0.8.0 变体）"
+stat_key = &"rof"
+values = [0.06, 0.1, 0.15, 0.22]

@@ -81,7 +81,7 @@ func _test_chip_data() -> void:
 			&"gold_gain", &"max_hp", &"xp_gain"]:
 		if not GameConst.CHIP_STAT_KEYS.has(key):
 			_check("CHIP_STAT_KEYS 含 %s" % String(key), false)
-	_check("chips 类目注册 8 枚（0 剔除）", reg.chips.size() == 8,
+	_check("chips 类目注册 12 枚（0 剔除；v0.8.0 +4 变体授权更新）", reg.chips.size() == 12,
 		"实际 %d" % reg.chips.size())
 	# 冻结数值表（id -> [stat_key, values 白/蓝/紫/金]）
 	var table := {
@@ -120,7 +120,7 @@ func _test_chip_data() -> void:
 		var c := reg.get_chip(id)
 		if not v.validate_chip(c).is_empty():
 			all_clean = false
-	_check("validate_chip：8 枚全部 0 错误", all_clean)
+	_check("validate_chip：12 枚全部 0 错误（v0.8.0 +4 变体授权更新）", all_clean)
 	# validator 剔除路径：坏数据逐一判错（仅 error 级触发剔除；warning 不剔除）
 	var bad := ChipData.new()
 	_check("validate_chip：空 id 报错", _has_error(v.validate_chip(bad)))

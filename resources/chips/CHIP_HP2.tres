@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ChipData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/chip_data.gd" id="1_cd"]
+
+[resource]
+script = ExtResource("1_cd")
+id = &"CHIP_HP2"
+display_name = "钢铁躯壳"
+description = "生命上限 +15~70（按档位，装备时回补等量 HP；v0.8.0 变体）"
+stat_key = &"max_hp"
+values = [15.0, 30.0, 48.0, 70.0]
