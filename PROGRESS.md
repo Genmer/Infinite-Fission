@@ -32,6 +32,8 @@
 
 **v0.7.0 增量（2026-09-01，U1~U15）：芯片系统（ChipData×8 / ChipHandler 3 槽 / 管线 ⑥b 独立乘区段 cap_chip_zone / 商店芯片货架+槽位面板 / Boss 芯片掉落）/ 金币狂欢关（w6/16/26，0.4×血 rush + 掉落覆写 + 波末比例奖励）/ 双 Boss 修复（w10/20/30 composition 清空）/ 召唤独立计数（summon_active_count 闸）/ 附着环 ElementRing + 反应粒子三预设 + 打击感分级 / 反应统计与结算行 / 首件武器保底（weapon_weight_mult ×2）/ 受击红闪 / 文本跳字通道。数值与裁定真源 = `docs/analysis/A6_v0.7.0_design.md`；自测 = `tests/runner/test_pkg7.gd`（172 项；审查后新增槽位门控 2 项 + U11 段武器 id 笔误 W2_smg→W2_gatling 修复后漏计 3 项归位）。提交序：U1 a9573ab → U2 a6377c1 → U3 22465f6 → U12-14 a920214 → U5 cf68ab3 → U4+U7 e74328b → U6 3753072 → U8-10 375dcf9 → U11 f184dac → U15 5dec3f4。**审查后修复批（fix-review）：芯片定价恢复裁定 60/110/180/300（coder 曾擅改卡架同梯度 40/70/120/220——已推翻）；free_slots()=unlocked−equipped 槽位门控真实生效（原为无语义死状态）；heal 预禁用在 maxhp/CHIP_HP 购买后回写；_gold_add_sum 帧缓存试做后回退（帧号失效对同帧 attach 词条路径返回脏数据，pkg6 冻结用例拦截——正确钩子见 §11）；粒子 burst null 守卫恢复；元素环无附着零分配；商店芯片槽满态购买后同步。**
 
+**v0.8.0 增量（2026-08-31，V1~V24）：芯片变体 4 枚（ATK2/ROF2/CRIT2/HP2，chips 8→12）/ 副词条（独立流 seed 4243，条数 {0:50%,1:35%,2:15%}，7 键无放回固定小值，offer 预随所见即所得 + Boss grant roll）/ 套装（主属性同键 ≥2 枚查询时 ×1.10）/ 诅咒运行时（CurseHandler 0~5 层：受伤×(1+0.08n)/掉率+0.15n/max_hp×(1−0.04n)，compute_max_hp 公式唯一真源 + curse_changed 第 22 号信号 + 卡流 cursed 卡同步加层）/ 词条移除与净化（TraitStack peek/detach_last/detach_by_id + is_curse_trait 单源；商店移除 60 金/净化 80 金/深渊契约 +1 层换 120 金，均店限 1）/ 商店 utility 扩容行2 + 三 setter 回写 + dim STOP / 事件系统（WaveDirector w4 起 40% 独立流 seed 777；EventUI 复用 SHOP 态；EventDirector 四事件：血色祭坛/命运赌桌 seed 888/深渊商人/寂静神龛，金币全走 _add_gold 吃 K_gold 文案带「基础值」；排空序冻结 _drain_overlays_after_resume）/ 角色系统（CharacterData×3：信使/重装/学者，registry characters 类目 + 悬空首发武器剔除；MenuScreen 选角卡；start_run 空参读菜单 + 角色感知重排经 _reset_run_state；goto_menu + GameOver 双按钮；xp 三乘子 = 遗物×角色×(1+K_chip)）/ 冲刺（Player try_dash 四门 fail-fast + 0.18s/220px/独立 0.15s 无敌通道 + Shift；HUD DashButton tap 判定 ×2 + 冷却灰显 + 诅咒标签 (612,64) 紫）。数值与裁定真源 = `docs/analysis/A7_v0.8.0_design.md`（含假设清单 R1~R10 与事件面额自拟值表）；自测 = `tests/runner/test_pkg8.gd`（160 项）。提交序：V13 1e76b2b → V14 e2bea0c → V15 c6bdfb5 → V6 105ad9f → V9 fd566d5 → V10/11 2ee5a50 → V1-4 89a9b3e → V17 bdd9a27 → V18/19 98cdc72 → V21/22 2d578ed → V23 ef61d34 → V24 本笔。**
+
 **阶段 E 关键战果（审查/测试发现并修复）：**
 - 一轮审查 1C+3I：重开不清场（残留战场秒杀重生）→ `_clear_battlefield` 清场序 + respawn 1.5s 无敌；GameFeel 订阅晚于 Spawner 清 tags（Boss 击杀打击感永不触发）→ early_bind；Boss 波伴随怪流水锁死 wave_cleared → `_boss_ref` 存活闸；TH_CRIT_SHARD 全武器声明零实现 + 校验器空承诺 → 补 `trait_effect_crit_shard.gd` + check_references ② 落地
 - coder 实现中发现的**双落血 bug 族 5 处**（settle_aoe/投射物直击/激光/环绕/弧斩：真件管线 9b 内部落血 + 调用方再落血 = 实际游戏全部伤害 ×2）→ 全部改双轨口径（`is DamagePipeline` 真件不落血/桩落血），pkg2/3 桩口径用例原样全绿验证；连带修 laser_beam._recycle 归还恒短路池泄漏
@@ -128,9 +130,11 @@
 - 导入：`"$G" --headless --path "<项目根>" --import`
 - 跑测试：`"$G" --headless --path "<项目根>" -s tests/runner/test_pkg0.gd`（pkg1/pkg2/pkg3 同理）
 - 注意：`-s` 模式下入口脚本编译早于 autoload 注册，测试用「入口引导 + 运行时 load 用例体」两段式（pkg0~pkg3 都是这个模式，新测试照抄）
-- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836；pkg6 为 v0.6.0 增量自测；另有 pkg6_extra 32 项验收补充用例独立 runner 与 pkg7 167 项 v0.7.0 增量自测，不计入 836 基线口径）**
+- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836 基线口径；另有 pkg6_extra 33 项验收补充 / pkg7 172 项 v0.7.0 增量 / pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量，独立 runner；全 runner 合计 1257 全 PASS）**
 - v0.6.0 压力复测：**P95 = 5.559ms**（avg 2.191 / P50 1.791 / P99 6.968，判定线 8.3ms PASS）
 - v0.7.0 压力复测：**P95 = 5.714ms**（avg 2.302 / P50 1.912 / P99 6.515，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0）
+- v0.8.0 压力复测：**P95 = 5.924ms**（avg 2.419 / P50 1.998 / P99 7.144 / MAX 12.625，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
+- v0.8.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.735ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.0→182.6 MB 增幅 0.88% < 3%；0 ERROR）
 - 压力/soak：`tests/stress/test_perf_500p100e.gd`（AC-01.2，headless 逻辑帧口径）与 `tests/stress/test_soak.gd`（AC-14.1，SOAK_FRAMES 常量控时长；10 分钟版预计 ~12 分钟实际，长跑须后台+轮询防会话超时）
 
 ## 8. 冻结契约速查（跨包接口，改动需全包评估）
@@ -204,6 +208,58 @@ pkg0（ADD 池计数 14）/pkg4（池×7）/pkg5（池×7 + 黑市桥接契约�
 12. **ChipHandler（新类）**：MAX_CHIP_SLOTS=3 / CHIP_RNG_SEED=4242 / CHIP_PRICES{40,70,120,220} /
     CONVERT_RATIO=0.5；GameLoop 组装序 = relic_handler 之后、spawner add_child 之前；
     player.setup deps 增键 `"chip_handler"`。
+
+### 8.3 v0.8.0 增量契约（详见 A7_v0.8.0_design.md §11 假设清单 R1~R10）
+
+1. **EventBus +1 信号**：`curse_changed(count:int, max_hp:float)` + emit 包装；
+   DataValidator.EVENT_NAMES 21 → **22**（双源镜像同步）。
+2. **WaveDirector +`event_requested(wave, event_index)` 信号** + `reset_event_state()`；
+   常量 EVENT_START_WAVE=4 / EVENT_CHANCE=0.40 / EVENT_KINDS=4 / EVENT_RNG_SEED=777；
+   BUFFER 事件闸在商店分支之后（非商店间隙显式排除 _is_shop_wave；黑市 pending>0 整闸跳过
+   不消耗 roll；一间隙一 roll 未中也消耗 _event_gapped 闸）。
+3. **ChipHandler**：+SUBSTAT_RNG_SEED=4243 / SET_BONUS_MULT=1.10 / SUBSTAT_VALUES（8 键固定
+   小值）/ SUBSTAT_DIST={0:0.50,1:0.85}；+`roll_substats(main_key)`；`equip(chip_id, rarity,
+   substats:=[])` 三参（旧调用恒等兼容）；equipped 条目带 `substats` 键；stat_bonus =
+   Σ主值+Σ副词条同键，主键 ≥2 枚 ×1.10（查询时聚合）；roll_shop_offers/grant_boss_chip
+   预随 substats（所见即所得）；max_hp 键走 CurseHandler.recompute_max_hp 通道（null 兜底旧
+   加法路径）；+curse_handler 注入键。
+4. **Player**：+static `compute_max_hp(char_pct, chip_sum, flat, curse_layers)`（max_hp 公式
+   唯一真源）；+`apply_character(CharacterData)`（move_speed/pickup_radius/引用；max_hp 不直改
+   ——respawn 公式承载）；+`char_max_hp_pct()/character_xp_mult()`（null 兜底 0.0/1.0）；
+   +`try_dash()`（四门 fail-fast）+ DASH_TIME/DISTANCE/INVULN/CD 常量 + dash_left/dash_cd_left/
+   dash_invuln_left/_last_move_dir 字段；受击判定 = invuln OR dash_invuln（互不覆盖）；
+   受伤 ×(1+0.08n)（deps.curse_handler，null → 1.0）；+max_hp_bonus_flat 池；
+   respawn 清 flat/冲刺计时/方向。
+5. **CurseHandler（新类）**：MAX_CURSE_LAYERS=5 / 0.08/0.15/0.04 每层三乘区；add/remove 钳边
+   返实际增量；recompute_max_hp(heal_delta:=0.0) 运行期 max_hp 唯一写入口；GameLoop 组装序 =
+   chip_handler 之后、player.setup 前（player deps +`"curse_handler"`、chip_handler deps 同）。
+6. **TraitStack**：+static `is_curse_trait(data)`（ADD 池负值；params.is_curse 退役装饰）；
+   +`peek_last(skip_curse)` / `detach_last(skip_curse)` / `detach_by_id(id, layers:=1)`
+   （共用 _detach_at；调用方负责 invalidate_panel）。
+7. **ShopUI**：open() 五参签名不变；+utility 行2（strip 60/purify 80/contract 120，均店限 1）；
+   布局 (60,790) 行2 / 面板 (60,884) / 离开 (60,1064)；layout_rects 11 → **14**；
+   +set_strip_available(p_ok, p_preview:="") / set_purify_available / set_contract_available；
+   shelf_state +strip/purify/contract_used；dim mouse_filter IGNORE→STOP。
+8. **EventUI（新类）/ EventDirector（新类）**：事件复用 SHOP 态（TRANSITIONS 零改动）；
+   EventUI 选项 (60,520)/(60,650) + 离开 (60,800)；EventDirector rng seed 888 赌桌专用；
+   四事件面额表见 A7 §7（自拟值真源）；事件金币全走 _add_gold（吃 K_gold）文案「基础值」。
+9. **GameLoop**：`start_run(p_character_id:=&"")`（空参读菜单选中；序 = PLAYING →
+   _reset_run_state → start_wave(1)，角色应用/首发武器并入 _reset_run_state）；+`goto_menu()`
+   （GAME_OVER→MENU）；+_starting_weapon_id() 单点（boot/reset 两处）；xp 三乘子 =
+   遗物×角色×(1+K_chip)；+_drain_overlays_after_resume()（弹卡→开店→开事件，_close_shop/
+   _on_card_choice/_close_event 共用）；cursed 卡两接入点 add_curse(1)；金币掉率 chance 追加
+   curse_handler.gold_drop_bonus()。
+10. **registry/validator**：+characters 类目（manifest 增行）；+validate_character（数值域
+    error 级）；check_references ④ starting_weapon_id 悬空剔除宿主；CharacterData（新 Resource）。
+11. **MenuScreen**：+setup(registry)/selected_character_id()/set_selection（id 字符串字典序
+    排序——StringName 直排按指针序不稳定）；布局 标题 y200/副标题 y260/角色卡×3
+    (48,340)/(264,340)/(480,340) 192x240/开始 (280,640)「开始出击」；start_requested 无参签名
+    不变。
+12. **GameOverScreen**：单按钮 → 双按钮「再次出击」(100,560) 220x52（restart_requested 语义
+    零改动）/「返回选角」(400,560) 220x52（+menu_requested → goto_menu）。
+13. **HUD**：+诅咒标签 (612,64) f14 紫（curse_changed 驱动，n=0 隐藏）；+DashButton 内嵌类 ×2
+    (24,1152)/(576,1152) 120x104 STOP（tap<0.3s 且位移 ≤14px → try_dash；冷却 modulate.a=0.35；
+    非 PLAYING 隐藏）；layout_rects 8 → **11**。
 
 ## 9. 工程铁律（全程有效）
 
