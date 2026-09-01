@@ -473,14 +473,14 @@ func _test_dash_edges_v21_v22() -> void:
 func _test_closure_v24() -> void:
 	print("── V24 收尾核对 ──")
 	var version: String = ProjectSettings.get_setting("application/config/version", "")
-	# v1.2.0 授权更新：version 随版本推进 1.1.0 → 1.2.0
-	_check("V24：version=1.2.0（project.godot application/config/version；v1.2.0 授权更新）",
-		version == "1.2.0", version)
+	# v1.3.0 授权更新：version 随版本推进 1.2.0 → 1.3.0
+	_check("V24：version=1.3.0（project.godot application/config/version；v1.3.0 授权更新）",
+		version == "1.3.0", version)
 	var progress_text := _read_text("res://PROGRESS.md")
-	# v1.2.0 授权更新：基线合计 1433 → 1464（pkg7_extra 授权 +3 / 新增 pkg12 20 + 表现面授权 +3；审查对账修正 off-by-one）
-	_check("V24：PROGRESS §7 基线含全 runner 合计 1464（独立实测一致；v1.2.0 授权更新）",
-		not progress_text.is_empty() and progress_text.contains("1464")
-		and progress_text.contains("pkg12 20"))
+	# v1.3.0 授权更新：基线合计 1464 → 1494（pkg12_extra 8 入账 + 新增 pkg13 22；实测对账）
+	_check("V24：PROGRESS §7 基线含全 runner 合计 1494（独立实测一致；v1.3.0 授权更新）",
+		not progress_text.is_empty() and progress_text.contains("1494")
+		and progress_text.contains("pkg13 22"))
 	var a7_text := _read_text("res://docs/analysis/A7_v0.8.0_design.md")
 	_check("V24：A7 设计留痕存在且假设清单含 R8",
 		not a7_text.is_empty() and a7_text.contains("R8"))

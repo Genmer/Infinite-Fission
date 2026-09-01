@@ -1046,7 +1046,7 @@ func _test_v55_dual_baseline() -> void:
 func _test_v56_closure() -> void:
 	print("── V56 收尾 ──")
 	var version: String = ProjectSettings.get_setting("application/config/version", "")
-	var version_ok := version == "1.2.0"
+	var version_ok := version == "1.3.0"          # v1.3.0 授权更新：version 随版本推进
 	var progress := _read_source("res://PROGRESS.md")
 	var progress_ok := (not progress.is_empty()) and progress.contains("1464") \
 		and progress.contains("pkg12 20") and progress.contains("v1.2.0 增量")
