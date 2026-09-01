@@ -18,7 +18,7 @@ scripts/core/    池(ObjectPool+特化池×7)/SpaceGrid/ModifierStack/DamagePipe
 scripts/core/data/    DataRegistry/DataValidator/BalanceTables + resources/*(Resource schema)
 scripts/combat/  weapon 四形态 / projectile / elemental / trait
 scripts/entities/ enemy / player / wave(WaveDirector/EnemySpawner)
-scripts/loop/    GameLoop(状态机+固定帧序) / relic_handler / chip_handler
+scripts/loop/    GameLoop(状态机+固定帧序) / relic_handler / chip_handler / blessing_handler(v0.9.0)
 scripts/ui/      HUD/ShopUI/CardSelectUI/GameOverScreen/PopupManager/DamagePopup
 scripts/cards/   CardGenerator/CardSelectUI   scripts/gamefeel/ 顿帧/震屏/色差/粒子
 tests/           runner(pkg0~pkg7 两段式) / stress(perf/soak) / formula / fixtures
@@ -57,8 +57,9 @@ G=/Users/genmer/Documents/Codes/Tools/godot/Godot.app/Contents/MacOS/Godot
 
 ## 项目特定契约（改动需全量评估，详见 PROGRESS §8）
 
-- EventBus 信号注册表与 DataValidator.EVENT_NAMES **双源镜像**（v0.7.0 = 21 信号），加信号必同步
-- 芯片独立乘区段：仅直击通道注入 chip_entries；**settle_aoe / DOT / 反应不吃芯片 ATK 段**
+- EventBus 信号注册表与 DataValidator.EVENT_NAMES **双源镜像**（v0.9.0 = 23 信号），加信号必同步
+- 芯片独立乘区段：仅直击通道注入 chip_entries；**settle_aoe / DOT / 反应不吃芯片 ATK 段**；
+  赐福 stat 段（ChipHandler.blessing_stats，v0.9.0）在套装 ×1.10 后加和——只加和不参与 ≥2 判定不被放大
 - Boss 掉落芯片 / 商店芯片货架共用 ChipHandler（3 槽、wave 1/10/20 解锁、同 id 唯一）
 - 金币关（w6/16/26）：0.4×血量 rush 敌 + 掉率≥0.5/面值×2 覆写 + 波末按剩余时间比例奖励
 - UI 全量坐标表 720×1280 见 shop_ui.gd / hud.gd 类头；`layout_rects()` 两两无交集是断言口

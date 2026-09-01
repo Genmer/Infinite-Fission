@@ -473,12 +473,14 @@ func _test_dash_edges_v21_v22() -> void:
 func _test_closure_v24() -> void:
 	print("── V24 收尾核对 ──")
 	var version: String = ProjectSettings.get_setting("application/config/version", "")
-	_check("V24：version=0.8.0（project.godot application/config/version）", version == "0.8.0",
-		version)
+	# v0.9.0 授权更新：version 随版本推进 0.8.0 → 0.9.0
+	_check("V24：version=0.9.0（project.godot application/config/version；v0.9.0 授权更新）",
+		version == "0.9.0", version)
 	var progress_text := _read_text("res://PROGRESS.md")
-	_check("V24：PROGRESS §7 基线含全 runner 合计 1257（独立实测一致）",
-		not progress_text.is_empty() and progress_text.contains("1257")
-		and progress_text.contains("pkg8 160"))
+	# v0.9.0 授权更新：基线合计 1257 → 1350（新增 pkg9 59 + pkg7 172→175）
+	_check("V24：PROGRESS §7 基线含全 runner 合计 1350（独立实测一致；v0.9.0 授权更新）",
+		not progress_text.is_empty() and progress_text.contains("1350")
+		and progress_text.contains("pkg9 59"))
 	var a7_text := _read_text("res://docs/analysis/A7_v0.8.0_design.md")
 	_check("V24：A7 设计留痕存在且假设清单含 R8",
 		not a7_text.is_empty() and a7_text.contains("R8"))

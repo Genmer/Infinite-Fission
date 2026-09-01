@@ -1,7 +1,7 @@
 # ⚡ INFINITE FISSION · 开发进度与交接文档（PROGRESS）
 
 > **本文档是跨工具/跨会话交接的唯一入口。新会话/新工具接手后：先读完本文 → 按 §5「下一步行动」顺序执行。**
-> 最后更新：2026-08-29 ｜ 更新人：主控 Agent（ZCode 会话：包 3 自测+修复、内容 .tres、duck 收紧、包 4、集成包两段接力，全部完成；当前在阶段 E 把关）
+> 最后更新：2026-09-01 ｜ 更新人：主控 Agent（ZCode 会话：v0.9.0 波次赐福三选一 + 芯片槽位扩展 6 格，W1~W7 全部完成）
 > 远程仓库：`https://github.com/Genmer/Infinite-Fission.git`（main 分支）
 
 ---
@@ -26,13 +26,15 @@
 | E 审查+测试（并行） | 独立代码审查 + 运行验证（两轮） | ✅ 完成（一轮：1C+3I 修复；二轮：可交付判定，720/720 终验 PASS） |
 | F 交付报告 | 汇总判定+关键决策清单 | ✅ 完成（判定 = 可交付；见 §5.8 与 §4 裁定记录） |
 
-**仓库当前可编译（0 解析错误），回归 836/836 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，另有 pkg6_extra 33 项验收补充 / pkg7 172 项 v0.7.0 增量自测 / pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量自测 / pkg8_extra 31 项验收补充，不计入 836 基线口径；全 runner 合计 1288）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~6.1ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**
-
 **v0.6.0 增量（2026-08-31，T0~T8）：商店（Boss 前夜 w9/w19/w29）/ 金币经济（掉落+磁吸+HUD）/ 武器卡（CardKind.WEAPON）/ 武器门槛词条（required_weapon）/ Boss 弹幕三形态+召唤 / HUD 720×1280 全量重排+波次横幅。数值与裁定真源 = `docs/analysis/A4_v0.6.0_design.md`；自测 = `tests/runner/test_pkg6.gd`（115 项）。提交序：T1 38ad7ef → T4 a18770d → T3 2db7455 → T5 b7984c7 → T2 57b742f → T6 f7d3f8a → T7 cffa4f5 → T8 本笔。**
 
 **v0.7.0 增量（2026-09-01，U1~U15）：芯片系统（ChipData×8 / ChipHandler 3 槽 / 管线 ⑥b 独立乘区段 cap_chip_zone / 商店芯片货架+槽位面板 / Boss 芯片掉落）/ 金币狂欢关（w6/16/26，0.4×血 rush + 掉落覆写 + 波末比例奖励）/ 双 Boss 修复（w10/20/30 composition 清空）/ 召唤独立计数（summon_active_count 闸）/ 附着环 ElementRing + 反应粒子三预设 + 打击感分级 / 反应统计与结算行 / 首件武器保底（weapon_weight_mult ×2）/ 受击红闪 / 文本跳字通道。数值与裁定真源 = `docs/analysis/A6_v0.7.0_design.md`；自测 = `tests/runner/test_pkg7.gd`（172 项；审查后新增槽位门控 2 项 + U11 段武器 id 笔误 W2_smg→W2_gatling 修复后漏计 3 项归位）。提交序：U1 a9573ab → U2 a6377c1 → U3 22465f6 → U12-14 a920214 → U5 cf68ab3 → U4+U7 e74328b → U6 3753072 → U8-10 375dcf9 → U11 f184dac → U15 5dec3f4。**审查后修复批（fix-review）：芯片定价恢复裁定 60/110/180/300（coder 曾擅改卡架同梯度 40/70/120/220——已推翻）；free_slots()=unlocked−equipped 槽位门控真实生效（原为无语义死状态）；heal 预禁用在 maxhp/CHIP_HP 购买后回写；_gold_add_sum 帧缓存试做后回退（帧号失效对同帧 attach 词条路径返回脏数据，pkg6 冻结用例拦截——正确钩子见 §11）；粒子 burst null 守卫恢复；元素环无附着零分配；商店芯片槽满态购买后同步。**
 
 **v0.8.0 增量（2026-08-31，V1~V24）：芯片变体 4 枚（ATK2/ROF2/CRIT2/HP2，chips 8→12）/ 副词条（独立流 seed 4243，条数 {0:50%,1:35%,2:15%}，7 键无放回固定小值，offer 预随所见即所得 + Boss grant roll）/ 套装（主属性同键 ≥2 枚查询时 ×1.10）/ 诅咒运行时（CurseHandler 0~5 层：受伤×(1+0.08n)/掉率+0.15n/max_hp×(1−0.04n)，compute_max_hp 公式唯一真源 + curse_changed 第 22 号信号 + 卡流 cursed 卡同步加层）/ 词条移除与净化（TraitStack peek/detach_last/detach_by_id + is_curse_trait 单源；商店移除 60 金/净化 80 金/深渊契约 +1 层换 120 金，均店限 1）/ 商店 utility 扩容行2 + 三 setter 回写 + dim STOP / 事件系统（WaveDirector w4 起 40% 独立流 seed 777；EventUI 复用 SHOP 态；EventDirector 四事件：血色祭坛/命运赌桌 seed 888/深渊商人/寂静神龛，金币全走 _add_gold 吃 K_gold 文案带「基础值」；排空序冻结 _drain_overlays_after_resume）/ 角色系统（CharacterData×3：信使/重装/学者，registry characters 类目 + 悬空首发武器剔除；MenuScreen 选角卡；start_run 空参读菜单 + 角色感知重排经 _reset_run_state；goto_menu + GameOver 双按钮；xp 三乘子 = 遗物×角色×(1+K_chip)）/ 冲刺（Player try_dash 四门 fail-fast + 0.18s/220px/独立 0.15s 无敌通道 + Shift；HUD DashButton tap 判定 ×2 + 冷却灰显 + 诅咒标签 (612,64) 紫）。数值与裁定真源 = `docs/analysis/A7_v0.8.0_design.md`（含假设清单 R1~R10 与事件面额自拟值表）；自测 = `tests/runner/test_pkg8.gd`（160 项）。提交序：V13 1e76b2b → V14 e2bea0c → V15 c6bdfb5 → V6 105ad9f → V9 fd566d5 → V10/11 2ee5a50 → V1-4 89a9b3e → V17 bdd9a27 → V18/19 98cdc72 → V21/22 2d578ed → V23 ef61d34 → V24 本笔。**
+
+**v0.9.0 增量（2026-09-01，W1~W7）：波次赐福三选一（BlessingHandler seed 999 + BlessingUI 复用 SHOP 态；wave_cleared w>=2 开门，出牌时过滤 slot1 仅 capacity<6 / slot2 仅 capacity<=4 / heal 仅 hp<max_hp；权重表 gold30/heal15/atk25/rof15/attach10/slot1 4/slot2 1 双源镜像 BalanceTables.blessing_weights；金币包 20+3w 基础值 / heal 15%max / atk +4% / rof +3% / attach +5% / 槽位 +1/+2； blessing_granted 第 23 号信号；排空序扩展 升级→赐福→商店→事件；硬上限叠波直调 start_wave 不派发 wave_cleared = 天然无赐福）/ 芯片槽位扩展 3→6（CHIP_SLOT_CAP=6 + bonus_slots 赐福位 + slot_capacity()=mini(unlock+bonus,6)；slot_snapshot 恒 6 格 locked 语义；商店槽位面板 6 槽盒 90x120 + 未解锁灰显）/ stat 三键 Option A（ChipHandler.blessing_stats 在套装 ×1.10 之后加和——只加和不参与 ≥2 判定不被放大，不占 TraitStack 不可 strip，atk 随 ⑥b 段共享 cap_chip_zone）。数值与裁定真源 = `docs/analysis/A8_v0.9.0_design.md`（含 Option A 裁定/时序图/假设清单 H1~H8）；自测 = `tests/runner/test_pkg9.gd`（59 项 G1~G9）。提交序：W1 0578963 → W2 0135114 → W3a f8eaa51 → W3b eb8b4ce → W4 bf2b04e → W6/W7 本笔。授权更新：pkg7（EVENT_NAMES 23 / capacity+bonus 维度 / 快照 6 格 locked / 槽盒 90 宽锚点）、pkg5/pkg6/pkg7_extra（wave_cleared 新订阅夹具排险）、pkg8_extra V24（version/基线推进）。**
+
+**仓库当前可编译（0 解析错误），回归全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，基线口径 836；另有 pkg6_extra 33 项验收补充 / pkg7 175 项 v0.7.0 增量自测（v0.9.0 +3 授权更新）/ pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量自测 / pkg8_extra 31 项验收补充 / pkg9 59 项 v0.9.0 增量自测，不计入 836 基线口径；全 runner 合计 1350）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95 = 5.764ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**
 
 **阶段 E 关键战果（审查/测试发现并修复）：**
 - 一轮审查 1C+3I：重开不清场（残留战场秒杀重生）→ `_clear_battlefield` 清场序 + respawn 1.5s 无敌；GameFeel 订阅晚于 Spawner 清 tags（Boss 击杀打击感永不触发）→ early_bind；Boss 波伴随怪流水锁死 wave_cleared → `_boss_ref` 存活闸；TH_CRIT_SHARD 全武器声明零实现 + 校验器空承诺 → 补 `trait_effect_crit_shard.gd` + check_references ② 落地
@@ -130,11 +132,13 @@
 - 导入：`"$G" --headless --path "<项目根>" --import`
 - 跑测试：`"$G" --headless --path "<项目根>" -s tests/runner/test_pkg0.gd`（pkg1/pkg2/pkg3 同理）
 - 注意：`-s` 模式下入口脚本编译早于 autoload 注册，测试用「入口引导 + 运行时 load 用例体」两段式（pkg0~pkg3 都是这个模式，新测试照抄）
-- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836 基线口径；另有 pkg6_extra 33 项验收补充 / pkg7 172 项 v0.7.0 增量 / pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量，独立 runner；全 runner 合计 1257 全 PASS）**
+- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836 基线口径；另有 pkg6_extra 33 项验收补充 / pkg7 175 项 v0.7.0 增量（v0.9.0 +3 授权更新）/ pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量 / pkg8_extra 31 项验收补充 / pkg9 59 项 v0.9.0 增量，独立 runner；全 runner 合计 1350 全 PASS）**
 - v0.6.0 压力复测：**P95 = 5.559ms**（avg 2.191 / P50 1.791 / P99 6.968，判定线 8.3ms PASS）
 - v0.7.0 压力复测：**P95 = 5.714ms**（avg 2.302 / P50 1.912 / P99 6.515，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0）
 - v0.8.0 压力复测：**P95 = 5.924ms**（avg 2.419 / P50 1.998 / P99 7.144 / MAX 12.625，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
+- v0.9.0 压力复测：**P95 = 5.764ms**（avg 2.348 / P50 1.953 / P99 6.813 / MAX 11.626，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
 - v0.8.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.735ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.0→182.6 MB 增幅 0.88% < 3%；0 ERROR）
+- v0.9.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.810ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.4→183.0 MB 增幅 0.88% < 3%；0 ERROR；终局波次 7）
 - 压力/soak：`tests/stress/test_perf_500p100e.gd`（AC-01.2，headless 逻辑帧口径）与 `tests/stress/test_soak.gd`（AC-14.1，SOAK_FRAMES 常量控时长；10 分钟版预计 ~12 分钟实际，长跑须后台+轮询防会话超时）
 
 ## 8. 冻结契约速查（跨包接口，改动需全包评估）
@@ -261,6 +265,36 @@ pkg0（ADD 池计数 14）/pkg4（池×7）/pkg5（池×7 + 黑市桥接契约�
 13. **HUD**：+诅咒标签 (612,64) f14 紫（curse_changed 驱动，n=0 隐藏）；+DashButton 内嵌类 ×2
     (24,1152)/(576,1152) 120x104 STOP（tap<0.3s 且位移 ≤14px → try_dash；冷却 modulate.a=0.35；
     非 PLAYING 隐藏）；layout_rects 8 → **11**。
+
+### 8.4 v0.9.0 增量契约（详见 A8_v0.9.0_design.md，假设清单 H1~H8）
+
+1. **EventBus +1 信号**：`blessing_granted(kind:StringName, wave:int)` + emit 包装；
+   DataValidator.EVENT_NAMES 22 → **23**（双源镜像同步）。
+2. **BlessingHandler（新类）**：seed 999 独立流；BLESSING_WEIGHTS{gold30/heal15/atk25/rof15/
+   attach10/slot1 4/slot2 1}≡BalanceTables.blessing_weights 双源镜像（.tres 不改）；
+   `gold_amount(w)=20+3w` / `available_pool(w)`（出牌时过滤：slot1 仅 capacity<6、slot2 仅
+   capacity<=4、heal 仅 hp<max_hp，gold/atk/rof/attach 恒入）/ `roll_offers(w)`（加权无放回
+   恰 3 项 {kind,label,detail}）/ `apply(kind,wave)->bool`（slot 臂 got<=0 → false 不派发）/
+   `count_skip()`（仅 DebugStats 遥测）。GameLoop 组装序 = presentation 段 popup_manager/hud
+   之后；`EventBus.wave_cleared` 订阅固定在金币关之后（连接序=派发序）。
+3. **BlessingUI（新类）**：复用 SHOP 态（TRANSITIONS 零改动）；标题 y300 f26 / 描述 (60,360)
+   600x48 / 三选项 (60,440)/(60,564)/(60,688) 600x110 / 跳过 (60,820) 600x70；
+   layout_rects 4 项两两无交集；dim STOP；GAME_OVER/MENU 强制收起；空 option 防御 disabled+"-"。
+4. **ChipHandler**：+CHIP_SLOT_CAP=6（MAX_CHIP_SLOTS=3 保留）；+bonus_slots / blessing_stats；
+   +`slot_capacity()=mini(unlocked_slots+bonus_slots, 6)` / `add_bonus_slots(n)->实际增量`
+   （负值钳 0）/ `add_blessing_stat(key, delta)` / `invalidate_panels()`；free_slots 改
+   `slot_capacity()−equipped`；stat_bonus 套装 ×1.10 **之后**加 blessing_stats 加和（Option A
+   ——只加和不参与 ≥2 判定不被放大）；slot_snapshot 恒 **6 格**（容量外 `{"locked":true}`）；
+   reset_run 归零 bonus_slots+blessing_stats。
+5. **GameLoop**：+blessing_handler/blessing_ui/_deferred_blessing；四方法
+   `_on_wave_cleared_blessing(w>=2 才弹)` / `_open_blessing_flow`（四重守卫：非 PLAYING ∥
+   shop.is_open ∥ event.is_open ∥ blessing.is_open → 暂存）/ `_on_blessing_choice` /
+   `_on_blessing_skip` + `_close_blessing`；_drain_overlays_after_resume 排空序扩展
+   **升级→赐福→商店→事件**；_reset_run_state 追加 blessing_ui.close() + 暂存清零 +
+   blessing_handler.reset_run()。硬上限叠波直调 start_wave 不派发 wave_cleared = 天然无赐福。
+6. **ShopUI**：SLOT_SIZE 188x120 → **90x120**；SLOT_POSITIONS 3 → **6 项**（8/105/205/305/405/505,
+   36）；_refresh_slots + locked 分支（"未解锁" 灰显 0.45,0.45,0.5）；面板 (60,884) 600x168
+   与离开 (60,1064) 不动；layout_rects 仍 14 项数值不变（槽盒嵌套不入列）。
 
 ## 9. 工程铁律（全程有效）
 
