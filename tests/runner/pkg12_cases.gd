@@ -50,6 +50,9 @@ func run(p_tree: SceneTree) -> void:
 	_test_v51_shield_runtime()                    # V51
 	_test_v52_shield_ring()                       # V52
 	_test_v53_presentation()                      # V53
+	_test_v54_pipeline_veto()                     # V54
+	_test_v55_dual_baseline()                     # V55
+	_test_v56_closure()                           # V56
 	_teardown_world()
 	_summary()
 
@@ -984,3 +987,72 @@ func _test_v53_presentation() -> void:
 	_check("V53：表现面——六键 scene_id/预设/feel 档全遍历防漏键回退 + HUD 六槽 clamp(0,5) + 结算行六名",
 		all_ok and hud_ok and text_ok,
 		"keys=%s hud=%s text=%s | %s" % [str(all_ok), str(hud_ok), str(text_ok), text])
+
+
+# ── V54 管线 veto ─────────────────────────────────────────────────
+func _test_v54_pipeline_veto() -> void:
+	print("── V54 管线 veto ──")
+	var src := _read_source("res://scripts/core/damage/damage_pipeline.gd")
+	var lower := src.to_lower()
+	_check("V54：damage_pipeline.gd 零改动守卫——源码小写不含 shield 字样（v1.2.0 一笔不碰）",
+		(not lower.is_empty()) and not lower.contains("shield"))
+
+
+# ── V55 双基线 ────────────────────────────────────────────────────
+# 含 TIDE 卡池固定 seed 新基线快照（ELE_TIDE 入 ELEM 池后 seed 20260901 ×5 批 15 张实测序列）
+const POOL_BASELINE := "AFF_MOVE_SWIFT,AFF_CRIT_DMG,MEC_KILL_BLAST,SYN_LOWHP_FURY,SYN_BURN_DEVOUR,AFF_MOVE_SWIFT,SYN_BOUNCE_SPEC,AFF_AREA,AFF_PROJ_SPD,AFF_CRIT_DMG,SYN_BURN_DEVOUR,AFF_MULTI,AFF_CRIT_RATE,AFF_CRIT_DMG,MEC_SHIELD"
+
+
+func _test_v55_dual_baseline() -> void:
+	print("── V55 双基线 ──")
+	# a) 无 TIDE 恒等锚（pkg11 数值不漂）：KIN 直击 = 100；无 TIDE 无 WAT 附着
+	var e := _spawn_enemy(_make_enemy_data("V55_A", 2000.0), Vector2(120, 900))
+	_sys.register_host(e)
+	_fire_at(_spawn_proj(GameConst.Element.KIN, e.global_position))
+	var r := _last_result()
+	var st: ElementalState = e.get("elemental")
+	var base_ok: bool = r != null and st != null \
+		and is_equal_approx(r.final_value, 100.0) \
+		and is_equal_approx(st.gauges[GameConst.Element.WAT], 0.0)
+	# b) 含 TIDE 卡池固定 seed 新基线快照（ELE_TIDE 入 ELEM 池 → 序列变化，落常量锚定）
+	var reg := DataRegistry.new()
+	reg.load_all("res://data/manifest.cfg")
+	var gen := CardGenerator.new()                # RefCounted：不入树不 free
+	gen.setup(reg)
+	gen.rng.seed = 20260901
+	var src_stub := GDScript.new()
+	src_stub.source_code = "extends Node2D\nvar weapon_slots: Array = []\n" \
+		+ "var unlocked_slots: int = 0\n"
+	src_stub.reload()
+	var player_stub: Node2D = src_stub.new()
+	tree.get_root().add_child(player_stub)
+	var seq: Array[String] = []
+	for _batch in range(5):
+		for card in gen.generate_candidates({"player": player_stub, "wave": 3}):
+			seq.append(String(card.get("id", &"FALLBACK")))
+	var sequence := ",".join(seq)
+	if POOL_BASELINE == "":
+		print("V55_PROBE baseline=", sequence)    # 首跑探测：将实测序列落 POOL_BASELINE 常量
+	var pool_ok: bool = reg.traits.has(&"ELE_TIDE") \
+		and reg.trait_ids_by_pool(GameConst.PoolClass.ELEM).has(&"ELE_TIDE") \
+		and sequence == POOL_BASELINE
+	player_stub.free()
+	_check("V55：双基线——无 TIDE 恒等（KIN 100 / WAT 槽 0）+ 含 TIDE 卡池 seed 20260901 新基线快照锁定",
+		base_ok and pool_ok,
+		"base=%s pool=%s seq=%s" % [str(base_ok), str(pool_ok), sequence])
+
+
+# ── V56 收尾 ──────────────────────────────────────────────────────
+func _test_v56_closure() -> void:
+	print("── V56 收尾 ──")
+	var version: String = ProjectSettings.get_setting("application/config/version", "")
+	var version_ok := version == "1.2.0"
+	var progress := _read_source("res://PROGRESS.md")
+	var progress_ok := (not progress.is_empty()) and progress.contains("1463") \
+		and progress.contains("pkg12 19") and progress.contains("v1.2.0 增量")
+	var a11 := _read_source("res://docs/analysis/A11_v1.2.0_design.md")
+	var a11_ok := (not a11.is_empty()) and a11.contains("H8") \
+		and a11.contains("RXN_WAT_ICE") and a11.contains("SHIELD_COUNTER")
+	_check("V56：收尾——version=1.2.0 + PROGRESS 对账（1463/pkg12 19/v1.2.0 增量）+ A11 留痕含假设清单与克环",
+		version_ok and progress_ok and a11_ok,
+		"version=%s progress=%s a11=%s" % [version, str(progress_ok), str(a11_ok)])
