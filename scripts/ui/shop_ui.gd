@@ -4,7 +4,8 @@
 #   武器架 (60,478) 600x88 / 芯片架 0-1 (60,584)/(368,584) 292x96 font14 /
 #   utility 行1×3 (60,696)/(260,696)/(460,696) 180x84 / utility 行2×3 (60,790)/(260,790)/(460,790)
 #   180x84（移除词条 60 / 净化 80 / 深渊契约 120 金，均店限 1）/ 芯片槽位面板 (60,884) 600x168
-#  （底板+标题+3 槽盒 188x120 @(8,36)/(206,36)/(404,36)）/ 离开 (60,1064) 600x80。
+#  （底板+标题+v0.9.0 6 槽盒 90x120 @(8,36)/(105,36)/(205,36)/(305,36)/(405,36)/(505,36)，A8）/
+#   离开 (60,1064) 600x80。
 #   全部相邻间隙 ≥10px；layout_rects() 断言两两无交集（v0.8.0 11→14 项）。
 # 货架（A4 §2 定价真源 + A6 §4 芯片梯度）：明码卡 3 张（白40/蓝70/紫120/金220；黑市金卡 260）
 # + 武器架 1 张（100，无可用武器则空架 disabled）+ 芯片架 2 张（price_for_rarity 同卡架梯度）
@@ -48,8 +49,10 @@ const UTIL_POSITIONS: Array[Vector2] = [Vector2(60.0, 696.0), Vector2(260.0, 696
 const UTIL2_POSITIONS: Array[Vector2] = [Vector2(60.0, 790.0), Vector2(260.0, 790.0), Vector2(460.0, 790.0)]
 const CHIP_PANEL_POS := Vector2(60.0, 884.0)
 const CHIP_PANEL_SIZE := Vector2(600.0, 168.0)
-const SLOT_SIZE := Vector2(188.0, 120.0)
-const SLOT_POSITIONS: Array[Vector2] = [Vector2(8.0, 36.0), Vector2(206.0, 36.0), Vector2(404.0, 36.0)]
+const SLOT_SIZE := Vector2(90.0, 120.0)
+# v0.9.0（A8）：6 槽盒（6×90+5×10=590≤600 面板内宽；赐福扩容后 snapshot 恒 6 格）
+const SLOT_POSITIONS: Array[Vector2] = [Vector2(8.0, 36.0), Vector2(105.0, 36.0), Vector2(205.0, 36.0),
+	Vector2(305.0, 36.0), Vector2(405.0, 36.0), Vector2(505.0, 36.0)]
 const LEAVE_POS := Vector2(60.0, 1064.0)
 const LEAVE_SIZE := Vector2(600.0, 80.0)
 const RARITY_NAMES: Array[String] = ["白", "蓝", "紫", "金"]
@@ -339,10 +342,15 @@ func _refresh_shelf() -> void:
 
 
 func _refresh_slots() -> void:
-	# 槽位面板 3 标签：已装备 "[金] 名称 value"；空槽 "空槽" 占位
+	# 槽位面板 6 标签（v0.9.0）：已装备 "[金] 名称 value"；容量内空槽 "空槽" 占位；
+	# 容量外 locked（赐福未扩容段）"未解锁" 灰显
 	for i in range(_slot_labels.size()):
 		var label := _slot_labels[i]
 		var slot: Dictionary = _chip_slots[i] if i < _chip_slots.size() else {}
+		if bool(slot.get("locked", false)):      # v0.9.0：容量外 locked 分支（先于空槽判定）
+			label.text = "未解锁"
+			label.self_modulate = Color(0.45, 0.45, 0.5)
+			continue
 		if slot.is_empty():
 			label.text = "空槽"
 			label.self_modulate = Color(0.6, 0.6, 0.65)
@@ -439,7 +447,7 @@ func _build_ui() -> void:
 		var util2: StringName = u2[0]
 		btn2.pressed.connect(func() -> void: utility_requested.emit(util2))
 		_util_buttons[util2] = btn2
-	# 芯片槽位面板（600x168 @ y=884：底板 + 标题 + 3 槽盒 188x120）
+	# 芯片槽位面板（600x168 @ y=884：底板 + 标题 + v0.9.0 6 槽盒 90x120，循环随 SLOT_POSITIONS 自动 6）
 	var panel := Panel.new()
 	panel.name = "ChipPanel"
 	panel.position = CHIP_PANEL_POS

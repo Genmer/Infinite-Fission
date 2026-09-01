@@ -798,19 +798,23 @@ func _test_shop_chips() -> void:
 			if i != j and r1.intersects(rects[j] as Rect2):
 				pairwise = false
 	_check("layout_rects：两两无交集 + 全部屏内（720×1280）", pairwise)
-	# 全量重排坐标锚点抽查（v0.8.0：离开下移 (60,1064)）
-	_check("坐标表：标题 y=96 / 离开 (60,1064,600x80)",
+	# 全量重排坐标锚点抽查（v0.8.0：离开下移 (60,1064)；v0.9.0 授权更新：槽盒 188→90 宽）
+	_check("坐标表：标题 y=96 / 离开 (60,1064,600x80) / 6 槽盒 90 宽（v0.9.0 授权更新）",
 		is_equal_approx(shop._title.position.y, 96.0)
 		and is_equal_approx((shop._card_buttons[3] as Button).position.y, 478.0)
 		and is_equal_approx((shop._chip_buttons[0] as Button).position.y, 584.0)
 		and is_equal_approx((shop._util_buttons[&"heal"] as Button).size.y, 84.0)
-		and is_equal_approx((shop._slot_labels[0] as Label).get_parent().size.x, 188.0))
-	# 槽位面板注入：空槽占位 / 已装备显示
+		and is_equal_approx((shop._slot_labels[0] as Label).get_parent().size.x, 90.0)
+		and shop._slot_labels.size() == 6)
+	# 槽位面板注入：空槽占位 / 已装备显示（v0.9.0：恒 6 格 + 容量外 locked 灰显）
 	shop.set_chip_slots([{"chip_id": &"CHIP_ATK", "display_name": "攻击核心",
-		"stat_key": &"atk_pct", "rarity": 3, "value_text": "+35%"}, {}, {}])
-	_check("set_chip_slots：已装备 [金]+value / 空槽占位",
+		"stat_key": &"atk_pct", "rarity": 3, "value_text": "+35%"}, {}, {},
+		{"locked": true}, {"locked": true}, {"locked": true}])
+	_check("set_chip_slots：已装备 [金]+value / 空槽占位 / locked 未解锁灰显（v0.9.0 授权更新）",
 		String((shop._slot_labels[0] as Label).text).contains("攻击核心")
-		and String((shop._slot_labels[1] as Label).text) == "空槽")
+		and String((shop._slot_labels[1] as Label).text) == "空槽"
+		and String((shop._slot_labels[3] as Label).text) == "未解锁"
+		and (shop._slot_labels[3] as Label).self_modulate == Color(0.45, 0.45, 0.5))
 	# 芯片货架注入 + 四态（空架 / 槽满 / 余额不足 / 可购）
 	shop.open(12, false, [], {}, 1000)
 	shop.set_chip_shelf([
