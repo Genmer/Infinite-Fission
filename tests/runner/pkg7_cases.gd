@@ -770,10 +770,10 @@ func _popup_text_seen(p_manager: PopupManager, p_text: String) -> bool:
 func _test_shop_chips() -> void:
 	print("── U4+U7 商店芯片 ──")
 	var shop := _gl.shop_ui
-	# 布局契约：rects 两两无交集 + 屏内
+	# 布局契约：rects 两两无交集 + 屏内（v0.8.0 utility 行2 → 14 项授权更新）
 	var rects := shop.layout_rects()
-	_check("layout_rects：10 项（卡3+武器+芯片2+utility3+面板+离开）", rects.size() == 11,
-		str(rects.size()))
+	_check("layout_rects：14 项（卡3+武器+芯片2+utility6+面板+离开；v0.8.0 授权更新）",
+		rects.size() == 14, str(rects.size()))
 	var pairwise := true
 	for i in range(rects.size()):
 		var r1: Rect2 = rects[i]
@@ -784,8 +784,8 @@ func _test_shop_chips() -> void:
 			if i != j and r1.intersects(rects[j] as Rect2):
 				pairwise = false
 	_check("layout_rects：两两无交集 + 全部屏内（720×1280）", pairwise)
-	# 全量重排坐标锚点抽查
-	_check("坐标表：标题 y=96 / 离开 (60,980,600x80)",
+	# 全量重排坐标锚点抽查（v0.8.0：离开下移 (60,1064)）
+	_check("坐标表：标题 y=96 / 离开 (60,1064,600x80)",
 		is_equal_approx(shop._title.position.y, 96.0)
 		and is_equal_approx((shop._card_buttons[3] as Button).position.y, 478.0)
 		and is_equal_approx((shop._chip_buttons[0] as Button).position.y, 584.0)

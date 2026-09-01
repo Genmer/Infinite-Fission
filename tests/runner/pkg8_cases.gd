@@ -22,6 +22,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_v15_set_bonus()                         # V15 套装
 	_test_v6_curse()                              # V6 诅咒运行时
 	_test_v9_detach()                             # V9 词条移除/净化
+	_test_v10_v11_shop_expand()                   # V10/V11 商店扩容
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -415,14 +416,22 @@ func _test_v9_detach() -> void:
 	_gl._on_shop_utility(&"purify")
 	_check("purify：GAMBLER_CURSE 词条摘除（80 金）",
 		_gl.gold == g1 - 80 and not stack_has_id(weapon.trait_stack, &"GAMBLER_CURSE"))
-	# purify：无词条诅咒 → 深渊层 −1
+	# purify：无词条诅咒 → 深渊层 −1（每店限 1 → 重开店刷新限购位）
+	_gl.shop_ui.close()
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+	_gl.change_state(GameConst.GameStatus.SHOP)
+	_gl.shop_ui.open(9, false, [], {}, 1000)
 	_gl.curse_handler.reset_run()
 	_gl.curse_handler.add_curse(2)
 	var g2: int = _gl.gold
 	_gl._on_shop_utility(&"purify")
 	_check("purify：深渊层 −1（80 金）",
 		_gl.gold == g2 - 80 and _gl.curse_handler.curse_count == 1)
-	# purify 拒绝：皆无
+	# purify 拒绝：皆无（重开店刷新限购位）
+	_gl.shop_ui.close()
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+	_gl.change_state(GameConst.GameStatus.SHOP)
+	_gl.shop_ui.open(9, false, [], {}, 1000)
 	_gl.curse_handler.reset_run()
 	var g3: int = _gl.gold
 	_gl._on_shop_utility(&"purify")
@@ -444,6 +453,87 @@ func stack_has_id(p_stack: TraitStack, p_id: StringName) -> bool:
 		if (tb as TraitBase).data.id == p_id:
 			return true
 	return false
+
+
+# ══ V10/V11：商店扩容（utility 行2 / 三 setter / contract / dim STOP） ══════
+func _test_v10_v11_shop_expand() -> void:
+	print("── V10/V11 商店扩容 ──")
+	var shop := _gl.shop_ui
+	var c := _gl.curse_handler
+	# 布局常量冻结（行2 y790 / 面板 (60,884) / 离开 (60,1064)）
+	_check("行2 坐标：(60,790)/(260,790)/(460,790) 180x84",
+		ShopUI.UTIL2_POSITIONS[0] == Vector2(60.0, 790.0)
+		and ShopUI.UTIL2_POSITIONS[2] == Vector2(460.0, 790.0)
+		and ShopUI.UTIL_SIZE == Vector2(180.0, 84.0))
+	_check("面板/离开下移：CHIP_PANEL (60,884) / LEAVE (60,1064)",
+		ShopUI.CHIP_PANEL_POS == Vector2(60.0, 884.0)
+		and ShopUI.LEAVE_POS == Vector2(60.0, 1064.0))
+	_check("定价冻结：STRIP 60 / PURIFY 80 / CONTRACT 120",
+		ShopUI.STRIP_PRICE == 60 and ShopUI.PURIFY_PRICE == 80 and ShopUI.CONTRACT_GOLD == 120)
+	_check("行2 按钮注册 + 信号枚举（strip/purify/contract）",
+		shop._util_buttons.has(&"strip") and shop._util_buttons.has(&"purify")
+		and shop._util_buttons.has(&"contract"))
+	# 三 setter 回写 + shelf_state 限购位
+	_gl.start_run()
+	_gl.change_state(GameConst.GameStatus.SHOP)
+	shop.open(9, false, [], {}, 0)
+	_gl.gold = 1000
+	var st0: Dictionary = shop.shelf_state()
+	_check("shelf_state 增键 strip_used/purify_used/contract_used（初始 false）",
+		not bool(st0["strip_used"]) and not bool(st0["purify_used"])
+		and not bool(st0["contract_used"]))
+	# contract：免费 +1 层换 120 金（基础值）
+	c.reset_run()
+	var gold0: int = _gl.gold
+	_gl._on_shop_utility(&"contract")
+	_check("contract：+1 层（0→1）+ 120 金入账 + 限购位",
+		c.curse_count == 1 and _gl.gold == gold0 + 120
+		and bool(shop.shelf_state()["contract_used"]))
+	# contract 二次拒绝（每店限 1）
+	var gold1: int = _gl.gold
+	_gl._on_shop_utility(&"contract")
+	_check("contract：每店限 1 → 拒绝", _gl.gold == gold1 and c.curse_count == 1)
+	# 满层禁用回写（contract 已购 → 重开店刷新限购位）
+	shop.close()
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+	_gl.change_state(GameConst.GameStatus.SHOP)
+	shop.open(9, false, [], {}, 1000)             # 余额快照 1000（setter 可购性判据）
+	c.reset_run()
+	c.add_curse(5)
+	_gl._refresh_shop_availability()
+	_check("contract setter：满 5 层 → disabled + （诅咒已满）",
+		(shop._util_buttons[&"contract"] as Button).disabled
+		and String((shop._util_buttons[&"contract"] as Button).text).contains("诅咒已满"))
+	# strip setter：无可移除 → disabled；有非诅咒词条 → enabled + 预览名
+	var weapon := _gl.player.weapon_slots[0]
+	weapon.trait_stack.clear()
+	c.reset_run()
+	_gl._refresh_shop_availability()
+	_check("strip setter：空栈 → disabled + （无可移除）",
+		(shop._util_buttons[&"strip"] as Button).disabled
+		and String((shop._util_buttons[&"strip"] as Button).text).contains("无可移除"))
+	var preview_data := TraitData.new()
+	preview_data.id = &"TEST_PREVIEW"
+	preview_data.display_name = "预览词条"
+	preview_data.pool = GameConst.PoolClass.ADD
+	preview_data.pool_id = &"add_atk"
+	preview_data.value = 0.2
+	preview_data.stack_max = 99
+	weapon.attach_trait(preview_data)
+	_gl._refresh_shop_availability()
+	_check("strip setter：可移除 → enabled + 文案带预览名",
+		not (shop._util_buttons[&"strip"] as Button).disabled
+		and String((shop._util_buttons[&"strip"] as Button).text).contains("预览词条"))
+	# purify setter：无诅咒 → disabled
+	c.reset_run()
+	weapon.trait_stack.clear()
+	_gl._refresh_shop_availability()
+	_check("purify setter：无词条无深渊层 → disabled + （无诅咒）",
+		(shop._util_buttons[&"purify"] as Button).disabled
+		and String((shop._util_buttons[&"purify"] as Button).text).contains("无诅咒"))
+	# 购买后回写联动（卡架 0 购买 → 余额变动触发 refresh 不崩）
+	shop.close()
+	_gl.change_state(GameConst.GameStatus.PLAYING)
 
 
 func _roll_substats_snapshot(p_h: ChipHandler) -> Array:

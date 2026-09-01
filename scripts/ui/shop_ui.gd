@@ -1,14 +1,18 @@
 # scripts/ui/shop_ui.gd
-# v0.6.0 ShopUI（A4 §1/§2）→ v0.7.0 全量重排 720×1280 坐标表（A6 §4）：
-#   标题 y96（TOP_WIDE 居中 font28）/ 卡架 0-2 (60,160)/(60,266)/(60,372) 600x96 /
+# v0.6.0 ShopUI（A4 §1/§2）→ v0.7.0 全量重排 720×1280 坐标表（A6 §4）→ v0.8.0 utility 扩容
+#（A7 §V10/V11）：标题 y96（TOP_WIDE 居中 font28）/ 卡架 0-2 (60,160)/(60,266)/(60,372) 600x96 /
 #   武器架 (60,478) 600x88 / 芯片架 0-1 (60,584)/(368,584) 292x96 font14 /
-#   utility×3 (60,696)/(260,696)/(460,696) 180x84 / 芯片槽位面板 (60,796) 600x168
-#  （底板+标题+3 槽盒 188x120 @(8,36)/(206,36)/(404,36)）/ 离开 (60,980) 600x80。
-#   全部相邻间隙 ≥10px；layout_rects() 断言两两无交集。
+#   utility 行1×3 (60,696)/(260,696)/(460,696) 180x84 / utility 行2×3 (60,790)/(260,790)/(460,790)
+#   180x84（移除词条 60 / 净化 80 / 深渊契约 120 金，均店限 1）/ 芯片槽位面板 (60,884) 600x168
+#  （底板+标题+3 槽盒 188x120 @(8,36)/(206,36)/(404,36)）/ 离开 (60,1064) 600x80。
+#   全部相邻间隙 ≥10px；layout_rects() 断言两两无交集（v0.8.0 11→14 项）。
 # 货架（A4 §2 定价真源 + A6 §4 芯片梯度）：明码卡 3 张（白40/蓝70/紫120/金220；黑市金卡 260）
 # + 武器架 1 张（100，无可用武器则空架 disabled）+ 芯片架 2 张（price_for_rarity 同卡架梯度）
-# + utility 三项（重随券 30 每店限 1 / 回复 30%max_hp 50 / max_hp+10 80 每店限 1）+ 离开按钮。
+# + utility 六项（重随券 30 每店限 1 / 回复 30%max_hp 50 / max_hp+10 80 每店限 1 /
+#   移除词条 60 / 净化 80 / 契约换金 120）+ 离开按钮。
 # 每项单次购买（购后 disabled+"（已购）"）；余额不足 disabled（refresh_gold 自刷重算）。
+# v0.8.0：dim mouse_filter IGNORE→STOP（挡 HUD 冲刺键）；strip/purify/contract 可购性由
+# GameLoop._refresh_shop_availability 回写（三 setter）。
 # 信号 → GameLoop 仲裁（先验证→apply→扣款，任一失败静默拒绝不扣款）。
 class_name ShopUI
 extends CanvasLayer
@@ -40,11 +44,13 @@ const CHIP_SIZE := Vector2(292.0, 96.0)
 const CHIP_POSITIONS: Array[Vector2] = [Vector2(60.0, 584.0), Vector2(368.0, 584.0)]
 const UTIL_SIZE := Vector2(180.0, 84.0)
 const UTIL_POSITIONS: Array[Vector2] = [Vector2(60.0, 696.0), Vector2(260.0, 696.0), Vector2(460.0, 696.0)]
-const CHIP_PANEL_POS := Vector2(60.0, 796.0)
+# v0.8.0 V10/V11：utility 行2（strip/purify/contract）+ 面板/离开下移
+const UTIL2_POSITIONS: Array[Vector2] = [Vector2(60.0, 790.0), Vector2(260.0, 790.0), Vector2(460.0, 790.0)]
+const CHIP_PANEL_POS := Vector2(60.0, 884.0)
 const CHIP_PANEL_SIZE := Vector2(600.0, 168.0)
 const SLOT_SIZE := Vector2(188.0, 120.0)
 const SLOT_POSITIONS: Array[Vector2] = [Vector2(8.0, 36.0), Vector2(206.0, 36.0), Vector2(404.0, 36.0)]
-const LEAVE_POS := Vector2(60.0, 980.0)
+const LEAVE_POS := Vector2(60.0, 1064.0)
 const LEAVE_SIZE := Vector2(600.0, 80.0)
 const RARITY_NAMES: Array[String] = ["白", "蓝", "紫", "金"]
 
@@ -64,6 +70,13 @@ var _chip_slots: Array[Dictionary] = []       # 槽位面板快照（set_chip_sl
 var _purchased: Array[bool] = [false, false, false, false, false, false]   # v0.7.0 扩 0~5
 var _reroll_used: bool = false                # 重随券每店限 1
 var _maxhp_used: bool = false                 # max_hp+10 每店限 1
+var _strip_used: bool = false                 # v0.8.0 移除词条每店限 1
+var _purify_used: bool = false                # v0.8.0 净化每店限 1
+var _contract_used: bool = false              # v0.8.0 深渊契约每店限 1
+var _strip_available: bool = false            # v0.8.0 回写可购性（GameLoop._refresh_shop_availability）
+var _purify_available: bool = false
+var _contract_available: bool = false
+var _strip_preview: String = ""               # v0.8.0：strip 预览词条名（文案带名）
 var _black_market: bool = false
 var _wave: int = 0
 var _gold: int = 0                            # 最近一次余额（refresh_gold 同步）
@@ -89,6 +102,9 @@ func open(p_wave: int, p_black_market: bool, p_cards: Array[Dictionary],
 	_purchased = [false, false, false, false, false, false]
 	_reroll_used = false
 	_maxhp_used = false
+	_strip_used = false                          # v0.8.0 三限购位每店复位
+	_purify_used = false
+	_contract_used = false
 	_chip_offers = []
 	_chip_free_slots = 0
 	_root.visible = true
@@ -141,6 +157,26 @@ func set_player_full_hp(p_full: bool) -> void:
 	_refresh_shelf()
 
 
+# ── v0.8.0 V10/V11：utility 扩容三 setter（GameLoop._refresh_shop_availability 回写口） ──
+func set_strip_available(p_ok: bool, p_preview: String = "") -> void:
+	# 移除词条可购性 + 预览词条名（p_preview 为空 → 不带名）
+	_strip_available = p_ok
+	_strip_preview = p_preview
+	_refresh_shelf()
+
+
+func set_purify_available(p_ok: bool) -> void:
+	# 净化可购性（主武器栈含 GAMBLER_CURSE 或深渊层 >0）
+	_purify_available = p_ok
+	_refresh_shelf()
+
+
+func set_contract_available(p_ok: bool) -> void:
+	# 深渊契约可购性（诅咒满 5 层禁用）
+	_contract_available = p_ok
+	_refresh_shelf()
+
+
 func shelf_state() -> Dictionary:
 	# 测试观测口（当前货架/已购位/限购位/黑市标记/波号/余额 + v0.7.0 芯片段）
 	var purchased_copy: Array[bool] = []
@@ -157,6 +193,9 @@ func shelf_state() -> Dictionary:
 		"purchased": purchased_copy,
 		"reroll_used": _reroll_used,
 		"maxhp_used": _maxhp_used,
+		"strip_used": _strip_used,
+		"purify_used": _purify_used,
+		"contract_used": _contract_used,
 		"gold": _gold,
 		"chips": _chip_offers.duplicate(),
 		"chip_purchased": chip_purchased,
@@ -175,11 +214,17 @@ func mark_purchased(p_index: int) -> void:
 
 
 func mark_utility_used(p_util: StringName) -> void:
-	# GameLoop utility 成功后调用（重随/maxhp 每店限 1）
+	# GameLoop utility 成功后调用（重随/maxhp/strip/purify/contract 每店限 1）
 	if p_util == &"reroll":
 		_reroll_used = true
 	elif p_util == &"maxhp":
 		_maxhp_used = true
+	elif p_util == &"strip":
+		_strip_used = true
+	elif p_util == &"purify":
+		_purify_used = true
+	elif p_util == &"contract":
+		_contract_used = true
 	_refresh_shelf()
 
 
@@ -201,9 +246,9 @@ func price_for(p_index: int) -> int:
 
 
 func layout_rects() -> Array[Rect2]:
-	# v0.7.0 布局契约断言口：货架/utility/面板/离开占位矩形（两两 intersects()==false；
-	# 相邻间隙 ≥10px）。标题为 TOP_WIDE 覆盖层不入列（同 HUD 横幅口径）；
-	# 槽盒嵌套于面板矩形内不入列（同 HUD HP 文本口径）。
+	# v0.8.0 布局契约断言口（11→14 项，pkg7:774 授权更新）：货架/utility×6/面板/离开占位
+	# 矩形（两两 intersects()==false；相邻间隙 ≥10px）。标题为 TOP_WIDE 覆盖层不入列
+	#（同 HUD 横幅口径）；槽盒嵌套于面板矩形内不入列（同 HUD HP 文本口径）。
 	var out: Array[Rect2] = []
 	for pos in CARD_POSITIONS:
 		out.append(Rect2(pos, CARD_SIZE))
@@ -211,6 +256,8 @@ func layout_rects() -> Array[Rect2]:
 	for pos in CHIP_POSITIONS:
 		out.append(Rect2(pos, CHIP_SIZE))
 	for pos in UTIL_POSITIONS:
+		out.append(Rect2(pos, UTIL_SIZE))
+	for pos in UTIL2_POSITIONS:
 		out.append(Rect2(pos, UTIL_SIZE))
 	out.append(Rect2(CHIP_PANEL_POS, CHIP_PANEL_SIZE))
 	out.append(Rect2(LEAVE_POS, LEAVE_SIZE))
@@ -276,6 +323,19 @@ func _refresh_shelf() -> void:
 	_util_text(heal_btn, &"heal", HEAL_PRICE, "（满血）" if _player_full_hp else "")
 	maxhp_btn.disabled = _maxhp_used or _gold < MAXHP_PRICE
 	_util_text(maxhp_btn, &"maxhp", MAXHP_PRICE, "（已购）" if _maxhp_used else "")
+	# v0.8.0 行2：strip/purify/contract（可购性回写 + 限购位 + 余额三态）
+	var strip_btn: Button = _util_buttons[&"strip"]
+	var purify_btn: Button = _util_buttons[&"purify"]
+	var contract_btn: Button = _util_buttons[&"contract"]
+	strip_btn.disabled = _strip_used or not _strip_available or _gold < STRIP_PRICE
+	var strip_suffix := "（已购）" if _strip_used else ("" if _strip_available else "（无可移除）")
+	_util_text(strip_btn, &"strip", STRIP_PRICE, strip_suffix)
+	purify_btn.disabled = _purify_used or not _purify_available or _gold < PURIFY_PRICE
+	var purify_suffix := "（已购）" if _purify_used else ("" if _purify_available else "（无诅咒）")
+	_util_text(purify_btn, &"purify", PURIFY_PRICE, purify_suffix)
+	contract_btn.disabled = _contract_used or not _contract_available
+	var contract_suffix := "（已购）" if _contract_used else ("" if _contract_available else "（诅咒已满）")
+	_util_text(contract_btn, &"contract", CONTRACT_GOLD, contract_suffix)
 
 
 func _refresh_slots() -> void:
@@ -318,6 +378,13 @@ func _util_text(p_btn: Button, p_util: StringName, p_price: int, p_suffix: Strin
 			label = "回复 30% HP"
 		&"maxhp":
 			label = "max_hp +10"
+		&"strip":
+			# v0.8.0：文案带预览词条名（GameLoop 回写）；单行格式防 Button 最小高度膨胀（>84 钳高）
+			label = "移除词条[%s]" % (_strip_preview if _strip_preview != "" else "?")
+		&"purify":
+			label = "净化诅咒−1"
+		&"contract":
+			label = "深渊契约+1层"
 	p_btn.text = "%s：%d 金币%s" % [label, p_price, p_suffix]
 
 
@@ -332,7 +399,7 @@ func _build_ui() -> void:
 	var dim := ColorRect.new()
 	dim.color = Color(0.04, 0.04, 0.09, 0.86)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP   # v0.8.0：挡 HUD 冲刺键（IGNORE→STOP）
 	_root.add_child(dim)
 	_title = _add_label(_root, TITLE_POS, "商店（金币 G0）", 28)
 	_title.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -356,7 +423,7 @@ func _build_ui() -> void:
 		var chip_index := 4 + i
 		chip_btn.pressed.connect(func() -> void: purchase_requested.emit(chip_index))
 		_chip_buttons.append(chip_btn)
-	# utility 三按钮（180x84 @ y=696 横排）
+	# utility 行1 三按钮（180x84 @ y=696 横排）
 	var utils: Array = [[&"reroll", 0], [&"heal", 1], [&"maxhp", 2]]
 	for u in utils:
 		var btn := _add_button(String(u[0]), UTIL_POSITIONS[u[1]], UTIL_SIZE, 14)
@@ -364,6 +431,14 @@ func _build_ui() -> void:
 		var util: StringName = u[0]
 		btn.pressed.connect(func() -> void: utility_requested.emit(util))
 		_util_buttons[util] = btn
+	# v0.8.0 utility 行2 三按钮（180x84 @ y=790：strip/purify/contract）
+	var utils2: Array = [[&"strip", 0], [&"purify", 1], [&"contract", 2]]
+	for u2 in utils2:
+		var btn2 := _add_button(String(u2[0]), UTIL2_POSITIONS[u2[1]], UTIL_SIZE, 14)
+		btn2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var util2: StringName = u2[0]
+		btn2.pressed.connect(func() -> void: utility_requested.emit(util2))
+		_util_buttons[util2] = btn2
 	# 芯片槽位面板（600x168 @ y=796：底板 + 标题 + 3 槽盒 188x120）
 	var panel := Panel.new()
 	panel.name = "ChipPanel"

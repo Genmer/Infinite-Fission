@@ -352,7 +352,7 @@ func _open_shop_flow(p_wave: int, p_black_market: bool) -> bool:
 	shop_ui.open(p_wave, p_black_market, current_candidates, weapon_card, gold)
 	shop_ui.set_chip_shelf(chip_offers, chip_handler.free_slots())
 	shop_ui.set_chip_slots(chip_handler.slot_snapshot())
-	shop_ui.set_player_full_hp(player.hp >= player.max_hp)   # v0.7.0 U7：heal 预禁用回写
+	_refresh_shop_availability()                 # v0.8.0：三 setter + heal 预禁用统一回写
 	return true
 
 
@@ -363,6 +363,33 @@ func _weapon_pity_active() -> bool:
 		if w != null and is_instance_valid(w):
 			held += 1
 	return held < 2 and upgrade_cards_dealt <= 3
+
+
+func _refresh_shop_availability() -> void:
+	# v0.8.0 V10/V11：utility 扩容可购性回写（三 setter + heal 预禁用）——
+	# 开店/每次购买/utility 成功后调用（单一回写口）。
+	if shop_ui == null or not shop_ui.is_open:
+		return
+	var primary := card_generator._primary_weapon(player)
+	var strip_ok := primary != null and primary.trait_stack != null \
+		and bool(primary.trait_stack.peek_last(true).get("ok", false))
+	var preview := ""
+	if strip_ok:
+		preview = String((primary.trait_stack.peek_last(true) as Dictionary).get("display_name", ""))
+	shop_ui.set_strip_available(strip_ok, preview)
+	var has_gambler := primary != null and primary.trait_stack != null \
+		and _stack_has_trait_id(primary.trait_stack, &"GAMBLER_CURSE")
+	shop_ui.set_purify_available(has_gambler
+		or (curse_handler != null and curse_handler.curse_count > 0))
+	shop_ui.set_contract_available(curse_handler == null or not curse_handler.is_maxed())
+	shop_ui.set_player_full_hp(player.hp >= player.max_hp)
+
+
+func _stack_has_trait_id(p_stack: TraitStack, p_id: StringName) -> bool:
+	for tb in p_stack.traits:
+		if (tb as TraitBase).data.id == p_id:
+			return true
+	return false
 
 
 func _close_shop() -> void:
@@ -452,8 +479,7 @@ func _on_shop_purchase(p_index: int) -> void:
 		_add_gold(-chip_price)
 		shop_ui.mark_purchased(p_index)
 		shop_ui.set_chip_slots(chip_handler.slot_snapshot())
-		# CHIP_HP 装备后可能满血 → heal 预禁用状态同步（审查 Fix）
-		shop_ui.set_player_full_hp(player.hp >= player.max_hp)
+		_refresh_shop_availability()       # v0.8.0：三 setter + heal 预禁用统一回写
 		return
 	var card: Dictionary = shelf["weapon"] if p_index == 3 \
 		else (shelf["cards"] as Array)[p_index]
@@ -480,6 +506,7 @@ func _on_shop_purchase(p_index: int) -> void:
 		return
 	_add_gold(-price)
 	shop_ui.mark_purchased(p_index)
+	_refresh_shop_availability()                 # v0.8.0：余额变动后可购性统一回写
 
 
 func _on_shop_utility(p_util: StringName) -> void:
@@ -506,6 +533,7 @@ func _on_shop_utility(p_util: StringName) -> void:
 				chip_handler.free_slots())
 			shop_ui.set_chip_slots(chip_handler.slot_snapshot())
 			shop_ui.mark_utility_used(&"reroll")
+			_refresh_shop_availability()
 		&"heal":
 			var max_hp: float = player.get("max_hp")
 			var hp: float = player.get("hp")
@@ -517,7 +545,7 @@ func _on_shop_utility(p_util: StringName) -> void:
 				return
 			_add_gold(-ShopUI.HEAL_PRICE)
 			player.set("hp", minf(hp + max_hp * 0.3, max_hp))
-			shop_ui.set_player_full_hp(player.hp >= player.max_hp)   # v0.7.0 U7：回写预禁用
+			_refresh_shop_availability()   # v0.7.0 U7 → v0.8.0 统一回写口（含 heal 预禁用）
 		&"maxhp":
 			if bool(shelf["maxhp_used"]):
 				push_warning("[GameLoop] max_hp+10 每店限 1 次，拒绝")
@@ -534,7 +562,7 @@ func _on_shop_utility(p_util: StringName) -> void:
 				player.max_hp += 10.0
 			shop_ui.mark_utility_used(&"maxhp")
 			# 上限抬升后 hp<max_hp → 回复合法化（审查 Fix：heal 预禁用状态同步）
-			shop_ui.set_player_full_hp(player.hp >= player.max_hp)
+			_refresh_shop_availability()
 		&"strip":
 			# v0.8.0 V9 移除词条（60 金/店限 1）：主武器最后挂载非诅咒词条 1 层
 			if bool(shelf.get("strip_used", false)):
@@ -554,6 +582,7 @@ func _on_shop_utility(p_util: StringName) -> void:
 			primary.invalidate_panel()             # 调用方失效宿主（TraitStack 不回查宿主）
 			_add_gold(-ShopUI.STRIP_PRICE)
 			shop_ui.mark_utility_used(&"strip")
+			_refresh_shop_availability()
 			if popup_manager != null and is_instance_valid(player):
 				popup_manager.show_text_popup(player.global_position + Vector2(0.0, -60.0),
 					"移除词条：%s" % String(detached.get("display_name", "")))
@@ -588,9 +617,28 @@ func _on_shop_utility(p_util: StringName) -> void:
 				return
 			_add_gold(-ShopUI.PURIFY_PRICE)
 			shop_ui.mark_utility_used(&"purify")
+			_refresh_shop_availability()
 			if popup_manager != null and is_instance_valid(player):
 				popup_manager.show_text_popup(player.global_position + Vector2(0.0, -60.0),
 					"净化完成（%s −1）" % purged)
+		&"contract":
+			# v0.8.0 V11 深渊契约（免费/店限 1）：+1 层换 120 金（基础值，经 _add_gold 吃
+			# K_gold）；满 5 层禁用（setter 回写 disabled）
+			if bool(shelf.get("contract_used", false)):
+				push_warning("[GameLoop] 深渊契约每店限 1 次，拒绝")
+				return
+			if curse_handler == null or curse_handler.is_maxed():
+				push_warning("[GameLoop] 深渊契约拒绝：诅咒已满 5 层")
+				return
+			if curse_handler.add_curse(1) <= 0:
+				push_warning("[GameLoop] 深渊契约拒绝：加层失败")
+				return
+			_add_gold(ShopUI.CONTRACT_GOLD)
+			shop_ui.mark_utility_used(&"contract")
+			_refresh_shop_availability()
+			if popup_manager != null and is_instance_valid(player):
+				popup_manager.show_text_popup(player.global_position + Vector2(0.0, -60.0),
+					"深渊契约：诅咒 %d/5（+120 金·基础值）" % curse_handler.curse_count)
 		_:
 			push_warning("[GameLoop] 未知 utility：%s" % String(p_util))
 
