@@ -87,6 +87,7 @@ var pools: Dictionary = {}                    # {projectile, enemy, popup, parti
 var frame_order: Array[StringName] = []       # 帧序探针（每帧重建；测试断言固定帧序）
 var current_candidates: Array[Dictionary] = []   # 当前货架（测试观测）
 var active_shards: Array[XpShard] = []        # 场上经验碎片（掉落/吸附/归还管理，B.1）
+var active_crystal: Crystal = null            # v1.3.0 场上元素水晶（同屏至多 1 颗，A12 R2）
 var gold: int = 0                             # v0.6.0 金币余额（唯一真源；变更走 _add_gold → gold_changed）
 var active_coins: Array[GoldCoin] = []        # 场上金币（掉落/吸附/入账/归还管理，A4 §3）
 var upgrade_cards_dealt: int = 0              # v0.7.0 U11：本局升级发牌数（首件武器保底计数）
@@ -606,6 +607,26 @@ func _on_wave_cleared_gold_rush(p_wave: int) -> void:
 			"金币狂欢 +%d" % amount)
 
 
+# ── 元素水晶（v1.3.0，A12 R2：w>=8 roll 出现——击破/波末/清场三消散出口） ──
+func _on_crystal_spawn_requested(p_pos: Vector2) -> void:
+	# 出现仲裁：先消散旧水晶（同屏至多 1 颗）→ 组装挂载（非池化，代码组装）
+	_dissolve_crystal()
+	var crystal := Crystal.new()
+	crystal.name = "Crystal"
+	add_child(crystal)
+	crystal.position = p_pos
+	crystal.activate(elemental, enemy_grid)
+	active_crystal = crystal
+
+
+func _dissolve_crystal(_p_wave: int = 0) -> void:
+	# 消散单点（击破尾 dissolve 之外的三出口：波末 wave_cleared / 清场 / 新水晶顶替）；
+	# 缺省参兼容 wave_cleared(wave) 信号签名；GAME_OVER 不清（重开 _reset_run_state 统一收）
+	if active_crystal != null and is_instance_valid(active_crystal):
+		active_crystal.dissolve()
+	active_crystal = null
+
+
 func _on_shop_purchase(p_index: int) -> void:
 	# 购买仲裁（A4 §2 + v0.7.0 A6 §4）：先验证 → apply → 扣款；任一失败静默拒绝 + push_warning。
 	# index 0~2 卡架 / 3 武器架 / 4~5 芯片架（芯片分支五查：未购/offer 非空/未持有/有空槽/余额足）。
@@ -1062,6 +1083,9 @@ func _boot_build_presentation() -> void:
 	EventBus.wave_cleared.connect(_on_wave_cleared_gold_rush)   # v0.7.0 U5：金币关波末奖励
 	# ★ v0.9.0 赐福订阅固定金币关之后（连接序 = 派发序：波末奖励先入账、赐福后开门——A8）
 	EventBus.wave_cleared.connect(_on_wave_cleared_blessing)
+	# v1.3.0（A12 R2）：水晶订阅区追加——波末消散（消散不读敌态，无前位连接序依赖）
+	EventBus.wave_cleared.connect(_dissolve_crystal)
+	wave_director.crystal_spawn_requested.connect(_on_crystal_spawn_requested)
 	# 商店开门请求（WaveDirector BUFFER 间隙 → 仲裁）
 	wave_director.shop_requested.connect(_on_shop_requested)
 	# 集成包 A：震屏宿主相机（trauma² 偏移在 ⑧ raw 通道应用）+ 主菜单屏
@@ -1471,3 +1495,4 @@ func _clear_battlefield() -> void:
 	if popup_manager != null:
 		popup_manager.clear_all()
 	(pools[&"particle"] as ParticlePool).release_active_all()
+	_dissolve_crystal()                          # v1.3.0 R2：清场尾水晶消散（重开统一收口）

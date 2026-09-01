@@ -36,6 +36,7 @@ var elemental: ElementalSystem = null         # 注入（元素附着入口）
 # 包 3 收口：击杀证据（MEC_KILL_BLAST 死亡新星的 ON_EXPIRE 期判定输入）
 var killed_target: bool = false               # 本弹存活期曾击杀（结算结果回填）
 var last_hit_pos: Vector2 = Vector2.ZERO      # 最近命中位置（死亡新星锚点）
+var last_hit_damage: float = 0.0              # v1.3.0 最近一跳结算伤害（水晶 LTG 臂基数）
 var is_clean: bool = true                     # 池清洁标记（归还/取出双向断言口径）
 
 # ── 内部运行时 ─────────────────────────────────────────────────
@@ -119,6 +120,7 @@ func spawn(p_params: Dictionary) -> void:
 	_pierce_hits = 0
 	killed_target = false                     # 包 3 收口：击杀证据复位
 	last_hit_pos = Vector2.ZERO
+	last_hit_damage = 0.0                        # v1.3.0：水晶 LTG 臂基数清零
 	is_clean = false
 	_live = true
 	_in_recycle = false
@@ -190,6 +192,23 @@ func _check_collision() -> void:
 			break
 		if _in_reach(target, effective_radius()):
 			_submit_hit(target)
+	if _live:
+		_check_crystal_hit()                      # v1.3.0 R2：敌先结算（LTG 当跳伤害新鲜）
+
+
+func _check_crystal_hit() -> void:
+	# v1.3.0（A12 R2）元素水晶碰撞：active/valid/alive 三守卫；一帧一水晶一条（E-03 同构）；
+	# 命中 → shatter——★弹不耗穿透不回收继续飞（水晶非敌实体，不占穿透预算）
+	var crystal := Crystal.active
+	if crystal == null or not is_instance_valid(crystal) or not crystal.alive:
+		return
+	if hits_this_frame.has(crystal.uid):
+		return
+	if global_position.distance_to(crystal.global_position) \
+			> effective_radius() + Crystal.HIT_RADIUS:
+		return
+	hits_this_frame[crystal.uid] = true
+	crystal.shatter(self)
 
 
 func _in_reach(p_target: Node2D, p_radius: float) -> bool:
@@ -353,6 +372,7 @@ func _on_settled(p_target: Node2D, p_result: DamageResult, p_tctx: TraitContext 
 	if p_result != null:
 		killed_target = killed_target or p_result.killed
 		last_hit_pos = global_position
+		last_hit_damage = p_result.final_value   # v1.3.0：水晶 LTG 臂基数回填
 	# v1.1.0 增幅消耗（A10 §2）：结算成功且目标未 dead → 清反向附着（重判同条件幂等）
 	if elemental != null and p_result != null and not p_result.killed:
 		elemental.consume_amplify(p_target, element)
@@ -592,6 +612,7 @@ func _reset_state() -> void:
 	_traits_cache = []
 	killed_target = false                     # 包 3 收口：击杀证据清零
 	last_hit_pos = Vector2.ZERO
+	last_hit_damage = 0.0                        # v1.3.0：水晶 LTG 臂基数清零
 	hits_this_frame.clear()
 	_reset_form_state()
 	is_clean = true

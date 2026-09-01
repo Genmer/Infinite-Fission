@@ -9,6 +9,7 @@ extends Node
 
 signal shop_requested(wave: int, black_market: bool)   # v0.6.0 商店间隙开门请求（A4 §1）
 signal event_requested(wave: int, event_index: int)    # v0.8.0 事件间隙触发（A7 §V1）
+signal crystal_spawn_requested(pos: Vector2)           # v1.3.0 元素水晶出现请求（A12 R2）
 
 var wave_table: WaveTableData = null          # M-14 注入（null → 公式 fallback）
 var spawner: EnemySpawner = null
@@ -25,6 +26,8 @@ var _extra_shop_pending: bool = false         # v0.6.0 黑市追加申请（queu
 # ── v0.8.0 事件触发（A7 §V1） ──
 var _event_gapped: bool = false               # 一间隙一 roll 闸（未中也消耗）
 var _event_rng: RandomNumberGenerator = RandomNumberGenerator.new()   # 独立 rng（seed 777）
+# ── v1.3.0 元素水晶（A12 R2） ──
+var _crystal_rng: RandomNumberGenerator = RandomNumberGenerator.new()   # 独立 rng（seed 1001）
 
 enum WavePhase { IDLE, SPAWNING, CLEARING, BUFFER }
 
@@ -59,6 +62,13 @@ const EVENT_START_WAVE := 4
 const EVENT_CHANCE := 0.40
 const EVENT_KINDS := 4
 const EVENT_RNG_SEED := 777
+# v1.3.0 元素水晶常量（A12 R2 冻结）：w8 起 / 40% 概率 / 独立 rng seed 1001 / 落点域
+const CRYSTAL_START_WAVE := 8
+const CRYSTAL_CHANCE := 0.40
+const CRYSTAL_RNG_SEED := 1001
+const CRYSTAL_MARGIN_X := 80.0
+const CRYSTAL_Y_MIN := 160.0
+const CRYSTAL_Y_MAX := 720.0
 const TP_FALLBACK := {"base": 14.0, "slope": 3.2, "elite_wave_mult": 1.25}   # A3 §1.4
 const ENDLESS_FALLBACK := {
 	"tp_base": 110.0, "tp_growth": 1.03, "window_base": 30.0, "window_slope": 0.2,
@@ -70,13 +80,16 @@ func _ready() -> void:
 	EventBus.enemy_killed.connect(_on_enemy_killed_event)
 	EventBus.boss_spawned.connect(_on_boss_spawned)
 	_event_rng.seed = EVENT_RNG_SEED             # v0.8.0：事件 roll 定种子（reset 可重播种）
+	_crystal_rng.seed = CRYSTAL_RNG_SEED         # v1.3.0：水晶 roll 定种子（reset 可重播种）
 
 
 func reset_event_state() -> void:
 	# v0.8.0 重开清零（GameLoop._reset_run_state 调用）：rng 重播种 + 闸复位
 	#（与 reset_extra_shop 同口径；事件 roll 不跨局）
+	# v1.3.0：水晶 roll 流同口径重播种（同 seed 1001 序列每局一致）
 	_event_rng.seed = EVENT_RNG_SEED
 	_event_gapped = false
+	_crystal_rng.seed = CRYSTAL_RNG_SEED
 
 
 func start_wave(p_wave: int) -> void:
@@ -115,6 +128,7 @@ func start_wave(p_wave: int) -> void:
 			spawner.enqueue(entry)
 		if _boss_wave:
 			_spawn_boss(p_wave)
+	_maybe_roll_crystal(p_wave)                  # v1.3.0 R2：水晶 roll（wave_started 前）
 	EventBus.emit_wave_started(p_wave)
 	# v0.7.0 U5：金币狂欢横幅（HUD 覆写普通波次横幅）
 	if is_gold_rush_wave(p_wave):
@@ -135,6 +149,23 @@ func start_wave(p_wave: int) -> void:
 func queue_extra_shop() -> void:
 	# v0.6.0 黑市追加商店申请（GameLoop._on_wave_cleared_shop_bridge 消费 relic 排程后调用）
 	_extra_shop_pending = true
+
+
+func _maybe_roll_crystal(p_wave: int) -> void:
+	# v1.3.0（A12 R2）元素水晶 roll：w<8 / Boss 波 → return 不消耗 rng；金币关不排除；
+	# randf()>=0.40 → return（未中也消耗一次 draw，与事件闸同口径）；命中 → 落点域内
+	# randf_range 采样后 emit（消费另两次 draw；GameLoop 组装挂载，同屏至多 1 颗）
+	if p_wave < CRYSTAL_START_WAVE or _boss_wave:
+		return
+	if _crystal_rng.randf() >= CRYSTAL_CHANCE:
+		return
+	var size := Vector2(720.0, 1280.0)
+	if GameConfig.balance != null:
+		size = Vector2(GameConfig.balance.res_logic)
+	var pos := Vector2(
+		_crystal_rng.randf_range(CRYSTAL_MARGIN_X, size.x - CRYSTAL_MARGIN_X),
+		_crystal_rng.randf_range(CRYSTAL_Y_MIN, CRYSTAL_Y_MAX))
+	crystal_spawn_requested.emit(pos)
 
 
 func reset_extra_shop() -> void:
