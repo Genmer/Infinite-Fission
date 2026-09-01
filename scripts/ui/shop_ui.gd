@@ -439,7 +439,7 @@ func _build_ui() -> void:
 		var util2: StringName = u2[0]
 		btn2.pressed.connect(func() -> void: utility_requested.emit(util2))
 		_util_buttons[util2] = btn2
-	# 芯片槽位面板（600x168 @ y=796：底板 + 标题 + 3 槽盒 188x120）
+	# 芯片槽位面板（600x168 @ y=884：底板 + 标题 + 3 槽盒 188x120）
 	var panel := Panel.new()
 	panel.name = "ChipPanel"
 	panel.position = CHIP_PANEL_POS
@@ -457,7 +457,7 @@ func _build_ui() -> void:
 		slot_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		slot_label.self_modulate = Color(0.6, 0.6, 0.65)
 		_slot_labels.append(slot_label)
-	# 离开按钮（600x80 @ y=980）
+	# 离开按钮（600x80 @ y=1064）
 	var leave := _add_button("Leave", LEAVE_POS, LEAVE_SIZE, 16)
 	leave.text = "离开商店"
 	leave.pressed.connect(func() -> void: close_requested.emit())

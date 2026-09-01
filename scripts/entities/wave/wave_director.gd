@@ -84,6 +84,8 @@ func start_wave(p_wave: int) -> void:
 	current_wave = p_wave
 	wave_first_kill_done = false
 	_shop_gapped = false                         # v0.6.0：单间隙单店闸随波复位
+	_event_gapped = false                        # v0.8.0 审查 Critical 修复：事件闸同口径随波复位
+	                                            #（缺复位=每局限一次 roll，40% 的局零事件房）
 	_boss_wave = _is_boss_wave(p_wave)
 	_boss_ref = null
 	_boss_seen = false

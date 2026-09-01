@@ -179,8 +179,9 @@ func _unhandled_input(p_event: InputEvent) -> void:
 			_drag_accum += mm.relative
 	elif p_event is InputEventKey:
 		# v0.8.0 冲刺（A7 §V21）：Shift 按下触发（try_dash fail-fast；HUD 冲刺钮共用）
+		# 审查 Q3：过滤 echo——长按不自动连冲（仅按下沿触发一次）
 		var key := p_event as InputEventKey
-		if key.physical_keycode == KEY_SHIFT and key.pressed:
+		if key.physical_keycode == KEY_SHIFT and key.pressed and not key.echo:
 			try_dash()
 
 

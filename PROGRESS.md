@@ -26,7 +26,7 @@
 | E 审查+测试（并行） | 独立代码审查 + 运行验证（两轮） | ✅ 完成（一轮：1C+3I 修复；二轮：可交付判定，720/720 终验 PASS） |
 | F 交付报告 | 汇总判定+关键决策清单 | ✅ 完成（判定 = 可交付；见 §5.8 与 §4 裁定记录） |
 
-**仓库当前可编译（0 解析错误），回归 836/836 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，另有 pkg6_extra 32 项验收补充 / pkg7 172 项 v0.7.0 增量自测 / pkg7_extra 56 项验收补充，不计入 836 基线口径；全 runner 合计 1096）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~6.2ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**
+**仓库当前可编译（0 解析错误），回归 836/836 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，另有 pkg6_extra 33 项验收补充 / pkg7 172 项 v0.7.0 增量自测 / pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量自测 / pkg8_extra 31 项验收补充，不计入 836 基线口径；全 runner 合计 1288）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~6.1ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**
 
 **v0.6.0 增量（2026-08-31，T0~T8）：商店（Boss 前夜 w9/w19/w29）/ 金币经济（掉落+磁吸+HUD）/ 武器卡（CardKind.WEAPON）/ 武器门槛词条（required_weapon）/ Boss 弹幕三形态+召唤 / HUD 720×1280 全量重排+波次横幅。数值与裁定真源 = `docs/analysis/A4_v0.6.0_design.md`；自测 = `tests/runner/test_pkg6.gd`（115 项）。提交序：T1 38ad7ef → T4 a18770d → T3 2db7455 → T5 b7984c7 → T2 57b742f → T6 f7d3f8a → T7 cffa4f5 → T8 本笔。**
 
@@ -216,7 +216,8 @@ pkg0（ADD 池计数 14）/pkg4（池×7）/pkg5（池×7 + 黑市桥接契约�
 2. **WaveDirector +`event_requested(wave, event_index)` 信号** + `reset_event_state()`；
    常量 EVENT_START_WAVE=4 / EVENT_CHANCE=0.40 / EVENT_KINDS=4 / EVENT_RNG_SEED=777；
    BUFFER 事件闸在商店分支之后（非商店间隙显式排除 _is_shop_wave；黑市 pending>0 整闸跳过
-   不消耗 roll；一间隙一 roll 未中也消耗 _event_gapped 闸）。
+   不消耗 roll；一间隙一 roll 未中也消耗 _event_gapped 闸，**闸随 start_wave 复位**——
+   审查 Critical 修复：初版漏复位=每局限一次 roll，40% 的局零事件房）。
 3. **ChipHandler**：+SUBSTAT_RNG_SEED=4243 / SET_BONUS_MULT=1.10 / SUBSTAT_VALUES（8 键固定
    小值）/ SUBSTAT_DIST={0:0.50,1:0.85}；+`roll_substats(main_key)`；`equip(chip_id, rarity,
    substats:=[])` 三参（旧调用恒等兼容）；equipped 条目带 `substats` 键；stat_bonus =

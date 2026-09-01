@@ -211,7 +211,7 @@ func _apply_gamble(p_option: Dictionary) -> Dictionary:
 		var win := "命运眷顾：+ %d 金币（基础值）" % payout
 		_popup(win)
 		return {"ok": true, "message": win}
-	var lose := "骰子背弃：60 金币尽失"
+	var lose := "骰子背弃：%d 金币尽失" % int(p_option.get("cost", 60))
 	_popup(lose)
 	return {"ok": true, "message": lose}
 
@@ -235,7 +235,7 @@ func _apply_gold_curse(p_option: Dictionary) -> Dictionary:
 	if gold > 0 and game_loop != null:
 		game_loop._add_gold(gold)
 		gold_granted_base += gold
-	var msg := "深渊契约成立：+ %d 金币（基础值）" % gold \
+	var msg := "交易达成：+ %d 金币（基础值）" % gold \
 		if gold > 0 else "深渊注视着你"
 	if curse_handler != null and curse > 0:
 		msg += "｜诅咒层 %d/5" % curse_handler.curse_count
