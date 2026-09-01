@@ -10,10 +10,9 @@
 class_name ElementalSystem
 extends Node
 
-# v1.1.0 增幅双轨（A10 §2）：融化 = ICE 附着 + FIR 直击 ×1.5 / 蒸发 = FIR 附着 + ICE 直击 ×2.0
-#（模块常量待升格 BalanceTables——A10 §7 假设 E-AMP-2）
-const AMP_MELT_FACTOR := 1.5
-const AMP_VAPOR_FACTOR := 2.0
+# v1.1.0 增幅双轨（A10 §2）→ v1.2.0 升格 BalanceTables 三因子（A11 §4，E-AMP-2 兑现）：
+# melt 1.5（ICE 附着 + FIR 直击，优先）/ vapor 2.0（FIR 附着 + ICE 直击）/ quench 1.5
+#（WAT 附着 + FIR 直击）；因子读取走 _amp_factor（balance 未就绪回退 v1.1.0 常量值）
 const MASTERY_LAYER_CAP := 3                   # v1.1.0 元素精通全局层数封顶（唯一裁定点）
 
 var pipeline: RefCounted = null                # 注入（DamagePipeline 或桩；独立结算通道）
@@ -111,34 +110,54 @@ func try_amplify_factor(p_target: Node2D, p_hit_element: int) -> float:
 
 
 func consume_amplify(p_target: Node2D, p_hit_element: int) -> void:
-	# 增幅消耗：重判同条件（已清则 no-op）→ clear_element(反向) 全清 + 分键遥测
+	# 增幅消耗：重判同条件（已清则 no-op）→ clear_element(反向) 全清 + 分键遥测。
+	# v1.2.0 三轨镜像（A11 §4）：FIR 直击先查 ICE（melt 优先）→ elif WAT（quench 分键）
 	if p_target == null or bool(p_target.get("dead")):
 		return
 	var state: Variant = p_target.get("elemental")
 	if not (state is ElementalState):
 		return
 	var st := state as ElementalState
-	if p_hit_element == GameConst.Element.FIR and st.gauges[GameConst.Element.ICE] > 0.0:
-		st.clear_element(GameConst.Element.ICE)
-		DebugStats.count(&"amplify_melt")
+	if p_hit_element == GameConst.Element.FIR:
+		if st.gauges[GameConst.Element.ICE] > 0.0:
+			st.clear_element(GameConst.Element.ICE)
+			DebugStats.count(&"amplify_melt")
+		elif st.gauges[GameConst.Element.WAT] > 0.0:
+			st.clear_element(GameConst.Element.WAT)
+			DebugStats.count(&"amplify_quench")
 	elif p_hit_element == GameConst.Element.ICE and st.gauges[GameConst.Element.FIR] > 0.0:
 		st.clear_element(GameConst.Element.FIR)
 		DebugStats.count(&"amplify_vapor")
 
 
+func _amp_factor(p_key: String, p_fallback: float) -> float:
+	# v1.2.0 增幅因子配置化读取（A11 §4 升格）：GameConfig.balance 字段缺平；
+	# balance 未就绪 / 缺键 → 回退 p_fallback（= v1.1.0 模块常量值，行为零漂移）
+	if GameConfig.balance == null:
+		return p_fallback
+	var v: Variant = GameConfig.balance.get(p_key)
+	if v == null:
+		return p_fallback
+	return float(v)
+
+
 func _amplify_snapshot(p_target: Node2D, p_hit_element: int) -> float:
 	# 增幅快照判定（只读）：反向附着非零才触发；×reaction_mult() 与剧变同源消费。
-	# KIN/LTG 直击、null/无状态宿主 → 0.0（= 不触发）；immune_mask 不查（吃附着计量）。
+	# v1.2.0 三轨（A11 §4）：FIR 直击双查 ICE（融化优先）→ WAT（淬火）；ICE 直击 + WAT
+	# 恒 1.0（蒸发只吃 FIR）；KIN/LTG 直击、null/无状态宿主 → 0.0；immune_mask 不查。
 	if p_target == null:
 		return 0.0
 	var state: Variant = p_target.get("elemental")
 	if not (state is ElementalState):
 		return 0.0
 	var st := state as ElementalState
-	if p_hit_element == GameConst.Element.FIR and st.gauges[GameConst.Element.ICE] > 0.0:
-		return AMP_MELT_FACTOR * reaction_mult()
-	if p_hit_element == GameConst.Element.ICE and st.gauges[GameConst.Element.FIR] > 0.0:
-		return AMP_VAPOR_FACTOR * reaction_mult()
+	if p_hit_element == GameConst.Element.FIR:
+		if st.gauges[GameConst.Element.ICE] > 0.0:
+			return _amp_factor("amp_melt_factor", 1.5) * reaction_mult()
+		if st.gauges[GameConst.Element.WAT] > 0.0:
+			return _amp_factor("amp_quench_factor", 1.5) * reaction_mult()
+	elif p_hit_element == GameConst.Element.ICE and st.gauges[GameConst.Element.FIR] > 0.0:
+		return _amp_factor("amp_vapor_factor", 2.0) * reaction_mult()
 	return 0.0
 
 

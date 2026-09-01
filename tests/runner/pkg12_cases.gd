@@ -44,6 +44,8 @@ func run(p_tree: SceneTree) -> void:
 	_test_v45_shatter()                           # V45
 	_test_v46_conduct()                           # V46
 	_test_v47_vaporblast()                        # V47
+	_test_v48_quench()                            # V48
+	_test_v49_amp_upgrade()                       # V49
 	_teardown_world()
 	_summary()
 
@@ -631,3 +633,90 @@ func _test_v47_vaporblast() -> void:
 			ov_spread_el = r.element
 	_check("V47：过载恒等重放——扩散结算 element 承载 RXN_FIR_LTG（_spread_reaction 缺省参零漂移）",
 		ov_spread_el == GameConst.ReactionType.RXN_FIR_LTG, "el=%d" % ov_spread_el)
+
+
+# ── V48 淬火 ──────────────────────────────────────────────────────
+func _test_v48_quench() -> void:
+	print("── V48 淬火 ──")
+	_purge_enemies()
+	# a) WAT 附着 + FIR 直击 → 淬火 contrib 0.5；结算清 WAT（帧末无汽爆）
+	var e1 := _spawn_enemy(_make_enemy_data("V48_A", 2000.0), Vector2(120, 200))
+	_sys.register_host(e1)
+	_gauge(e1, GameConst.Element.WAT, 30.0)
+	var q0: int = DebugStats.get_counter(&"amplify_quench")
+	_fire_at(_spawn_proj(GameConst.Element.FIR, e1.global_position))
+	var r1 := _last_result()
+	var st1: ElementalState = e1.get("elemental")
+	var quench_ok: bool = r1 != null and st1 != null \
+		and is_equal_approx(float(r1.pool_breakdown.get(&"amplify", -1.0)), 0.5) \
+		and is_equal_approx(r1.final_value, 150.0) \
+		and is_equal_approx(st1.gauges[GameConst.Element.WAT], 0.0) \
+		and st1.gauges[GameConst.Element.FIR] > 0.0 \
+		and DebugStats.get_counter(&"amplify_quench") == q0 + 1
+	_bump()
+	_sys.detect_reactions()
+	var no_blast: bool = not _rxn_events.has(GameConst.ReactionType.RXN_WAT_FIR)
+	_check("V48：淬火——WAT+FIR 直击 contrib 0.5 落血 150 + amplify_quench 分键 + 清 WAT 帧末无汽爆",
+		quench_ok and no_blast,
+		"quench=%s no_blast=%s brk=%s" % [str(quench_ok), str(no_blast),
+			str(r1.pool_breakdown if r1 != null else {})])
+	# b) ICE+WAT 双附着 + FIR 直击 → 融化优先（pkg11 恒等锚）：清 ICE 保 WAT
+	var e2 := _spawn_enemy(_make_enemy_data("V48_B", 2000.0), Vector2(400, 200))
+	_sys.register_host(e2)
+	_gauge(e2, GameConst.Element.ICE, 30.0)
+	_gauge(e2, GameConst.Element.WAT, 30.0)
+	_fire_at(_spawn_proj(GameConst.Element.FIR, e2.global_position))
+	var r2 := _last_result()
+	var st2: ElementalState = e2.get("elemental")
+	var melt_first: bool = r2 != null and st2 != null \
+		and is_equal_approx(float(r2.pool_breakdown.get(&"amplify", -1.0)), 0.5) \
+		and is_equal_approx(st2.gauges[GameConst.Element.ICE], 0.0) \
+		and st2.gauges[GameConst.Element.WAT] > 0.0
+	# c) ICE 直击 + WAT 附着 → 恒 1.0（蒸发只吃 FIR）
+	var e3 := _spawn_enemy(_make_enemy_data("V48_C", 2000.0), Vector2(680, 200))
+	_sys.register_host(e3)
+	_gauge(e3, GameConst.Element.WAT, 30.0)
+	_fire_at(_spawn_proj(GameConst.Element.ICE, e3.global_position))
+	var r3 := _last_result()
+	var ice_wat_ok: bool = r3 != null \
+		and not r3.pool_breakdown.has(&"amplify") \
+		and is_equal_approx(r3.final_value, 100.0)
+	_check("V48：优先级——ICE+WAT 双附着 FIR 直击走 MELT（清 ICE 保 WAT）/ ICE 直击 + WAT 恒 1.0",
+		melt_first and ice_wat_ok,
+		"melt=%s ice_wat=%s" % [str(melt_first), str(ice_wat_ok)])
+
+
+# ── V49 增幅升格 ──────────────────────────────────────────────────
+func _test_v49_amp_upgrade() -> void:
+	print("── V49 升格 ──")
+	# a) 三因子 schema 默认 + GameConfig.balance 加载值镜像（.tres 同值）
+	var schema := BalanceTables.new()
+	var mirror_ok: bool = is_equal_approx(schema.amp_melt_factor, 1.5) \
+		and is_equal_approx(schema.amp_vapor_factor, 2.0) \
+		and is_equal_approx(schema.amp_quench_factor, 1.5) \
+		and GameConfig.balance != null \
+		and is_equal_approx(GameConfig.balance.amp_melt_factor, 1.5) \
+		and is_equal_approx(GameConfig.balance.amp_vapor_factor, 2.0) \
+		and is_equal_approx(GameConfig.balance.amp_quench_factor, 1.5)
+	# b) melt/vapor 恒等（pkg11 数值不漂）：FIR 直击 ICE 附着 150 / ICE 直击 FIR 附着 200
+	var e1 := _spawn_enemy(_make_enemy_data("V49_A", 2000.0), Vector2(120, 400))
+	_sys.register_host(e1)
+	_gauge(e1, GameConst.Element.ICE, 30.0)
+	_fire_at(_spawn_proj(GameConst.Element.FIR, e1.global_position))
+	var r1 := _last_result()
+	var melt_ok: bool = r1 != null and is_equal_approx(r1.final_value, 150.0) \
+		and is_equal_approx(float(r1.pool_breakdown.get(&"amplify", -1.0)), 0.5)
+	var e2 := _spawn_enemy(_make_enemy_data("V49_B", 2000.0), Vector2(400, 400))
+	_sys.register_host(e2)
+	_gauge(e2, GameConst.Element.FIR, 30.0)
+	_fire_at(_spawn_proj(GameConst.Element.ICE, e2.global_position))
+	var r2 := _last_result()
+	var vapor_ok: bool = r2 != null and is_equal_approx(r2.final_value, 200.0) \
+		and is_equal_approx(float(r2.pool_breakdown.get(&"amplify", -1.0)), 1.0)
+	# c) _amp_factor 缺键回退 fallback（null → v1.1.0 常量值通道）
+	var fallback_ok: bool = is_equal_approx(_sys._amp_factor("amp_melt_factor", 1.5), 1.5) \
+		and is_equal_approx(_sys._amp_factor("amp_no_such_key", 1.7), 1.7)
+	_check("V49：增幅升格——三因子 schema/.tres 镜像 + melt/vapor 恒等（150/200）+ _amp_factor 缺键回退",
+		mirror_ok and melt_ok and vapor_ok and fallback_ok,
+		"mirror=%s melt=%s vapor=%s fb=%s" % [str(mirror_ok), str(melt_ok), str(vapor_ok),
+			str(fallback_ok)])

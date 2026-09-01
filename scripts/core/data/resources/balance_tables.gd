@@ -44,6 +44,11 @@ extends Resource
 # v0.6.0：WEAPON 8 + 原五类×0.92 归一（和=100.0；与 CardGenerator.CATEGORY_WEIGHTS / .tres 三处同值，A4 §5）
 @export var category_weights: Dictionary = {"MASTERY": 11.04, "ADD": 36.8, "MULT": 16.56, "MECH": 12.88, "ELEM": 9.2, "RELIC": 5.52, "WEAPON": 8.0}
 @export var cd_rxn: float = 2.0                              # 反应 CD（F-34）
+# v1.2.0 增幅三因子（A11 §4 升格——A10 §7 假设 E-AMP-2 兑现）：melt/vapor 与 v1.1.0 模块
+# 常量同值（行为零漂移）；quench = WAT 附着 + FIR 直击 ×1.5（.tres 同值镜像）
+@export var amp_melt_factor: float = 1.5
+@export var amp_vapor_factor: float = 2.0
+@export var amp_quench_factor: float = 1.5
 # FIR/ICE/LTG/WAT 比例衰减 λ（F-22；v1.2.0 尾追 WAT=0.38，A11 §1——三处同值：
 # schema 默认 / balance_tables.tres / A11 §1）
 @export var element_decay_lambda: Array[float] = [0.35, 0.30, 0.40, 0.38]
