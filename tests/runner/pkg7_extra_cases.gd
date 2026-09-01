@@ -362,18 +362,26 @@ func _test_u8_ring_colors_decay_death() -> void:
 # ══ U9：burst 调用计数（观测口）+ 反应 scene_id 映射在环 ═══════════
 func _test_u9_burst_count_and_scene_map() -> void:
 	print("── U9 burst 计数与映射在环 ──")
-	# 映射表字面值（A6 §9 冻结：碎裂/过载/超导）
+	# 映射表字面值（A6 §9 冻结：碎裂/过载/超导；v1.2.0 授权更新：水系三反 A11 §6）
 	_check("映射表字面值：碎裂→burst_rxn_shatter",
 		String(ParticleDirector.REACTION_SCENE_IDS[GameConst.ReactionType.RXN_FIR_ICE]) == "burst_rxn_shatter")
 	_check("映射表字面值：过载→burst_rxn_overload",
 		String(ParticleDirector.REACTION_SCENE_IDS[GameConst.ReactionType.RXN_FIR_LTG]) == "burst_rxn_overload")
 	_check("映射表字面值：超导→burst_rxn_superconduct",
 		String(ParticleDirector.REACTION_SCENE_IDS[GameConst.ReactionType.RXN_ICE_LTG]) == "burst_rxn_superconduct")
+	_check("映射表字面值：冻结→burst_rxn_freeze（v1.2.0 授权更新）",
+		String(ParticleDirector.REACTION_SCENE_IDS[GameConst.ReactionType.RXN_WAT_ICE]) == "burst_rxn_freeze")
+	_check("映射表字面值：导电→burst_rxn_conduct（v1.2.0 授权更新）",
+		String(ParticleDirector.REACTION_SCENE_IDS[GameConst.ReactionType.RXN_WAT_LTG]) == "burst_rxn_conduct")
+	_check("映射表字面值：汽爆→burst_rxn_vaporblast（v1.2.0 授权更新）",
+		String(ParticleDirector.REACTION_SCENE_IDS[GameConst.ReactionType.RXN_WAT_FIR]) == "burst_rxn_vaporblast")
 	var gf := _gl.game_feel
 	var pd := gf.particles
 	var pool := _gl.pools[&"particle"] as ParticlePool
 	var reactions := [GameConst.ReactionType.RXN_FIR_ICE,
-		GameConst.ReactionType.RXN_FIR_LTG, GameConst.ReactionType.RXN_ICE_LTG]
+		GameConst.ReactionType.RXN_FIR_LTG, GameConst.ReactionType.RXN_ICE_LTG,
+		GameConst.ReactionType.RXN_WAT_ICE, GameConst.ReactionType.RXN_WAT_LTG,
+		GameConst.ReactionType.RXN_WAT_FIR]
 	var all_ok := true
 	var detail := ""
 	for rxn in reactions:
@@ -392,7 +400,7 @@ func _test_u9_burst_count_and_scene_map() -> void:
 			all_ok = false
 			detail += "rxn=%d burstΔ=%d scene(%s)=%s | " % [int(rxn),
 				pd.burst_requests - n0, expected_scene, str(scene_seen)]
-	_check("三反应：on_reaction_triggered → burst 恰 +1 且发射器挂正确 scene_id（在环）",
+	_check("六反应：on_reaction_triggered → burst 恰 +1 且发射器挂正确 scene_id（在环；v1.2.0 授权更新）",
 		all_ok, detail)
 
 

@@ -975,12 +975,15 @@ func _test_reaction_presentation() -> void:
 	es.free()
 	e.free()
 	print("── U9 反应粒子/分级 ──")
-	# REACTION_SCENE_IDS 三键覆盖
-	_check("U9：REACTION_SCENE_IDS 覆盖三反应",
-		ParticleDirector.REACTION_SCENE_IDS.size() == 3
+	# REACTION_SCENE_IDS 六键覆盖（v1.2.0 授权更新：水系三反 A11 §6）
+	_check("U9：REACTION_SCENE_IDS 覆盖六反应（v1.2.0 授权更新）",
+		ParticleDirector.REACTION_SCENE_IDS.size() == 6
 		and ParticleDirector.REACTION_SCENE_IDS.has(GameConst.ReactionType.RXN_FIR_ICE)
 		and ParticleDirector.REACTION_SCENE_IDS.has(GameConst.ReactionType.RXN_FIR_LTG)
-		and ParticleDirector.REACTION_SCENE_IDS.has(GameConst.ReactionType.RXN_ICE_LTG))
+		and ParticleDirector.REACTION_SCENE_IDS.has(GameConst.ReactionType.RXN_ICE_LTG)
+		and ParticleDirector.REACTION_SCENE_IDS.has(GameConst.ReactionType.RXN_WAT_ICE)
+		and ParticleDirector.REACTION_SCENE_IDS.has(GameConst.ReactionType.RXN_WAT_LTG)
+		and ParticleDirector.REACTION_SCENE_IDS.has(GameConst.ReactionType.RXN_WAT_FIR))
 	# burst 返回发射器 + 反应材质重指（防串色）
 	var pd := _gl.game_feel.particles
 	var emitter := (_gl.pools[&"particle"] as ParticlePool).burst(
@@ -1004,10 +1007,14 @@ func _test_reaction_presentation() -> void:
 	var base_stop := 50.0                          # CATALYST 顿帧基值 ms
 	var base_trauma := 0.5                         # CATALYST trauma 基值
 	var base_ca := 0.004 * 4.0                    # CATALYST 色差基值（base×mult）
+	# v1.2.0 授权更新：三键 → 六键（新三档与 game_feel_director.RXN_FEEL_SCALE 字面同值，A11 §6）
 	var scales := {
 		GameConst.ReactionType.RXN_FIR_ICE: {"stop": 1.0, "trauma": 1.0, "ca": 1.0},
 		GameConst.ReactionType.RXN_FIR_LTG: {"stop": 0.8, "trauma": 0.85, "ca": 0.8},
 		GameConst.ReactionType.RXN_ICE_LTG: {"stop": 0.6, "trauma": 0.7, "ca": 0.6},
+		GameConst.ReactionType.RXN_WAT_ICE: {"stop": 0.9, "trauma": 0.9, "ca": 0.9},
+		GameConst.ReactionType.RXN_WAT_LTG: {"stop": 0.7, "trauma": 0.75, "ca": 0.7},
+		GameConst.ReactionType.RXN_WAT_FIR: {"stop": 0.75, "trauma": 0.8, "ca": 0.75},
 	}
 	var scale_ok := true
 	var scale_detail := ""

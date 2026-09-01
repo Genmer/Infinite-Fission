@@ -37,19 +37,19 @@ func show_summary() -> void:
 		_refresh_reaction_label()
 	else:
 		_summary_label.text = "击杀 -　波次 -　总伤害 -"
-		_reaction_label.text = "碎裂 0/0(0%) · 过载 0/0(0%) · 超导 0/0(0%)"
+		_reaction_label.text = "碎裂 0/0(0%) · 过载 0/0(0%) · 超导 0/0(0%) · 冻结 0/0(0%) · 导电 0/0(0%) · 汽爆 0/0(0%)"
 	_root.visible = true
 
 
 func _refresh_reaction_label() -> void:
-	# v0.7.0 U10：反应结算行——"碎裂 n/dmg(p%) · 过载 … · 超导 …"；
+	# v0.7.0 U10：反应结算行——"碎裂 n/dmg(p%) · 过载 … · 超导 …"（v1.2.0 六反应，A11 §6）；
 	# p = 反应承载伤害 / total_damage（0 保护）；无元素战斗零值占位
 	var counts: Array = stats_source.get("reaction_counts")
 	var damages: Array = stats_source.get("reaction_damage")
 	var total: float = stats_source.get("total_damage")
-	var names: Array[String] = ["碎裂", "过载", "超导"]
+	var names: Array[String] = ["碎裂", "过载", "超导", "冻结", "导电", "汽爆"]
 	var parts: Array[String] = []
-	for i in range(3):
+	for i in range(6):
 		var n := int(counts[i]) if i < counts.size() else 0
 		var d := float(damages[i]) if i < damages.size() else 0.0
 		var p := 0.0 if total <= 0.0 else d / total

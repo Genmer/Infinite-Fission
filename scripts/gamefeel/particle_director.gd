@@ -16,13 +16,17 @@ const PRIORITY_CRIT := 3
 const PRIORITY_HIT := 2
 const PRIORITY_AMBIENT := 1
 
-# v0.7.0 U9：三反应 → 专属 burst 场景 id（池模板统一 burst emitter，id 仅作 meta/材质选择键）
+# v0.7.0 U9：反应 → 专属 burst 场景 id（池模板统一 burst emitter，id 仅作 meta/材质选择键；
+# v1.2.0 增水系三反，A11 §6）
 const REACTION_SCENE_IDS: Dictionary = {
 	GameConst.ReactionType.RXN_FIR_ICE: &"burst_rxn_shatter",       # 碎裂
 	GameConst.ReactionType.RXN_FIR_LTG: &"burst_rxn_overload",      # 过载
 	GameConst.ReactionType.RXN_ICE_LTG: &"burst_rxn_superconduct",  # 超导
+	GameConst.ReactionType.RXN_WAT_ICE: &"burst_rxn_freeze",        # 冻结
+	GameConst.ReactionType.RXN_WAT_LTG: &"burst_rxn_conduct",       # 导电
+	GameConst.ReactionType.RXN_WAT_FIR: &"burst_rxn_vaporblast",    # 汽爆
 }
-# v0.7.0 U9：反应粒子预设（色/速度/重力/最大缩放；真源 A6 §9）
+# v0.7.0 U9：反应粒子预设（色/速度/重力/最大缩放；真源 A6 §9 + v1.2.0 三反 A11 §6）
 const REACTION_PRESETS: Dictionary = {
 	&"burst_rxn_shatter": {"color": Color(1.0, 0.5, 0.3), "vmin": 180.0, "vmax": 320.0,
 		"gravity_y": 320.0, "scale_max": 2.0},
@@ -30,6 +34,12 @@ const REACTION_PRESETS: Dictionary = {
 		"gravity_y": 120.0, "scale_max": 1.6},
 	&"burst_rxn_superconduct": {"color": Color(0.8, 0.7, 1.0), "vmin": 60.0, "vmax": 160.0,
 		"gravity_y": 40.0, "scale_max": 1.2},
+	&"burst_rxn_freeze": {"color": Color(0.55, 0.85, 1.0), "vmin": 40.0, "vmax": 120.0,
+		"gravity_y": 60.0, "scale_max": 1.4},
+	&"burst_rxn_conduct": {"color": Color(0.7, 0.55, 1.0), "vmin": 200.0, "vmax": 380.0,
+		"gravity_y": 0.0, "scale_max": 1.8},
+	&"burst_rxn_vaporblast": {"color": Color(0.95, 0.97, 1.0), "vmin": 100.0, "vmax": 240.0,
+		"gravity_y": -80.0, "scale_max": 2.2},
 }
 
 var _shared_material: ParticleProcessMaterial = null   # 程序化占位材质（全发射器共享）

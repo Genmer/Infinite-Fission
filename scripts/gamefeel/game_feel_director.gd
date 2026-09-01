@@ -31,11 +31,15 @@ var _chromatic_material: ShaderMaterial = null
 # 粒子场景 id（池模板统一 burst emitter；场景 id 仅作 meta 遥测键）
 const EMITTER_SCENE_ID := &"burst_default"
 
-# v0.7.0 U9：反应打击感分级（以 CATALYST 档为基 × 系数：碎裂 1.0 / 过载 0.8 / 超导 0.6）
+# v0.7.0 U9：反应打击感分级（以 CATALYST 档为基 × 系数：碎裂 1.0 / 过载 0.8 / 超导 0.6；
+# v1.2.0 增水系三反 A11 §6：冻结 0.9 / 导电 0.7 / 汽爆 0.75）
 const RXN_FEEL_SCALE: Dictionary = {
 	GameConst.ReactionType.RXN_FIR_ICE: {"stop": 1.0, "trauma": 1.0, "ca": 1.0},
 	GameConst.ReactionType.RXN_FIR_LTG: {"stop": 0.8, "trauma": 0.85, "ca": 0.8},
 	GameConst.ReactionType.RXN_ICE_LTG: {"stop": 0.6, "trauma": 0.7, "ca": 0.6},
+	GameConst.ReactionType.RXN_WAT_ICE: {"stop": 0.9, "trauma": 0.9, "ca": 0.9},
+	GameConst.ReactionType.RXN_WAT_LTG: {"stop": 0.7, "trauma": 0.75, "ca": 0.7},
+	GameConst.ReactionType.RXN_WAT_FIR: {"stop": 0.75, "trauma": 0.8, "ca": 0.75},
 }
 
 

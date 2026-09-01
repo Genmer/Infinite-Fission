@@ -92,8 +92,8 @@ var kills: int = 0
 var wave: int = 0
 var gold: int = 0                             # v0.6.0 金币余额显示值（gold_changed 驱动）
 var run_elapsed: float = 0.0                  # 计时（raw 通道累计——含顿帧，观感口径）
-var reaction_counts: Array[int] = [0, 0, 0]   # v0.7.0 U10：碎裂/过载/超导 触发次数
-var reaction_damage: Array[float] = [0.0, 0.0, 0.0]   # v0.7.0 U10：反应承载伤害累计
+var reaction_counts: Array[int] = [0, 0, 0, 0, 0, 0]   # v0.7.0 U10：六反应触发次数（v1.2.0 6 槽：碎裂/过载/超导/冻结/导电/汽爆，A11 §6）
+var reaction_damage: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # v0.7.0 U10：反应承载伤害累计（v1.2.0 6 槽）
 var _fallback_timer: float = 0.0              # 1Hz 兜底刷新
 var _banner_label: Label = null               # 波次横幅（居中，2.0s 三段动画）
 var _banner_left: float = 0.0                 # 横幅剩余时长（raw 通道；>0 = 可见）
@@ -329,9 +329,9 @@ func _on_damage_resolved(p_result: DamageResult) -> void:
 	# 总伤害统计（结算屏数据源；HUD 不逐次刷新——1Hz 兜底承担）
 	total_damage += p_result.final_value
 	# v0.7.0 U10：反应统计（判据 popup_style == REACTION；element 承载 ReactionType
-	# 0/1/2——resolve_reaction 契约，A6 §10）
+	# 0~5——resolve_reaction 契约，A6 §10 + v1.2.0 水系三反 A11 §6）
 	if p_result.popup_style == GameConst.PopupStyle.REACTION:
-		var idx := clampi(p_result.element, 0, 2)
+		var idx := clampi(p_result.element, 0, 5)
 		reaction_counts[idx] += 1
 		reaction_damage[idx] += p_result.final_value
 
@@ -345,9 +345,9 @@ func reaction_stats() -> Dictionary:
 
 
 func reset_reactions() -> void:
-	# v0.7.0 U10：重开清零（kills 清零处一并调用）
-	reaction_counts = [0, 0, 0]
-	reaction_damage = [0.0, 0.0, 0.0]
+	# v0.7.0 U10：重开清零（kills 清零处一并调用；v1.2.0 六槽）
+	reaction_counts = [0, 0, 0, 0, 0, 0]
+	reaction_damage = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
 func _build_summary() -> String:

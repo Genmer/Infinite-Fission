@@ -49,6 +49,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_v50_shield_data()                       # V50
 	_test_v51_shield_runtime()                    # V51
 	_test_v52_shield_ring()                       # V52
+	_test_v53_presentation()                      # V53
 	_teardown_world()
 	_summary()
 
@@ -452,6 +453,10 @@ func _test_v45_shatter() -> void:
 	var hits_ok: bool = st != null and st.freeze_timer <= 0.0 \
 		and st.freeze_shatter_pending and _approx(st.freeze_shatter_snapshot, 100.0)
 	_captured.clear()
+	var hud := HUD.new()                          # v1.2.0 W8：六槽 HUD 订阅（counts[3] 冻结槽）
+	hud.name = "Pkg12V45Hud"
+	tree.get_root().add_child(hud)
+	hud.bind_events()                             # HUD 订阅由 GameLoop 调 bind_events（测试侧补齐）
 	_sys.tick(DT)                                 # 帧末破碎结算 0.4×100×1.0 = 40
 	var settle_ok := false
 	for r in _captured:
@@ -459,9 +464,14 @@ func _test_v45_shatter() -> void:
 				and r.popup_style == GameConst.PopupStyle.REACTION \
 				and _approx(r.final_value, 40.0):
 			settle_ok = true
-	_check("V45：破碎——3 NORMAL 直击解冻 + 帧末结算 40（0.4×snapshot×φ）落血",
-		hits_ok and settle_ok and _approx(e1.hp, hp0 - 340.0, 0.01),
-		"hits=%s settle=%s hp=%s" % [str(hits_ok), str(settle_ok), str(e1.hp)])
+	var v45_stats: Dictionary = hud.reaction_stats()
+	var v45_counts: Array = v45_stats.get("counts", [])
+	var hud45_ok: bool = v45_counts.size() == 6 and int(v45_counts[3]) == 1
+	hud.free()
+	_check("V45：破碎——3 NORMAL 直击解冻 + 帧末结算 40（0.4×snapshot×φ）落血 + HUD counts[3]=1",
+		hits_ok and settle_ok and hud45_ok and _approx(e1.hp, hp0 - 340.0, 0.01),
+		"hits=%s settle=%s hud=%s hp=%s" % [str(hits_ok), str(settle_ok), str(hud45_ok),
+			str(e1.hp)])
 	# b) REACTION/DOT 不计入破碎
 	var e2 := _spawn_enemy(_make_enemy_data("V45_B", 2000.0), Vector2(400, 800))
 	_sys.register_host(e2)
@@ -899,3 +909,78 @@ func _test_v52_shield_ring() -> void:
 		prog_ok and hide_ok and flash_keep and first_ok and reuse_ok,
 		"prog=%s hide=%s keep=%s first=%s reuse=%s" % [str(prog_ok), str(hide_ok),
 			str(flash_keep), str(first_ok), str(reuse_ok)])
+
+
+# ── V53 表现面 ────────────────────────────────────────────────────
+func _test_v53_presentation() -> void:
+	print("── V53 表现面 ──")
+	# a) 六键全遍历（防漏键静默回退）：scene_id 映射 + 预设 + feel 档字面（A11 §6 冻结表）
+	var expect_scenes := {
+		GameConst.ReactionType.RXN_FIR_ICE: "burst_rxn_shatter",
+		GameConst.ReactionType.RXN_FIR_LTG: "burst_rxn_overload",
+		GameConst.ReactionType.RXN_ICE_LTG: "burst_rxn_superconduct",
+		GameConst.ReactionType.RXN_WAT_ICE: "burst_rxn_freeze",
+		GameConst.ReactionType.RXN_WAT_LTG: "burst_rxn_conduct",
+		GameConst.ReactionType.RXN_WAT_FIR: "burst_rxn_vaporblast",
+	}
+	var expect_feel := {
+		GameConst.ReactionType.RXN_FIR_ICE: [1.0, 1.0, 1.0],
+		GameConst.ReactionType.RXN_FIR_LTG: [0.8, 0.85, 0.8],
+		GameConst.ReactionType.RXN_ICE_LTG: [0.6, 0.7, 0.6],
+		GameConst.ReactionType.RXN_WAT_ICE: [0.9, 0.9, 0.9],
+		GameConst.ReactionType.RXN_WAT_LTG: [0.7, 0.75, 0.7],
+		GameConst.ReactionType.RXN_WAT_FIR: [0.75, 0.8, 0.75],
+	}
+	var all_ok := true
+	var detail := ""
+	for rxn in expect_scenes:
+		var scene_id := String(ParticleDirector.REACTION_SCENE_IDS.get(rxn, ""))
+		var feel: Dictionary = GameFeelDirector.RXN_FEEL_SCALE.get(rxn, {})
+		var want: Array = expect_feel[rxn]
+		if scene_id != String(expect_scenes[rxn]) \
+				or not ParticleDirector.REACTION_PRESETS.has(StringName(scene_id)) \
+				or feel.is_empty() \
+				or not is_equal_approx(float(feel.get("stop", -1.0)), float(want[0])) \
+				or not is_equal_approx(float(feel.get("trauma", -1.0)), float(want[1])) \
+				or not is_equal_approx(float(feel.get("ca", -1.0)), float(want[2])):
+			all_ok = false
+			detail += "rxn=%d scene=%s feel=%s | " % [int(rxn), scene_id, str(feel)]
+	# b) HUD 六槽 clamp(0,5)：element 9 → 槽 5；element -2 → 槽 0
+	var hud := HUD.new()
+	hud.name = "Pkg12V53Hud"
+	tree.get_root().add_child(hud)
+	hud.reset_reactions()
+	var r_hi := DamageResult.new()
+	r_hi.final_value = 1.0
+	r_hi.popup_style = GameConst.PopupStyle.REACTION
+	r_hi.element = 9
+	hud._on_damage_resolved(r_hi)
+	var r_lo := DamageResult.new()
+	r_lo.final_value = 1.0
+	r_lo.popup_style = GameConst.PopupStyle.REACTION
+	r_lo.element = -2
+	hud._on_damage_resolved(r_lo)
+	var hud_ok: bool = hud.reaction_counts.size() == 6 and int(hud.reaction_counts[5]) == 1 \
+		and int(hud.reaction_counts[0]) == 1
+	hud.free()
+	# c) 结算行六名（碎裂/过载/超导/冻结/导电/汽爆）
+	var screen := GameOverScreen.new()
+	screen.name = "Pkg12V53Screen"
+	tree.get_root().add_child(screen)
+	var src := GDScript.new()
+	src.source_code = "extends Node2D\nvar kills: int = 3\nvar wave: int = 2\n" \
+		+ "var total_damage: float = 200.0\nvar reaction_counts: Array = [2, 0, 0, 1, 0, 0]\n" \
+		+ "var reaction_damage: Array = [150.0, 0.0, 0.0, 50.0, 0.0, 0.0]\n"
+	src.reload()
+	var stub: Node2D = src.new()
+	tree.get_root().add_child(stub)
+	screen.stats_source = stub
+	screen.show_summary()
+	var text := screen.reaction_text()
+	var text_ok: bool = text.contains("碎裂 2/150(75%)") and text.contains("冻结 1/50(25%)") \
+		and text.contains("汽爆 0/0(0%)") and text.contains("导电 0/0(0%)")
+	screen.free()
+	stub.free()
+	_check("V53：表现面——六键 scene_id/预设/feel 档全遍历防漏键回退 + HUD 六槽 clamp(0,5) + 结算行六名",
+		all_ok and hud_ok and text_ok,
+		"keys=%s hud=%s text=%s | %s" % [str(all_ok), str(hud_ok), str(text_ok), text])
