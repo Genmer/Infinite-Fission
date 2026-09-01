@@ -509,6 +509,12 @@ func _test_shop() -> void:
 	wd.tick(DT)                                   # 清空检测 → wave_cleared(9) → BUFFER
 	_check("w9 清空 → BUFFER 相位", wd._phase == WaveDirector.WavePhase.BUFFER
 		and wd.current_wave == 9)
+	# v0.9.0 授权更新：wave_cleared 新增赐福订阅（w>=2 开门，A8）——夹具排险：清暂存位 +
+	# 跳过开门赐福（v0.9.0 起赐福期商店请求会暂存、赐福毕排空补开），恢复本组
+	# "w9 间隙尽 → 商店直开"的既有断言语义
+	_gl._deferred_blessing = false
+	if _gl.blessing_ui.is_open:
+		_gl.blessing_ui.skip_requested.emit()
 	wd.buffer_left = 0.001
 	wd.tick(DT)                                   # 间隙尽 → 商店门控（当前波刚清空）
 	_check("w9 间隙尽 → PLAYING→SHOP + 界面打开（black_market=false）",
@@ -613,6 +619,11 @@ func _test_shop() -> void:
 	EventBus.emit_wave_cleared(35)
 	_check("黑市桥接：w35 清空 → pending 消费 + queue_extra_shop 生效",
 		wd._extra_shop_pending and _gl.relic_handler.pending_shop_waves == 0)
+	# v0.9.0 授权更新：wave_cleared 新增赐福订阅（w>=2 开门，A8）——夹具排险：清暂存位 +
+	# 跳过已开门的赐福（无补偿），保持后续商店流用例的 PLAYING 态语义
+	_gl._deferred_blessing = false
+	if _gl.blessing_ui.is_open:
+		_gl.blessing_ui.skip_requested.emit()
 	# 黑市货架：金卡价 260（非黑市 220 对照）
 	var gold_card := gen._make_trait_card(&"AFF_AREA", 30)
 	gold_card["rarity"] = 3

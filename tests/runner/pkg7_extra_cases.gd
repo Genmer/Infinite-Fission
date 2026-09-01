@@ -87,6 +87,14 @@ func _clear_battlefield() -> void:
 		_gl.spawner.on_enemy_killed(e)
 
 
+func _dismiss_blessing_fixture() -> void:
+	# v0.9.0 授权更新（A8）：wave_cleared 新增赐福订阅（w>=2 开门）——夹具排险：
+	# 清暂存位 + 跳过已开门的赐福（无补偿），恢复 PLAYING 态语义
+	_gl._deferred_blessing = false
+	if _gl.blessing_ui != null and _gl.blessing_ui.is_open:
+		_gl.blessing_ui.skip_requested.emit()
+
+
 func _release_all_coins() -> void:
 	# 清空场内金币（不入账——保持经济链断言口径纯净）
 	while not _gl.active_coins.is_empty():
@@ -516,6 +524,9 @@ func _test_u5_reward_monotonic() -> void:
 	_check("w16 慢清（ratio 0.5）：波末奖励 +45", slow == 45, "delta=%d" % slow)
 	_check("清速单调：快清 90 > 慢清 45（ratio 与奖励单调一致）", fast > slow)
 	_check("波末奖励遥测 +2", DebugStats.get_counter(&"gold_rush_reward") == counter0 + 2)
+	# v0.9.0 授权更新：wave_cleared 新增赐福订阅（w>=2 开门，A8）——夹具排险：清暂存位 +
+	# 跳过已开门的赐福（无补偿），保持后续商店流用例的 PLAYING 态语义
+	_dismiss_blessing_fixture()
 	_clear_battlefield()
 
 
@@ -562,6 +573,7 @@ func _test_economy_chain_w6() -> void:
 		_gl.gold == g0 + int(sum_drops) + 40
 		and DebugStats.get_counter(&"gold_rush_reward") == counter0 + 1)
 	_gl.chip_handler.reset_run()
+	_dismiss_blessing_fixture()                   # v0.9.0 授权更新：w6 wave_cleared 赐福排险（A8）
 	_clear_battlefield()
 
 

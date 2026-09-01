@@ -528,6 +528,11 @@ func _test_relic_handler() -> void:
 	EventBus.emit_wave_cleared(36)
 	_check("REL_BLACK_MARKET：w45 排程消费 / w36 不排程（申请位仍单次挂起）",
 		h.pending_shop_waves == 0 and _gl.wave_director._extra_shop_pending)
+	# v0.9.0 授权更新：wave_cleared 新增赐福订阅（w>=2 开门，A8）——夹具排险：清暂存位 +
+	# 跳过已开门的赐福（无补偿），恢复后续 PHOENIX 用例的 PLAYING 态语义
+	_gl._deferred_blessing = false
+	if _gl.blessing_ui.is_open:
+		_gl.blessing_ui.skip_requested.emit()
 	# REL_PHOENIX：致死保留 1 HP + 清屏冲击（每场 1 次）——放最后（含死亡分支）
 	_check("REL_PHOENIX：激活", h.activate(&"REL_PHOENIX"))
 	_gl.player.invuln_left = 0.0

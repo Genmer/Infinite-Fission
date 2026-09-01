@@ -74,6 +74,8 @@ var chip_handler: ChipHandler = null           # v0.7.0：芯片效果处理器�
 var curse_handler: CurseHandler = null         # v0.8.0：诅咒效果处理器（A7 §V6）
 var event_director: EventDirector = null       # v0.8.0：事件效果处理器（A7 §V2）
 var event_ui: EventUI = null                   # v0.8.0：事件界面（复用 SHOP 态宿主）
+var blessing_handler: BlessingHandler = null   # v0.9.0：波次赐福处理器（A8 §1）
+var blessing_ui: BlessingUI = null             # v0.9.0：赐福界面（复用 SHOP 态宿主）
 var current_character: CharacterData = null    # v0.8.0：本局选中角色（null = 默认兜底）
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
@@ -96,6 +98,7 @@ var _gold_rng: RandomNumberGenerator = RandomNumberGenerator.new()   # v0.6.0 �
 var _deferred_shop_wave: int = 0              # v0.6.0 非战斗态暂存商店波（0 = 无；闭店/选卡后排空）
 var _deferred_event_wave: int = 0             # v0.8.0：非战斗态暂存事件波（0 = 无）
 var _deferred_event_index: int = -1           # v0.8.0：暂存事件索引（配对 _deferred_event_wave）
+var _deferred_blessing: bool = false          # v0.9.0：非战斗态暂存赐福（排空补开，A8）
 
 
 func _ready() -> void:
@@ -424,10 +427,15 @@ func _close_shop() -> void:
 
 func _drain_overlays_after_resume() -> void:
 	# v0.8.0 排空序冻结（A7）：pending_level_ups 弹卡 → _deferred_shop_wave 开店 →
-	# _deferred_event 开事件（逐项消费，命中即停——每项恢复 PLAYING/开新浮层）
+	# _deferred_event 开事件（逐项消费，命中即停——每项恢复 PLAYING/开新浮层）。
+	# v0.9.0（A8）：序扩展为 升级→赐福→商店→事件
 	if pending_level_ups > 0:
 		pending_level_ups -= 1
 		_open_card_flow(player.level)
+		return
+	if _deferred_blessing:                    # v0.9.0：暂存赐福先于商店/事件（冻结序）
+		_deferred_blessing = false
+		_open_blessing_flow(wave_director.current_wave if wave_director != null else 0)
 		return
 	if _deferred_shop_wave > 0:
 		var wave := _deferred_shop_wave
@@ -487,6 +495,57 @@ func _close_event() -> void:
 	if state != GameConst.GameStatus.SHOP:
 		return
 	event_ui.close()
+	change_state(GameConst.GameStatus.PLAYING)
+	_drain_overlays_after_resume()
+
+
+# ── 赐福流（v0.9.0，A8 §1：波次赐福三选一——复用 SHOP 态，TRANSITIONS 零改动） ──
+func _on_wave_cleared_blessing(p_wave: int) -> void:
+	# wave_cleared 消费（w>=2 才弹）；硬上限叠波直调 start_wave 不派发 wave_cleared =
+	# 天然无赐福（pkg9 固化）
+	if p_wave < BlessingHandler.MIN_WAVE:
+		return
+	_open_blessing_flow(p_wave)
+
+
+func _open_blessing_flow(p_wave: int) -> void:
+	# 开门仲裁：仅 PLAYING 且商店/事件/赐福均关闭可开（四重守卫，与 ShopUI/EventUI 互斥
+	# 由本函数单点保证）；非战斗态 → 暂存（_deferred_blessing，闭店/选卡/收赐福后排空补开）
+	if state != GameConst.GameStatus.PLAYING \
+			or (shop_ui != null and shop_ui.is_open) \
+			or (event_ui != null and event_ui.is_open) \
+			or (blessing_ui != null and blessing_ui.is_open):
+		_deferred_blessing = true
+		return
+	change_state(GameConst.GameStatus.SHOP)
+	blessing_ui.open(blessing_handler.roll_offers(p_wave))
+
+
+func _on_blessing_choice(p_index: int) -> void:
+	# 选项仲裁：SHOP 态且赐福打开且 index 界内 → apply → 收赐福回 PLAYING → 排空
+	if state != GameConst.GameStatus.SHOP or blessing_ui == null or not blessing_ui.is_open:
+		return
+	var options := blessing_ui.current_options()
+	if p_index < 0 or p_index >= options.size():
+		return
+	var kind := StringName(String((options[p_index] as Dictionary).get("kind", &"")))
+	blessing_handler.apply(kind, wave_director.current_wave if wave_director != null else 0)
+	_close_blessing()
+
+
+func _on_blessing_skip() -> void:
+	# 跳过仲裁：无补偿（仅 DebugStats 遥测，无信号）→ 收赐福回 PLAYING → 排空
+	if state != GameConst.GameStatus.SHOP or blessing_ui == null or not blessing_ui.is_open:
+		return
+	blessing_handler.count_skip()
+	_close_blessing()
+
+
+func _close_blessing() -> void:
+	# 收赐福：SHOP → PLAYING（战斗恢复）→ 排空（连升/暂存赐福/暂存店/暂存事件，序冻结 A8）
+	if state != GameConst.GameStatus.SHOP:
+		return
+	blessing_ui.close()
 	change_state(GameConst.GameStatus.PLAYING)
 	_drain_overlays_after_resume()
 
@@ -946,10 +1005,29 @@ func _boot_build_presentation() -> void:
 	add_child(event_ui)
 	event_ui.option_chosen.connect(_on_event_choice)
 	event_ui.leave_requested.connect(_on_event_leave)
+	# v0.9.0 波次赐福（A8 §1）：handler 需 popup_manager/hud（presentation 段组装件）——
+	# 构造 + setup 在本段完成（player/chip_handler 在 actors 段已就绪）
+	blessing_handler = BlessingHandler.new()
+	blessing_handler.name = "BlessingHandler"
+	add_child(blessing_handler)
+	blessing_handler.setup({
+		"player": player,
+		"chip_handler": chip_handler,
+		"game_loop": self,
+		"popup_manager": popup_manager,
+		"hud": hud,
+	})
+	blessing_ui = BlessingUI.new()
+	blessing_ui.name = "BlessingUI"
+	add_child(blessing_ui)
+	blessing_ui.option_chosen.connect(_on_blessing_choice)
+	blessing_ui.skip_requested.connect(_on_blessing_skip)
 	# 事件开门请求（WaveDirector BUFFER 间隙 → 仲裁）
 	wave_director.event_requested.connect(_on_event_requested)
 	EventBus.wave_cleared.connect(_on_wave_cleared_shop_bridge)
 	EventBus.wave_cleared.connect(_on_wave_cleared_gold_rush)   # v0.7.0 U5：金币关波末奖励
+	# ★ v0.9.0 赐福订阅固定金币关之后（连接序 = 派发序：波末奖励先入账、赐福后开门——A8）
+	EventBus.wave_cleared.connect(_on_wave_cleared_blessing)
 	# 商店开门请求（WaveDirector BUFFER 间隙 → 仲裁）
 	wave_director.shop_requested.connect(_on_shop_requested)
 	# 集成包 A：震屏宿主相机（trauma² 偏移在 ⑧ raw 通道应用）+ 主菜单屏
@@ -1254,6 +1332,11 @@ func _reset_run_state() -> void:
 		event_ui.close()                          # v0.8.0：强制收起事件浮层（重开净化）
 	_deferred_event_wave = 0                      # v0.8.0：暂存事件清零
 	_deferred_event_index = -1
+	if blessing_ui != null:
+		blessing_ui.close()                       # v0.9.0：强制收起赐福浮层（重开净化）
+	_deferred_blessing = false                    # v0.9.0：暂存赐福清零
+	if blessing_handler != null:
+		blessing_handler.reset_run()              # v0.9.0：赐福 rng 重播种 + 遥测清零（A8）
 	if wave_director != null:
 		wave_director.reset_extra_shop()          # v0.6.0：黑市追加申请不跨局（与 relic reset 同口径）
 		wave_director.reset_event_state()         # v0.8.0：事件 rng 重播种 + 闸复位（A7 §V1）
