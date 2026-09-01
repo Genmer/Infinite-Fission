@@ -17,7 +17,7 @@ const TRIGGER_CHILL: int = 2
 const TRIGGER_FREEZE: int = 3
 const TRIGGER_SHOCK: int = 4
 
-var gauges: Array[float] = [0.0, 0.0, 0.0, 0.0]  # 元素枚举直索引（KIN 槽恒 0 弃用）：FIR/ICE/LTG = 1/2/3
+var gauges: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0]  # 元素枚举直索引（KIN 槽恒 0 弃用）：FIR/ICE/LTG/WAT = 1/2/3/4（v1.2.0 5 槽，A11 §2）
 var immune_mask: int = 0                       # 宿主 Enemy 注入（F-17 免疫矩阵）
 # 状态运行时
 var burn_layers: int = 0                       # ≤5（第 6 次附着拒绝）
@@ -43,7 +43,7 @@ var _chill_from_full: bool = false             # 寒滞已由满槽触发（二�
 func apply(p_element: int, p_value: float, p_snapshot: float = 0.0,
 		p_overrides: Dictionary = {}) -> int:
 	# 附着：计量累计 → 满槽触发状态并清空该槽（返回触发码；快照为攻击者面板 S）
-	if p_element < GameConst.Element.FIR or p_element > GameConst.Element.LTG:
+	if p_element < GameConst.Element.FIR or p_element > GameConst.Element.WAT:
 		return TRIGGER_NONE
 	if p_snapshot > 0.0:
 		last_attach_snapshot = p_snapshot
@@ -104,6 +104,8 @@ func is_state_active(p_element: int) -> bool:
 			return chill_timer > 0.0 or freeze_timer > 0.0 or vuln_timer > 0.0
 		GameConst.Element.LTG:
 			return gauges[GameConst.Element.LTG] > 0.0
+		GameConst.Element.WAT:
+			return gauges[GameConst.Element.WAT] > 0.0   # v1.2.0：水附着态（A11 §2）
 	return false
 
 
@@ -150,7 +152,7 @@ func apply_superconduct(p_delta: float, p_duration: float) -> void:
 
 func reset() -> void:
 	# 归还清零（AC-11.1：死亡/回收清 DOT）
-	gauges = [0.0, 0.0, 0.0, 0.0]
+	gauges = [0.0, 0.0, 0.0, 0.0, 0.0]
 	burn_layers = 0
 	burn_timer = 0.0
 	dot_tick_left = 0.5

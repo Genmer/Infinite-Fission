@@ -12,8 +12,8 @@ extends Resource
 @export_range(0.0, 200.0) var dmg_base: float = 8.0  # 接触伤害
 @export var exp_base: float = 3.0                   # ≥0
 @export var tp_cost: float = 1.0                    # >0（威胁点成本）
-# 每项 ∈ [-0.8, 0.8]（KIN/FIR/ICE/LTG，A3 §2.3）
-@export var resist: Array[float] = [0.0, 0.0, 0.0, 0.0]
+# 每项 ∈ [-0.8, 0.8]（KIN/FIR/ICE/LTG/WAT，A3 §2.3 + v1.2.0 尾追 WAT，A11 §2）
+@export var resist: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0]
 @export var immune_mask: int = 0                    # 已知位组合（Boss 置 IMMUNE_FREEZE，F-17）
 @export var tags: int = 0                           # TAG_ELITE / TAG_BOSS 位
 @export_range(0.1, 64.0) var hitbox_r: float = 14.0 # (0, 64]

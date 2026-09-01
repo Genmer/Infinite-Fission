@@ -135,7 +135,7 @@ func validate_enemy(e: EnemyData) -> Array:
 	_err(out, &"dmg_base", e.dmg_base < 0.0 or e.dmg_base > 200.0, "dmg_base ∈ [0, 200]")
 	_err(out, &"exp_base", e.exp_base < 0.0, "exp_base ≥ 0")
 	_err(out, &"tp_cost", e.tp_cost <= 0.0, "tp_cost > 0")
-	_err(out, &"resist", e.resist.size() != 4, "resist 恰好 4 项（KIN/FIR/ICE/LTG）")
+	_err(out, &"resist", e.resist.size() != 5, "resist 恰好 5 项（KIN/FIR/ICE/LTG/WAT）")
 	for i in range(e.resist.size()):
 		_err(out, StringName("resist[%d]" % i), e.resist[i] < -0.8 or e.resist[i] > 0.8, "resist[%d] ∈ [-0.8, 0.8]" % i)
 	_err(out, &"immune_mask", e.immune_mask & ~(GameConst.IMMUNE_FREEZE | GameConst.IMMUNE_CHILL | GameConst.IMMUNE_BURN | GameConst.IMMUNE_SHOCK) != 0, "immune_mask 已知位组合（IMMUNE_* 位）")
@@ -382,7 +382,7 @@ func validate_balance(bt: BalanceTables) -> Array:
 		cat_sum += int(bt.category_weights[k])
 	_nf(out, "category_weights", cat_sum <= 0, "category_weights 权重和 > 0")
 	_nf(out, "cd_rxn", bt.cd_rxn <= 0.0, "cd_rxn > 0（F-34）")
-	_nf(out, "element_decay_lambda", bt.element_decay_lambda.size() != 3, "element_decay_lambda 恰好 3 项（FIR/ICE/LTG）")
+	_nf(out, "element_decay_lambda", bt.element_decay_lambda.size() != 4, "element_decay_lambda 恰好 4 项（FIR/ICE/LTG/WAT）")
 	for i in range(bt.element_decay_lambda.size()):
 		_nf(out, "element_decay_lambda", bt.element_decay_lambda[i] <= 0.0, "element_decay_lambda[%d] > 0（F-22）" % i)
 	for k in [&"burn", &"freeze", &"shock"]:

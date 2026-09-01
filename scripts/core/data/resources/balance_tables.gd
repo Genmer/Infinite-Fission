@@ -44,8 +44,9 @@ extends Resource
 # v0.6.0：WEAPON 8 + 原五类×0.92 归一（和=100.0；与 CardGenerator.CATEGORY_WEIGHTS / .tres 三处同值，A4 §5）
 @export var category_weights: Dictionary = {"MASTERY": 11.04, "ADD": 36.8, "MULT": 16.56, "MECH": 12.88, "ELEM": 9.2, "RELIC": 5.52, "WEAPON": 8.0}
 @export var cd_rxn: float = 2.0                              # 反应 CD（F-34）
-# FIR/ICE/LTG 比例衰减 λ（F-22）
-@export var element_decay_lambda: Array[float] = [0.35, 0.30, 0.40]
+# FIR/ICE/LTG/WAT 比例衰减 λ（F-22；v1.2.0 尾追 WAT=0.38，A11 §1——三处同值：
+# schema 默认 / balance_tables.tres / A11 §1）
+@export var element_decay_lambda: Array[float] = [0.35, 0.30, 0.40, 0.38]
 # 状态参数（§2.10 契约键）
 @export var element_states: Dictionary = {
 	"burn": {"dot_ratio": 0.15, "tick": 0.5, "duration": 3.0, "max_layers": 5},

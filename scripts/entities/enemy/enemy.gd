@@ -16,7 +16,7 @@ var contact_dmg: float = 8.0
 var exp_value: float = 3.0
 var behavior: int = GameConst.EnemyBehavior.CHASE
 var hitbox_r: float = 14.0                    # 碰撞半径快照（data.hitbox_r；投射物窄相判定读取）
-var resist: Array[float] = [0.0, 0.0, 0.0, 0.0]  # KIN/FIR/ICE/LTG 快照（超导 −30% 实时改写）
+var resist: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0]  # KIN/FIR/ICE/LTG/WAT 快照（超导 −30% 实时改写；v1.2.0 5 位，A11 §2）
 var immune_mask: int = 0
 var elemental: ElementalState = null          # 状态容器（M-11 注入；包 3 收紧：register_host 挂 ElementalState）
 var dead: bool = false                        # 死亡短路标志（E-06：首次致死立即置位）
@@ -171,7 +171,7 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	if _ring != null:                          # v0.7.0 U8：附着环半径 = hitbox + 7px
 		_ring.radius = hitbox_r + 7.0
 		_ring.visible = false
-		_ring.set_gauges([0.0, 0.0, 0.0, 0.0])
+		_ring.set_gauges([0.0, 0.0, 0.0, 0.0, 0.0])
 	_ring_refresh_left = 0.0
 	modulate.a = 0.0                          # 入场渐显起点
 	_apply_flash(0.0)
@@ -500,13 +500,13 @@ const RING_REFRESH_HZ := 15.0                  # 附着环刷新频率（降频�
 
 
 func _tick_element_ring(p_game_delta: float) -> void:
-	# max(gauges[1..3]) > 1.0 → 显示 + 15Hz 降频 set_gauges/queue_redraw；否则隐藏（零开销门控；
-	# 审查 Q4：无附着路径零分配——不再每 tick 构造临时数组）
+	# max(gauges[1..4]) > 1.0 → 显示 + 15Hz 降频 set_gauges/queue_redraw；否则隐藏（零开销门控；
+	# 审查 Q4：无附着路径零分配——不再每 tick 构造临时数组；v1.2.0 门 >=5 / peak 含 WAT，A11 §2）
 	if _ring == null:
 		return
-	if elemental != null and elemental.gauges.size() >= 4:
+	if elemental != null and elemental.gauges.size() >= 5:
 		var gauges := elemental.gauges
-		var peak := maxf(gauges[1], maxf(gauges[2], gauges[3]))
+		var peak := maxf(gauges[1], maxf(gauges[2], maxf(gauges[3], gauges[4])))
 		if peak > 1.0:
 			if not _ring.visible:
 				_ring.visible = true
@@ -540,7 +540,7 @@ func _reset_state() -> void:
 	exp_value = 3.0
 	behavior = GameConst.EnemyBehavior.CHASE
 	hitbox_r = 14.0
-	resist = [0.0, 0.0, 0.0, 0.0]
+	resist = [0.0, 0.0, 0.0, 0.0, 0.0]
 	immune_mask = 0
 	elemental = null
 	dead = true                               # 池内 = 不存在（死亡态短路）：同帧网格快照仍含
@@ -572,7 +572,7 @@ func _reset_state() -> void:
 		_fuse_ring.progress = 0.0
 	if _ring != null:
 		_ring.visible = false                    # v0.7.0 U8：附着环清零
-		_ring.set_gauges([0.0, 0.0, 0.0, 0.0])
+		_ring.set_gauges([0.0, 0.0, 0.0, 0.0, 0.0])
 	_ring_refresh_left = 0.0
 	_flash_left = 0.0
 	_fade_left = 0.0
@@ -665,7 +665,7 @@ class FuseRing:
 		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, edge, 3.0, true)
 
 
-# ── v0.7.0 U8 附着环（FIR/ICE/LTG 各占 120° 扇区；程序化占位绘制） ──
+# ── v0.7.0 U8 附着环（FIR/ICE/LTG/WAT 各占 90° 扇区；程序化占位绘制；v1.2.0 4 扇区，A11 §2） ──
 class ElementRing:
 	extends Node2D
 
@@ -673,30 +673,31 @@ class ElementRing:
 		Color(1.0, 0.45, 0.2, 0.9),              # FIR 橙
 		Color(0.4, 0.75, 1.0, 0.9),              # ICE 蓝
 		Color(0.75, 0.6, 1.0, 0.9),              # LTG 紫
+		Color(0.3, 0.75, 0.9, 0.9),              # WAT 水青（v1.2.0；= ELEMENT_COLORS[4] alpha 0.9 版）
 	]
-	const SECTOR := TAU / 3.0                    # 每元素 120° 扇区
+	const SECTOR := TAU / 4.0                    # 每元素 90° 扇区（v1.2.0：TAU/3 → TAU/4）
 	const GAUGE_MAX := 100.0                     # ElementalState.GAUGE_MAX 同值（显示归一）
 
 	var radius: float = 21.0
-	var _gauges: Array[float] = [0.0, 0.0, 0.0]  # FIR/ICE/LTG 快照
+	var _gauges: Array[float] = [0.0, 0.0, 0.0, 0.0]  # FIR/ICE/LTG/WAT 快照（v1.2.0 4 槽）
 
 	func set_gauges(p: Array[float]) -> void:
-		# 快照（p 为 ElementalState 4 槽 gauges——取 [1..3]）+ 重绘
-		if p.size() >= 4:
-			_gauges = [p[1], p[2], p[3]]
+		# 快照（p 为 ElementalState 5 槽 gauges——取 [1..4]）+ 重绘
+		if p.size() >= 5:
+			_gauges = [p[1], p[2], p[3], p[4]]
 		else:
-			_gauges = [0.0, 0.0, 0.0]
+			_gauges = [0.0, 0.0, 0.0, 0.0]
 		queue_redraw()
 
 	func progress(p_element: int) -> float:
 		# 观测口：p_element ∈ GameConst.Element → 满槽比例 0~1
-		var idx := clampi(p_element - 1, 0, 2)
+		var idx := clampi(p_element - 1, 0, 3)
 		return clampf(_gauges[idx] / GAUGE_MAX, 0.0, 1.0)
 
 	func _draw() -> void:
-		# 每元素 120° 扇区弧：起点 = −PI/2 + idx×120°，扫角 = 120°×clamp(gauge/100)；
-		# 颜色 FIR 橙 / ICE 蓝 / LTG 紫，线宽 3，alpha 0.9
-		for i in range(3):
+		# 每元素 90° 扇区弧：起点 = −PI/2 + idx×90°，扫角 = 90°×clamp(gauge/100)；
+		# 颜色 FIR 橙 / ICE 蓝 / LTG 紫 / WAT 水青，线宽 3，alpha 0.9
+		for i in range(4):
 			var frac := clampf(_gauges[i] / GAUGE_MAX, 0.0, 1.0)
 			if frac <= 0.0:
 				continue

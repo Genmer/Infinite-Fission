@@ -57,6 +57,7 @@ const ELEMENT_COLORS: Array[Color] = [
 	Color(1.0, 0.45, 0.2),                    # FIR
 	Color(0.4, 0.8, 1.0),                     # ICE
 	Color(0.75, 0.5, 1.0),                    # LTG
+	Color(0.3, 0.75, 0.9),                    # WAT（v1.2.0，A11 §1）
 ]
 const ENEMY_TEAM_TINT := Color(1.0, 0.35, 0.45)   # 敌弹统一染色（敌我识别）
 

@@ -163,7 +163,8 @@ func apply_attach(p_enemy: Node2D, p_element: int, p_value: float,
 
 func tick(p_game_delta: float) -> void:
 	# 全敌：λ 比例衰减（F19/F-22）→ 状态计时 → DOT 跳伤调度 → 超导到期恢复
-	var lambdas: Array[float] = [0.35, 0.30, 0.40]
+	# v1.2.0：兜底表尾追 WAT=0.38（A11 §2；与 BalanceTables 默认同值）
+	var lambdas: Array[float] = [0.35, 0.30, 0.40, 0.38]
 	if GameConfig.balance != null:
 		lambdas = GameConfig.balance.element_decay_lambda
 	for host in _hosts.duplicate():

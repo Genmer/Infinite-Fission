@@ -302,13 +302,15 @@ func _test_u3_clamp_retained() -> void:
 func _test_u8_ring_colors_decay_death() -> void:
 	print("── U8 环元素色/衰减/死亡隐藏 ──")
 	# 元素色冻结表（headless 不验像素；与 A6 §9 表一致 + 绘制常量单源）
+	# v1.2.0 授权更新：WAT 入场 → RING_COLORS 3 → 4（A11 §2；FIR/ICE/LTG 三值冻结不变）
 	var colors: Array[Color] = Enemy.ElementRing.RING_COLORS
-	var ok3 := colors.size() == 3
-	_check("ElementRing.RING_COLORS 恰 3 元素", ok3)
-	if ok3:
+	var ok4 := colors.size() == 4
+	_check("ElementRing.RING_COLORS 恰 4 元素（v1.2.0 授权更新）", ok4)
+	if ok4:
 		var fir := colors[GameConst.Element.FIR - 1]
 		var ice := colors[GameConst.Element.ICE - 1]
 		var ltg := colors[GameConst.Element.LTG - 1]
+		var wat := colors[GameConst.Element.WAT - 1]
 		_check("FIR 橙 (1.0,0.45,0.2,0.9)（A6 §9 冻结）",
 			is_equal_approx(fir.r, 1.0) and is_equal_approx(fir.g, 0.45)
 			and is_equal_approx(fir.b, 0.2) and is_equal_approx(fir.a, 0.9))
@@ -318,6 +320,9 @@ func _test_u8_ring_colors_decay_death() -> void:
 		_check("LTG 紫 (0.75,0.6,1.0,0.9)",
 			is_equal_approx(ltg.r, 0.75) and is_equal_approx(ltg.g, 0.6)
 			and is_equal_approx(ltg.b, 1.0) and is_equal_approx(ltg.a, 0.9))
+		_check("WAT 水青 (0.3,0.75,0.9,0.9)（A11 §1 冻结）",
+			is_equal_approx(wat.r, 0.3) and is_equal_approx(wat.g, 0.75)
+			and is_equal_approx(wat.b, 0.9) and is_equal_approx(wat.a, 0.9))
 	# 衰减：附着 60 → λ_FIR 衰减 0.5s → 进度严格下降
 	var es := ElementalSystem.new()
 	var e := Enemy.new()

@@ -4,7 +4,7 @@
 class_name GameConst
 extends RefCounted
 
-enum Element { KIN, FIR, ICE, LTG }                       # 伤害/附着元素
+enum Element { KIN, FIR, ICE, LTG, WAT }                  # 伤害/附着元素（v1.2.0 尾追 WAT=4，A11 §2）
 enum PoolClass { ADD, MULT, LOCAL, MECH, ELEM }           # 词条池归类（B_spec §2.5）
 enum TraitEvent { ON_SPAWN, ON_TICK, ON_HIT, ON_PIERCE, ON_BOUNCE, ON_EXPIRE }  # 六大生命周期
 enum WeaponForm { BALLISTIC, LASER, HOMING, MELEE }       # 武器四形态
