@@ -42,6 +42,8 @@ func run(p_tree: SceneTree) -> void:
 	_test_v43_freeze_trigger()                    # V43
 	_test_v44_freeze_fullstop()                   # V44
 	_test_v45_shatter()                           # V45
+	_test_v46_conduct()                           # V46
+	_test_v47_vaporblast()                        # V47
 	_teardown_world()
 	_summary()
 
@@ -230,7 +232,8 @@ func _detect(p_frames: int = 1) -> void:
 
 
 func _gauge(p_enemy: Node2D, p_element: int, p_value: float) -> void:
-	_sys.apply_attach(p_enemy, p_element, p_value)    # 非满槽预置附着（无状态触发）
+	# 非满槽预置附着（无状态触发）；snapshot 100 供剧变快照通道（过载/导电/汽爆基数）
+	_sys.apply_attach(p_enemy, p_element, p_value, {"snapshot": 100.0})
 
 
 func _freeze(p_enemy: Node2D) -> void:
@@ -245,6 +248,16 @@ func _read_source(p_path: String) -> String:
 	if f == null:
 		return ""
 	return f.get_as_text()
+
+
+func _purge_enemies() -> void:
+	# 用例间隔离：归还全部存活敌 + 清空网格（池化复用，spawn 全量重置）——
+	# V46/V47 的连锁/扩散几何要求无邻近杂敌（query_circle 保守半径 160+64）
+	for e in _alive_enemies:
+		_sys.unregister_host(e)
+		_enemy_pool.release(e)
+	_alive_enemies.clear()
+	_grid.rebuild(_alive_enemies)
 
 
 # ── V41 WAT 基建 ──────────────────────────────────────────────────
@@ -481,3 +494,140 @@ func _direct_fake() -> DamageResult:
 	r.popup_style = GameConst.PopupStyle.NORMAL
 	r.panel_snapshot = 100.0
 	return r
+
+
+# ── V46 导电 ──────────────────────────────────────────────────────
+func _test_v46_conduct() -> void:
+	print("── V46 导电 ──")
+	_purge_enemies()
+	# a) 单列链：O→A→B→C 间距 200（query 保守 160+64=224 → 每跳恰 1 新目标）；X 距外
+	# hop0 = 0.9×snapshot×φ(=1) = 90 → 54 → 32.4；主目标 REACTION 90；深度 3 封顶（X 不吃）
+	var o := _spawn_enemy(_make_enemy_data("V46_O", 4000.0), Vector2(60, 700))
+	_sys.register_host(o)
+	var a := _spawn_enemy(_make_enemy_data("V46_A", 4000.0), Vector2(260, 700))
+	_sys.register_host(a)
+	var b := _spawn_enemy(_make_enemy_data("V46_B", 4000.0), Vector2(460, 700))
+	_sys.register_host(b)
+	var c := _spawn_enemy(_make_enemy_data("V46_C", 4000.0), Vector2(660, 700))
+	_sys.register_host(c)
+	var x := _spawn_enemy(_make_enemy_data("V46_X", 4000.0), Vector2(660, 900))
+	_sys.register_host(x)
+	_gauge(o, GameConst.Element.WAT, 30.0)
+	_gauge(o, GameConst.Element.LTG, 30.0)
+	_detect()
+	var main_ok := false
+	var hop_a := -1.0
+	var hop_b := -1.0
+	var hop_c := -1.0
+	var hop_x := -1.0
+	for r in _captured:
+		if r.target_uid == int(o.get("uid")) and r.popup_style == GameConst.PopupStyle.REACTION \
+				and r.element == GameConst.ReactionType.RXN_WAT_LTG \
+				and _approx(r.final_value, 90.0):
+			main_ok = true
+		elif r.popup_style == GameConst.PopupStyle.DOT and r.element == GameConst.Element.LTG:
+			if r.target_uid == int(a.get("uid")):
+				hop_a = r.final_value
+			elif r.target_uid == int(b.get("uid")):
+				hop_b = r.final_value
+			elif r.target_uid == int(c.get("uid")):
+				hop_c = r.final_value
+			elif r.target_uid == int(x.get("uid")):
+				hop_x = r.final_value
+	var chain_ok := main_ok and _approx(hop_a, 90.0) and _approx(hop_b, 54.0) \
+		and _approx(hop_c, 32.4) and hop_x < 0.0
+	# b) 清双槽 + CD 4.0
+	var st: ElementalState = o.get("elemental")
+	var clear_ok: bool = st != null and _approx(st.gauges[GameConst.Element.WAT], 0.0) \
+		and _approx(st.gauges[GameConst.Element.LTG], 0.0) \
+		and _approx(float(st.reaction_cd.get(GameConst.ReactionType.RXN_WAT_LTG, -1.0)), 4.0)
+	_check("V46：导电——主 90×φ + BFS 3 跳衰减 90/54/32.4（深度封顶 X 不吃）+ WAT/LTG 双槽清 + CD 4s",
+		chain_ok and clear_ok,
+		"main=%s a=%s b=%s c=%s x=%s clear=%s" % [str(main_ok), str(hop_a), str(hop_b),
+			str(hop_c), str(hop_x), str(clear_ok)])
+	# c) 同帧 shock + conduct 并存：幂等键分流不互撞（共享目标吃两跳 35/90）
+	_purge_enemies()
+	var s_src := _spawn_enemy(_make_enemy_data("V46_S", 4000.0), Vector2(100, 1000))
+	_sys.register_host(s_src)
+	var s1 := _spawn_enemy(_make_enemy_data("V46_S1", 4000.0), Vector2(200, 1000))
+	_sys.register_host(s1)
+	var w_src := _spawn_enemy(_make_enemy_data("V46_W", 4000.0), Vector2(100, 1100))
+	_sys.register_host(w_src)
+	var shared := _spawn_enemy(_make_enemy_data("V46_SH", 4000.0), Vector2(260, 1050))
+	_sys.register_host(shared)
+	_bump()
+	_pipeline.begin_frame()
+	_captured.clear()
+	_rxn_events.clear()
+	# 同帧：感电（满 LTG 槽 → 即时 shock chain 35%×100）+ 导电（帧末 detect hop0 90）
+	_sys.apply_attach(s_src, GameConst.Element.LTG, 100.0, {"hit_damage": 100.0})
+	_gauge(w_src, GameConst.Element.WAT, 30.0)
+	_gauge(w_src, GameConst.Element.LTG, 30.0)
+	_sys.detect_reactions()
+	var shared_jumps: Array[float] = []
+	for r in _captured:
+		if r.target_uid == int(shared.get("uid")) and r.popup_style == GameConst.PopupStyle.DOT:
+			shared_jumps.append(r.final_value)
+	var both_ok := shared_jumps.size() == 2 \
+		and shared_jumps.has(35.0) and shared_jumps.has(90.0)
+	_check("V46：同帧 shock+conduct 并存——共享目标吃两跳 35/90（_uid_chain/_uid_conduct 幂等分流不撞）",
+		both_ok, "jumps=%s" % str(shared_jumps))
+
+
+# ── V47 汽爆 ──────────────────────────────────────────────────────
+func _test_v47_vaporblast() -> void:
+	print("── V47 汽爆 ──")
+	_purge_enemies()
+	# a) 主 0.6×φ=60 + 半径 80 扩散（近 79 吃 / 远 95 不吃；窄相 reach=80+hitbox1=81）
+	var vd := _make_enemy_data("V47_V", 4000.0)
+	vd.hitbox_r = 1.0
+	var v := _spawn_enemy(vd, Vector2(100, 200))
+	_sys.register_host(v)
+	var near_d := _make_enemy_data("V47_N", 4000.0)
+	near_d.hitbox_r = 1.0
+	var near := _spawn_enemy(near_d, Vector2(179, 200))
+	_sys.register_host(near)
+	var far_d := _make_enemy_data("V47_F", 4000.0)
+	far_d.hitbox_r = 1.0
+	var far := _spawn_enemy(far_d, Vector2(195, 200))
+	_sys.register_host(far)
+	_gauge(v, GameConst.Element.WAT, 30.0)
+	_gauge(v, GameConst.Element.FIR, 30.0)
+	_detect()
+	var main_ok := false
+	var near_hit := false
+	var far_hit := false
+	for r in _captured:
+		if r.target_uid == int(v.get("uid")) and r.popup_style == GameConst.PopupStyle.REACTION \
+				and r.element == GameConst.ReactionType.RXN_WAT_FIR \
+				and _approx(r.final_value, 60.0):
+			main_ok = true
+		if r.target_uid == int(near.get("uid")):
+			near_hit = true
+		if r.target_uid == int(far.get("uid")):
+			far_hit = true
+	# b) 清双槽 + CD 3.0
+	var st: ElementalState = v.get("elemental")
+	var clear_ok: bool = st != null and _approx(st.gauges[GameConst.Element.WAT], 0.0) \
+		and _approx(st.gauges[GameConst.Element.FIR], 0.0) \
+		and _approx(float(st.reaction_cd.get(GameConst.ReactionType.RXN_WAT_FIR, -1.0)), 3.0)
+	_check("V47：汽爆——主 60×φ + 半径 80 扩散（79 距吃/95 距不吃）+ WAT/FIR 双槽清 + CD 3s",
+		main_ok and near_hit and not far_hit and clear_ok,
+		"main=%s near=%s far=%s clear=%s" % [str(main_ok), str(near_hit), str(far_hit),
+			str(clear_ok)])
+	# c) 过载恒等重放：同几何 FIR+LTG → 扩散结算 element 承载 RXN_FIR_LTG（第 5 参缺省恒等）
+	_purge_enemies()
+	var ov := _spawn_enemy(_make_enemy_data("V47_OV", 4000.0), Vector2(100, 400))
+	_sys.register_host(ov)
+	var ov_near := _spawn_enemy(_make_enemy_data("V47_ON", 4000.0), Vector2(179, 400))
+	_sys.register_host(ov_near)
+	_gauge(ov, GameConst.Element.FIR, 30.0)
+	_gauge(ov, GameConst.Element.LTG, 30.0)
+	_detect()
+	var ov_spread_el := -1
+	for r in _captured:
+		if r.target_uid == int(ov_near.get("uid")) \
+				and r.popup_style == GameConst.PopupStyle.REACTION:
+			ov_spread_el = r.element
+	_check("V47：过载恒等重放——扩散结算 element 承载 RXN_FIR_LTG（_spread_reaction 缺省参零漂移）",
+		ov_spread_el == GameConst.ReactionType.RXN_FIR_LTG, "el=%d" % ov_spread_el)

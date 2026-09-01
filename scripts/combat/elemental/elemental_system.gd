@@ -27,12 +27,14 @@ var _mastery_step := 0.0                       # 精通每层步长（后写覆�
 var _uid_dot: int = 0                          # DOT 结算幂等键 source_uid（分流）
 var _uid_chain: int = 0                        # 连锁跳伤 source_uid
 var _uid_reaction: int = 0                     # 反应结算 source_uid
+var _uid_conduct: int = 0                      # v1.2.0 导电连锁跳伤 source_uid（分流，A11 §3）
 
 
 func _init() -> void:
 	_uid_dot = GameConst.next_uid()
 	_uid_chain = GameConst.next_uid()
 	_uid_reaction = GameConst.next_uid()
+	_uid_conduct = GameConst.next_uid()
 
 
 func register_host(p_enemy: Node2D) -> void:
@@ -314,6 +316,30 @@ func _trigger_reaction(p_enemy: Node2D, p_state: ElementalState, p_rxn: int) -> 
 			EventBus.emit_reaction_triggered(GameConst.ReactionType.RXN_WAT_ICE,
 				(p_enemy as Node2D).global_position, enemy_uid)
 			DebugStats.count(&"reaction_freeze")
+		GameConst.ReactionType.RXN_WAT_LTG:
+			# 导电（v1.2.0 A11 §3）：主目标 90% 快照 × 反应强化 + BFS 连锁（深度 3/
+			# 每跳 3 目标/半径 160/逐跳 ×0.6 衰减；去重含 origin）；清双槽
+			var rule5: Dictionary = tables.get("RXN_WAT_LTG",
+				{"coef": 0.9, "chain_hops": 3, "chain_targets": 3,
+				"chain_radius": 160.0, "chain_decay": 0.6, "cd": 4.0})
+			var snapshot5 := p_state.last_attach_snapshot
+			var coef5 := float(rule5.get("coef", 0.9)) * rm
+			_settle_reaction(p_enemy, snapshot5, coef5, GameConst.ReactionType.RXN_WAT_LTG)
+			_conduct_chain(p_enemy, snapshot5, coef5)
+			p_state.clear_element(GameConst.Element.WAT)
+			p_state.clear_element(GameConst.Element.LTG)
+		GameConst.ReactionType.RXN_WAT_FIR:
+			# 汽爆（v1.2.0 A11 §3）：主目标 60% 快照 × 反应强化 + 半径 80 扩散
+			#（_spread_reaction 显式传 RXN_WAT_FIR；过载调用点传 RXN_FIR_LTG 恒等）；清双槽
+			var rule6: Dictionary = tables.get("RXN_WAT_FIR", {"coef": 0.6, "radius": 80.0})
+			var snapshot6 := p_state.last_attach_snapshot
+			var coef6 := float(rule6.get("coef", 0.6)) * rm
+			var radius6 := float(rule6.get("radius", 80.0))
+			_settle_reaction(p_enemy, snapshot6, coef6, GameConst.ReactionType.RXN_WAT_FIR)
+			_spread_reaction(p_enemy, radius6, snapshot6, coef6,
+				GameConst.ReactionType.RXN_WAT_FIR)
+			p_state.clear_element(GameConst.Element.WAT)
+			p_state.clear_element(GameConst.Element.FIR)
 	DebugStats.count(&"reaction_triggered")
 
 
@@ -341,8 +367,10 @@ func _settle_reaction(p_enemy: Node2D, p_snapshot: float, p_coef: float, p_rxn: 
 		DebugStats.count(&"reaction_settled")
 
 
-func _spread_reaction(p_center: Node2D, p_radius: float, p_snapshot: float, p_coef: float) -> void:
-	# 过载半径扩散：圆查询逐敌独立结算（去中心；同帧幂等键分流独立 uid）。
+func _spread_reaction(p_center: Node2D, p_radius: float, p_snapshot: float, p_coef: float,
+		p_rxn: int = GameConst.ReactionType.RXN_FIR_LTG) -> void:
+	# 过载/汽爆半径扩散：圆查询逐敌独立结算（去中心；同帧幂等键分流独立 uid）。
+	# v1.2.0 增第 5 参 p_rxn（缺省 RXN_FIR_LTG = 既有过载语义恒等；汽爆显式传 RXN_WAT_FIR）。
 	# 网格候选为保守超集（入桶半径 = max_entity_radius）——此处窄相收窄到结算半径 + 目标 hitbox_r
 	if enemy_grid == null:
 		return
@@ -356,7 +384,7 @@ func _spread_reaction(p_center: Node2D, p_radius: float, p_snapshot: float, p_co
 		var reach := p_radius + (float(hr) if hr != null else 0.0)
 		if (cand as Node2D).global_position.distance_to(center) > reach:
 			continue
-		_settle_reaction(cand, p_snapshot, p_coef, GameConst.ReactionType.RXN_FIR_LTG)
+		_settle_reaction(cand, p_snapshot, p_coef, p_rxn)
 
 
 func _dot_tick(p_enemy: Node2D, p_state: ElementalState) -> void:
@@ -430,6 +458,57 @@ func _nearest_targets(p_from: Node2D, p_radius: float, p_dedup: Dictionary,
 			break
 		out.append(row[1])
 	return out
+
+
+func _conduct_chain(p_origin: Node2D, p_snapshot: float, p_coef: float) -> void:
+	# 导电连锁（v1.2.0 A11 §3，镜像 _shock_chain BFS）：深度 3 / 每跳目标 3 / 半径 160 /
+	# hop0 = p_coef×snapshot，后续每跳 ×0.6 衰减；同周期同目标去重（含 origin——主目标
+	# 只吃 _settle_reaction 主结算，链路不再跳它）
+	if pipeline == null or enemy_grid == null:
+		return
+	var depth := 3
+	var decay := 0.6
+	var targets_per_hop := 3
+	var radius := 160.0
+	if GameConfig.balance != null:
+		var conduct: Dictionary = GameConfig.balance.reaction_table.get("RXN_WAT_LTG", {})
+		depth = int(conduct.get("chain_hops", 3))
+		targets_per_hop = int(conduct.get("chain_targets", 3))
+		decay = float(conduct.get("chain_decay", 0.6))
+		radius = float(conduct.get("chain_radius", 160.0))
+	var origin_pos: Vector2 = (p_origin as Node2D).global_position
+	var dedup: Dictionary = {int(p_origin.get("uid")): true}
+	var frontier: Array[Node2D] = [p_origin]
+	var damage := p_coef * p_snapshot
+	for _hop in range(depth):
+		var next_frontier: Array[Node2D] = []
+		for node in frontier:
+			for target in _nearest_targets(node, radius, dedup, targets_per_hop):
+				dedup[int(target.get("uid"))] = true
+				_settle_conduct_jump(target, damage)
+				next_frontier.append(target)
+		if next_frontier.is_empty():
+			break
+		frontier = next_frontier
+		damage *= decay                          # 每跳衰减 60%
+
+
+func _settle_conduct_jump(p_target: Node2D, p_damage: float) -> void:
+	# 导电连锁跳伤（v1.2.0，镜像 _settle_chain_jump：element=LTG、HIT_IS_DOT 不掷暴击、
+	# source_uid=_uid_conduct 幂等分流——同帧 shock+conduct 并存不撞）
+	var ctx := DamageContext.make()
+	ctx.source_uid = _uid_conduct
+	ctx.target = p_target
+	ctx.target_uid = int(p_target.get("uid"))
+	ctx.frame_stamp = GameConfig.frame_stamp
+	ctx.base_atk = p_damage
+	ctx.element = GameConst.Element.LTG
+	ctx.hit_flags = GameConst.HIT_IS_DOT
+	ctx.crit_chance = 0.0
+	ctx.pos = (p_target as Node2D).global_position
+	if pipeline.has_method(&"resolve"):
+		pipeline.call(&"resolve", ctx)
+	DebugStats.count(&"conduct_chain_jump")
 
 
 func _settle_chain_jump(p_target: Node2D, p_damage: float) -> void:
