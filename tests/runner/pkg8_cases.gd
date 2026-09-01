@@ -27,6 +27,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_v17_characters()                        # V17 角色数据
 	_test_v18_v19_character_flow()                # V18/V19 角色链
 	_test_v21_v22_dash()                          # V21/22 冲刺 + HUD 冲刺钮/诅咒标签
+	_test_v5_v8_v12_v16_v20_v23_closure()         # 收口：跨系统闭环
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -841,6 +842,122 @@ func _has_error(p_verdicts: Array) -> bool:
 		if String(v.get("severity", DataValidator.SEV_ERROR)) == DataValidator.SEV_ERROR:
 			return true
 	return false
+
+
+# ══ 收口：V5 事件金币吃 K_gold / V8 预随端到端 / V12 赌桌专用 rng / V16 移除后再刷出 /
+#    V20 诅咒标签信号联动 / V23 全链闭环 ═══════════════════════════
+func _test_v5_v8_v12_v16_v20_v23_closure() -> void:
+	print("── 收口闭环 ──")
+	var ed := _gl.event_director
+	var c := _gl.curse_handler
+	var player := _gl.player
+	var h := _gl.chip_handler
+	var hud := _gl.hud
+	_gl.start_run(&"CHAR_COURIER")
+	# ── V5：事件金币全走 _add_gold（吃 K_gold）+「基础值」文案 ──
+	h.reset_run()
+	h.unlocked_slots = 3
+	h.equip(&"CHIP_GOLD", 0)                      # gold_gain +0.10 → K_gold = 0.10
+	c.reset_run()
+	_gl.gold = 0
+	var r30: Dictionary = ed.apply_option(3, 1)   # 神龛离开 +30 基础值
+	_check("V5：事件金币吃 K_gold（30×1.1=33）+ 文案带「基础值」",
+		_gl.gold == 33 and String(r30.get("message", "")).contains("基础值"),
+		"gold=%d" % _gl.gold)
+	# ── V12：赌桌判定专用 rng——金币流零消费 ──
+	var gold_state_before: String = str(_gl._gold_rng.state)
+	ed.reset_run()
+	_gl.gold = 100
+	ed.apply_option(1, 0)                         # 赌桌下注（用事件流 888，不碰金币流）
+	_check("V12：赌桌判定消费事件流，金币流（seed 42）零消费",
+		str(_gl._gold_rng.state) == gold_state_before)
+	# ── V8/V14：商店芯片购买端到端——equipped 副词条 == offer 预随（所见即所得） ──
+	h.reset_run()
+	h.unlocked_slots = 3
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_gl.restart_run()
+	_gl.chip_handler.reset_run()
+	_gl.chip_handler.unlocked_slots = 3
+	_gl.gold = 1000
+	_gl._open_shop_flow(12, false)
+	var offers: Array = _gl.shop_ui.shelf_state()["chips"]
+	if not offers.is_empty():
+		var offer: Dictionary = offers[0]
+		var gold_before: int = _gl.gold
+		_gl._on_shop_purchase(4)
+		var bought_id := StringName(String(offer.get("chip_id", "")))
+		var entry_sub: Array = []
+		for entry in h.equipped:
+			if (entry.get("chip") as ChipData).id == bought_id:
+				entry_sub = entry.get("substats", [])
+		var match_ok := (entry_sub as Array).size() == (offer.get("substats", []) as Array).size()
+		if match_ok:
+			for i in range((entry_sub as Array).size()):
+				match_ok = match_ok and String((entry_sub[i] as Dictionary).get("stat")) \
+					== String(((offer.get("substats") as Array)[i] as Dictionary).get("stat"))
+		_check("V8：购买即得预随副词条（equipped == offer 逐键一致）+ 扣款",
+			match_ok and _gl.gold == gold_before - int(offer.get("price", 0)),
+			"id=%s" % String(bought_id))
+	else:
+		_check("V8：购买即得预随副词条（货架空——夹具失效）", false)
+	_gl.shop_ui.close()
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+	# ── V16：移除词条后可再刷出（同 id 重新挂载不被排除） ──
+	var weapon := player.weapon_slots[0]
+	var re_data := TraitData.new()
+	re_data.id = &"TEST_REATTACH"
+	re_data.display_name = "可再生词条"
+	re_data.pool = GameConst.PoolClass.ADD
+	re_data.pool_id = &"add_atk"
+	re_data.value = 0.05
+	re_data.stack_max = 2
+	weapon.attach_trait(re_data)
+	weapon.attach_trait(re_data)                  # 叠 2 层
+	_gl.change_state(GameConst.GameStatus.SHOP)
+	_gl.shop_ui.open(9, false, [], {}, 1000)
+	_gl.gold = 1000
+	_gl._refresh_shop_availability()
+	_gl._on_shop_utility(&"strip")                # 移除 1 层
+	_check("V16：strip 移除 1 层后同 id 可再挂载（卡池不排除已移除词条）",
+		weapon.attach_trait(re_data)
+		and String((weapon.trait_stack.peek_last(true) as Dictionary).get("trait_id")) == "TEST_REATTACH")
+	# ── V20：诅咒标签信号联动（add_curse → curse_changed → HUD 标签显隐） ──
+	c.reset_run()
+	c.add_curse(2)
+	_check("V20 信号联动：add_curse(2) → HUD 标签显示「诅咒 2/5」",
+		hud_visible() and hud_text() == "诅咒 2/5")
+	# ── V23：闭环——契约 → 标签 → 净化 → 重开全清 ──
+	_gl.change_state(GameConst.GameStatus.SHOP)
+	_gl.shop_ui.close()
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+	_gl.change_state(GameConst.GameStatus.SHOP)
+	_gl.shop_ui.open(9, false, [], {}, 0)
+	_gl.gold = 0
+	c.reset_run()
+	c.add_curse(4)
+	_gl._on_shop_utility(&"contract")             # +1 层 → 满 5 → +120 金
+	_check("V23 闭环：契约加至满层 5 + 120 金入账",
+		c.curse_count == 5 and _gl.gold == 120 and c.is_maxed())
+	_gl._refresh_shop_availability()
+	_check("V23 闭环：满层契约禁用 + 净化可用",
+		(_gl.shop_ui._util_buttons[&"contract"] as Button).disabled
+		and not (_gl.shop_ui._util_buttons[&"purify"] as Button).disabled)
+	_gl.shop_ui.close()
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_gl.restart_run()
+	_check("V23 闭环：重开全清（层数/遥测/标签隐藏/事件暂存）",
+		c.curse_count == 0 and ed.events_triggered == 0
+		and not hud._curse_label.visible and _gl._deferred_event_wave == 0
+		and not _gl.wave_director._event_gapped)
+
+
+func hud_visible() -> bool:
+	return _gl.hud._curse_label.visible
+
+
+func hud_text() -> String:
+	return String(_gl.hud._curse_label.text)
 
 
 # ══ V21/22：冲刺（Player dash 四门 / 位移 / 双通道无敌）+ HUD 冲刺钮 / 诅咒标签 ══
