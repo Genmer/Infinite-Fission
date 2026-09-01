@@ -8,6 +8,7 @@ class_name WaveDirector
 extends Node
 
 signal shop_requested(wave: int, black_market: bool)   # v0.6.0 商店间隙开门请求（A4 §1）
+signal event_requested(wave: int, event_index: int)    # v0.8.0 事件间隙触发（A7 §V1）
 
 var wave_table: WaveTableData = null          # M-14 注入（null → 公式 fallback）
 var spawner: EnemySpawner = null
@@ -21,6 +22,9 @@ var enemies_alive: int = 0
 var wave_first_kill_done: bool = false        # SYN_FIRST_STRIKE 重置位
 var _shop_gapped: bool = false                # v0.6.0 单间隙单店闸（start_wave 复位）
 var _extra_shop_pending: bool = false         # v0.6.0 黑市追加申请（queue_extra_shop 置位）
+# ── v0.8.0 事件触发（A7 §V1） ──
+var _event_gapped: bool = false               # 一间隙一 roll 闸（未中也消耗）
+var _event_rng: RandomNumberGenerator = RandomNumberGenerator.new()   # 独立 rng（seed 777）
 
 enum WavePhase { IDLE, SPAWNING, CLEARING, BUFFER }
 
@@ -50,6 +54,11 @@ const ESCORT_MIX_WAVE := 30                   # w30 起：混合怪 ×1/2s 场�
 const ESCORT_MIX_INTERVAL := 2.0
 const ESCORT_MIX_CAP := 14
 const ELITE_SCATTER: Array[int] = [8, 12, 16, 22, 24, 26, 28]   # A3 §2.4 精英散布（fallback）
+# v0.8.0 事件触发常量（A7 §V1 冻结）：w4 起 / 40% 概率 / 4 种事件 / 独立 rng seed 777
+const EVENT_START_WAVE := 4
+const EVENT_CHANCE := 0.40
+const EVENT_KINDS := 4
+const EVENT_RNG_SEED := 777
 const TP_FALLBACK := {"base": 14.0, "slope": 3.2, "elite_wave_mult": 1.25}   # A3 §1.4
 const ENDLESS_FALLBACK := {
 	"tp_base": 110.0, "tp_growth": 1.03, "window_base": 30.0, "window_slope": 0.2,
@@ -60,6 +69,14 @@ const ENDLESS_FALLBACK := {
 func _ready() -> void:
 	EventBus.enemy_killed.connect(_on_enemy_killed_event)
 	EventBus.boss_spawned.connect(_on_boss_spawned)
+	_event_rng.seed = EVENT_RNG_SEED             # v0.8.0：事件 roll 定种子（reset 可重播种）
+
+
+func reset_event_state() -> void:
+	# v0.8.0 重开清零（GameLoop._reset_run_state 调用）：rng 重播种 + 闸复位
+	#（与 reset_extra_shop 同口径；事件 roll 不跨局）
+	_event_rng.seed = EVENT_RNG_SEED
+	_event_gapped = false
 
 
 func start_wave(p_wave: int) -> void:
@@ -174,6 +191,15 @@ func tick(p_game_delta: float) -> void:
 					_extra_shop_pending = false
 					shop_requested.emit(current_wave, black)
 					return
+				# v0.8.0 V1 事件间隙（A7）：非商店间隙、w4 起、黑市 pending==0（pending>0 整闸
+				# 跳过不消耗 roll）；一间隙一 roll——未中也消耗 _event_gapped 闸；触发帧停留 BUFFER
+				if not _event_gapped and current_wave >= EVENT_START_WAVE \
+						and not _extra_shop_pending and not _is_shop_wave(current_wave):
+					_event_gapped = true
+					if _event_rng.randf() < EVENT_CHANCE:
+						event_requested.emit(current_wave,
+							_event_rng.randi_range(0, EVENT_KINDS - 1))
+						return
 				start_wave(current_wave + 1)
 		_:
 			pass

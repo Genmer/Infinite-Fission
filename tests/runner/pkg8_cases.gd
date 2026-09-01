@@ -23,6 +23,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_v6_curse()                              # V6 诅咒运行时
 	_test_v9_detach()                             # V9 词条移除/净化
 	_test_v10_v11_shop_expand()                   # V10/V11 商店扩容
+	_test_v1_v4_events()                          # V1~V4 事件链
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -553,6 +554,194 @@ func _offer_ids(p_offers: Array) -> Array[String]:
 	for offer in p_offers:
 		out.append(String((offer as Dictionary).get("chip_id", "")))
 	return out
+
+
+# ══ V1~V4：事件链（WaveDirector 触发 / GameLoop 仲裁 / EventUI / EventDirector 四效果） ══
+func _test_v1_v4_events() -> void:
+	print("── V1~V4 事件链 ──")
+	var wd := _gl.wave_director
+	var ed := _gl.event_director
+	var eui := _gl.event_ui
+	var c := _gl.curse_handler
+	# ── V1 触发器常量与闸 ──
+	_check("事件常量：START_WAVE=4 / CHANCE=0.40 / KINDS=4 / SEED=777",
+		WaveDirector.EVENT_START_WAVE == 4
+		and is_equal_approx(WaveDirector.EVENT_CHANCE, 0.40)
+		and WaveDirector.EVENT_KINDS == 4 and WaveDirector.EVENT_RNG_SEED == 777)
+	wd.reset_event_state()
+	var seq_a := _event_roll_snapshot(wd)
+	wd.reset_event_state()
+	var seq_b := _event_roll_snapshot(wd)
+	_check("事件流重播种：reset_event_state 后序列逐位一致", seq_a == seq_b)
+	# 触发确定性：seed 777 下逐间隙模拟 BUFFER → 收集 event_requested 发射
+	wd.reset_event_state()
+	var fired: Array = []
+	var cb := func(wave: int, idx: int) -> void: fired.append([wave, idx])
+	wd.event_requested.connect(cb)
+	wd.current_wave = 3                            # w3 < START_WAVE → 不触发（闸不消耗）
+	wd._phase = WaveDirector.WavePhase.BUFFER
+	wd.buffer_left = 0.0
+	var gapped0 := wd._event_gapped
+	wd.tick(DT)
+	_check("w3 BUFFER：低于起始波不触发不消耗闸",
+		wd._event_gapped == gapped0 and fired.is_empty() and wd.current_wave == 4)
+	wd.reset_event_state()
+	wd.current_wave = 4                            # w4：黑市 pending → 整闸跳过不消耗
+	wd._phase = WaveDirector.WavePhase.BUFFER
+	wd.buffer_left = 0.0
+	wd._extra_shop_pending = true
+	wd.tick(DT)
+	_check("w4 + 黑市 pending：跳过且不消耗闸", not wd._event_gapped and fired.is_empty())
+	wd._extra_shop_pending = false
+	# 显式构造下一间隙（w5 BUFFER）：闸未被上一间隙消耗 → 本间隙正常 roll（或未中直接叠波）
+	wd.current_wave = 5
+	wd._phase = WaveDirector.WavePhase.BUFFER
+	wd.buffer_left = 0.0
+	wd._event_gapped = false
+	wd.tick(DT)
+	_check("w5 无 pending：消耗闸（roll 未中则直接 start_wave）",
+		wd._event_gapped and (fired.size() == 1 or wd.current_wave == 6))
+	wd.event_requested.disconnect(cb)
+	wd.reset_event_state()
+	# ── V2 EventDirector 构建/available ──
+	_check("event_count()=4 / id 表冻结",
+		ed.event_count() == 4
+		and EventDirector.EVENTS[0]["id"] == &"EV_ALTAR"
+		and EventDirector.EVENTS[1]["id"] == &"EV_TABLE"
+		and EventDirector.EVENTS[2]["id"] == &"EV_MERCHANT"
+		and EventDirector.EVENTS[3]["id"] == &"EV_SHRINE")
+	var ev0 := ed.build_event(0)
+	_check("build_event(0)：结构 title/options[{label,detail,available}]",
+		String(ev0.get("title", "")) == "血色祭坛" and (ev0.get("options") as Array).size() == 2
+		and (ev0.get("options") as Array)[0].has("available"))
+	var ev_oob := ed.build_event(99)
+	_check("build_event 越界钳末位（99→3 寂静神龛）", String(ev_oob.get("title", "")) == "寂静神龛")
+	# available：祭坛 HP 不足
+	_gl.player.hp = 1.0
+	var ev_altar_low := ed.build_event(0)
+	_check("祭坛 available：HP≤1 → 选项A disabled",
+		not bool(((ev_altar_low.get("options") as Array)[0] as Dictionary).get("available", true))
+		and bool(((ev_altar_low.get("options") as Array)[1] as Dictionary).get("available", true)))
+	_gl.player.hp = _gl.player.max_hp
+	# available：赌桌金币<60
+	_gl.gold = 10
+	var ev_table_poor := ed.build_event(1)
+	_check("赌桌 available：金币<60 → 下注 disabled",
+		not bool(((ev_table_poor.get("options") as Array)[0] as Dictionary).get("available", true)))
+	# available：商人满层
+	c.reset_run()
+	c.add_curse(5)
+	var ev_merchant := ed.build_event(2)
+	_check("商人 available：满层 → 两选项 disabled",
+		not bool(((ev_merchant.get("options") as Array)[0] as Dictionary).get("available", true))
+		and not bool(((ev_merchant.get("options") as Array)[1] as Dictionary).get("available", true)))
+	c.reset_run()
+	_gl.gold = 500
+	# ── V3/V4 效果：祭坛 A 献祭赐紫卡 ──
+	ed.reset_run()
+	_gl.player.hp = 50.0
+	var r1: Dictionary = ed.apply_option(0, 0)
+	_check("祭坛 A：献祭 20%（50→40）+ 赐卡 ok + 遥测",
+		is_equal_approx(_gl.player.hp, 40.0) and bool(r1.get("ok"))
+		and ed.cards_granted == 1 and ed.events_triggered == 1)
+	# 祭坛 B：满血 + 50 金（基础值）
+	_gl.player.hp = 30.0
+	var gold0: int = _gl.gold
+	var r2: Dictionary = ed.apply_option(0, 1)
+	_check("祭坛 B：满血 + 50 金基础值入账",
+		is_equal_approx(_gl.player.hp, _gl.player.max_hp) and _gl.gold == gold0 + 50
+		and ed.gold_granted_base == 50 and bool(r2.get("ok")))
+	# 赌桌 A：seed 888 确定性（同 reset 同结果）
+	var results: Array = []
+	for i in range(2):
+		ed.reset_run()
+		_gl.gold = 100
+		results.append(ed.apply_option(1, 0).get("message", ""))
+	_check("赌桌 A：seed 888 判定可复现（50% 单次布尔）",
+		results[0] == results[1] and (String(results[0]).contains("命运眷顾")
+		or String(results[0]).contains("骰子背弃")))
+	# 赌桌 B：诅咒 +2 → 150 金
+	ed.reset_run()
+	c.reset_run()
+	_gl.gold = 0
+	var r3: Dictionary = ed.apply_option(1, 1)
+	_check("赌桌 B：诅咒 +2 + 150 金基础值 + 遥测",
+		c.curse_count == 2 and _gl.gold == 150 and ed.curses_from_events == 2
+		and ed.gold_granted_base == 150 and bool(r3.get("ok")))
+	# 商人 A：诅咒 +1 → 120 金；商人 B 续 → 诅咒 3 层 + 260 金
+	ed.reset_run()
+	c.reset_run()
+	_gl.gold = 0
+	ed.apply_option(2, 0)
+	_check("商人 A：诅咒 +1 + 120 金基础值", c.curse_count == 1 and _gl.gold == 120)
+	var r4: Dictionary = ed.apply_option(2, 1)
+	_check("商人 B：诅咒 +2 + 260 金基础值",
+		c.curse_count == 3 and _gl.gold == 380 and bool(r4.get("ok")))
+	# 神龛 B：+30 金；神龛 A：遗物或 50 金 fallback
+	ed.reset_run()
+	_gl.gold = 0
+	var r5: Dictionary = ed.apply_option(3, 1)
+	_check("神龛 B：+30 金基础值", _gl.gold == 30 and ed.gold_granted_base == 30
+		and bool(r5.get("ok")))
+	var owned0: int = _gl.relic_handler.owned_count()
+	var r6: Dictionary = ed.apply_option(3, 0)
+	_check("神龛 A：遗物入列（或池空 fallback 50 金）",
+		bool(r6.get("ok")) and (_gl.relic_handler.owned_count() == owned0 + 1
+		or String(r6.get("message", "")).contains("50")))
+	# ── V2 EventUI 布局与互斥流 ──
+	var rects := eui.layout_rects()
+	_check("EventUI layout_rects：3 项两两无交集 + 屏内",
+		rects.size() == 3 and _rects_disjoint(rects))
+	_gl.start_run()
+	wd.reset_event_state()
+	_gl._open_event_flow(4, 0)
+	_check("开门仲裁：SHOP 态 + is_open + current_event 血色祭坛",
+		_gl.state == GameConst.GameStatus.SHOP and eui.is_open
+		and String(eui.current_event().get("title", "")) == "血色祭坛")
+	_gl._on_event_choice(0)
+	_check("选卡仲裁：apply → 收事件 → PLAYING + 排空不卡死",
+		_gl.state == GameConst.GameStatus.PLAYING and not eui.is_open)
+	_gl._open_event_flow(4, 1)
+	_gl._on_event_leave()
+	_check("离开仲裁：PLAYING + 关闭", _gl.state == GameConst.GameStatus.PLAYING and not eui.is_open)
+	# 非战斗态暂存：LEVEL_UP 中请求 → defer → 排空后补开
+	_gl.change_state(GameConst.GameStatus.LEVEL_UP)
+	_gl._open_event_flow(4, 2)
+	_check("LEVEL_UP 中：暂存不开门", not eui.is_open and _gl._deferred_event_wave == 4
+		and _gl._deferred_event_index == 2)
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+	_gl._drain_overlays_after_resume()
+	_check("排空：暂存事件补开（SHOP 态）", _gl.state == GameConst.GameStatus.SHOP
+		and eui.is_open and String(eui.current_event().get("id", "")) == "EV_MERCHANT")
+	_gl._on_event_leave()
+	# GAME_OVER 强制收起
+	_gl._open_event_flow(4, 0)
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_check("GAME_OVER：事件浮层强制收起", not eui.is_open)
+	_gl.restart_run()
+	_check("restart：事件暂存清零 + 遥测随局清零",
+		_gl._deferred_event_wave == 0 and ed.events_triggered == 0
+		and ed.gold_granted_base == 0 and not wd._event_gapped)
+
+
+func _event_roll_snapshot(p_wd: WaveDirector) -> Array:
+	# 事件流固定消费序快照（8 次 40% roll + 事件索引抽取）
+	var out: Array = []
+	for i in range(8):
+		out.append(p_wd._event_rng.randf() < WaveDirector.EVENT_CHANCE)
+		out.append(p_wd._event_rng.randi_range(0, WaveDirector.EVENT_KINDS - 1))
+	return out
+
+
+func _rects_disjoint(p_rects: Array[Rect2]) -> bool:
+	for i in range(p_rects.size()):
+		for j in range(i + 1, p_rects.size()):
+			if p_rects[i].intersects(p_rects[j]):
+				return false
+		var r := p_rects[i]
+		if r.position.x < 0.0 or r.position.y < 0.0 or r.end.x > 720.0 or r.end.y > 1280.0:
+			return false
+	return true
 
 
 func _substats_valid(p_h: ChipHandler, p_main_key: StringName, p_substats: Variant) -> bool:

@@ -72,6 +72,8 @@ var card_select_ui: CardSelectUI = null
 var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处理器
 var chip_handler: ChipHandler = null           # v0.7.0：芯片效果处理器（A6 §2）
 var curse_handler: CurseHandler = null         # v0.8.0：诅咒效果处理器（A7 §V6）
+var event_director: EventDirector = null       # v0.8.0：事件效果处理器（A7 §V2）
+var event_ui: EventUI = null                   # v0.8.0：事件界面（复用 SHOP 态宿主）
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
 var shop_ui: ShopUI = null                    # v0.6.0：Boss 前商店界面（SHOP 态宿主）
@@ -91,6 +93,8 @@ var _boot_elapsed_ms: float = 0.0             # Boot 耗时（AC：<3s 预算遥
 var _separation_left: float = SEPARATION_INTERVAL   # E-10 分离力 10Hz 相位
 var _gold_rng: RandomNumberGenerator = RandomNumberGenerator.new()   # v0.6.0 金币 roll 流（默认 seed 42）
 var _deferred_shop_wave: int = 0              # v0.6.0 非战斗态暂存商店波（0 = 无；闭店/选卡后排空）
+var _deferred_event_wave: int = 0             # v0.8.0：非战斗态暂存事件波（0 = 无）
+var _deferred_event_index: int = -1           # v0.8.0：暂存事件索引（配对 _deferred_event_wave）
 
 
 func _ready() -> void:
@@ -307,7 +311,8 @@ func _open_card_flow(p_new_level: int) -> void:
 
 
 func _on_card_choice(p_card: Dictionary) -> void:
-	# 选卡应用（CardGenerator）→ 恢复 PLAYING；连升排队继续弹（A3 §6.2）
+	# 选卡应用（CardGenerator）→ 恢复 PLAYING；连升排队继续弹（A3 §6.2）；
+	# v0.8.0：排空重构为 _drain_overlays_after_resume 单点（弹卡→暂存店→暂存事件，行为不变）
 	if state != GameConst.GameStatus.LEVEL_UP:
 		return
 	card_generator.apply_choice(p_card, player)
@@ -316,15 +321,7 @@ func _on_card_choice(p_card: Dictionary) -> void:
 		curse_handler.add_curse(1)
 	card_select_ui.close()
 	change_state(GameConst.GameStatus.PLAYING)
-	if pending_level_ups > 0:
-		pending_level_ups -= 1
-		_open_card_flow(player.level)
-		return
-	if _deferred_shop_wave > 0:
-		# v0.6.0：LEVEL_UP 竞态暂存的商店在选卡排空后补开（防波间隙卡死）
-		var wave := _deferred_shop_wave
-		_deferred_shop_wave = 0
-		_open_shop_flow(wave, false)
+	_drain_overlays_after_resume()
 
 
 # ── 商店流（v0.6.0，A4 §1/§2：Boss 前商店——开门/购买/utility/闭店仲裁） ──
@@ -393,11 +390,18 @@ func _stack_has_trait_id(p_stack: TraitStack, p_id: StringName) -> bool:
 
 
 func _close_shop() -> void:
-	# 闭店：SHOP → PLAYING（战斗恢复）→ 排空连升队列与暂存商店（A4 §1）
+	# 闭店：SHOP → PLAYING（战斗恢复）→ 排空连升队列与暂存商店（A4 §1；v0.8.0 重构为
+	# _drain_overlays_after_resume 单点排空，行为不变）
 	if state != GameConst.GameStatus.SHOP:
 		return
 	shop_ui.close()
 	change_state(GameConst.GameStatus.PLAYING)
+	_drain_overlays_after_resume()
+
+
+func _drain_overlays_after_resume() -> void:
+	# v0.8.0 排空序冻结（A7）：pending_level_ups 弹卡 → _deferred_shop_wave 开店 →
+	# _deferred_event 开事件（逐项消费，命中即停——每项恢复 PLAYING/开新浮层）
 	if pending_level_ups > 0:
 		pending_level_ups -= 1
 		_open_card_flow(player.level)
@@ -406,6 +410,62 @@ func _close_shop() -> void:
 		var wave := _deferred_shop_wave
 		_deferred_shop_wave = 0
 		_open_shop_flow(wave, false)
+		return
+	if _deferred_event_wave > 0:
+		var wave := _deferred_event_wave
+		var index := _deferred_event_index
+		_deferred_event_wave = 0
+		_deferred_event_index = -1
+		_open_event_flow(wave, index)
+
+
+# ── 事件流（v0.8.0，A7 §V1~V4：事件复用 SHOP 态——TRANSITIONS 零改动） ──
+func _on_event_requested(p_wave: int, p_index: int) -> void:
+	# WaveDirector.event_requested 消费（BUFFER 间隙触发，A7 §V1）
+	_open_event_flow(p_wave, p_index)
+
+
+func _open_event_flow(p_wave: int, p_index: int) -> void:
+	# 开门仲裁：仅 PLAYING 且商店关闭可开（EventUI 与 ShopUI 互斥由本函数单点保证）；
+	# 非战斗态 → 暂存（闭店/选卡后排空补开）。事件复用 SHOP 态（战斗冻结同口径）。
+	if state != GameConst.GameStatus.PLAYING or (shop_ui != null and shop_ui.is_open):
+		_deferred_event_wave = p_wave
+		_deferred_event_index = p_index
+		return
+	change_state(GameConst.GameStatus.SHOP)
+	event_ui.open(event_director.build_event(p_index))
+
+
+func _on_event_choice(p_option: int) -> void:
+	# 选项仲裁：SHOP 态且事件打开 → apply_option → 收事件回 PLAYING → 排空
+	if state != GameConst.GameStatus.SHOP or event_ui == null or not event_ui.is_open:
+		return
+	var index := _event_index_of(event_ui.current_event())
+	event_director.apply_option(index, p_option)
+	_close_event()
+
+
+func _on_event_leave() -> void:
+	# 离开仲裁：直接收事件
+	_close_event()
+
+
+func _event_index_of(p_event: Dictionary) -> int:
+	# 事件 id → EVENTS 索引（EventDirector 表序）；未命中 → 0 兜底
+	var id := StringName(String(p_event.get("id", "")))
+	for i in range(event_director.event_count()):
+		if StringName(String(EventDirector.EVENTS[i].get("id", ""))) == id:
+			return i
+	return 0
+
+
+func _close_event() -> void:
+	# 收事件：SHOP → PLAYING（战斗恢复）→ 排空（连升/暂存店/暂存事件，序冻结）
+	if state != GameConst.GameStatus.SHOP:
+		return
+	event_ui.close()
+	change_state(GameConst.GameStatus.PLAYING)
+	_drain_overlays_after_resume()
 
 
 func _on_shop_requested(p_wave: int, p_black_market: bool) -> void:
@@ -843,6 +903,27 @@ func _boot_build_presentation() -> void:
 	shop_ui.purchase_requested.connect(_on_shop_purchase)
 	shop_ui.utility_requested.connect(_on_shop_utility)
 	shop_ui.close_requested.connect(_close_shop)
+	# v0.8.0 事件流（A7 §V2）：EventDirector（效果）+ EventUI（SHOP 态复用宿主）+ 连线。
+	# ★ 订阅在 shop_ui 连线之后（连接序 = 派发序：同 BUFFER 帧商店先仲裁、事件后仲裁）
+	event_director = EventDirector.new()
+	event_director.name = "EventDirector"
+	add_child(event_director)
+	event_director.setup({
+		"registry": registry,
+		"player": player,
+		"card_generator": card_generator,
+		"curse_handler": curse_handler,
+		"chip_handler": chip_handler,
+		"popup_manager": popup_manager,
+		"game_loop": self,
+	})
+	event_ui = EventUI.new()
+	event_ui.name = "EventUI"
+	add_child(event_ui)
+	event_ui.option_chosen.connect(_on_event_choice)
+	event_ui.leave_requested.connect(_on_event_leave)
+	# 事件开门请求（WaveDirector BUFFER 间隙 → 仲裁）
+	wave_director.event_requested.connect(_on_event_requested)
 	EventBus.wave_cleared.connect(_on_wave_cleared_shop_bridge)
 	EventBus.wave_cleared.connect(_on_wave_cleared_gold_rush)   # v0.7.0 U5：金币关波末奖励
 	# 商店开门请求（WaveDirector BUFFER 间隙 → 仲裁）
@@ -1123,6 +1204,8 @@ func _reset_run_state() -> void:
 	chip_handler.reset_run()                      # v0.7.0：芯片每场重新获取（装备/槽位/遥测清零）
 	if curse_handler != null:
 		curse_handler.reset_run()                 # v0.8.0：诅咒层数/遥测清零 + max_hp 重导出（A7 §V6）
+	if event_director != null:
+		event_director.reset_run()                # v0.8.0：事件遥测清零 + rng 重播种（A7 §V2）
 	for shard in active_shards:                   # B.1：清场归还经验碎片
 		if is_instance_valid(shard):
 			(pools[&"xp"] as XPPool).release(shard)
@@ -1136,8 +1219,13 @@ func _reset_run_state() -> void:
 	upgrade_cards_dealt = 0                       # v0.7.0 U11：发牌计数随局清零
 	if shop_ui != null:
 		shop_ui.close()                           # v0.6.0：强制收起商店（重开净化）
+	if event_ui != null:
+		event_ui.close()                          # v0.8.0：强制收起事件浮层（重开净化）
+	_deferred_event_wave = 0                      # v0.8.0：暂存事件清零
+	_deferred_event_index = -1
 	if wave_director != null:
 		wave_director.reset_extra_shop()          # v0.6.0：黑市追加申请不跨局（与 relic reset 同口径）
+		wave_director.reset_event_state()         # v0.8.0：事件 rng 重播种 + 闸复位（A7 §V1）
 	_separation_left = SEPARATION_INTERVAL
 	pending_level_ups = 0
 	game_feel.hit_stop_left = 0.0
