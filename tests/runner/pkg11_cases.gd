@@ -38,6 +38,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_v27_vaporize()                          # V27
 	_test_v28_exclusions()                        # V28
 	_test_v29_pierce_independent()                # V29
+	_test_v30_pipeline_veto()                     # V30
 	_test_v40_gauge_residue()                     # V40（纯净面：melt/vapor 贡献不受 VOID 污染）
 	_test_v31_top8()                              # V31
 	_test_v35_cd_split()                          # V35（CD 与反应强化乘区无关）
@@ -46,6 +47,8 @@ func run(p_tree: SceneTree) -> void:
 	_test_v33_mastery_register()                  # V33（局部 sys 隔离，不污染共享 _sys）
 	_test_v34_phi_aggregate()                     # V34（局部 sys 隔离）
 	_test_v38_hud_mastery()                       # V38
+	_test_v36_telemetry_keys()                    # V36
+	_test_v37_popup_suffix()                      # V37
 	_teardown_world()
 	_summary()
 
@@ -787,3 +790,79 @@ func _test_v38_hud_mastery() -> void:
 	_check("V38：HUD Build 串——跨武器 2+2 封顶 MP:3 / 无精通 MP:0 恒显 / layout_rects 仍 11 项",
 		capped and zero_ok and layout_ok,
 		"t1=%s t0=%s rects=%d" % [text, text0, rects.size()])
+
+
+# ── V36 遥测分键 ──────────────────────────────────────────────────
+func _test_v36_telemetry_keys() -> void:
+	print("── V36 遥测分键 ──")
+	var m0: int = DebugStats.get_counter(&"amplify_melt")
+	var v0: int = DebugStats.get_counter(&"amplify_vapor")
+	var e1 := _spawn_enemy(_make_enemy_data("V36_A"), Vector2(120, 1160))
+	_sys.register_host(e1)
+	_gauge(e1, GameConst.Element.ICE, 30.0)
+	_fire_at(_spawn_proj(GameConst.Element.FIR, e1.global_position))   # 融化消耗
+	var e2 := _spawn_enemy(_make_enemy_data("V36_B"), Vector2(400, 1160))
+	_sys.register_host(e2)
+	_gauge(e2, GameConst.Element.FIR, 30.0)
+	_fire_at(_spawn_proj(GameConst.Element.ICE, e2.global_position))   # 蒸发消耗
+	var m1: int = DebugStats.get_counter(&"amplify_melt")
+	var v1: int = DebugStats.get_counter(&"amplify_vapor")
+	_check("V36：遥测分键——amplify_melt / amplify_vapor 各自恰 +1（consume_amplify 内计）",
+		m1 == m0 + 1 and v1 == v0 + 1,
+		"melt %d→%d vapor %d→%d" % [m0, m1, v0, v1])
+
+
+# ── V37 popup 后缀 ────────────────────────────────────────────────
+func _test_v37_popup_suffix() -> void:
+	print("── V37 popup 后缀 ──")
+	# a) DamagePopup 直测：第 6 参后缀 + merge 重渲染保留 + 文本模式不变
+	var p1 := DamagePopup.new()
+	tree.get_root().add_child(p1)
+	p1.show_popup(Vector2(100, 100), 150.0, GameConst.PopupStyle.NORMAL, 7, "", "‼")
+	var with_suffix: String = p1._label.text
+	p1.merge(50.0)
+	var merged_text: String = p1._label.text
+	p1.show_popup(Vector2(100, 100), 0.0, GameConst.PopupStyle.NORMAL, 0, "+20 金币", "‼")
+	var text_mode: String = p1._label.text
+	p1.free()
+	# b) PopupManager 集成：仅 breakdown 含 amplify 的新跳字加后缀
+	var pool := PopupPool.new()
+	pool.name = "Pkg11PopupPool"
+	tree.get_root().add_child(pool)
+	pool.setup(&"pkg11_popup", load("res://scenes/ui/damage_popup.tscn"), 16)
+	var mgr := PopupManager.new()
+	mgr.name = "Pkg11PopupMgr"
+	tree.get_root().add_child(mgr)
+	mgr.setup(pool)                               # 订阅 damage_resolved（free 随节点断开）
+	var r1 := DamageResult.new()
+	r1.pos = Vector2(200, 200)
+	r1.final_value = 150.0
+	r1.popup_style = GameConst.PopupStyle.NORMAL
+	r1.target_uid = 41
+	r1.pool_breakdown = {&"amplify": 0.5}
+	mgr.on_damage_resolved(r1)
+	var t_amp := _popup_text(mgr, 41)
+	var r2 := DamageResult.new()
+	r2.pos = Vector2(300, 200)
+	r2.final_value = 100.0
+	r2.popup_style = GameConst.PopupStyle.NORMAL
+	r2.target_uid = 42
+	r2.pool_breakdown = {}
+	mgr.on_damage_resolved(r2)
+	var t_plain := _popup_text(mgr, 42)
+	mgr.clear_all()
+	mgr.free()
+	pool.free()
+	var ok := with_suffix == "150‼" and merged_text == "200‼" \
+		and text_mode == "+20 金币" \
+		and t_amp.ends_with("‼") and not t_plain.ends_with("‼")
+	_check("V37：popup 后缀——数值模式 ‼ 结尾且 merge 保留 / 文本模式不变 / 仅 breakdown 含 amplify 加后缀",
+		ok, "%s|%s|%s|%s|%s" % [with_suffix, merged_text, text_mode, t_amp, t_plain])
+
+
+func _popup_text(p_mgr: PopupManager, p_uid: int) -> String:
+	var entry: Dictionary = p_mgr._merge_registry.get(p_uid, {})
+	if entry.is_empty():
+		return ""
+	var popup: DamagePopup = entry["popup"]
+	return popup._label.text

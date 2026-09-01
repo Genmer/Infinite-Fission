@@ -45,7 +45,9 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 		_dropped_count += 1
 		return
 	var popup := node as DamagePopup
-	popup.show_popup(p_result.pos, p_result.final_value, p_result.popup_style, uid)
+	# v1.1.0：乘区明细含 amplify 池 → 数值跳字追加 ‼ 后缀（增幅可读性，E7）
+	var suffix := "‼" if p_result.pool_breakdown.has(&"amplify") else ""
+	popup.show_popup(p_result.pos, p_result.final_value, p_result.popup_style, uid, "", suffix)
 	_active_list.append(popup)
 	_merge_registry[uid] = {"popup": popup, "window_left": merge_window}
 	active_popups = _active_list.size()
