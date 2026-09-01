@@ -71,6 +71,7 @@ var card_generator: CardGenerator = null
 var card_select_ui: CardSelectUI = null
 var relic_handler: RelicHandler = null         # 集成包 B.2：遗物效果处理器
 var chip_handler: ChipHandler = null           # v0.7.0：芯片效果处理器（A6 §2）
+var curse_handler: CurseHandler = null         # v0.8.0：诅咒效果处理器（A7 §V6）
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
 var shop_ui: ShopUI = null                    # v0.6.0：Boss 前商店界面（SHOP 态宿主）
@@ -310,6 +311,9 @@ func _on_card_choice(p_card: Dictionary) -> void:
 	if state != GameConst.GameStatus.LEVEL_UP:
 		return
 	card_generator.apply_choice(p_card, player)
+	# v0.8.0：cursed 卡（REL_GAMBLER 末位诅咒）同步诅咒层（A7 §V6 卡流接入点 1/2）
+	if bool(p_card.get("cursed", false)) and curse_handler != null:
+		curse_handler.add_curse(1)
 	card_select_ui.close()
 	change_state(GameConst.GameStatus.PLAYING)
 	if pending_level_ups > 0:
@@ -441,7 +445,8 @@ func _on_shop_purchase(p_index: int) -> void:
 		if chip_price < 0 or gold < chip_price:
 			push_warning("[GameLoop] 商店购买拒绝：余额不足（需 %d，有 %d）" % [chip_price, gold])
 			return
-		if not chip_handler.equip(chip_id, int(offer.get("rarity", 0))):
+		if not chip_handler.equip(chip_id, int(offer.get("rarity", 0)),
+				offer.get("substats", [])):   # v0.8.0：预随副词条所见即所得
 			push_warning("[GameLoop] 芯片 equip 失败，不扣款")
 			return
 		_add_gold(-chip_price)
@@ -466,6 +471,9 @@ func _on_shop_purchase(p_index: int) -> void:
 			push_warning("[GameLoop] 武器架门控失效，拒绝购买")
 			return
 	card_generator.apply_choice(card, player)
+	# v0.8.0：cursed 卡（商店货架 REL_GAMBLER 诅咒卡）同步诅咒层（A7 §V6 卡流接入点 2/2）
+	if bool(card.get("cursed", false)) and curse_handler != null:
+		curse_handler.add_curse(1)
 	if p_index == 3 and not card_generator._player_holds_weapon(player,
 			StringName(String(card.get("id", "")))):
 		push_warning("[GameLoop] 武器卡 apply 失败，不扣款")
@@ -518,7 +526,12 @@ func _on_shop_utility(p_util: StringName) -> void:
 				push_warning("[GameLoop] 余额不足：max_hp+10 需 %d" % ShopUI.MAXHP_PRICE)
 				return
 			_add_gold(-ShopUI.MAXHP_PRICE)
-			player.max_hp += 10.0
+			# v0.8.0：max_hp 走 flat 池 + recompute_max_hp 唯一写入口（比例回补口径）
+			player.max_hp_bonus_flat += 10.0
+			if curse_handler != null:
+				curse_handler.recompute_max_hp()
+			else:
+				player.max_hp += 10.0
 			shop_ui.mark_utility_used(&"maxhp")
 			# 上限抬升后 hp<max_hp → 回复合法化（审查 Fix：heal 预禁用状态同步）
 			shop_ui.set_player_full_hp(player.hp >= player.max_hp)
@@ -617,6 +630,11 @@ func _boot_build_actors() -> void:
 	chip_handler = ChipHandler.new()
 	chip_handler.name = "ChipHandler"
 	add_child(chip_handler)
+	# ★ v0.8.0 诅咒处理器组装（chip_handler 之后、player.setup 前——player deps 注入
+	#   curse_handler 问询通道，A7 §V6）
+	curse_handler = CurseHandler.new()
+	curse_handler.name = "CurseHandler"
+	add_child(curse_handler)
 	elemental = ElementalSystem.new()
 	elemental.name = "ElementalSystem"
 	add_child(elemental)
@@ -665,10 +683,12 @@ func _boot_build_actors() -> void:
 		"relic_handler": relic_handler,           # B.2：遗物命中乘区问询通道
 		"wave_director": wave_director,           # B.4：SYN_FIRST_STRIKE 波首命中位
 		"chip_handler": chip_handler,             # v0.7.0：芯片 crit 折算（A6 §3）
+		"curse_handler": curse_handler,           # v0.8.0：诅咒受伤乘区问询通道（A7 §V6）
 	})
 	relic_handler.setup({"registry": registry, "player": player})
-	chip_handler.setup({"registry": registry, "player": player})
+	chip_handler.setup({"registry": registry, "player": player, "curse_handler": curse_handler})
 	chip_handler.bind_events()
+	curse_handler.setup({"player": player, "chip_handler": chip_handler})   # v0.8.0（A7 §V6）
 	# Q-4：首发手枪（形态工厂 add_weapon）
 	player.add_weapon(registry.get_weapon(STARTING_WEAPON_ID))
 
@@ -856,7 +876,8 @@ func _on_enemy_killed_drop_gold(p_enemy: Node2D) -> void:
 		return                                  # 负值 guard（校验器 warning 级，掉落侧兜底）
 	if max_v < min_v:
 		max_v = min_v                           # 坏序防御（randi_range 前提 min ≤ max）
-	var chance := clampf(float(drop.get("chance", 0.0)) + _gold_add_sum(&"add_gold_drop"), 0.0, 1.0)
+	var chance := clampf(float(drop.get("chance", 0.0)) + _gold_add_sum(&"add_gold_drop")
+		+ (curse_handler.gold_drop_bonus() if curse_handler != null else 0.0), 0.0, 1.0)   # v0.8.0 诅咒掉率层
 	# v0.7.0 U5：金币关掉率下限 50%（词条正常叠加；非金币关零影响）
 	if enemy.gold_rush:
 		chance = maxf(chance, 0.5)
@@ -996,6 +1017,8 @@ func _reset_run_state() -> void:
 	card_generator.owned_relics.clear()
 	relic_handler.reset_run()                     # B.2：遗物每场重新获取（owned/常驻位清零）
 	chip_handler.reset_run()                      # v0.7.0：芯片每场重新获取（装备/槽位/遥测清零）
+	if curse_handler != null:
+		curse_handler.reset_run()                 # v0.8.0：诅咒层数/遥测清零 + max_hp 重导出（A7 §V6）
 	for shard in active_shards:                   # B.1：清场归还经验碎片
 		if is_instance_valid(shard):
 			(pools[&"xp"] as XPPool).release(shard)

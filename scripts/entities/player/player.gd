@@ -12,12 +12,15 @@ var hp: float = 100.0
 var move_speed: float = 280.0                 # 移速（相对拖动 1:1 口径下的调试/键盘备用参数）
 var pickup_radius: float = 120.0              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
 var invuln_left: float = 0.0                  # 受击无敌帧（contact_tick=0.6s 口径）
+var dash_invuln_left: float = 0.0             # v0.8.0 冲刺无敌通道（0.15s；受击判定 OR 并联，互不覆盖）
 var weapon_slots: Array[WeaponBase] = []      # ≤5（集成包 B.8 第二批收紧：pkg2 用例已迁移 WeaponBase 真件）
 var unlocked_slots: int = 1                   # w3→2 / w7→3 / Boss1→4 / Boss2 或 w21→5（F-19）
 var level: int = 1
 var xp: float = 0.0
 var xp_need: float = 14.0                     # 14 × lv^1.4
 var hitbox_radius: float = 16.0               # 命中盒半径（敌弹距离判定口径）
+var max_hp_bonus_flat: float = 0.0            # v0.8.0 商店 maxhp flat 池（recompute_max_hp 口径）
+var character: Resource = null                # v0.8.0 角色数据（V18 起 narrow 为 CharacterData）
 
 var _dead: bool = false
 var _drag_accum: Vector2 = Vector2.ZERO       # 相对拖动采样累计（E-15）
@@ -75,6 +78,30 @@ func setup(p_deps: Dictionary) -> void:
 	_deps = p_deps
 
 
+static func compute_max_hp(p_char_pct: float, p_chip_sum: float, p_flat: float,
+		p_curse_layers: int) -> float:
+	# ★ v0.8.0 max_hp 公式唯一真源（A7 §V6 冻结）：
+	# maxf((base×(1+char_pct) + chip_sum + flat) × (1−0.04n), 1.0)
+	# CurseHandler.recompute_max_hp / respawn 全部经此；base 真源 cfg player_base_hp。
+	var base: float = GameConfig.get_constant(&"player_base_hp", 100.0)
+	return maxf((base * (1.0 + p_char_pct) + p_chip_sum + p_flat)
+		* (1.0 - CurseHandler.MAXHP_PER_LAYER * float(maxi(p_curse_layers, 0))), 1.0)
+
+
+func char_max_hp_pct() -> float:
+	# 角色 max_hp% 加成（character null → 0.0 兜底；CharacterData.max_hp_pct）
+	if character == null:
+		return 0.0
+	return float(character.get("max_hp_pct"))
+
+
+func character_xp_mult() -> float:
+	# 角色经验乘子（character null → 1.0 兜底；CharacterData.xp_mult）
+	if character == null:
+		return 1.0
+	return float(character.get("xp_mult"))
+
+
 func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 	# 相对拖动移动 + 边界钳制 + 无敌帧推进 + 武器自动开火调度
 	if _dead:
@@ -83,6 +110,11 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 		invuln_left -= p_game_delta
 		if invuln_left < 0.0:
 			invuln_left = 0.0
+	# v0.8.0 冲刺无敌通道并列递减（game_delta；与受击 invuln 互不覆盖）
+	if dash_invuln_left > 0.0:
+		dash_invuln_left -= p_game_delta
+		if dash_invuln_left < 0.0:
+			dash_invuln_left = 0.0
 	var total := p_move_delta
 	if total == Vector2.ZERO:
 		total = _drag_accum                 # GameLoop 未投递时消费自采样拖动
@@ -106,10 +138,15 @@ func _unhandled_input(p_event: InputEvent) -> void:
 
 
 func take_contact_damage(p_dmg: float) -> void:
-	# ★ 简化路径（Q-16）：无敌帧判定 → 直接扣 HP → player_hit 事件（不入 M-12）
-	if _dead or invuln_left > 0.0:
+	# ★ 简化路径（Q-16）：无敌帧判定（受击 OR 冲刺双通道并联，互不覆盖）→ 诅咒受伤乘区 →
+	# 直接扣 HP → player_hit 事件（不入 M-12）。冲刺无敌期受击不写 dash 通道（仍只写 invuln_left）。
+	if _dead or invuln_left > 0.0 or dash_invuln_left > 0.0:
 		return
-	var dmg := maxf(p_dmg, 0.0)
+	var curse_mult := 1.0
+	var handler: Variant = _deps.get("curse_handler")
+	if handler is CurseHandler:
+		curse_mult = (handler as CurseHandler).dmg_taken_mult()
+	var dmg: float = maxf(p_dmg * curse_mult, 0.0)
 	hp -= dmg
 	invuln_left = GameConfig.balance.contact_tick if GameConfig.balance != null else 0.6
 	EventBus.emit_player_hit(dmg, 0)
@@ -201,11 +238,13 @@ func respawn() -> void:
 	# _dead 属一次性 E-16 仲裁标志，必须随局重置——否则重开后 take_contact_damage 永久无效）
 	# 重生无敌 1.5s（B_spec 无重生无敌数值 → 主控裁定；重开保护——防残留/新刷弹幕
 	# 重生首帧秒杀，配合 GameLoop._reset_run_state 战场清场序，审查 Fix 1）
-	# v0.7.0（A6 §3）：max_hp 重导出基线真源（global_constants player_base_hp）——
-	# 消除芯片/商店 maxhp 加成残留跨局。
+	# v0.7.0（A6 §3）：max_hp 重导出基线真源——v0.8.0 起公式唯一真源 Player.compute_max_hp
+	#（0 芯片 / 0 flat / 0 诅咒 / 角色加成口径）；max_hp_bonus_flat 与冲刺计时随局清零。
 	_dead = false
-	max_hp = GameConfig.get_constant(&"player_base_hp", 100.0)
+	max_hp = compute_max_hp(char_max_hp_pct(), 0.0, 0.0, 0)
 	hp = max_hp
+	max_hp_bonus_flat = 0.0
+	dash_invuln_left = 0.0
 	level = 1
 	xp = 0.0
 	xp_need = _xp_need_for(1)

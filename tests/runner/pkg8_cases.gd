@@ -20,6 +20,7 @@ func run(p_tree: SceneTree) -> void:
 	_boot_game_loop()
 	_test_v14_substats()                          # V14 副词条
 	_test_v15_set_bonus()                         # V15 套装
+	_test_v6_curse()                              # V6 诅咒运行时
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -203,6 +204,130 @@ func _test_v15_set_bonus() -> void:
 		is_equal_approx(h.stat_bonus(&"atk_pct"), 0.352), str(h.stat_bonus(&"atk_pct")))
 	# 异键不互扰：双 atk_pct 不影响 rof 单键
 	_check("套装异键隔离：stat_bonus(rof) 恒 0", is_equal_approx(h.stat_bonus(&"rof"), 0.0))
+
+
+# ══ V6：诅咒运行时（CurseHandler / compute_max_hp 唯一公式 / 双通道无敌 / 受击乘区） ══
+func _test_v6_curse() -> void:
+	print("── V6 诅咒运行时 ──")
+	var h := _gl.chip_handler
+	var player := _gl.player
+	var c := _gl.curse_handler
+	# GameLoop Boot 组装 + 注入
+	_check("Boot：CurseHandler 组装 + player deps 注入（A7 §V6）",
+		c != null and player.get("_deps").get("curse_handler") == c
+		and h.curse_handler == c)
+	_check("常量冻结：MAX=5 / 每层 0.08/0.15/0.04",
+		CurseHandler.MAX_CURSE_LAYERS == 5
+		and is_equal_approx(CurseHandler.DMG_TAKEN_PER_LAYER, 0.08)
+		and is_equal_approx(CurseHandler.GOLD_DROP_PER_LAYER, 0.15)
+		and is_equal_approx(CurseHandler.MAXHP_PER_LAYER, 0.04))
+	# compute_max_hp 唯一公式（静态纯函数）
+	_check("compute_max_hp：基线 (0,0,0,0)=100",
+		is_equal_approx(Player.compute_max_hp(0.0, 0.0, 0.0, 0), 100.0))
+	_check("compute_max_hp：角色+芯片+flat (0.3,80,10,0)=220",
+		is_equal_approx(Player.compute_max_hp(0.3, 80.0, 10.0, 0), 220.0))
+	_check("compute_max_hp：诅咒 2 层 (0,0,0,2)=92",
+		is_equal_approx(Player.compute_max_hp(0.0, 0.0, 0.0, 2), 92.0))
+	_check("compute_max_hp：下限钳 1.0（(-0.99,0,0,5)→0.8→1.0）",
+		is_equal_approx(Player.compute_max_hp(-0.99, 0.0, 0.0, 5), 1.0))
+	# CurseHandler 单元：加/减层钳制 + 遥测 + 乘区问询
+	c.reset_run()
+	_check("reset_run：清零 + recompute（max_hp 回基线 100）",
+		c.curse_count == 0 and c.curses_taken == 0 and c.curses_purged == 0
+		and is_equal_approx(player.max_hp, 100.0))
+	_check("add_curse：+2 → 返 2 / dmg_taken_mult=1.16 / gold_drop_bonus=0.30",
+		c.add_curse(2) == 2 and is_equal_approx(c.dmg_taken_mult(), 1.16)
+		and is_equal_approx(c.gold_drop_bonus(), 0.30))
+	_check("add_curse：+9 钳到上限 → 返 3 / is_maxed",
+		c.add_curse(9) == 3 and c.is_maxed() and c.curse_count == 5)
+	_check("add_curse：满层拒绝 → 返 0", c.add_curse(1) == 0)
+	_check("remove_curse：−4 → 返 4 / 层数 1 / 净化遥测 +4",
+		c.remove_curse(4) == 4 and c.curse_count == 1 and c.curses_purged == 4)
+	_check("remove_curse：残余 1 层全移 → 返 1 / 层数 0",
+		c.remove_curse(2) == 1 and c.curse_count == 0)
+	_check("remove_curse：0 层再减 → 返 0", c.remove_curse(1) == 0)
+	# recompute 通道：max_hp = (100+chip+flat)×(1−0.04n) + curse_changed 广播
+	c.reset_run()
+	c.add_curse(1)
+	_check("recompute：1 层 max_hp = 100×0.96 = 96",
+		is_equal_approx(player.max_hp, 96.0), str(player.max_hp))
+	player.max_hp_bonus_flat = 20.0
+	c.recompute_max_hp()
+	_check("recompute：flat 池计入（100+20)×0.96 = 115.2",
+		is_equal_approx(player.max_hp, 115.2), str(player.max_hp))
+	player.max_hp_bonus_flat = 0.0
+	var got_curse: Array = []
+	var cb_curse := func(count: int, max_hp: float) -> void: got_curse.append([count, max_hp])
+	EventBus.curse_changed.connect(cb_curse)
+	c.recompute_max_hp(10.0)
+	EventBus.curse_changed.disconnect(cb_curse)
+	_check("recompute(Δ=10)：芯片回补口径 hp=minf(hp+10,max) + curse_changed 广播（1 层 96）",
+		(got_curse as Array).size() == 1 and int((got_curse[0] as Array)[0]) == 1
+		and is_equal_approx(player.max_hp, 96.0))
+	# 受击乘区（诅咒 ×(1+0.08n)）+ 双通道无敌
+	player.respawn()
+	c.reset_run()
+	var hp0: float = player.hp
+	player.invuln_left = 0.0
+	player.take_contact_damage(10.0)
+	_check("受击 0 诅咒恒等：扣 10 + 受击无敌写入",
+		is_equal_approx(player.hp, hp0 - 10.0) and player.invuln_left > 0.0)
+	var hp1: float = player.hp
+	player.take_contact_damage(10.0)
+	_check("受击无敌期：二跳免伤（invuln 通道）", is_equal_approx(player.hp, hp1))
+	c.add_curse(2)
+	player.invuln_left = 0.0
+	var hp2: float = player.hp
+	player.take_contact_damage(10.0)
+	_check("受击诅咒乘区：2 层 ×1.16 → 扣 11.6",
+		is_equal_approx(hp2 - player.hp, 11.6), str(hp2 - player.hp))
+	# 冲刺无敌通道：并联判定 + 互不覆盖（受击不写 dash 通道）
+	player.respawn()
+	c.reset_run()
+	player.invuln_left = 0.0
+	player.dash_invuln_left = 0.15
+	var hp3: float = player.hp
+	player.take_contact_damage(10.0)
+	_check("dash_invuln 通道：受击判定免伤且不写 invuln_left",
+		is_equal_approx(player.hp, hp3) and player.invuln_left == 0.0
+		and player.dash_invuln_left > 0.0)
+	# respawn：max_hp 公式重导出 + flat/dash 通道清零
+	player.max_hp_bonus_flat = 30.0
+	player.dash_invuln_left = 0.1
+	player.respawn()
+	_check("respawn：max_hp=compute_max_hp(char_pct,0,0,0) + flat/dash 清零",
+		is_equal_approx(player.max_hp, 100.0) and player.max_hp_bonus_flat == 0.0
+		and player.dash_invuln_left == 0.0 and is_equal_approx(player.hp, 100.0))
+	# maxhp utility：flat 池 + recompute（0 诅咒 → base+10 恒等）
+	_gl.start_run()
+	_gl.change_state(GameConst.GameStatus.SHOP)
+	_gl.shop_ui.open(9, false, [], {}, 0)
+	_gl.gold = 200
+	_gl._on_shop_utility(&"maxhp")
+	_check("maxhp utility：flat+recompute（max_hp=110 / flat=10 / 限购位）",
+		is_equal_approx(player.max_hp, 110.0) and player.max_hp_bonus_flat == 10.0
+		and bool(_gl.shop_ui.shelf_state()["maxhp_used"]))
+	_gl.shop_ui.close()
+	_gl.change_state(GameConst.GameStatus.PLAYING)
+	# 芯片 max_hp 键：curse recompute 通道（0 诅咒 + 单枚恒等 +80）
+	h.reset_run()
+	h.unlocked_slots = 3
+	var max_before: float = player.max_hp
+	_check("equip CHIP_HP 金档（recompute 通道）：max_hp +80",
+		h.equip(&"CHIP_HP", 3) and is_equal_approx(player.max_hp, max_before + 80.0))
+	# cursed 卡同步诅咒层（卡流接入点：_on_card_choice）
+	c.reset_run()
+	h.reset_run()
+	_gl.change_state(GameConst.GameStatus.LEVEL_UP)
+	var cursed_card := {"id": &"AFF_ATK_UP", "kind": CardGenerator.CardKind.TRAIT,
+		"rarity": 3, "cursed": true, "data": _gl.registry.get_trait(&"AFF_ATK_UP")}
+	_gl._on_card_choice(cursed_card)
+	_check("cursed 卡 apply → add_curse(1)（卡流接入点 1/2）",
+		c.curse_count == 1 and c.curses_taken == 1 and _gl.state == GameConst.GameStatus.PLAYING)
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_gl.restart_run()
+	_check("restart：诅咒层数/遥测随局清零",
+		c.curse_count == 0 and c.curses_taken == 0 and c.curses_purged == 0)
 
 
 func _roll_substats_snapshot(p_h: ChipHandler) -> Array:

@@ -30,6 +30,7 @@ const SUBSTAT_DIST: Dictionary = {0: 0.50, 1: 0.85}
 
 var registry: DataRegistry = null              # 注入（chip id → ChipData）
 var player: Node2D = null                      # 注入（max_hp 键宿主 / 全武器面板失效宿主）
+var curse_handler: CurseHandler = null         # v0.8.0 注入（max_hp 键走 recompute 通道；null → 旧加法路径）
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()   # 芯片 roll 流（seed 4242）
 var _substat_rng: RandomNumberGenerator = RandomNumberGenerator.new()   # 副词条 roll 流（seed 4243）
 var unlocked_slots: int = 0                    # 已解锁槽位数（0~3；wave 1/10/20 解锁）
@@ -43,9 +44,10 @@ var _events_bound: bool = false
 
 
 func setup(p_deps: Dictionary) -> void:
-	# Boot 注入（GameLoop._boot_build_actors：registry/player——先于芯片流就绪）
+	# Boot 注入（GameLoop._boot_build_actors：registry/player/curse_handler——先于芯片流就绪）
 	registry = p_deps.get("registry")
 	player = p_deps.get("player")
+	curse_handler = p_deps.get("curse_handler")
 	reset_run()
 
 
@@ -107,9 +109,15 @@ func equip(p_chip_id: StringName, p_rarity: int, p_substats: Array = []) -> bool
 	equipped.append({"chip": data, "rarity": rarity, "substats": p_substats.duplicate()})
 	if data.stat_key == &"max_hp" and player != null and is_instance_valid(player):
 		var value := float(data.values[rarity]) if data.values.size() > 0 else 0.0
-		var new_max := float(player.get("max_hp")) + value
-		player.set("max_hp", new_max)
-		player.set("hp", minf(float(player.get("hp")) + value, new_max))
+		# v0.8.0：max_hp 键走 CurseHandler.recompute_max_hp 通道（0 诅咒恒等——0.8 版语义：
+		# prescale 已含 stat_bonus(max_hp) 本枚，heal_delta>0 芯片回补口径）；
+		# curse_handler null 兜底走旧加法路径（测试直构造 ChipHandler 场景）
+		if curse_handler != null:
+			curse_handler.recompute_max_hp(value)
+		else:
+			var new_max := float(player.get("max_hp")) + value
+			player.set("max_hp", new_max)
+			player.set("hp", minf(float(player.get("hp")) + value, new_max))
 	_invalidate_all_weapon_panels()
 	chips_granted += 1
 	DebugStats.count(&"chip_equipped")

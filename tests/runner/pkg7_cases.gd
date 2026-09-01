@@ -168,11 +168,12 @@ func _has_error(p_verdicts: Array) -> bool:
 # ══ U2：芯片运行时（ChipHandler / 事件 / 波次解锁） ════════════════
 func _test_chip_handler() -> void:
 	print("── U2 芯片运行时 ──")
-	# 事件注册表镜像 +2（共 21）
-	_check("EVENT_NAMES 共 21 且含 chip_slot_unlocked/gold_rush_started",
-		DataValidator.EVENT_NAMES.size() == 21
+	# 事件注册表镜像 +2（v0.7.0 共 21；v0.8.0 +curse_changed 授权更新 → 22）
+	_check("EVENT_NAMES 共 22 且含 chip_slot_unlocked/gold_rush_started/curse_changed",
+		DataValidator.EVENT_NAMES.size() == 22
 		and DataValidator.EVENT_NAMES.has(&"chip_slot_unlocked")
-		and DataValidator.EVENT_NAMES.has(&"gold_rush_started"),
+		and DataValidator.EVENT_NAMES.has(&"gold_rush_started")
+		and DataValidator.EVENT_NAMES.has(&"curse_changed"),
 		str(DataValidator.EVENT_NAMES.size()))
 	var reg := _gl.registry
 	var player := _gl.player
