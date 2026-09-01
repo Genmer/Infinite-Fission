@@ -1393,6 +1393,9 @@ func _reset_run_state() -> void:
 	card_generator.owned_relics.clear()
 	relic_handler.reset_run()                     # B.2：遗物每场重新获取（owned/常驻位清零）
 	chip_handler.reset_run()                      # v0.7.0：芯片每场重新获取（装备/槽位/遥测清零）
+	if elemental != null:
+		elemental.reset_run()                     # v1.1.0 审查 Critical：反应注册表清零
+		                                         #（×1.8 既有缺口 + 精通层跨局残留，XE1 坐实）
 	if curse_handler != null:
 		# v1.0.0（A9）：meta hpg 注入★先于 reset——reset 内 recompute_max_hp 收口生效
 		if meta_store != null:

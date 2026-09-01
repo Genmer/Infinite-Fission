@@ -61,6 +61,16 @@ func register_reaction_mult(p_source_uid: int, p_mult: float) -> void:
 		_reaction_mults[p_source_uid] = p_mult
 
 
+func reset_run() -> void:
+	# v1.1.0 审查 Critical 修复：重开清零注册表。本系统是 boot 期跨局常驻单例，
+	# 旧武器 queue_free 后其 source_uid 注册键（reaction_mult ×1.8 既有缺口 + mastery
+	# 精通层）永不复用 → 跨局残留虚增反应伤害且与 HUD 活栈显示不一致（XE1 坐实）。
+	# 与 relic/chip/curse/blessing 的 reset_run 同位，_reset_run_state 统一调用。
+	_reaction_mults.clear()
+	_mastery_reg.clear()
+	_mastery_step = 0.0
+
+
 func reaction_mult() -> float:
 	# 反应强化聚合（多源连乘；金卡唯一 → 实际单源 ×1.8）× 精通乘区（v1.1.0 E3：
 	# 1 + step×Σ层，全局 ≤3 层）——剧变与增幅同源消费，同构乘算自动同乘；
