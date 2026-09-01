@@ -176,6 +176,16 @@ func tick(p_game_delta: float) -> void:
 		var st := state as ElementalState
 		st.tick(p_game_delta, lambdas)
 		_dot_tick(host, st)
+		if st.consume_freeze_shatter():
+			# v1.2.0 冻结破碎（A11 §3）：冻结期内 3 次 NORMAL/CRIT 直击 → 帧末结算
+			# 0.4×快照×φ（RXN_WAT_ICE 通道独立结算；快照消费后清零）
+			var shatter_coef := 0.4
+			if GameConfig.balance != null:
+				var frule: Dictionary = GameConfig.balance.reaction_table.get("RXN_WAT_ICE", {})
+				shatter_coef = float(frule.get("shatter_coef", 0.4))
+			_settle_reaction(host, st.freeze_shatter_snapshot, shatter_coef * reaction_mult(),
+				GameConst.ReactionType.RXN_WAT_ICE)
+			st.freeze_shatter_snapshot = 0.0
 		if st.consume_superconduct_expired():
 			_restore_resist(host)
 
@@ -199,6 +209,9 @@ func detect_reactions() -> void:
 			GameConst.ReactionType.RXN_FIR_ICE,
 			GameConst.ReactionType.RXN_FIR_LTG,
 			GameConst.ReactionType.RXN_ICE_LTG,
+			GameConst.ReactionType.RXN_WAT_ICE,
+			GameConst.ReactionType.RXN_WAT_LTG,
+			GameConst.ReactionType.RXN_WAT_FIR,
 		]
 		for rxn in order:
 			if float(st.reaction_cd.get(rxn, 0.0)) > 0.0:
@@ -220,6 +233,12 @@ static func reaction_key(p_rxn: int) -> String:
 			return "RXN_FIR_LTG"
 		GameConst.ReactionType.RXN_ICE_LTG:
 			return "RXN_ICE_LTG"
+		GameConst.ReactionType.RXN_WAT_ICE:
+			return "RXN_WAT_ICE"
+		GameConst.ReactionType.RXN_WAT_LTG:
+			return "RXN_WAT_LTG"
+		GameConst.ReactionType.RXN_WAT_FIR:
+			return "RXN_WAT_FIR"
 	return ""
 
 
@@ -233,6 +252,12 @@ func _reaction_condition(p_state: ElementalState, p_rxn: int) -> bool:
 			return p_state.has_both(GameConst.Element.FIR, GameConst.Element.LTG)
 		GameConst.ReactionType.RXN_ICE_LTG:
 			return p_state.has_both(GameConst.Element.ICE, GameConst.Element.LTG)
+		GameConst.ReactionType.RXN_WAT_ICE:
+			return p_state.has_both(GameConst.Element.WAT, GameConst.Element.ICE)
+		GameConst.ReactionType.RXN_WAT_LTG:
+			return p_state.has_both(GameConst.Element.WAT, GameConst.Element.LTG)
+		GameConst.ReactionType.RXN_WAT_FIR:
+			return p_state.has_both(GameConst.Element.WAT, GameConst.Element.FIR)
 	return false
 
 
@@ -276,6 +301,19 @@ func _trigger_reaction(p_enemy: Node2D, p_state: ElementalState, p_rxn: int) -> 
 			EventBus.emit_reaction_triggered(GameConst.ReactionType.RXN_ICE_LTG,
 				(p_enemy as Node2D).global_position, enemy_uid)
 			DebugStats.count(&"reaction_superconduct")
+		GameConst.ReactionType.RXN_WAT_ICE:
+			# 冻结（v1.2.0 A11 §3）：定身全停 2.5s（本体零伤害，伤害在破碎）；
+			# 免疫定身宿主（Boss）→ CD 已耗/双槽已清/零广播，直接返回
+			var rule4: Dictionary = tables.get("RXN_WAT_ICE",
+				{"duration": 2.5, "shatter_coef": 0.4, "shatter_hits": 3, "cd": 5.0})
+			p_state.clear_element(GameConst.Element.WAT)
+			p_state.clear_element(GameConst.Element.ICE)
+			if (p_state.immune_mask & GameConst.IMMUNE_FREEZE) != 0:
+				return
+			p_state.apply_freeze_reaction(float(rule4.get("duration", 2.5)))
+			EventBus.emit_reaction_triggered(GameConst.ReactionType.RXN_WAT_ICE,
+				(p_enemy as Node2D).global_position, enemy_uid)
+			DebugStats.count(&"reaction_freeze")
 	DebugStats.count(&"reaction_triggered")
 
 

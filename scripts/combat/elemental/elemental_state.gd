@@ -1,7 +1,8 @@
 # scripts/combat/elemental/elemental_state.gd
 # M-11 ElementalState（架构 §2.10）：单敌状态容器（A2 §4.1 附着—衰减—触发—消耗）。
-# · gauges：附着计量 G（4 槽，下标 = GameConst.Element 枚举值直索引：KIN=0 槽恒 0 弃用，
-#   FIR/ICE/LTG = 1/2/3；容量 100，满槽触发状态并清空该槽，F19/F20 稳态免疫线）。
+# · gauges：附着计量 G（5 槽，下标 = GameConst.Element 枚举值直索引：KIN=0 槽恒 0 弃用，
+#   FIR/ICE/LTG/WAT = 1/2/3/4；容量 100，满槽触发状态并清空该槽，F19/F20 稳态免疫线；
+#   v1.2.0 4 槽 → 5 槽，A11 §2）。
 # · 状态运行时：点燃 DOT（15%ATK/0.5s×3s，层 ≤5——第 6 次附着拒绝）；寒滞（−40% 移速）
 #   + 易伤（×1.25 独立乘区，vuln 池注入）；二次满槽 → 完全冻结 1.2s（定身，受 immune_mask）；
 #   感电连锁参数（3 目标/160px/35%每跳/深度 2 衰减 60%——执行在 ElementalSystem）。
@@ -38,6 +39,10 @@ var superconduct_left: float = 0.0             # 超导削抗剩余（−30% 全
 var superconduct_active: bool = false
 var last_attach_snapshot: float = 0.0          # 最近一次附着的攻击者面板快照（过载 120%ATK 基数）
 var _chill_from_full: bool = false             # 寒滞已由满槽触发（二次满槽 → 冻结判定位）
+# v1.2.0 冻结破碎（A11 §3：RXN_WAT_ICE；冻结期内 3 次 NORMAL/CRIT 直击 → 解冻 + 帧末结算）
+var freeze_hits: int = 0                       # 冻结期内直击计数（满 3 触发破碎）
+var freeze_shatter_pending: bool = false       # 破碎待结算（帧末 ElementalSystem.tick 消费）
+var freeze_shatter_snapshot: float = 0.0       # 破碎结算快照（第 3 击 panel_snapshot）
 
 
 func apply(p_element: int, p_value: float, p_snapshot: float = 0.0,
@@ -73,6 +78,8 @@ func tick(p_game_delta: float, p_decay_lambdas: Array[float]) -> void:
 		if chill_timer <= 0.0:
 			_chill_from_full = false
 	freeze_timer = maxf(freeze_timer - p_game_delta, 0.0)
+	if freeze_timer <= 0.0:
+		freeze_hits = 0                           # 冻结到期未满 3 击 → 计数清零（A11 §3；二次冻结重计）
 	vuln_timer = maxf(vuln_timer - p_game_delta, 0.0)
 	shock_chain_cd = maxf(shock_chain_cd - p_game_delta, 0.0)
 	for rxn in reaction_cd:
@@ -150,6 +157,32 @@ func apply_superconduct(p_delta: float, p_duration: float) -> void:
 	superconduct_left = p_duration
 
 
+# ── v1.2.0 冻结破碎（A11 §3：RXN_WAT_ICE 通道） ───────────────────
+func apply_freeze_reaction(p_duration: float) -> void:
+	# 水冰冻结（定身全停 2.5s）：计时置时长 + 直击计数清零（重复触发重新计数）
+	freeze_timer = p_duration
+	freeze_hits = 0
+
+
+func register_freeze_hit(p_snapshot: float) -> void:
+	# 冻结期直击入账（仅 NORMAL/CRIT 直击，宿主 take_result 判定后调用）；
+	# 满 3 → 立即解冻 + 置破碎待发 + 快照落字段（帧末 ElementalSystem.tick 结算）
+	freeze_hits += 1
+	if freeze_hits >= 3:
+		freeze_hits = 0
+		freeze_timer = 0.0
+		freeze_shatter_pending = true
+		freeze_shatter_snapshot = p_snapshot
+
+
+func consume_freeze_shatter() -> bool:
+	# 破碎到期消费（ElementalSystem.tick 宿主循环：pending → true 一次性，结算后快照由系统清零）
+	if freeze_shatter_pending:
+		freeze_shatter_pending = false
+		return true
+	return false
+
+
 func reset() -> void:
 	# 归还清零（AC-11.1：死亡/回收清 DOT）
 	gauges = [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -171,6 +204,9 @@ func reset() -> void:
 	superconduct_active = false
 	last_attach_snapshot = 0.0
 	_chill_from_full = false
+	freeze_hits = 0
+	freeze_shatter_pending = false
+	freeze_shatter_snapshot = 0.0
 
 
 # ── 内部 ──────────────────────────────────────────────────────────

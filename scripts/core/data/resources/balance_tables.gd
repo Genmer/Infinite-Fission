@@ -54,10 +54,15 @@ extends Resource
 	"shock": {"chain_targets": 3, "chain_radius": 160.0, "chain_ratio": 0.35, "chain_depth": 2, "chain_decay": 0.6},
 }
 # 反应系数 >0（§2.4）；v1.1.0 CD 分立：各 rule 携带独立 cd（缺键回退 cd_rxn；.tres 同值镜像）
+# v1.2.0 尾追水系三剧变（A11 §1/§3）：冻结（全停 2.5s + 破碎 3 直击 40%ATK）/导电（90%×3 跳
+# 160px 衰减 0.6）/汽爆（60% 半径 80）
 @export var reaction_table: Dictionary = {
 	"RXN_FIR_ICE": {"coef": 2.0, "cd": 2.0},
 	"RXN_FIR_LTG": {"coef": 1.2, "radius": 90.0, "cd": 3.0},
 	"RXN_ICE_LTG": {"resist_delta": -0.3, "duration": 6.0, "cd": 6.0},
+	"RXN_WAT_ICE": {"duration": 2.5, "shatter_coef": 0.4, "shatter_hits": 3, "cd": 5.0},
+	"RXN_WAT_LTG": {"coef": 0.9, "chain_hops": 3, "chain_targets": 3, "chain_radius": 160.0, "chain_decay": 0.6, "cd": 4.0},
+	"RXN_WAT_FIR": {"coef": 0.6, "radius": 80.0, "cd": 3.0},
 }
 # v0.9.0 波次赐福权重镜像（A8 §1）：与 BlessingHandler.BLESSING_WEIGHTS 同值（和=100.0）。
 # 双源镜像纪律同 category_weights（改一处必改两处；.tres 不改——schema 默认即合法）。

@@ -193,6 +193,9 @@ func tick(p_game_delta: float) -> void:
 	var sf := 1.0
 	if elemental != null:
 		sf = elemental.get_speed_factor()
+	# v1.2.0 冻结全停判定（A11 §3：移动 sf=0 既有 + RANGED/Boss 行为门；
+	# 同一 freeze_timer 通道——既有 ICE 满槽冻结同步升级全停）
+	var frozen := elemental != null and elemental.freeze_timer > 0.0
 	_tick_element_ring(p_game_delta)           # v0.7.0 U8：附着环驱动（15Hz 降频）
 	var player := _player()
 	match behavior:
@@ -205,7 +208,8 @@ func tick(p_game_delta: float) -> void:
 				global_position += dir * spd * p_game_delta
 				_tick_volatile_fuse(p_game_delta, player)
 		GameConst.EnemyBehavior.RANGED:
-			_tick_ranged(p_game_delta, player, sf)
+			if not frozen:
+				_tick_ranged(p_game_delta, player, sf)
 		_:
 			pass
 	# 接触伤害（Area2D 低频通道——玩家侧无敌帧 contact_tick 节流）
@@ -221,6 +225,12 @@ func tick(p_game_delta: float) -> void:
 func take_result(p_result: DamageResult) -> void:
 	# 受击入口（pipeline 步骤 9 之后由投射物侧调用）：扣血 + 受击闪白 + 死亡广播
 	# 易伤标记：包 3 ElementalSystem 合入后经 elemental 容器承担（get_vuln_factor 已就绪）
+	# v1.2.0 冻结破碎直击计数（A11 §3）：冻结期内 NORMAL/CRIT 直击入账（第 3 击解冻+帧末破碎；
+	# REACTION/DOT 等其他通道不计）
+	if elemental != null and elemental.freeze_timer > 0.0 \
+			and (p_result.popup_style == GameConst.PopupStyle.NORMAL
+				or p_result.popup_style == GameConst.PopupStyle.CRIT):
+		elemental.register_freeze_hit(p_result.panel_snapshot)
 	apply_damage(p_result.final_value)
 	if not dead:
 		_flash_left = FLASH_TIME
@@ -383,7 +393,10 @@ func _fire_at(p_player: Node2D) -> void:
 func _tick_boss_patterns(p_game_delta: float) -> void:
 	# Boss 专用计时（tick 内 is_boss 时调用；dead 短路已由 tick 入口拦）：
 	# 弹幕/召唤双计时器，开场半冷却（interval_s×0.5），发射后回满间隔
+	# v1.2.0：冻结全停（A11 §3——弹幕+召唤计时全停，dead 短路后判定）
 	if dead:
+		return
+	if elemental != null and elemental.freeze_timer > 0.0:
 		return
 	if not _boss_pattern.is_empty():
 		_pattern_cd_left -= p_game_delta

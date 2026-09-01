@@ -34,6 +34,6 @@ category_weights = {"MASTERY": 11.04, "ADD": 36.8, "MULT": 16.56, "MECH": 12.88,
 cd_rxn = 2.0
 element_decay_lambda = [0.35, 0.3, 0.4, 0.38]
 element_states = {"burn": {"dot_ratio": 0.15, "tick": 0.5, "duration": 3.0, "max_layers": 5}, "freeze": {"chill_slow": 0.4, "chill_dur": 2.5, "freeze_dur": 1.2, "vuln_mult": 1.25, "vuln_dur": 3.0}, "shock": {"chain_targets": 3, "chain_radius": 160.0, "chain_ratio": 0.35, "chain_depth": 2, "chain_decay": 0.6}}
-reaction_table = {"RXN_FIR_ICE": {"coef": 2.0, "cd": 2.0}, "RXN_FIR_LTG": {"coef": 1.2, "radius": 90.0, "cd": 3.0}, "RXN_ICE_LTG": {"resist_delta": -0.3, "duration": 6.0, "cd": 6.0}}
+reaction_table = {"RXN_FIR_ICE": {"coef": 2.0, "cd": 2.0}, "RXN_FIR_LTG": {"coef": 1.2, "radius": 90.0, "cd": 3.0}, "RXN_ICE_LTG": {"resist_delta": -0.3, "duration": 6.0, "cd": 6.0}, "RXN_WAT_ICE": {"duration": 2.5, "shatter_coef": 0.4, "shatter_hits": 3, "cd": 5.0}, "RXN_WAT_LTG": {"coef": 0.9, "chain_hops": 3, "chain_targets": 3, "chain_radius": 160.0, "chain_decay": 0.6, "cd": 4.0}, "RXN_WAT_FIR": {"coef": 0.6, "radius": 80.0, "cd": 3.0}}
 event_storm_threshold = 128
 data_version = 1

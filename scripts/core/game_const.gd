@@ -13,7 +13,7 @@ enum GameStatus { BOOT, MENU, PLAYING, PAUSED, LEVEL_UP, GAME_OVER, SHOP }   # v
 enum RecycleReason { EXPIRED, PIERCE_DEPLETED, BOUNCE_DEPLETED, NULLIFIED, FORCED }  # 回收五路径
 enum PopupStyle { NORMAL, CRIT, REACTION, DOT, HEAL, XP }
 enum FeelLevel { HIT, CRIT, CATALYST, BOSS_DEATH }        # GameFeel 分级（Q-12）
-enum ReactionType { RXN_FIR_ICE, RXN_FIR_LTG, RXN_ICE_LTG }  # 碎裂/过载/超导（中性 ID）
+enum ReactionType { RXN_FIR_ICE, RXN_FIR_LTG, RXN_ICE_LTG, RXN_WAT_ICE, RXN_WAT_LTG, RXN_WAT_FIR }  # 碎裂/过载/超导/冻结/导电/汽爆（中性 ID；v1.2.0 尾追 3/4/5，旧序零变，A11 §3）
 enum TargetStrategy { NEAREST, FOREMOST, LOWEST_HP, LOCKED }  # 武器目标策略
 enum ConditionId {                                        # 乘区条件封闭枚举（§三.5）
 	TARGET_FROZEN, TARGET_BURNING, TARGET_SHOCKED, AFTER_BOUNCE,
