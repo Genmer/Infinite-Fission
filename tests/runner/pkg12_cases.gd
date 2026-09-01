@@ -48,6 +48,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_v49_amp_upgrade()                       # V49
 	_test_v50_shield_data()                       # V50
 	_test_v51_shield_runtime()                    # V51
+	_test_v52_shield_ring()                       # V52
 	_teardown_world()
 	_summary()
 
@@ -845,3 +846,56 @@ func _test_v51_shield_runtime() -> void:
 		"cap=%s abs=%s ctr=%s rxn=%s brk=%s regen=%s amp=%s strip=%s"
 			% [str(cap_ok), str(absorb_ok), str(counter_ok), str(rxn_ok), str(break_ok),
 			str(no_regen), str(amp_ok), str(strip_ok)])
+
+
+# ── V52 盾环 ──────────────────────────────────────────────────────
+func _test_v52_shield_ring() -> void:
+	print("── V52 盾环 ──")
+	# a) progress：set_progress 钳制 0~1 + 观测口
+	var ring := Enemy.ShieldRing.new()
+	ring.setup(4, 25.0)                           # WAT 盾（A11 §1 色）
+	ring.set_progress(0.5)
+	var prog_ok: bool = is_equal_approx(ring.progress(), 0.5)
+	ring.set_progress(1.5)
+	prog_ok = prog_ok and is_equal_approx(ring.progress(), 1.0)
+	ring.set_progress(-0.1)
+	prog_ok = prog_ok and is_equal_approx(ring.progress(), 0.0)
+	# b) 破盾 flash → tick 余韵后隐藏（progress 0 + flash 尽）
+	ring.visible = true
+	ring.set_progress(0.0)
+	ring.flash()
+	var flash_on: bool = ring.visible
+	ring.tick(Enemy.ShieldRing.FLASH_TIME)
+	var hide_ok: bool = flash_on and not ring.visible
+	# c) flash 期不隐藏（盾非空 flash = 受击白闪语义独立于破盾）
+	ring.visible = true
+	ring.set_progress(1.0)
+	ring.flash()
+	ring.tick(Enemy.ShieldRing.FLASH_TIME)
+	var flash_keep: bool = ring.visible           # progress 1 → 不隐藏
+	# d) 池复用二次赋盾：spawn 带盾 → 破盾 → _reset_state 归还 → 再 spawn 带盾 → 环复活
+	_purge_enemies()
+	var sd := _make_enemy_data("V52_E", 1000.0)
+	sd.shield = {"element": 4, "capacity_ratio": 0.3}
+	var e1 := _spawn_enemy(sd, Vector2(120, 600))
+	var first_ok: bool = e1._shield_ring.visible and is_equal_approx(e1.shield_progress(), 1.0)
+	var fake := DamageResult.new()
+	fake.final_value = 100000.0                   # 一击破盾（300 盾 << 100000）
+	fake.popup_style = GameConst.PopupStyle.NORMAL
+	fake.element = GameConst.Element.KIN
+	e1.take_result(fake)
+	_enemy_pool.release(e1)
+	_alive_enemies.erase(e1)
+	var e2 := _enemy_pool.acquire() as Enemy
+	e2.spawn(sd, 1, 0)
+	e2.position = Vector2(120, 700)
+	_alive_enemies.append(e2)
+	_grid.rebuild(_alive_enemies)
+	var reuse_ok: bool = e2 == e1 and e2._shield_ring.visible \
+		and is_equal_approx(e2.shield_progress(), 1.0) \
+		and is_equal_approx(e2.shield_hp, 300.0)
+	ring.free()
+	_check("V52：盾环——progress 钳制观测 / 破盾 flash 余韵后隐藏（盾非空 flash 不隐藏）/ 池复用二次赋盾复活（A11 §9 H8 半径 hitbox+11）",
+		prog_ok and hide_ok and flash_keep and first_ok and reuse_ok,
+		"prog=%s hide=%s keep=%s first=%s reuse=%s" % [str(prog_ok), str(hide_ok),
+			str(flash_keep), str(first_ok), str(reuse_ok)])
