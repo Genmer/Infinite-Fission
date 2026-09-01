@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/character_data.gd" id="1_ch"]
+
+[resource]
+script = ExtResource("1_ch")
+id = &"CHAR_COURIER"
+display_name = "信使"
+description = "跑得快，捡得多——永远快弹药需求一步。"
+starting_weapon_id = &"W1_pistol"
+max_hp_pct = 0.0
+move_speed_mult = 1.1
+pickup_radius_add = 40.0
+xp_mult = 1.0

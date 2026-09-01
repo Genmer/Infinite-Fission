@@ -62,6 +62,7 @@ func validate_all(registry: DataRegistry) -> Dictionary:
 	total += _run_category(registry, &"relics", registry.relics, "validate_relic", rejected, errors, warnings)
 	total += _run_category(registry, &"synergies", registry.synergies, "validate_synergy", rejected, errors, warnings)
 	total += _run_category(registry, &"chips", registry.chips, "validate_chip", rejected, errors, warnings)
+	total += _run_category(registry, &"characters", registry.characters, "validate_character", rejected, errors, warnings)   # v0.8.0：角色类目
 	# 单件类目：波表 / GameFeel（条目级问题已就地降级；字段级错误 → 剔除整件）
 	if registry.wave_table != null:
 		total += 1
@@ -237,6 +238,23 @@ func validate_chip(c: ChipData) -> Array:
 	return out
 
 
+func validate_character(ch: CharacterData) -> Array:
+	# v0.8.0 单类校验（A7 §V17）：id/starting_weapon_id 非空 + 数值域约束（均 error 级）；
+	# starting_weapon_id 悬空剔除在 check_references（跨表）。
+	var out: Array = []
+	_err(out, &"id", ch.id == &"", "id 非空")
+	_err(out, &"starting_weapon_id", ch.starting_weapon_id == &"",
+		"starting_weapon_id 非空（悬空 → check_references 剔除宿主）")
+	_err(out, &"xp_mult", ch.xp_mult < 0.5 or ch.xp_mult > 2.0, "xp_mult ∈ [0.5, 2.0]")
+	_err(out, &"move_speed_mult", ch.move_speed_mult < 0.5 or ch.move_speed_mult > 2.0,
+		"move_speed_mult ∈ [0.5, 2.0]")
+	_err(out, &"max_hp_pct", ch.max_hp_pct < -0.9 or ch.max_hp_pct > 3.0, "max_hp_pct ∈ [-0.9, 3.0]")
+	_err(out, &"pickup_radius_add", ch.pickup_radius_add < -100.0 or ch.pickup_radius_add > 200.0,
+		"pickup_radius_add ∈ [-100, 200]")
+	_warn(out, &"display_name", ch.display_name == "", "display_name 为空（仅告警）")
+	return out
+
+
 func validate_wave_table(t: WaveTableData) -> Array:
 	# 单类校验（规则见 §三.6）：index 唯一（重复 → 后者剔除）；缺失波回退公式（降级不崩溃）
 	var out: Array = []
@@ -384,6 +402,7 @@ func check_references(registry: DataRegistry) -> Array:
 	#    条目 + 告警（不整枪剔除——宿主武器其余词条/形态段合法，AC-13.3 降级不崩溃；
 	#    审查 Fix 4 落地，注释原「随包 3 落地」空承诺就此兑现）；
 	# ③ RelicData.listen_events 悬空 → validate_relic 内经事件名注册表剔除（无需跨表）。
+# ④ v0.8.0：CharacterData.starting_weapon_id 悬空 → 剔除宿主角色（error 级）。
 	var issues: Array = []
 	if registry.wave_table != null:
 		for entry: WaveEntryData in registry.wave_table.entries:
@@ -416,6 +435,20 @@ func check_references(registry: DataRegistry) -> Array:
 				kept_th.append(th)
 		if kept_th.size() != weapon.threshold_traits.size():
 			weapon.threshold_traits = kept_th
+	# ④ v0.8.0：CharacterData.starting_weapon_id 悬空 → 剔除宿主（error 级——角色无首发
+	#   武器即不可开局；就地 erase 与 ①② 降级口径一致）
+	for cid in registry.characters.keys():
+		var character: CharacterData = registry.characters[cid]
+		if character == null:
+			continue
+		var w := StringName(String(character.starting_weapon_id))
+		if w == &"" or not registry.weapons.has(w):
+			issues.append({
+				"category": &"characters", "id": cid,
+				"field": "starting_weapon_id", "severity": SEV_ERROR,
+				"message": "starting_weapon_id 悬空，剔除宿主角色：%s" % String(w),
+			})
+			registry.characters.erase(cid)
 	return issues
 
 

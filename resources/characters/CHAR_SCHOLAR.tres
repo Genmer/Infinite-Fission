@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="CharacterData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/character_data.gd" id="1_ch"]
+
+[resource]
+script = ExtResource("1_ch")
+id = &"CHAR_SCHOLAR"
+display_name = "学者"
+description = "脆皮书呆子，从每颗碎片里榨取更多知识。"
+starting_weapon_id = &"W4_pulse_beam"
+max_hp_pct = -0.1
+move_speed_mult = 1.0
+pickup_radius_add = 0.0
+xp_mult = 1.15

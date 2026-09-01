@@ -1,7 +1,7 @@
 # tests/runner/pkg6_extra_cases.gd
 # v0.6.0 验收补漏用例体（由 test_pkg6_extra.gd 入口在 autoload 就绪后运行时加载编译）。
 # tester 独立验收视角：pkg6 已覆盖项不重复；本文件只补 pkg6 未覆盖的验收口径——
-#   A. T1 DataRegistry 加载 80 资源 0 剔除（v0.7.0 +8 chips；v0.8.0 +4 变体；report 锁数 + 表尺寸 vs 文件系统独立对账）
+#   A. T1 DataRegistry 加载 83 资源 0 剔除（v0.7.0 +8 chips；v0.8.0 +4 变体 +3 characters；report 锁数 + 表尺寸 vs 文件系统独立对账）
 #   B. T4 卡池 500 抽（固定种子）AFF_GOLD_DROP / AFF_GOLD_VALUE 各 ≥1 次
 #   C. T4 apply 掉率词条后 chance=0.06 大批量抽样通过率上移 ≥6.8 个百分点
 #   D. T4 金币词条叠满 stack_max → 移出候选池（§6.4）
@@ -70,24 +70,25 @@ func _teardown_game_loop() -> void:
 # （v0.6.0 基线 68；v0.7.0 增 chips 类目 8 枚 → 76；v0.8.0 增变体 4 枚 → 80。
 #  预期值随数据类目合法增量修正，断言数不变）
 func _test_registry_68() -> void:
-	print("── A/T1 DataRegistry 80 资源 0 剔除 ──")
+	print("── A/T1 DataRegistry 83 资源 0 剔除 ──")
 	var reg := _gl.registry
 	var rep: Dictionary = reg.report
-	_check("校验报告：total = 80 且 rejected = 0",
-		int(rep.get("total", -1)) == 80 and int(rep.get("rejected", -1)) == 0,
+	_check("校验报告：total = 83 且 rejected = 0",
+		int(rep.get("total", -1)) == 83 and int(rep.get("rejected", -1)) == 0,
 		"total=%s rejected=%s" % [str(rep.get("total")), str(rep.get("rejected"))])
-	# 独立对账（文件系统口径：resources/* + data/gamefeel 的 .tres 计数 9/8/30/11/8/12/1/1）
+	# 独立对账（文件系统口径：resources/* + data/gamefeel 的 .tres 计数 9/8/30/11/8/12/3/1/1）
 	_check("对账 weapons = 9", reg.weapons.size() == 9, str(reg.weapons.size()))
 	_check("对账 enemies = 8", reg.enemies.size() == 8, str(reg.enemies.size()))
 	_check("对账 traits = 30", reg.traits.size() == 30, str(reg.traits.size()))
 	_check("对账 relics = 11", reg.relics.size() == 11, str(reg.relics.size()))
 	_check("对账 synergies = 8", reg.synergies.size() == 8, str(reg.synergies.size()))
 	_check("对账 chips = 12（v0.8.0 +4 变体授权更新）", reg.chips.size() == 12, str(reg.chips.size()))
+	_check("对账 characters = 3（v0.8.0 角色类目授权更新）", reg.characters.size() == 3, str(reg.characters.size()))
 	_check("对账 wave_table / game_feel 各 1（单件类目）",
 		reg.wave_table != null and reg.game_feel != null)
 	var table_sum: int = reg.weapons.size() + reg.enemies.size() + reg.traits.size() \
-		+ reg.relics.size() + reg.synergies.size() + reg.chips.size() + 2
-	_check("表尺寸合计 = 80（与 report.total 互证）", table_sum == 80
+		+ reg.relics.size() + reg.synergies.size() + reg.chips.size() + reg.characters.size() + 2
+	_check("表尺寸合计 = 83（与 report.total 互证）", table_sum == 83
 		and int(rep.get("total", -1)) == table_sum, "sum=%d" % table_sum)
 
 

@@ -24,6 +24,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_v9_detach()                             # V9 词条移除/净化
 	_test_v10_v11_shop_expand()                   # V10/V11 商店扩容
 	_test_v1_v4_events()                          # V1~V4 事件链
+	_test_v17_characters()                        # V17 角色数据
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -744,6 +745,75 @@ func _rects_disjoint(p_rects: Array[Rect2]) -> bool:
 	return true
 
 
+# ══ V17：角色数据（CharacterData schema / registry 类目 / validator / 三角色冻结值） ══
+func _test_v17_characters() -> void:
+	print("── V17 角色数据 ──")
+	var reg := _gl.registry
+	# 类目注册 + 冻结数值表（id -> [武器, max_hp_pct, move_mult, pickup_add, xp_mult, 中文名]）
+	_check("characters 类目注册 3 角色（0 剔除）", reg.characters.size() == 3,
+		str(reg.characters.size()))
+	var table := {
+		&"CHAR_COURIER": [&"W1_pistol", 0.0, 1.10, 40.0, 1.0, "信使"],
+		&"CHAR_VANGUARD": [&"W3_shotgun", 0.30, 0.95, 0.0, 1.0, "重装"],
+		&"CHAR_SCHOLAR": [&"W4_pulse_beam", -0.10, 1.0, 0.0, 1.15, "学者"],
+	}
+	for id in table:
+		var ch := reg.get_character(id)
+		if ch == null:
+			_check("角色 %s 注册加载" % String(id), false)
+			continue
+		var row: Array = table[id]
+		var ok: bool = ch.starting_weapon_id == row[0] \
+			and is_equal_approx(ch.max_hp_pct, float(row[1])) \
+			and is_equal_approx(ch.move_speed_mult, float(row[2])) \
+			and is_equal_approx(ch.pickup_radius_add, float(row[3])) \
+			and is_equal_approx(ch.xp_mult, float(row[4])) \
+			and ch.display_name == row[5] and ch.description != ""
+		_check("角色 %s 数值冻结 + 风格文案" % String(id), ok,
+			"w=%s pct=%s mv=%s xp=%s" % [String(ch.starting_weapon_id),
+			str(ch.max_hp_pct), str(ch.move_speed_mult), str(ch.xp_mult)])
+		_check("角色 %s starting_weapon_id 命中武器表" % String(id),
+			reg.get_weapon(ch.starting_weapon_id) != null)
+	_check("get_character：未命中返回 null", reg.get_character(&"CHAR_NOPE") == null)
+	# validator：合法构造 0 错误
+	var v := DataValidator.new()
+	var good := CharacterData.new()
+	good.id = &"CHAR_TEST"
+	good.display_name = "测试角色"
+	good.starting_weapon_id = &"W1_pistol"
+	_check("validate_character：合法构造 0 错误", v.validate_character(good).is_empty())
+	# error 级逐项：空 id / 空武器 / 数值越界
+	_check("validate_character：空 id 报错", _has_error(v.validate_character(CharacterData.new())))
+	good.id = &""
+	_check("validate_character：空武器 id 报错",
+		_has_error(v.validate_character(good)))
+	good.id = &"CHAR_TEST"
+	good.xp_mult = 3.0
+	_check("validate_character：xp_mult 越界报错", _has_error(v.validate_character(good)))
+	good.xp_mult = 1.0
+	good.move_speed_mult = 0.1
+	_check("validate_character：move_speed_mult 越界报错", _has_error(v.validate_character(good)))
+	good.move_speed_mult = 1.0
+	good.max_hp_pct = 5.0
+	_check("validate_character：max_hp_pct 越界报错", _has_error(v.validate_character(good)))
+	good.max_hp_pct = 0.0
+	good.pickup_radius_add = 500.0
+	_check("validate_character：pickup_radius_add 越界报错", _has_error(v.validate_character(good)))
+	# check_references：悬空首发武器 → 宿主剔除（error 级闭环）
+	var bad := CharacterData.new()
+	bad.id = &"CHAR_BAD"
+	bad.starting_weapon_id = &"W_NOPE"
+	reg.characters[&"CHAR_BAD"] = bad
+	var result: Dictionary = v.validate_all(reg)
+	var bad_removed := not reg.characters.has(&"CHAR_BAD")
+	var bad_in_errors := false
+	for e in result["errors"]:
+		if (e as Dictionary).get("id") == &"CHAR_BAD":
+			bad_in_errors = true
+	_check("check_references：悬空首发武器 → 宿主剔除 + error 明细",
+		bad_removed and bad_in_errors)
+
+
 func _substats_valid(p_h: ChipHandler, p_main_key: StringName, p_substats: Variant) -> bool:
 	# substats 契约：Array、≤2 条、键 ∈ 8 键−主键、无重复、值 = 固定小值表
 	if not (p_substats is Array):
@@ -761,3 +831,11 @@ func _substats_valid(p_h: ChipHandler, p_main_key: StringName, p_substats: Varia
 		if not is_equal_approx(float(d.get("value", -1.0)), float(ChipHandler.SUBSTAT_VALUES.get(stat, -1.0))):
 			return false
 	return true
+
+
+func _has_error(p_verdicts: Array) -> bool:
+	# validator 语义：仅 SEV_ERROR 触发剔除（warning 不剔除；同 pkg7 口径）
+	for v in p_verdicts:
+		if String(v.get("severity", DataValidator.SEV_ERROR)) == DataValidator.SEV_ERROR:
+			return true
+	return false
