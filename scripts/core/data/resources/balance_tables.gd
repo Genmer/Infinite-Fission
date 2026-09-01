@@ -58,6 +58,9 @@ extends Resource
 	"RXN_FIR_LTG": {"coef": 1.2, "radius": 90.0},
 	"RXN_ICE_LTG": {"resist_delta": -0.3, "duration": 6.0},
 }
+# v0.9.0 波次赐福权重镜像（A8 §1）：与 BlessingHandler.BLESSING_WEIGHTS 同值（和=100.0）。
+# 双源镜像纪律同 category_weights（改一处必改两处；.tres 不改——schema 默认即合法）。
+@export var blessing_weights: Dictionary = {&"gold": 30.0, &"heal": 15.0, &"atk": 25.0, &"rof": 15.0, &"attach": 10.0, &"slot1": 4.0, &"slot2": 1.0}
 @export var event_storm_threshold: int = 128                 # §六.4
 # R_rxn 反应通道独立告警线（集成包 B.6 落字段——管线 resolve_reaction 原用 r_alarm_ratio=500
 # 兜底）。真源推导：A3 §2.4 反应系数上限 χ=2.0（碎裂）× φ=1.8（ELE_REACTION_VOID）= 3.6，
