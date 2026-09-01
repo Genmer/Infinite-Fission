@@ -22,6 +22,7 @@ const SCENE_PARTICLE := "res://scenes/fx/burst_emitter.tscn"
 const SCENE_LASER := "res://scenes/combat/lasers/laser_beam.tscn"
 const MANIFEST_PATH := "res://data/manifest.cfg"
 const STARTING_WEAPON_ID := &"W1_pistol"      # Q-4：首发手枪
+const BLESSING_SKIP_GOLD: int = 15            # v1.3.0 R3：赐福跳过补偿（基础值，经 _add_gold 吃 K_gold）
 const SCENE_XP_SHARD := "res://scenes/combat/pickups/xp_shard.tscn"   # B.1 经验碎片（XPPool 模板）
 const SCENE_GOLD_COIN := "res://scenes/combat/pickups/gold_coin.tscn"   # v0.6.0 金币（GoldPool 模板，A4 §3）
 const GOLD_RNG_SEED: int = 42                 # 金币掉落 roll 固定种子（A4 §7：与卡牌流同口径，可注入）
@@ -558,10 +559,15 @@ func _on_blessing_choice(p_index: int) -> void:
 
 
 func _on_blessing_skip() -> void:
-	# 跳过仲裁：无补偿（仅 DebugStats 遥测，无信号）→ 收赐福回 PLAYING → 排空
+	# 跳过仲裁：v1.3.0（R3）补偿 15 金币基础值（经 _add_gold 正增量吃 K_gold）+ 跳字
+	#（popup_manager null 守卫）→ 收赐福回 PLAYING → 排空
 	if state != GameConst.GameStatus.SHOP or blessing_ui == null or not blessing_ui.is_open:
 		return
 	blessing_handler.count_skip()
+	_add_gold(BLESSING_SKIP_GOLD)
+	if popup_manager != null and player != null and is_instance_valid(player):
+		popup_manager.show_text_popup(player.global_position + Vector2(0.0, -60.0),
+			"跳过 · +%d 金币（基础值）" % BLESSING_SKIP_GOLD)
 	_close_blessing()
 
 

@@ -3,7 +3,7 @@
 # 互斥由 GameLoop 单点保证：_open_blessing_flow 仅在 PLAYING 且商店/事件/赐福均关闭时开门，
 # 序列化排空——冻结序 升级→赐福→商店→事件）。
 # 布局（720×1280）：标题 TOP_WIDE y300 f26「波次赐福」/ 描述 (60,360) 600x48 f14
-# 「选择一项赐福（跳过无补偿）」/ 选项 (60,440)/(60,564)/(60,688) 600x110 / 跳过 (60,820) 600x70。
+# 「选择一项赐福（跳过得 15 金币·基础值）」/ 选项 (60,440)/(60,564)/(60,688) 600x110 / 跳过 (60,820) 600x70。
 # dim ColorRect 0.86 mouse_filter=STOP（挡 HUD 冲刺键）；标题/描述不占交互矩形
 # （layout_rects 仅 4 项：三选项 + 跳过，两两无交集）。
 # 空 option 防御 disabled + "-"；state_changed GAME_OVER/MENU 强制收起；
@@ -12,7 +12,7 @@ class_name BlessingUI
 extends CanvasLayer
 
 signal option_chosen(option_index: int)        # 选项点击（GameLoop 仲裁）
-signal skip_requested()                        # 跳过（无补偿，仅遥测）
+signal skip_requested()                        # 跳过（v1.3.0 起补偿 15 金币基础值——GameLoop 仲裁）
 
 const OUTLINE_COLOR := Color(0.0, 0.0, 0.0, 0.9)
 const OUTLINE_SIZE := 4
@@ -20,7 +20,7 @@ const TITLE_POS := Vector2(0.0, 300.0)
 const TITLE_TEXT := "波次赐福"
 const DESC_POS := Vector2(60.0, 360.0)
 const DESC_SIZE := Vector2(600.0, 48.0)
-const DESC_TEXT := "选择一项赐福（跳过无补偿）"
+const DESC_TEXT := "选择一项赐福（跳过得 15 金币·基础值）"
 const OPTION_SIZE := Vector2(600.0, 110.0)
 const OPTION_POSITIONS: Array[Vector2] = [Vector2(60.0, 440.0), Vector2(60.0, 564.0), Vector2(60.0, 688.0)]
 const SKIP_POS := Vector2(60.0, 820.0)
@@ -118,7 +118,7 @@ func _build_ui() -> void:
 		btn.pressed.connect(func() -> void: option_chosen.emit(option_index))
 		_option_buttons.append(btn)
 	_skip_btn = _add_button("Skip", SKIP_POS, SKIP_SIZE, 15)
-	_skip_btn.text = "跳过"
+	_skip_btn.text = "跳过（+15 金币）"
 	_skip_btn.pressed.connect(func() -> void: skip_requested.emit())
 
 
