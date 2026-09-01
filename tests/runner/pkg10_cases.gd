@@ -79,10 +79,10 @@ func _boot_game_loop() -> void:
 
 func _teardown_game_loop() -> void:
 	tree.paused = false
-	# 收尾清残留（隔离纪律）：wipe → 恢复默认路径 → wipe
+	# 收尾清残留（隔离纪律）：仅 wipe 本 runner 的注入测试档。
+	# v1.0.0 审查 Important 2：不触碰默认路径——pkg10 全程未写默认档（headless 下产品
+	# 侧也走 meta_save_headless.cfg），无条件删默认档会误删真机真实存档
 	if _gl != null and _gl.meta_store != null:
-		_gl.meta_store.wipe()
-		_gl.meta_store.set_save_path(MetaStore.DEFAULT_SAVE_PATH)
 		_gl.meta_store.wipe()
 	if _gl != null:
 		_gl.free()

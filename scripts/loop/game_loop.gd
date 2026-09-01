@@ -881,6 +881,10 @@ func _boot_build_actors() -> void:
 	meta_store = MetaStore.new()
 	meta_store.name = "MetaStore"
 	add_child(meta_store)
+	# v1.0.0 审查 Important 1：headless 回归与真机存档自动隔离——headless 下死亡用例的
+	# settle 落独立档，真实档（窗口模式写的 meta_save.cfg）永不被测试写侧污染
+	if DisplayServer.get_name() == "headless":
+		meta_store.set_save_path("user://meta_save_headless.cfg")
 	meta_store.load_save()
 	# 管线（工厂自动切真件）→ 遗物处理器 → 敌波（spawner/wave_director）→ 玩家 → 元素系统
 	# ★ 经验掉落订阅必须先于 EnemySpawner 入树（信号连接序 = 派发序：掉落侧读取
