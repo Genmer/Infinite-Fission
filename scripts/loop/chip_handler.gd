@@ -39,6 +39,9 @@ var unlocked_slots: int = 0                    # 已解锁槽位数（0~3；wave
 var bonus_slots: int = 0                       # v0.9.0：赐福追加槽位（slot1 +1 / slot2 +2；与 unlock 叠加钳 6）
 var blessing_stats: Dictionary = {}            # v0.9.0：赐福 stat 三键（atk/rof/attach）——Option A：
                                                # 套装 ×1.10 之后加和，不占 TraitStack、不可 strip
+var meta_stats: Dictionary = {}                # v1.0.0 局外 meta 段（A9）：★reset_run 不清——
+                                               # 与 blessing_stats 关键差异；run 开始由
+                                               # GameLoop._reset_run_state 显式 set_meta_stats 载入
 var equipped: Array[Dictionary] = []           # 已装备（{chip: ChipData, rarity: int, substats: Array}）
 # ── 遥测（测试观测口） ──
 var chips_granted: int = 0                     # 芯片装备成功累计（Boss 掉落 + 商店购买共用 equip 单点）
@@ -62,6 +65,8 @@ func reset_run() -> void:
 	unlocked_slots = 0
 	bonus_slots = 0                               # v0.9.0：赐福槽位随局清零
 	blessing_stats = {}                           # v0.9.0：赐福 stat 段随局清零
+	# v1.0.0：meta_stats 有意【不清】——跨局由 GameLoop._reset_run_state 显式
+	# set_meta_stats 载入覆盖上一局残留（A9 冻结语义）
 	rng.seed = CHIP_RNG_SEED
 	_substat_rng.seed = SUBSTAT_RNG_SEED          # v0.8.0：副词条流独立重播种
 	chips_granted = 0
@@ -105,6 +110,12 @@ func add_blessing_stat(p_key: StringName, p_delta: float) -> void:
 	# v0.9.0 Option A：赐福 stat 三键加和累加（atk_pct/rof/attach_strength；只加和不参与
 	# ≥2 套装判定、不被 ×1.10 放大——消费在 stat_bonus 套装段之后）
 	blessing_stats[p_key] = float(blessing_stats.get(p_key, 0.0)) + p_delta
+
+
+func set_meta_stats(p_stats: Dictionary) -> void:
+	# v1.0.0（A9）：局外 meta 段整体注入（GameLoop._reset_run_state run 开始调用——
+	# 覆盖上一局残留；duplicate 防御外部字典后续变更）
+	meta_stats = p_stats.duplicate()
 
 
 func invalidate_panels() -> void:
@@ -204,6 +215,9 @@ func stat_bonus(p_stat: StringName) -> float:
 	# v0.9.0 Option A（A8 §2）：赐福 stat 段在套装 ×1.10 之后加和——只加和，
 	# 不参与 ≥2 判定（不触发套装）、不被套装乘区放大；atk 并入后随芯片 ⑥b 段共享 cap_chip_zone。
 	total += float(blessing_stats.get(p_stat, 0.0))
+	# v1.0.0（A9）：meta 段赐福后加和（同 ⑥b 段共享 cap_chip_zone；仅 atk_pct/gold_gain
+	# 入快照防双算）——空表 get 0.0 → 全 0 级与 v0.9.0 恒等
+	total += float(meta_stats.get(p_stat, 0.0))
 	return total
 
 

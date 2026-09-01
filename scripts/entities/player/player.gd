@@ -88,12 +88,13 @@ func setup(p_deps: Dictionary) -> void:
 
 
 static func compute_max_hp(p_char_pct: float, p_chip_sum: float, p_flat: float,
-		p_curse_layers: int) -> float:
-	# ★ v0.8.0 max_hp 公式唯一真源（A7 §V6 冻结）：
-	# maxf((base×(1+char_pct) + chip_sum + flat) × (1−0.04n), 1.0)
+		p_curse_layers: int, p_meta_flat: float = 0.0) -> float:
+	# ★ v0.8.0 max_hp 公式唯一真源（A7 §V6 冻结）；v1.0.0 增第 5 参 p_meta_flat（A9 局外生命
+	# flat——默认 0 → respawn 及全部既有调用零改动恒等）：
+	# maxf((base×(1+char_pct) + chip_sum + flat + meta_flat) × (1−0.04n), 1.0)
 	# CurseHandler.recompute_max_hp / respawn 全部经此；base 真源 cfg player_base_hp。
 	var base: float = GameConfig.get_constant(&"player_base_hp", 100.0)
-	return maxf((base * (1.0 + p_char_pct) + p_chip_sum + p_flat)
+	return maxf((base * (1.0 + p_char_pct) + p_chip_sum + p_flat + p_meta_flat)
 		* (1.0 - CurseHandler.MAXHP_PER_LAYER * float(maxi(p_curse_layers, 0))), 1.0)
 
 
