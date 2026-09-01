@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"ELE_TIDE"
+display_name = "潮汐弹药"
+description = "直击附带水元素附着（层2 附着值×1.5）"
+pool = 4
+pool_id = &""
+effect_id = &"EF_ELEMENTAL"
+value = 22.0
+value2 = 0.0
+params = {"element": 4, "value": 22, "value_lv2": 33}
+event_hooks = [0, 2]
+stack_max = 2
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 2
+tags = 0
+condition = {}

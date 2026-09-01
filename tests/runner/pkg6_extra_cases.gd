@@ -69,18 +69,19 @@ func _teardown_game_loop() -> void:
 # ── A / T1：DataRegistry 加载 80 资源 0 剔除 ──────────────────────
 # （v0.6.0 基线 68；v0.7.0 增 chips 类目 8 枚 → 76；v0.8.0 增变体 4 枚 → 80。
 #  v1.1.0 增 ELE_MASTERY.tres → traits 31 / 全表 84（授权更新，断言数不变）。
+#  v1.2.0 增 ELE_TIDE.tres → traits 32 / 全表 85（授权更新，断言数不变）。
 #  预期值随数据类目合法增量修正，断言数不变）
 func _test_registry_68() -> void:
-	print("── A/T1 DataRegistry 84 资源 0 剔除 ──")
+	print("── A/T1 DataRegistry 85 资源 0 剔除 ──")
 	var reg := _gl.registry
 	var rep: Dictionary = reg.report
-	_check("校验报告：total = 84 且 rejected = 0（v1.1.0 +ELE_MASTERY 授权更新）",
-		int(rep.get("total", -1)) == 84 and int(rep.get("rejected", -1)) == 0,
+	_check("校验报告：total = 85 且 rejected = 0（v1.2.0 +ELE_TIDE 授权更新）",
+		int(rep.get("total", -1)) == 85 and int(rep.get("rejected", -1)) == 0,
 		"total=%s rejected=%s" % [str(rep.get("total")), str(rep.get("rejected"))])
-	# 独立对账（文件系统口径：resources/* + data/gamefeel 的 .tres 计数 9/8/31/11/8/12/3/1/1）
+	# 独立对账（文件系统口径：resources/* + data/gamefeel 的 .tres 计数 9/8/32/11/8/12/3/1/1）
 	_check("对账 weapons = 9", reg.weapons.size() == 9, str(reg.weapons.size()))
 	_check("对账 enemies = 8", reg.enemies.size() == 8, str(reg.enemies.size()))
-	_check("对账 traits = 31（v1.1.0 +ELE_MASTERY 授权更新）", reg.traits.size() == 31, str(reg.traits.size()))
+	_check("对账 traits = 32（v1.2.0 +ELE_TIDE 授权更新）", reg.traits.size() == 32, str(reg.traits.size()))
 	_check("对账 relics = 11", reg.relics.size() == 11, str(reg.relics.size()))
 	_check("对账 synergies = 8", reg.synergies.size() == 8, str(reg.synergies.size()))
 	_check("对账 chips = 12（v0.8.0 +4 变体授权更新）", reg.chips.size() == 12, str(reg.chips.size()))
@@ -89,7 +90,7 @@ func _test_registry_68() -> void:
 		reg.wave_table != null and reg.game_feel != null)
 	var table_sum: int = reg.weapons.size() + reg.enemies.size() + reg.traits.size() \
 		+ reg.relics.size() + reg.synergies.size() + reg.chips.size() + reg.characters.size() + 2
-	_check("表尺寸合计 = 84（与 report.total 互证；v1.1.0 授权更新）", table_sum == 84
+	_check("表尺寸合计 = 85（与 report.total 互证；v1.2.0 授权更新）", table_sum == 85
 		and int(rep.get("total", -1)) == table_sum, "sum=%d" % table_sum)
 
 
