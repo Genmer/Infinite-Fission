@@ -178,8 +178,9 @@ func _test_chip_handler() -> void:
 	var reg := _gl.registry
 	var player := _gl.player
 	var h := _gl.chip_handler
-	_check("夹具：GameLoop Boot 组装 ChipHandler（setup 后槽 0/空）",
-		h != null and h.unlocked_slots == 0 and h.free_slots() == 0 and h.equipped.is_empty())
+	_check("夹具：GameLoop Boot 组装 ChipHandler（setup 后槽 0/空；v0.9.0 授权更新 +capacity/bonus 维度）",
+		h != null and h.unlocked_slots == 0 and h.free_slots() == 0 and h.equipped.is_empty()
+		and h.slot_capacity() == 0 and h.bonus_slots == 0)
 	_check("EventBus 信号可经 emit 包装派发（订阅收到）", _probe_chip_signals())
 	# equip 五门 fail-fast（含未解锁门：free_slots=0；探针已解锁 1 档——改判 unlocked 残留）
 	var h_null := ChipHandler.new()
@@ -191,6 +192,12 @@ func _test_chip_handler() -> void:
 	EventBus.emit_chip_slot_unlocked(3)
 	_check("解锁后 free_slots()==3（w20 满槽档）",
 		h.unlocked_slots == 3 and h.free_slots() == 3)
+	# v0.9.0 授权更新：bonus_slots 叠加与钳 6（unlock 3 + bonus 2 = 5；再 +9 只补到 6 返 1）
+	_check("add_bonus_slots(2)→capacity==5（unlock 3 + bonus 2）",
+		h.add_bonus_slots(2) == 2 and h.slot_capacity() == 5, "cap=%d" % h.slot_capacity())
+	_check("add_bonus_slots(9)→钳 6 返实际增量 1",
+		h.add_bonus_slots(9) == 1 and h.slot_capacity() == 6, "cap=%d" % h.slot_capacity())
+	h.bonus_slots = 0                            # 夹具复位（后续断言回归 unlock 3 档）
 	_check("equip：合法装备 CHIP_ATK 白 → true", h.equip(&"CHIP_ATK", 0) == true)
 	_check("equip 五门：同 id 重复 → false", h.equip(&"CHIP_ATK", 2) == false)
 	_check("装备后 stat_bonus(atk_pct)=0.10（白档）", is_equal_approx(h.stat_bonus(&"atk_pct"), 0.10))
@@ -208,13 +215,19 @@ func _test_chip_handler() -> void:
 		is_equal_approx(player.max_hp, max0 + 80.0)
 		and is_equal_approx(player.hp, minf(hp0 + 80.0, max0 + 80.0)))
 	_check("stat_bonus(max_hp)=80（金档）", is_equal_approx(h.stat_bonus(&"max_hp"), 80.0))
-	# slot_snapshot
+	# slot_snapshot（v0.9.0 授权更新：恒 6 格——容量内空槽 {} 占位、容量外 {"locked":true}）
 	var snap := h.slot_snapshot()
-	_check("slot_snapshot 恒 3 格", snap.size() == 3)
+	_check("slot_snapshot 恒 6 格（v0.9.0 授权更新）", snap.size() == 6, str(snap.size()))
 	_check("slot_snapshot 已装备项键齐全（chip_id/display_name/stat_key/rarity/value_text）",
 		(snap[0] as Dictionary).has("chip_id") and String((snap[0] as Dictionary).get("display_name", "")) == "攻击核心"
 		and String((snap[0] as Dictionary).get("value_text", "")) == "+10%")
-	_check("slot_snapshot 空槽 {} 占位", (snap[2] as Dictionary).is_empty())
+	_check("slot_snapshot 空槽 {} 占位（容量内 index 2）", (snap[2] as Dictionary).is_empty())
+	# v0.9.0 授权更新：容量外 3 格 locked 灰显语义（夹具 unlocked=3, bonus=0）
+	var locked_ok := true
+	for i in range(3, 6):
+		if not bool((snap[i] as Dictionary).get("locked", false)):
+			locked_ok = false
+	_check("slot_snapshot：snap[3]/[4]/[5] 均 {\"locked\":true}（容量外灰显）", locked_ok)
 	# roll_shop_offers：格数/未持有池/无放回/定价
 	h.reset_run()
 	h.set_rng_seed(4242)

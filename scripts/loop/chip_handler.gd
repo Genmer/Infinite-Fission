@@ -13,6 +13,8 @@ class_name ChipHandler
 extends Node
 
 const MAX_CHIP_SLOTS: int = 3
+# v0.9.0（A8）：槽位上限扩 6——unlock 链（w1/10/20 → 1~3）不动，赐福 bonus_slots 叠加至 6
+const CHIP_SLOT_CAP: int = 6
 const CHIP_RNG_SEED: int = 4242
 const CONVERT_RATIO: float = 0.5               # Boss 掉落转金币 = round(定价 × 0.5)
 # 芯片定价（主 Agent 裁定 2026-09-01：独立于卡架的更高档——常驻件定价 白60/蓝110/紫180/金300）
@@ -34,6 +36,9 @@ var curse_handler: CurseHandler = null         # v0.8.0 注入（max_hp 键走 r
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()   # 芯片 roll 流（seed 4242）
 var _substat_rng: RandomNumberGenerator = RandomNumberGenerator.new()   # 副词条 roll 流（seed 4243）
 var unlocked_slots: int = 0                    # 已解锁槽位数（0~3；wave 1/10/20 解锁）
+var bonus_slots: int = 0                       # v0.9.0：赐福追加槽位（slot1 +1 / slot2 +2；与 unlock 叠加钳 6）
+var blessing_stats: Dictionary = {}            # v0.9.0：赐福 stat 三键（atk/rof/attach）——Option A：
+                                               # 套装 ×1.10 之后加和，不占 TraitStack、不可 strip
 var equipped: Array[Dictionary] = []           # 已装备（{chip: ChipData, rarity: int, substats: Array}）
 # ── 遥测（测试观测口） ──
 var chips_granted: int = 0                     # 芯片装备成功累计（Boss 掉落 + 商店购买共用 equip 单点）
@@ -55,6 +60,8 @@ func reset_run() -> void:
 	# 重开清零（GameLoop._reset_run_state 调用；装备/槽位每场重来 + 双 rng 流重播种）
 	equipped.clear()
 	unlocked_slots = 0
+	bonus_slots = 0                               # v0.9.0：赐福槽位随局清零
+	blessing_stats = {}                           # v0.9.0：赐福 stat 段随局清零
 	rng.seed = CHIP_RNG_SEED
 	_substat_rng.seed = SUBSTAT_RNG_SEED          # v0.8.0：副词条流独立重播种
 	chips_granted = 0
@@ -82,10 +89,33 @@ func _on_chip_slot_unlocked(p_slot: int) -> void:
 
 
 # ── 查询 ──────────────────────────────────────────────────────────
+func slot_capacity() -> int:
+	# v0.9.0：总槽容量 = 解锁链（0~3）+ 赐福 bonus_slots，整体钳 CHIP_SLOT_CAP=6
+	return mini(unlocked_slots + bonus_slots, CHIP_SLOT_CAP)
+
+
+func add_bonus_slots(p_n: int) -> int:
+	# v0.9.0：赐福加槽（slot1 +1 / slot2 +2）→ 返回实际增量（钳 6 后可能 <p_n，0 = 已满无效果）
+	var before := slot_capacity()
+	bonus_slots = maxi(bonus_slots + p_n, 0)
+	return slot_capacity() - before
+
+
+func add_blessing_stat(p_key: StringName, p_delta: float) -> void:
+	# v0.9.0 Option A：赐福 stat 三键加和累加（atk_pct/rof/attach_strength；只加和不参与
+	# ≥2 套装判定、不被 ×1.10 放大——消费在 stat_bonus 套装段之后）
+	blessing_stats[p_key] = float(blessing_stats.get(p_key, 0.0)) + p_delta
+
+
+func invalidate_panels() -> void:
+	# v0.9.0：面板失效公开口（BlessingHandler 出牌后调——atk/rof/attach 段即时生效）
+	_invalidate_all_weapon_panels()
+
+
 func free_slots() -> int:
-	# 空槽 = 已解锁槽 − 已装备（审查裁定 2026-09-01：解锁门控真实生效——
-	# 未解锁即 0 空槽，w1/w10/w20 节奏约束商店购买与 Boss 掉落转金币）
-	return maxi(unlocked_slots - equipped.size(), 0)
+	# 空槽 = 总容量（slot_capacity，v0.9.0 含 bonus_slots）− 已装备（审查裁定 2026-09-01：
+	# 解锁门控真实生效——未解锁即 0 空槽，w1/w10/w20 节奏约束商店购买与 Boss 掉落转金币）
+	return maxi(slot_capacity() - equipped.size(), 0)
 
 
 func is_equipped(p_chip_id: StringName) -> bool:
@@ -171,6 +201,9 @@ func stat_bonus(p_stat: StringName) -> float:
 				total += float(sub.get("value", 0.0))
 	if main_count >= 2:
 		total *= SET_BONUS_MULT
+	# v0.9.0 Option A（A8 §2）：赐福 stat 段在套装 ×1.10 之后加和——只加和，
+	# 不参与 ≥2 判定（不触发套装）、不被套装乘区放大；atk 并入后随芯片 ⑥b 段共享 cap_chip_zone。
+	total += float(blessing_stats.get(p_stat, 0.0))
 	return total
 
 
@@ -178,6 +211,7 @@ func slot_snapshot() -> Array[Dictionary]:
 	# 槽位面板快照（ShopUI.set_chip_slots 消费）：已装备项
 	# {chip_id, display_name, stat_key, rarity, value_text(+副词条摘要)}；空槽 {} 占位至
 	# MAX_CHIP_SLOTS。v0.8.0：value_text 追加副词条摘要（空副词条 → 恒等，pkg7 冻结兼容）。
+	# v0.9.0：恒 6 格——容量内空槽 {} 占位，容量外 {"locked":true} 灰显（ShopUI locked 分支）。
 	var out: Array[Dictionary] = []
 	for entry in equipped:
 		var chip: ChipData = entry.get("chip")
@@ -199,8 +233,8 @@ func slot_snapshot() -> Array[Dictionary]:
 			"rarity": rarity,
 			"value_text": value_text,
 		})
-	while out.size() < MAX_CHIP_SLOTS:
-		out.append({})
+	while out.size() < CHIP_SLOT_CAP:            # v0.9.0：恒 6 格（locked 语义见函数头）
+		out.append({"locked": true} if out.size() >= slot_capacity() else {})
 	return out
 
 
