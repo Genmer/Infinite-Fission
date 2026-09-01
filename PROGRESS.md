@@ -1,7 +1,7 @@
 # ⚡ INFINITE FISSION · 开发进度与交接文档（PROGRESS）
 
 > **本文档是跨工具/跨会话交接的唯一入口。新会话/新工具接手后：先读完本文 → 按 §5「下一步行动」顺序执行。**
-> 最后更新：2026-09-01 ｜ 更新人：主控 Agent（ZCode 会话：v0.9.0 波次赐福三选一 + 芯片槽位扩展 6 格，W1~W7 全部完成）
+> 最后更新：2026-09-01 ｜ 更新人：主控 Agent（ZCode 会话：v1.0.0 局外成长 Meta + 存档层，M1~M7 全部完成）
 > 远程仓库：`https://github.com/Genmer/Infinite-Fission.git`（main 分支）
 
 ---
@@ -34,7 +34,9 @@
 
 **v0.9.0 增量（2026-09-01，W1~W7）：波次赐福三选一（BlessingHandler seed 999 + BlessingUI 复用 SHOP 态；wave_cleared w>=2 开门，出牌时过滤 slot1 仅 capacity<6 / slot2 仅 capacity<=4 / heal 仅 hp<max_hp；权重表 gold30/heal15/atk25/rof15/attach10/slot1 4/slot2 1 双源镜像 BalanceTables.blessing_weights；金币包 20+3w 基础值 / heal 15%max / atk +4% / rof +3% / attach +5% / 槽位 +1/+2； blessing_granted 第 23 号信号；排空序扩展 升级→赐福→商店→事件；硬上限叠波直调 start_wave 不派发 wave_cleared = 天然无赐福）/ 芯片槽位扩展 3→6（CHIP_SLOT_CAP=6 + bonus_slots 赐福位 + slot_capacity()=mini(unlock+bonus,6)；slot_snapshot 恒 6 格 locked 语义；商店槽位面板 6 槽盒 90x120 + 未解锁灰显）/ stat 三键 Option A（ChipHandler.blessing_stats 在套装 ×1.10 之后加和——只加和不参与 ≥2 判定不被放大，不占 TraitStack 不可 strip，atk 随 ⑥b 段共享 cap_chip_zone）。数值与裁定真源 = `docs/analysis/A8_v0.9.0_design.md`（含 Option A 裁定/时序图/假设清单 H1~H8）；自测 = `tests/runner/test_pkg9.gd`（59 项 G1~G9）。提交序：W1 0578963 → W2 0135114 → W3a f8eaa51 → W3b eb8b4ce → W4 bf2b04e → W6/W7 本笔。授权更新：pkg7（EVENT_NAMES 23 / capacity+bonus 维度 / 快照 6 格 locked / 槽盒 90 宽锚点）、pkg5/pkg6/pkg7_extra（wave_cleared 新订阅夹具排险）、pkg8_extra V24（version/基线推进）。**
 
-**仓库当前可编译（0 解析错误），回归全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，基线口径 836；另有 pkg6_extra 33 项验收补充 / pkg7 175 项 v0.7.0 增量自测（v0.9.0 +3 授权更新）/ pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量自测 / pkg8_extra 31 项验收补充 / pkg9 59 项 v0.9.0 增量自测，不计入 836 基线口径；全 runner 合计 1350）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95 = 5.764ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**
+**v1.0.0 增量（2026-09-01，M1~M7）：局外成长 Meta + 存档层（MetaStore：结晶货币 + 五条目封闭表 hpg/atk/greed/seed_gold/xp + 累计战绩，ConfigFile `user://meta_save.cfg` SAVE_VERSION=1 + 完整损坏判定树全回退不写回；定价 100 起逐级 ×1.6 round——★非 pow，round(655.36)=655≠冻结 656；序列 100/160/256/410/656 + seed_gold 100/160/256）/ 死亡结转（GameLoop._settle_run 一次闸 _settled_this_run：本局金币全额折结晶 + record_run + save；降级路径 meta_store 缺失 → 结晶 +0）/ 注入四通道（① hpg→CurseHandler.meta_hp_flat 先于 reset 注入；② atk/greed→ChipHandler.meta_stats——★reset_run 不清由 run 开始 set_meta_stats 覆盖，stat_bonus 赐福段后加和同 ⑥b 共享 cap_chip_zone；③ seed_gold 直注入 gold 不经 _add_gold——greed 不放大开局金；④ xp 链第 4 因子 meta_store.xp_mult 与芯片 xp_gain 分立防双算）/ compute_max_hp 增第 5 参 p_meta_flat（默认 0 恒等）/ MetaPanel（MENU 态宿主不占状态机；dim STOP 遮挡开始钮互斥实现；layout_rects 6 项）+ MenuScreen 统计行/入口钮 + GameOver 结晶行。核心红线：全 0 级与 v0.9.0 行为逐位恒等（pkg10 M23 锚定）。数值与裁定真源 = `docs/analysis/A9_v1.0.0_design.md`（含注入四通道契约/假设清单 A9-1~A9-6）；自测 = `tests/runner/test_pkg10.gd`（24 项 M1~M24 恰额）。提交序：M1 b8892b7 → M2-5 348ab4d → M6-7 本笔。授权更新：project.godot version 1.0.0、pkg8_extra V24（version/基线推进）。**
+
+**仓库当前可编译（0 解析错误），回归全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，基线口径 836；另有 pkg6_extra 33 项验收补充 / pkg7 175 项 v0.7.0 增量自测（v0.9.0 +3 授权更新）/ pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量自测 / pkg8_extra 31 项验收补充 / pkg9 59 项 v0.9.0 增量自测 / pkg10 24 项 v1.0.0 增量自测，不计入 836 基线口径；全 runner 合计 1374）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95 = 5.784ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**
 
 **阶段 E 关键战果（审查/测试发现并修复）：**
 - 一轮审查 1C+3I：重开不清场（残留战场秒杀重生）→ `_clear_battlefield` 清场序 + respawn 1.5s 无敌；GameFeel 订阅晚于 Spawner 清 tags（Boss 击杀打击感永不触发）→ early_bind；Boss 波伴随怪流水锁死 wave_cleared → `_boss_ref` 存活闸；TH_CRIT_SHARD 全武器声明零实现 + 校验器空承诺 → 补 `trait_effect_crit_shard.gd` + check_references ② 落地
@@ -132,13 +134,15 @@
 - 导入：`"$G" --headless --path "<项目根>" --import`
 - 跑测试：`"$G" --headless --path "<项目根>" -s tests/runner/test_pkg0.gd`（pkg1/pkg2/pkg3 同理）
 - 注意：`-s` 模式下入口脚本编译早于 autoload 注册，测试用「入口引导 + 运行时 load 用例体」两段式（pkg0~pkg3 都是这个模式，新测试照抄）
-- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836 基线口径；另有 pkg6_extra 33 项验收补充 / pkg7 175 项 v0.7.0 增量（v0.9.0 +3 授权更新）/ pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量 / pkg8_extra 31 项验收补充 / pkg9 59 项 v0.9.0 增量，独立 runner；全 runner 合计 1350 全 PASS）**
+- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836 基线口径；另有 pkg6_extra 33 项验收补充 / pkg7 175 项 v0.7.0 增量（v0.9.0 +3 授权更新）/ pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量 / pkg8_extra 31 项验收补充 / pkg9 59 项 v0.9.0 增量 / pkg10 24 项 v1.0.0 增量，独立 runner；全 runner 合计 1374 全 PASS）**
 - v0.6.0 压力复测：**P95 = 5.559ms**（avg 2.191 / P50 1.791 / P99 6.968，判定线 8.3ms PASS）
 - v0.7.0 压力复测：**P95 = 5.714ms**（avg 2.302 / P50 1.912 / P99 6.515，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0）
 - v0.8.0 压力复测：**P95 = 5.924ms**（avg 2.419 / P50 1.998 / P99 7.144 / MAX 12.625，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
 - v0.9.0 压力复测：**P95 = 5.764ms**（avg 2.348 / P50 1.953 / P99 6.813 / MAX 11.626，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
+- v1.0.0 压力复测：**P95 = 5.784ms**（avg 2.297 / P50 1.925 / P99 6.514 / MAX 13.190，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
 - v0.8.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.735ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.0→182.6 MB 增幅 0.88% < 3%；0 ERROR）
 - v0.9.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.810ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.4→183.0 MB 增幅 0.88% < 3%；0 ERROR；终局波次 7）
+- v1.0.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.586ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.9→183.5 MB 增幅 0.87% < 3%；0 ERROR；终局波次 7）
 - 压力/soak：`tests/stress/test_perf_500p100e.gd`（AC-01.2，headless 逻辑帧口径）与 `tests/stress/test_soak.gd`（AC-14.1，SOAK_FRAMES 常量控时长；10 分钟版预计 ~12 分钟实际，长跑须后台+轮询防会话超时）
 
 ## 8. 冻结契约速查（跨包接口，改动需全包评估）
@@ -295,6 +299,40 @@ pkg0（ADD 池计数 14）/pkg4（池×7）/pkg5（池×7 + 黑市桥接契约�
 6. **ShopUI**：SLOT_SIZE 188x120 → **90x120**；SLOT_POSITIONS 3 → **6 项**（8/105/205/305/405/505,
    36）；_refresh_slots + locked 分支（"未解锁" 灰显 0.45,0.45,0.5）；面板 (60,884) 600x168
    与离开 (60,1064) 不动；layout_rects 仍 14 项数值不变（槽盒嵌套不入列）。
+
+### 8.5 v1.0.0 增量契约（详见 A9_v1.0.0_design.md，假设清单 A9-1~A9-6）
+
+1. **MetaStore（新类，无 autoload）**：SAVE_VERSION=1 / DEFAULT_SAVE_PATH `user://meta_save.cfg` /
+   UPGRADES 五条目封闭表（hpg/atk/greed/seed_gold/xp）；存档键布局 [meta] save_version+crystal /
+   [levels] String(id)×5 / [stats] total_runs+total_kills+best_wave；损坏判定树全回退【不写回】；
+   save 失败 push_warning+false 内存保留；wipe 本无档静默；purchase 三拒（未知/满级/余额不足）
+   不扣款。**组装序 = GameLoop._boot_build_actors 首位**（boot 即 load_save）。
+2. **定价序列冻结**：100 起逐级 ×1.6 后 round（★逐级迭代非 pow——round(655.36)=655≠冻结 656）；
+   hpg/atk/greed/xp = 100/160/256/410/656，seed_gold = 100/160/256；满级 price=-1。
+3. **compute_max_hp 增第 5 参 `p_meta_flat:=0.0`**（公式唯一真源 prescale 加 + meta_flat；
+   默认 0 → respawn 及全部既有调用零改动恒等）。
+4. **CurseHandler +meta_hp_flat**（run 开始注入，recompute 每次算入；不存 player 字段
+   respawn 不清）；**ChipHandler +meta_stats +set_meta_stats**（★reset_run 不清——与
+   blessing_stats 关键差异；run 开始由 GameLoop 显式载入覆盖；stat_bonus 赐福段之后加和，
+   atk 随 ⑥b 段共享 cap_chip_zone）；meta_stats_snapshot 仅 {atk_pct, gold_gain} 二键防双算。
+5. **GameLoop**：+_settle_run 死亡结转单点（一次闸 _settled_this_run，_on_player_died 内
+   change_state 前调用；gain=maxi(gold,0)；meta_store 缺失 → set_crystal_gain(0) 降级）；
+   _reset_run_state 注入序冻结 = curse reset **前**注 meta_hp_flat → _add_gold(-gold) 后
+   ①set_meta_stats（先载入覆盖残留）②seed_gold>0 **直注入** gold+emit（★不经 _add_gold——
+   greed 不放大开局金）→ 尾部 _settled_this_run=false；xp 链第 4 因子 value×=xp_mult()
+   （chip 行后、_spawn 前）；_boot_build_presentation 组装 MetaPanel（menu_screen 之后
+   add_child→同层绘制在上）+ 四方法 _on_meta_requested/_on_meta_purchase/_close_meta_panel/
+   _refresh_menu_meta（购买仲裁仅 MENU+面板开）。
+6. **UI**：MenuScreen +meta_requested 信号 + 统计行 (0,712) f14「最佳波次 %d · 总局数 %d ·
+   累计击杀 %d · 结晶 %d」+ 入口钮 (280,752) 160x56（setup/start_requested 签名零改动）；
+   GameOverScreen +结晶行 (0,624) f16 + set_crystal_gain/crystal_text（summary/reaction/
+   双按钮零改动）；MetaPanel 布局 = 标题 y96 f28 / 余额行 y152 f18 / 行钮×5 (60,
+   200/320/440/560/680) 600x110（行序=UPGRADES 表序）+ 返回 (60,1084) 600x80 + dim
+   (0.06,0.07,0.12,0.96) STOP（遮挡开始钮=与 MenuScreen 互斥实现）；layout_rects 6 项
+   两两无交集；state_changed 非 MENU 强制 close；is_open 语义 = _opened + is_open()。
+7. **核心红线**：全 0 级与 v0.9.0 行为逐位恒等（pkg10 M23 锚定：max_hp 100 / _add_gold 无
+   缩放 / 快照 0.0 / xp fixed-seed 基线）；测试档隔离 pkg10 = 独立档 boot 后首件事
+   set_save_path+wipe，收尾恢复默认路径再 wipe。
 
 ## 9. 工程铁律（全程有效）
 

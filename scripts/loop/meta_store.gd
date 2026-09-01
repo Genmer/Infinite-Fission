@@ -113,8 +113,12 @@ func save() -> bool:
 
 
 func wipe() -> void:
-	# 内存全默认 + 删除存档文件（ERR_FILE_NOT_FOUND 静默 = 本无档，语义已达）
+	# 内存全默认 + 删除存档文件（本无档静默——DirAccess.remove_absolute 对不存在文件在
+	# macOS 返回 FAILED 而非 ERR_FILE_NOT_FOUND，先做 file_exists 预检保证「无档 = 删除
+	# 语义已达」路径恒静默；ERR_FILE_NOT_FOUND 双保险）
 	_reset_memory()
+	if not FileAccess.file_exists(_save_path):
+		return
 	var err := DirAccess.remove_absolute(ProjectSettings.globalize_path(_save_path))
 	if err != OK and err != ERR_FILE_NOT_FOUND:
 		push_warning("[MetaStore] 存档删除失败（err=%d）" % err)
