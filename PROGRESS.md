@@ -1,7 +1,7 @@
 # ⚡ INFINITE FISSION · 开发进度与交接文档（PROGRESS）
 
 > **本文档是跨工具/跨会话交接的唯一入口。新会话/新工具接手后：先读完本文 → 按 §5「下一步行动」顺序执行。**
-> 最后更新：2026-09-01 ｜ 更新人：主控 Agent（ZCode 会话：v1.0.0 局外成长 Meta + 存档层，M1~M7 全部完成）
+> 最后更新：2026-09-01 ｜ 更新人：主控 Agent（ZCode 会话：v1.1.0 元素反应二期——增幅双轨/精通/CD 分立，E1~E5 全部完成）
 > 远程仓库：`https://github.com/Genmer/Infinite-Fission.git`（main 分支）
 
 ---
@@ -36,7 +36,9 @@
 
 **v1.0.0 增量（2026-09-01，M1~M7）：局外成长 Meta + 存档层（MetaStore：结晶货币 + 五条目封闭表 hpg/atk/greed/seed_gold/xp + 累计战绩，ConfigFile `user://meta_save.cfg` SAVE_VERSION=1 + 完整损坏判定树全回退不写回；定价 100 起逐级 ×1.6 round——★非 pow，round(655.36)=655≠冻结 656；序列 100/160/256/410/656 + seed_gold 100/160/256）/ 死亡结转（GameLoop._settle_run 一次闸 _settled_this_run：本局金币全额折结晶 + record_run + save；降级路径 meta_store 缺失 → 结晶 +0）/ 注入四通道（① hpg→CurseHandler.meta_hp_flat 先于 reset 注入；② atk/greed→ChipHandler.meta_stats——★reset_run 不清由 run 开始 set_meta_stats 覆盖，stat_bonus 赐福段后加和同 ⑥b 共享 cap_chip_zone；③ seed_gold 直注入 gold 不经 _add_gold——greed 不放大开局金；④ xp 链第 4 因子 meta_store.xp_mult 与芯片 xp_gain 分立防双算）/ compute_max_hp 增第 5 参 p_meta_flat（默认 0 恒等）/ MetaPanel（MENU 态宿主不占状态机；dim STOP 遮挡开始钮互斥实现；layout_rects 6 项）+ MenuScreen 统计行/入口钮 + GameOver 结晶行。核心红线：全 0 级与 v0.9.0 行为逐位恒等（pkg10 M23 锚定）。数值与裁定真源 = `docs/analysis/A9_v1.0.0_design.md`（含注入四通道契约/假设清单 A9-1~A9-6）；自测 = `tests/runner/test_pkg10.gd`（24 项 M1~M24 恰额）。提交序：M1 b8892b7 → M2-5 348ab4d → M6-7 本笔。授权更新：project.godot version 1.0.0、pkg8_extra V24（version/基线推进）。**
 
-**仓库当前可编译（0 解析错误），回归全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，基线口径 836；另有 pkg6_extra 33 项验收补充 / pkg7 175 项 v0.7.0 增量自测（v0.9.0 +3 授权更新）/ pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量自测 / pkg8_extra 31 项验收补充 / pkg9 59 项 v0.9.0 增量自测 / pkg10 24 项 v1.0.0 增量自测，不计入 836 基线口径；全 runner 合计 1374）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95 = 5.784ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**
+**v1.1.0 增量（2026-09-01，E1~E5）：元素反应二期（数值与裁定真源 = `docs/analysis/A10_v1.1.0_design.md`）。增幅双轨（融化 = ICE 附着+FIR 直击 ×1.5 / 蒸发 = FIR 附着+ICE 直击 ×2.0；amplify 乘区池经弹侧 `_build_damage_ctx` 注入 + 三插点幂等消耗——projectile 主路径/homing 主目标/homing 次级，均「结算成功且未 dead」后置；KIN/光束/近战/settle_aoe/DOT/连锁跳天然排除；穿透链各目标独立；融→蒸同帧连段合法）/ 元素精通（ELE_MASTERY.tres：step 0.25、stack_max 3、hooks 常驻；register_mastery 跨武器注册 + mastery_layers 全局封顶 3 唯一裁定点；reaction_mult 改写 = ∏VOID × (1+step×层)，仅 VOID 恒等 1.8 零冲击；HUD Build 串增 MP）/ 反应 CD 分立（reaction_table 三 rule 携带 cd 2/3/6 双源镜像，缺键回退 cd_rxn；validator cd≤0 告警；pkg3 超导 CD 断言授权更新 2s→6s）/ 顺手项（超导拼写 superconduct、碎裂昵称清理「碎裂≠融化」、damage_pipeline.gd 注释现状化——唯一授权管线 diff，pkg11 V30 源码守卫）/ 跳字 ‼ 后缀 + amplify_melt/vapor 遥测分键。三剧变（碎裂/过载/超导）触发条件与结算通道零语义变更。提交序：E1 b23b9e2 → E2 11c5b5d → E3 4185267 → E4 229b4d4 → E5 本笔。授权更新：project.godot version 1.1.0、pkg8_extra V24（version/基线推进）、pkg6_extra T1（注册资源 83→84 / traits 30→31）、pkg3（超导 CD/拼写四处）。**
+
+**仓库当前可编译（0 解析错误），回归全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 118 + pkg6 115，基线口径 836；另有 pkg6_extra 33 项验收补充 / pkg7 175 项 v0.7.0 增量自测（v0.9.0 +3 授权更新）/ pkg7_extra 56 项验收补充 / pkg8 160 项 v0.8.0 增量自测 / pkg8_extra 31 项验收补充 / pkg9 59 项 v0.9.0 增量自测 / pkg9_extra 34 项验收补充 / pkg10 24 项 v1.0.0 增量自测 / pkg10_extra 9 项验收补充 / pkg11 16 项 v1.1.0 增量自测，不计入 836 基线口径；全 runner 合计 1433）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95 = 5.895ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。**
 
 **阶段 E 关键战果（审查/测试发现并修复）：**
 - 一轮审查 1C+3I：重开不清场（残留战场秒杀重生）→ `_clear_battlefield` 清场序 + respawn 1.5s 无敌；GameFeel 订阅晚于 Spawner 清 tags（Boss 击杀打击感永不触发）→ early_bind；Boss 波伴随怪流水锁死 wave_cleared → `_boss_ref` 存活闸；TH_CRIT_SHARD 全武器声明零实现 + 校验器空承诺 → 补 `trait_effect_crit_shard.gd` + check_references ② 落地
@@ -140,9 +142,11 @@
 - v0.8.0 压力复测：**P95 = 5.924ms**（avg 2.419 / P50 1.998 / P99 7.144 / MAX 12.625，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
 - v0.9.0 压力复测：**P95 = 5.764ms**（avg 2.348 / P50 1.953 / P99 6.813 / MAX 11.626，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
 - v1.0.0 压力复测：**P95 = 5.784ms**（avg 2.297 / P50 1.925 / P99 6.514 / MAX 13.190，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
+- v1.1.0 压力复测：**P95 = 5.895ms**（avg 2.461 / P50 2.013 / P99 7.233 / MAX 12.610，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
 - v0.8.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.735ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.0→182.6 MB 增幅 0.88% < 3%；0 ERROR）
 - v0.9.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.810ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.4→183.0 MB 增幅 0.88% < 3%；0 ERROR；终局波次 7）
 - v1.0.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.586ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.9→183.5 MB 增幅 0.87% < 3%；0 ERROR；终局波次 7）
+- v1.1.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 3.000ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 182.2→183.8 MB 增幅 0.86% < 3%；0 ERROR；终局波次 7）
 - 压力/soak：`tests/stress/test_perf_500p100e.gd`（AC-01.2，headless 逻辑帧口径）与 `tests/stress/test_soak.gd`（AC-14.1，SOAK_FRAMES 常量控时长；10 分钟版预计 ~12 分钟实际，长跑须后台+轮询防会话超时）
 
 ## 8. 冻结契约速查（跨包接口，改动需全包评估）
@@ -333,6 +337,35 @@ pkg0（ADD 池计数 14）/pkg4（池×7）/pkg5（池×7 + 黑市桥接契约�
 7. **核心红线**：全 0 级与 v0.9.0 行为逐位恒等（pkg10 M23 锚定：max_hp 100 / _add_gold 无
    缩放 / 快照 0.0 / xp fixed-seed 基线）；测试档隔离 pkg10 = 独立档 boot 后首件事
    set_save_path+wipe，收尾恢复默认路径再 wipe。
+
+### 8.6 v1.1.0 增量契约（详见 A10_v1.1.0_design.md，假设清单 E-AMP-1~E-AMP-4）
+
+1. **ElementalSystem +增幅双轨**：`try_amplify_factor(target, hit_element)->float`（只读快照：
+   FIR 直击+ICE gauge → ×1.5×φ / ICE 直击+FIR gauge → ×2.0×φ / 其余 1.0；immune_mask 不查）；
+   `consume_amplify(target, hit_element)`（重判同条件幂等 → clear 反向全清 + 分键遥测）；
+   常量 AMP_MELT_FACTOR/AMP_VAPOR_FACTOR/MASTERY_LAYER_CAP（待升格 BalanceTables，E-AMP-2）。
+2. **ProjectileBase._build_damage_ctx 注入**：element∈{FIR,ICE} 且 elemental!=null 且
+   factor>1.0 → mult_pools += `{"pool_id": &"amplify", "source_uid": uid, "contrib":
+   factor−1, "cap_pool": factor−1, "priority": 0}`（字段对齐 vuln 池）；**damage_pipeline.gd
+   零代码改动**（V30 源码守卫：不含 "amplify"）。消费插点三处（projectile._on_settled /
+   homing 主目标 / homing 次级循环），均在结算成功且目标未 dead 后、附着前。
+3. **BalanceTables.reaction_table 三 rule +cd 键**（2.0/3.0/6.0；.tres 显式同值镜像）；
+   detect_reactions 触发前 `rule.get("cd", cd_fallback)`（cd_fallback=cd_rxn，字段保留）；
+   `ElementalSystem.reaction_key(rxn)` 唯一映射口；validator 增非致命告警 cd≤0。
+4. **ELE_MASTERY 词条**（.tres：step 0.25 / stack_max 3 / hooks 常驻 / rarity 2；
+   traits 28→31 家族第 5 枚，注册资源 83→84）；`WeaponBase.attach_trait` 扩展
+   mastery_step 注册分支 + `_trait_layers(id)`；`register_mastery(uid, layers, step)`
+   （layers≤0 或 step≤0 不收；step 后写覆盖；无注销通道 E-AMP-1）；
+   `mastery_layers()=mini(Σ跨武器, 3)` 唯一裁定点；`reaction_mult()` = ∏VOID ×
+   (1+step×层数)——剧变系数与增幅因子同源同乘；仅 VOID 恒等 1.8（pkg3 零冲击）。
+5. **UI/遥测**：`DamagePopup.show_popup` 增可选第 6 参 `p_suffix`（数值模式拼接、
+   merge 保留、文本模式不变、归还清空）；`PopupManager.on_damage_resolved` 仅
+   breakdown 含 &"amplify" 的新跳字加 ‼；DebugStats 新分键 `amplify_melt`/`amplify_vapor`；
+   HUD `_build_summary` → `"Build  W:%d T:%d MP:%d"`（MP 跨武器封顶 3、0 恒显；
+   layout_rects 11 项不变）。
+6. **语义边界**：三剧变零语义变更；KIN/光束/近战/settle_aoe/DOT/连锁跳不触发增幅；
+   穿透链各目标独立判定与消耗；融→蒸同帧连段合法（E-AMP-4）；截断不标注（E-AMP-3）。
+   自测 = `tests/runner/test_pkg11.gd`（16 项 V25~V40 恰额）。
 
 ## 9. 工程铁律（全程有效）
 
