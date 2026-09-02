@@ -128,8 +128,11 @@ func host() -> Enemy:
 
 
 func meta_scratch() -> MetaStore:
-	# T6 meta 真购买 scratch 档（惰性建：独立 save path + 构造即 wipe——pkg14 隔离纪律同款）
+	# T6 meta 真购买 scratch 档（惰性建：独立 save path + 构造即 wipe——pkg14 隔离纪律同款；
+	# 先建 user://sim_batch 目录——ConfigFile.save 父目录缺失 err=7）
 	if _meta_scratch == null or not is_instance_valid(_meta_scratch):
+		DirAccess.make_dir_recursive_absolute(
+			ProjectSettings.globalize_path("user://sim_batch"))
 		_meta_scratch = MetaStore.new()
 		_meta_scratch.name = "SimMetaScratch"
 		(Engine.get_main_loop() as SceneTree).get_root().add_child(_meta_scratch)

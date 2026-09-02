@@ -3,6 +3,9 @@
 # · run_cell：advance_frame → pipeline.begin_frame → 逐武器 SimWeaponDriver.tick（玩家静止，
 #   无投射物飞行——弹丸直达）→ grid.rebuild → enemy.tick → elemental.tick → detect_reactions
 #   → pipeline.end_frame → EventBus.end_frame；enemy.dead 即止；TIME_CAP_S 未杀 → NTK(-1)。
+#   NTK 早退守卫（A14 §假设）：≥5s 瞬态期后每 5s 采样一次，累计 DPS 投影 finish>1.5×帽
+#   且剩余血量>50% → 提前判 NTK——三条件合取下真实 finish>180s 必然 NTK，击杀格永不触发，
+#   判定语义逐位保持（≤300s 跑批墙钟预算的实现手段）。
 # · hit：直击时序复刻（母本 projectile_base:238-409，行号入注释）——
 #   ① uid=next_uid() 每丸独立（:251 命中序数口径）
 #   ② ctx 从 build_panel_snapshot 展开（:303-346 同构：base/flat/crit/add_entries/
@@ -22,6 +25,7 @@ const DT := 1.0 / 120.0                       # 120Hz 逻辑帧
 const TIME_CAP_S := 120                       # 单 cell 墙钟上限（超时 NTK）
 const U_DESIGN := 0.85                        # 设计 U 值（A14 判定基准线）
 const FRAME_CAP: int = TIME_CAP_S * 120       # 14400 帧
+const NTK_PROBE_FRAME := 600                  # NTK 早退采样相位（5s 瞬态期后；每 600 帧一查）
 
 static var _probe: Node = null                # 结算计数探针（pkg1 Node 订阅纪律——E-12 拦非 Node）
 
@@ -46,6 +50,7 @@ static func run_cell(p_env: SimEnv, p_weapons: Array[WeaponBase], p_wave: int,
 	var shield_break := -1
 	var ttk := -1
 	var f := 0
+	var hp_done_max := 0.0                            # 累计伤害（NTK 早退投影分母）
 	while f < FRAME_CAP:
 		GameConfig.advance_frame()                # 帧序 0：帧号推进（幂等键时钟）
 		p_env.pipeline.begin_frame()              # 帧序 0：幂等缓存清空
@@ -72,6 +77,26 @@ static func run_cell(p_env: SimEnv, p_weapons: Array[WeaponBase], p_wave: int,
 		if shield_break < 0 and shield_was and not enemy.shield_active():
 			shield_break = f                      # 盾破帧（观测口口径）
 		shield_was = enemy.shield_active()
+		# NTK 早退守卫（≤300s 墙钟预算；判定语义保持——三条件合取下 finish>1.5×帽，
+		# 必然 NTK：击杀格 ttk≤120s 永不触发；1.5× 安全系数吸收 DPS 爬坡误判，
+		# 瞬态期（<5s：加特林预热/熔融平衡/暴击稳态）不采样。A14 §假设留痕）
+		if f >= NTK_PROBE_FRAME and (f % NTK_PROBE_FRAME) == 0:
+			var done := hp_total - (enemy.hp + enemy.shield_hp)
+			if done > hp_done_max:
+				hp_done_max = done
+			var dps_avg := hp_done_max / (float(f) * DT)
+			var remaining := enemy.hp + enemy.shield_hp
+			if dps_avg <= 0.000001:
+				ttk = -1                          # 零伤害 → 必然 NTK
+				p_env.pipeline.end_frame()
+				EventBus.end_frame()
+				break
+			if remaining > 0.5 * hp_total \
+					and float(f) * DT + remaining / dps_avg > 1.5 * float(TIME_CAP_S):
+				ttk = -1
+				p_env.pipeline.end_frame()
+				EventBus.end_frame()
+				break
 	SimEnemy.release(p_env, enemy)
 	if ttk < 0:
 		return _result(-1, shield_break, hp_total)
@@ -79,7 +104,7 @@ static func run_cell(p_env: SimEnv, p_weapons: Array[WeaponBase], p_wave: int,
 		"ttk_frames": ttk,
 		"shield_break_frames": shield_break,
 		"hp_total": hp_total,
-		"dps": hp_total / (float(ttk) * DT),
+		"dps": hp_total / maxf(float(ttk) * DT, DT),   # ttk=0（首帧击杀）除零钳 DT
 		"t_clear_est": float(ttk) * DT,
 		"n_hits": int(probe.get("hits")),
 		"n_crit": int(probe.get("crits")),

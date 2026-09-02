@@ -51,8 +51,11 @@ static func label(p_id: String) -> String:
 
 
 static func build(p_env: SimEnv, p_id: String, p_wave: int) -> Array[WeaponBase]:
-	# 装配（复用环境：先清上一轮武器栈——每 cell 干净口径）
+	# 装配（复用环境：先清上一轮武器栈与芯片运行态——每 cell 干净口径；
+	# ★ chip.reset_run 清 equipped/bonus/blessing，meta_stats 有意保留（A9 冻结语义，
+	#   T6 由 build 内 set_meta_stats 显式重载））
 	_reset_weapons(p_env)
+	p_env.chip.reset_run()
 	match p_id:
 		"T1":
 			return _t1(p_env)
