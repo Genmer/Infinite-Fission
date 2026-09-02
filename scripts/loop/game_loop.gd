@@ -303,18 +303,23 @@ func _on_player_died() -> void:
 
 func _settle_run() -> void:
 	# v1.0.0（A9）死亡结转单点：本局金币 → 结晶 + 战绩入档 + 写盘（失败仅告警）。
-	# ★ 一次闸 _settled_this_run——重入不重复入账；meta_store 缺失 → 降级 set_crystal_gain(0)。
+	# v1.4.0（A13）：入账折算改软上限 convert_gold（≤500 全额 / 超出 ×0.5）+ 击杀档成就判定
+	# + 结算屏新成就行。★ 一次闸 _settled_this_run——重入不重复入账；
+	# meta_store 缺失 → 降级 set_crystal_gain(0)。
 	if _settled_this_run:
 		return
 	_settled_this_run = true
-	var gain := maxi(gold, 0)
+	var gain := MetaStore.convert_gold(maxi(gold, 0))
 	if meta_store == null:
 		game_over_screen.set_crystal_gain(0)      # 降级：无存档层 → 结晶 +0，不入档
 		return
 	meta_store.add_crystal(gain)
 	meta_store.record_run(hud.kills, hud.wave)
+	# ★ v1.4.0（A13）：击杀档成就判定（读 record_run 后的累计击杀）先于取新成就清单
+	achievement_tracker.on_run_settled(meta_store.total_kills)
 	meta_store.save()                            # 失败仅告警（MetaStore 内 push_warning）
 	game_over_screen.set_crystal_gain(gain)
+	game_over_screen.set_new_achievements(achievement_tracker.new_unlock_titles())
 	_refresh_menu_meta()
 
 
@@ -1125,6 +1130,8 @@ func _boot_build_presentation() -> void:
 	add_child(meta_panel)
 	meta_panel.purchase_requested.connect(_on_meta_purchase)
 	meta_panel.close_requested.connect(_close_meta_panel)
+	# v1.4.0（A13）：成就解锁跳字（本地信号订阅；wipe_requested 连线随 C4 面板扩展）
+	achievement_tracker.achievement_unlocked.connect(_on_achievement_unlocked)
 	menu_screen.meta_requested.connect(_on_meta_requested)
 	_refresh_menu_meta()
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）
@@ -1157,6 +1164,13 @@ func _close_meta_panel() -> void:
 	if meta_panel != null:
 		meta_panel.close()
 	_refresh_menu_meta()
+
+
+func _on_achievement_unlocked(_p_id: StringName, p_title: String) -> void:
+	# v1.4.0（A13）：成就解锁跳字（玩家上方 -64；popup/player null 守卫——降级静默）
+	if popup_manager != null and player != null and is_instance_valid(player):
+		popup_manager.show_text_popup(player.global_position + Vector2(0.0, -64.0),
+			"成就达成：%s" % p_title)
 
 
 func _refresh_menu_meta() -> void:
@@ -1483,6 +1497,8 @@ func _reset_run_state() -> void:
 	_deferred_blessing = false                    # v0.9.0：暂存赐福清零
 	if blessing_handler != null:
 		blessing_handler.reset_run()              # v0.9.0：赐福 rng 重播种 + 遥测清零（A8）
+	if achievement_tracker != null:
+		achievement_tracker.reset_run()           # v1.4.0（A13）：本局新成就清单随局清零
 	if wave_director != null:
 		wave_director.reset_extra_shop()          # v0.6.0：黑市追加申请不跨局（与 relic reset 同口径）
 		wave_director.reset_event_state()         # v0.8.0：事件 rng 重播种 + 闸复位（A7 §V1）

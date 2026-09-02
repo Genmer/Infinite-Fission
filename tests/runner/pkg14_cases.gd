@@ -53,6 +53,12 @@ func run(p_tree: SceneTree) -> void:
 	_test_c9_chip_tracking()                      # C9
 	_test_c10_relic_tracking()                    # C10
 	_test_c14_null_guards()                       # C14
+	_test_c15_boss_tiers()                        # C15
+	_test_c16_wave_tiers()                        # C16
+	_test_c17_chip_judgment()                     # C17
+	_test_c18_weapon_kills_judgment()             # C18
+	_test_c19_list_dedup_reset()                  # C19
+	_test_c23_settle_screen()                     # C23
 	_teardown_game_loop()
 	_teardown()
 	_summary()
@@ -556,3 +562,160 @@ func _test_c8_wipe_clears() -> void:
 		and not s.reaction_seen("amp_vapor") and not s.has_achievement(&"ach_wave10") \
 		and not FileAccess.file_exists(TEST_PATH)
 	_check("C8 wipe：图鉴三表 + 成就表全清 + 存档文件删除", ok)
+
+
+# ── tracker 单元夹具（直调 handler 不走总线——避免 GameLoop 自带 tracker 竞听） ──
+func _new_tracker(p_store: MetaStore) -> AchievementTracker:
+	var t := AchievementTracker.new()
+	t.name = "Pkg14Tracker%d" % randi()
+	tree.get_root().add_child(t)
+	t.setup(p_store)                              # setup 连总线（真实语义）；用毕 _drop_tracker
+	return t
+
+
+func _drop_tracker(p_t: AchievementTracker) -> void:
+	if p_t == null or not is_instance_valid(p_t):
+		return
+	if EventBus.enemy_killed.is_connected(p_t._on_enemy_killed):
+		EventBus.enemy_killed.disconnect(p_t._on_enemy_killed)
+	if EventBus.wave_started.is_connected(p_t._on_wave_started):
+		EventBus.wave_started.disconnect(p_t._on_wave_started)
+	p_t.free()
+
+
+func _boss_enemy(p_id: StringName, p_is_boss: bool) -> Enemy:
+	# 真夹具：裸 Enemy + EnemyData（spawn 走生产路径——tags 合成/波次缩放/行为降级）
+	var d := EnemyData.new()
+	d.id = p_id
+	d.display_name = String(p_id)
+	d.hp_base = 100.0
+	d.spd_base = 0.0
+	d.dmg_base = 8.0
+	d.exp_base = 3.0
+	d.tp_cost = 1.0
+	d.hitbox_r = 14.0
+	var e := Enemy.new()
+	e.spawn(d, 1, GameConst.TAG_BOSS if p_is_boss else 0)
+	return e
+
+
+# ══ C15：Boss 三档真夹具 + 本地信号 ═════════════════════════════════
+func _test_c15_boss_tiers() -> void:
+	print("── C15 Boss 三档 ──")
+	var s := _new_store()
+	var t := _new_tracker(s)
+	var unlocks: Array[StringName] = []
+	t.achievement_unlocked.connect(func(p_id: StringName, _p_title: String) -> void:
+		unlocks.append(p_id))
+	# 非 Boss（无 TAG_BOSS）不标
+	var minion := _boss_enemy(&"E1_testling", false)
+	t._on_enemy_killed(minion)
+	minion.free()
+	# TAG_BOSS 但 id 非三档 → 不标（精确匹配）
+	var unknown := _boss_enemy(&"E6_bossX", true)
+	t._on_enemy_killed(unknown)
+	unknown.free()
+	var none_marked := unlocks.is_empty() and not s.has_achievement(&"ach_boss1")
+	# 三档逐一解锁（各自独立、不回溯）
+	for i in range(3):
+		var b := _boss_enemy(AchievementTracker.BOSS_IDS[i], true)
+		t._on_enemy_killed(b)
+		b.free()
+	var all_tiers := unlocks.size() == 3 and unlocks == AchievementTracker.BOSS_ACH_IDS \
+		and s.has_achievement(&"ach_boss1") and s.has_achievement(&"ach_boss2") \
+		and s.has_achievement(&"ach_boss3")
+	_drop_tracker(t)
+	_check("C15 Boss 三档：真夹具 E6_boss1/2/3 逐一精确解锁 + 本地信号三次 "
+		+ "+ 非 Boss/未知 Boss id 不标", none_marked and all_tiers,
+		"none=%s unlocks=%s" % [str(none_marked), str(unlocks)])
+
+
+# ══ C16：波次三档（≥10/20/30） ══════════════════════════════════════
+func _test_c16_wave_tiers() -> void:
+	print("── C16 波次三档 ──")
+	var s := _new_store()
+	var t := _new_tracker(s)
+	t._on_wave_started(5)
+	var below := not s.has_achievement(&"ach_wave10")
+	t._on_wave_started(10)
+	var w10 := s.has_achievement(&"ach_wave10") and not s.has_achievement(&"ach_wave20")
+	t._on_wave_started(20)
+	var w20 := s.has_achievement(&"ach_wave20") and not s.has_achievement(&"ach_wave30")
+	t._on_wave_started(30)
+	var w30 := s.has_achievement(&"ach_wave30")
+	_drop_tracker(t)
+	_check("C16 波次三档：wave 5 不标 / 10 标 wave10 / 20 标 wave20 / 30 标 wave30",
+		below and w10 and w20 and w30)
+
+
+# ══ C17：芯片成就判定（套装 ≥2 / 满配 ≥6） ═══════════════════════════
+func _test_c17_chip_judgment() -> void:
+	print("── C17 芯片判定 ──")
+	var s := _new_store()
+	var t := _new_tracker(s)
+	t.on_chip_equipped(1, 5)                      # 主属性 1 枚 / 5 枚 → 均不达
+	var below := not s.has_achievement(&"ach_chip_set") and not s.has_achievement(&"ach_chip_full")
+	t.on_chip_equipped(2, 5)                      # 套装达 / 满配未达
+	var mid := s.has_achievement(&"ach_chip_set") and not s.has_achievement(&"ach_chip_full")
+	t.on_chip_equipped(2, 6)                      # 满配达
+	var full := s.has_achievement(&"ach_chip_full")
+	_drop_tracker(t)
+	_check("C17 芯片判定：(1,5) 双不标 / (2,5) 仅套装 / (2,6) 补满配", below and mid and full)
+
+
+# ══ C18：武器/击杀成就判定（≥5 把 / ≥1000 累计） ═════════════════════
+func _test_c18_weapon_kills_judgment() -> void:
+	print("── C18 武器/击杀判定 ──")
+	var s := _new_store()
+	var t := _new_tracker(s)
+	t.on_weapon_slots_changed(4)
+	var w4 := not s.has_achievement(&"ach_weapons5")
+	t.on_weapon_slots_changed(5)
+	var w5 := s.has_achievement(&"ach_weapons5")
+	t.on_run_settled(999)
+	var k999 := not s.has_achievement(&"ach_kills1000")
+	t.on_run_settled(1000)
+	var k1000 := s.has_achievement(&"ach_kills1000")
+	_drop_tracker(t)
+	_check("C18 武器/击杀判定：4 把不标 / 5 把标 / 999 不标 / 1000 标", w4 and w5 and k999 and k1000)
+
+
+# ══ C19：清单去重 + reset（信号不重放） ═════════════════════════════
+func _test_c19_list_dedup_reset() -> void:
+	print("── C19 清单去重 ──")
+	var s := _new_store()
+	var t := _new_tracker(s)
+	var signal_count := [0]
+	t.achievement_unlocked.connect(func(_p_id: StringName, _p_title: String) -> void:
+		signal_count[0] += 1)
+	t._on_wave_started(30)                        # 三档同时达 → 3 次解锁
+	t._on_wave_started(30)                        # 幂等 → 0 次新解锁
+	var dedup: bool = int(signal_count[0]) == 3 \
+		and t.new_unlock_titles() == ["卅波传奇", "廿波征途", "十波之约"]
+	t.reset_run()
+	var cleared := t.new_unlock_titles().is_empty() and s.has_achievement(&"ach_wave30")
+	_drop_tracker(t)
+	_check("C19 清单去重 + reset：wave30 重复触发不重放信号（恰 3 次）+ 清单序表驱动 "
+		+ "+ reset 清清单不清已解锁持久态", dedup and cleared,
+		"count=%d" % signal_count[0])
+
+
+# ══ C23：结算屏集成（软上限 + 击杀档新成就行） ═══════════════════════
+func _test_c23_settle_screen() -> void:
+	print("── C23 结算集成 ──")
+	_gl.meta_store.wipe()
+	_gl.meta_store.record_run(1000, 1)            # 预置累计击杀达千（击杀档阈值）
+	var started := _gl.start_run() and _gl.state == GameConst.GameStatus.PLAYING
+	_gl._add_gold(600)                            # greed 0（wipe 过）→ gold == 600
+	_gl._on_player_died()
+	var ok := started and _gl.state == GameConst.GameStatus.GAME_OVER
+	ok = ok and _gl.game_over_screen.crystal_text() == "结晶 +550"
+	ok = ok and _gl.game_over_screen.new_achievements_text() == "新成就：千锤百炼"
+	ok = ok and _gl.meta_store.has_achievement(&"ach_kills1000") \
+		and _gl.meta_store.crystal == 550
+	if _gl.state == GameConst.GameStatus.GAME_OVER:
+		_gl.goto_menu()                           # 回 MENU 供后续用例
+	_check("C23 结算集成：gold=600 软上限 → 「结晶 +550」+ 新成就行「新成就：千锤百炼」"
+		+ " + store 入账/解锁一致", ok,
+		"crystal=%s ach=%s" % [_gl.game_over_screen.crystal_text(),
+		_gl.game_over_screen.new_achievements_text()])

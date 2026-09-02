@@ -14,6 +14,7 @@ var _root: Control = null
 var _summary_label: Label = null
 var _reaction_label: Label = null             # v0.7.0 U10：反应统计行
 var _crystal_label: Label = null              # v1.0.0：结晶获得行（A9，set_crystal_gain 回写）
+var _new_achievements_label: Label = null     # v1.4.0：新成就行（A13，set_new_achievements 回写）
 
 
 func _ready() -> void:
@@ -92,6 +93,25 @@ func set_crystal_gain(p_gain: int) -> void:
 	_crystal_label.text = "结晶 +%d" % p_gain
 
 
+func set_new_achievements(p_titles: Array) -> void:
+	# v1.4.0（A13）：本局新解锁成就回写（GameLoop._settle_run 消费——on_run_settled 之后
+	# 取清单）——空 → 隐藏行；非空 → 「新成就：A · B」
+	if p_titles.is_empty():
+		_new_achievements_label.text = ""
+		_new_achievements_label.visible = false
+		return
+	var strs: Array[String] = []
+	for t in p_titles:
+		strs.append(String(t))
+	_new_achievements_label.text = "新成就：" + " · ".join(strs)
+	_new_achievements_label.visible = true
+
+
+func new_achievements_text() -> String:
+	# v1.4.0（A13）测试观测口
+	return _new_achievements_label.text
+
+
 func _on_state_changed(p_state: int) -> void:
 	if p_state == GameConst.GameStatus.GAME_OVER:
 		show_summary()
@@ -158,3 +178,12 @@ func _build_ui() -> void:
 	_crystal_label.position = Vector2(0.0, 624.0)
 	_crystal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_root.add_child(_crystal_label)
+	# v1.4.0（A13）：新成就行（y=660 f15 居中——结晶行 624 下方，无交集；默认隐藏）
+	_new_achievements_label = Label.new()
+	_new_achievements_label.text = ""
+	_new_achievements_label.add_theme_font_size_override("font_size", 15)
+	_new_achievements_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_new_achievements_label.position = Vector2(0.0, 660.0)
+	_new_achievements_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_new_achievements_label.visible = false
+	_root.add_child(_new_achievements_label)
