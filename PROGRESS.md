@@ -142,7 +142,7 @@
 - 导入：`"$G" --headless --path "<项目根>" --import`
 - 跑测试：`"$G" --headless --path "<项目根>" -s tests/runner/test_pkg0.gd`（pkg1/pkg2/pkg3 同理）
 - 注意：`-s` 模式下入口脚本编译早于 autoload 注册，测试用「入口引导 + 运行时 load 用例体」两段式（pkg0~pkg3 都是这个模式，新测试照抄）
-- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836 基线口径；另有 pkg6_extra 33 / pkg7 175 / pkg7_extra 60 / pkg8 160 / pkg8_extra 31 / pkg9 59 / pkg9_extra 34 / pkg10 24 / pkg10_extra 9 / pkg11 16 / pkg11_extra 7 / pkg12 20 / pkg12_extra 8 / pkg13 22 / pkg13_extra 13 / pkg14 24，独立 runner；v1.4.0 实测对账全 runner 合计 1518（1494 + pkg14 24）全 PASS）**
+- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836 基线口径；另有 pkg6_extra 33 / pkg7 175 / pkg7_extra 60 / pkg8 160 / pkg8_extra 31 / pkg9 59 / pkg9_extra 34 / pkg10 24 / pkg10_extra 9 / pkg11 16 / pkg11_extra 7 / pkg12 20 / pkg12_extra 8 / pkg13 22 / pkg13_extra 13 / pkg14 24，独立 runner；v1.4.0 实测对账全 runner 合计 1531（1494 + pkg13_extra 13 + pkg14 24——审查后对账修正：1518 漏加 fix-review aa3563e 的 pkg13_extra）全 PASS）**
 - v0.6.0 压力复测：**P95 = 5.559ms**（avg 2.191 / P50 1.791 / P99 6.968，判定线 8.3ms PASS）
 - v0.7.0 压力复测：**P95 = 5.714ms**（avg 2.302 / P50 1.912 / P99 6.515，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0）
 - v0.8.0 压力复测：**P95 = 5.924ms**（avg 2.419 / P50 1.998 / P99 7.144 / MAX 12.625，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
@@ -150,6 +150,7 @@
 - v1.0.0 压力复测：**P95 = 5.784ms**（avg 2.297 / P50 1.925 / P99 6.514 / MAX 13.190，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
 - v1.1.0 压力复测：**P95 = 5.895ms**（avg 2.461 / P50 2.013 / P99 7.233 / MAX 12.610，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
 - v1.3.0 压力复测：**P95 = 6.127ms**（avg 2.793 / P50 2.340 / P99 7.294 / MAX 13.562，判定线 8.3ms 与参考线 7.3ms 双 PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）
+- v1.4.0 压力复测：**P95 = 6.635/6.705ms 两轮**（avg 3.117/3.099，判定线 8.3 与参考线 7.3 双 PASS；六池 0 运行期实例化 / 污染 0；soak 180s：RSS +0.95% / 0 实例化 / 终局波 7 / 0 ERROR）——审查 D2 补录（mark 首见即存 ≤46 次/档非稳态成本，抬升归因机器噪声）
 - v0.8.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.735ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.0→182.6 MB 增幅 0.88% < 3%；0 ERROR）
 - v0.9.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.810ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.4→183.0 MB 增幅 0.88% < 3%；0 ERROR；终局波次 7）
 - v1.0.0 soak：**180s 满载自动战斗 PASS**（窗口帧均 2.586ms；六池 0 运行期实例化 / 池污染 0 / 非法归还 0；RSS 181.9→183.5 MB 增幅 0.87% < 3%；0 ERROR；终局波次 7）

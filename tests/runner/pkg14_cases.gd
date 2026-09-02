@@ -819,12 +819,12 @@ func _test_c24_closure() -> void:
 	var version: String = ProjectSettings.get_setting("application/config/version", "")
 	var version_ok := version == "1.4.0"          # v1.4.0 授权更新：version 随版本推进
 	var progress := _read_source("res://PROGRESS.md")
-	var progress_ok := (not progress.is_empty()) and progress.contains("1518") \
+	var progress_ok := (not progress.is_empty()) and progress.contains("1531") \
 		and progress.contains("pkg14 24") and progress.contains("v1.4.0 增量")
 	var a13 := _read_source("res://docs/analysis/A13_v1.4.0_design.md")
 	var a13_ok := (not a13.is_empty()) and a13.contains("H1") and a13.contains("H2") \
 		and a13.contains("H3") and a13.contains("H4") and a13.contains("convert_gold") \
 		and a13.contains("RESONANCE_SEEN_KEYS")
-	_check("C24：收尾——version=1.4.0 + PROGRESS 对账（1518/pkg14 24/v1.4.0 增量）"
+	_check("C24：收尾——version=1.4.0 + PROGRESS 对账（1531/pkg14 24/v1.4.0 增量；审查后对账修正）"
 		+ " + A13 留痕含 H1~H4 与软上限/共鸣映射", version_ok and progress_ok and a13_ok,
 		"version=%s progress=%s a13=%s" % [version, str(progress_ok), str(a13_ok)])
