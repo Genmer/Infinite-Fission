@@ -474,8 +474,8 @@ func _test_closure_v24() -> void:
 	print("── V24 收尾核对 ──")
 	var version: String = ProjectSettings.get_setting("application/config/version", "")
 	# v1.3.0 授权更新：version 随版本推进 1.2.0 → 1.3.0
-	_check("V24：version=1.3.0（project.godot application/config/version；v1.3.0 授权更新）",
-		version == "1.3.0", version)
+	_check("V24：version=1.4.0（project.godot application/config/version；v1.4.0 授权更新）",
+		version == "1.4.0", version)
 	var progress_text := _read_text("res://PROGRESS.md")
 	# v1.3.0 授权更新：基线合计 1464 → 1494（pkg12_extra 8 入账 + 新增 pkg13 22；实测对账）
 	_check("V24：PROGRESS §7 基线含全 runner 合计 1494（独立实测一致；v1.3.0 授权更新）",

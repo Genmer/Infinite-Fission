@@ -901,7 +901,7 @@ func _test_v76_skip_surface() -> void:
 func _test_v78_closure() -> void:
 	print("── V78 收尾 ──")
 	var version: String = ProjectSettings.get_setting("application/config/version", "")
-	var version_ok := version == "1.3.0"
+	var version_ok := version == "1.4.0"          # v1.4.0 授权更新：version 随版本推进
 	var progress := _read_source("res://PROGRESS.md")
 	var progress_ok := (not progress.is_empty()) and progress.contains("1494") \
 		and progress.contains("pkg13 22") and progress.contains("v1.3.0 增量")

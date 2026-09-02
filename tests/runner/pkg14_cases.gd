@@ -62,6 +62,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_c21_cell_row_text()                     # C21
 	_test_c22_wipe_flow()                         # C22
 	_test_c23_settle_screen()                     # C23
+	_test_c24_closure()                           # C24
 	_teardown_game_loop()
 	_teardown()
 	_summary()
@@ -810,3 +811,20 @@ func _test_c22_wipe_flow() -> void:
 		+ " + 余额归零回写",
 		before_text == "清除存档" and armed_text == "确认清除？" and still_seen and cleared \
 			and reset_text == "清除存档" and balance_ok)
+
+
+# ══ C24：收尾核对（version / PROGRESS 对账 / A13 留痕） ═══════════════
+func _test_c24_closure() -> void:
+	print("── C24 收尾 ──")
+	var version: String = ProjectSettings.get_setting("application/config/version", "")
+	var version_ok := version == "1.4.0"          # v1.4.0 授权更新：version 随版本推进
+	var progress := _read_source("res://PROGRESS.md")
+	var progress_ok := (not progress.is_empty()) and progress.contains("1518") \
+		and progress.contains("pkg14 24") and progress.contains("v1.4.0 增量")
+	var a13 := _read_source("res://docs/analysis/A13_v1.4.0_design.md")
+	var a13_ok := (not a13.is_empty()) and a13.contains("H1") and a13.contains("H2") \
+		and a13.contains("H3") and a13.contains("H4") and a13.contains("convert_gold") \
+		and a13.contains("RESONANCE_SEEN_KEYS")
+	_check("C24：收尾——version=1.4.0 + PROGRESS 对账（1518/pkg14 24/v1.4.0 增量）"
+		+ " + A13 留痕含 H1~H4 与软上限/共鸣映射", version_ok and progress_ok and a13_ok,
+		"version=%s progress=%s a13=%s" % [version, str(progress_ok), str(a13_ok)])
