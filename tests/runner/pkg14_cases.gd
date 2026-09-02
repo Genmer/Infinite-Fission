@@ -58,6 +58,9 @@ func run(p_tree: SceneTree) -> void:
 	_test_c17_chip_judgment()                     # C17
 	_test_c18_weapon_kills_judgment()             # C18
 	_test_c19_list_dedup_reset()                  # C19
+	_test_c20_tab_rects()                         # C20
+	_test_c21_cell_row_text()                     # C21
+	_test_c22_wipe_flow()                         # C22
 	_test_c23_settle_screen()                     # C23
 	_teardown_game_loop()
 	_teardown()
@@ -719,3 +722,91 @@ func _test_c23_settle_screen() -> void:
 		+ " + store 入账/解锁一致", ok,
 		"crystal=%s ach=%s" % [_gl.game_over_screen.crystal_text(),
 		_gl.game_over_screen.new_achievements_text()])
+
+# ── 面板夹具 ──────────────────────────────────────────────────────
+func _rects_ok(p_expected: int) -> bool:
+	# layout_rects 数量 + 两两无交集（C20 分口径断言原子）
+	var rects := _gl.meta_panel.layout_rects()
+	if rects.size() != p_expected:
+		return false
+	for i in range(rects.size()):
+		for j in range(i + 1, rects.size()):
+			if (rects[i] as Rect2).intersects(rects[j] as Rect2):
+				return false
+	return true
+
+
+# ══ C20：tab/rects 分口径 {10/19/18/20/14} ═══════════════════════════
+func _test_c20_tab_rects() -> void:
+	print("── C20 tab/rects ──")
+	_gl.meta_store.wipe()
+	_gl.meta_panel.open(_gl.meta_store)           # 默认 tab0
+	var ok := _gl.meta_panel.current_tab() == 0 and _rects_ok(10)
+	_gl.meta_panel.select_tab(1)                  # 图鉴·芯片册
+	ok = ok and _gl.meta_panel.current_tab() == 1 and _rects_ok(19)
+	_gl.meta_panel.select_book(0)
+	ok = ok and _gl.meta_panel.current_book() == 0 and _rects_ok(19)
+	_gl.meta_panel.select_book(1)                 # 遗物册
+	ok = ok and _gl.meta_panel.current_book() == 1 and _rects_ok(18)
+	_gl.meta_panel.select_book(2)                 # 反应册
+	ok = ok and _gl.meta_panel.current_book() == 2 and _rects_ok(20)
+	_gl.meta_panel.select_tab(2)                  # 成就页
+	ok = ok and _gl.meta_panel.current_tab() == 2 and _rects_ok(14)
+	_gl.meta_panel.select_tab(0)
+	ok = ok and _rects_ok(10)
+	_check("C20 tab/rects 分口径：tab0=10 / 芯片册=19 / 遗物册=18 / 反应册=20 / 成就页=14"
+		+ "（隐藏页不入列且两两无交集）", ok)
+
+
+# ══ C21：cell/row 文案两态 ═══════════════════════════════════════════
+func _test_c21_cell_row_text() -> void:
+	print("── C21 cell/row 文案 ──")
+	_gl.meta_store.wipe()
+	_gl.meta_panel.open(_gl.meta_store)
+	_gl.meta_panel.select_tab(1)
+	_gl.meta_panel.select_book(0)
+	var unseen := _gl.meta_panel.cell_text(0, 0) == "？？？\n未收录"
+	# 首键收录 → "display_name\ndescription"（registry 资源直读；序 = 键 String 升序）
+	var names: Array[String] = []
+	for k in _gl.registry.chips:
+		names.append(String(k))
+	names.sort()
+	var first_id := StringName(names[0])
+	var marked := _gl.meta_store.mark_chip_seen(first_id)
+	var chip_data := _gl.registry.get_chip(first_id)
+	var seen_text := _gl.meta_panel.cell_text(0, 0)
+	var seen_ok := marked and chip_data != null \
+		and seen_text == "%s\n%s" % [chip_data.display_name, chip_data.description]
+	# 成就行两态（表序首行 = ach_boss1）
+	var row_before := _gl.meta_panel.achievement_row_text(0)
+	var unlocked := _gl.meta_store.unlock_achievement(&"ach_boss1")
+	var row_after := _gl.meta_panel.achievement_row_text(0)
+	var row_ok := row_before == "『首破强敌』击败第一位 Boss — 未达成" and unlocked \
+		and row_after == "『首破强敌』击败第一位 Boss — 已达成"
+	# 反应行格式（balance 就绪 → 表驱动前缀 + 数值段非空）
+	var rxn_text := _gl.meta_panel.cell_text(2, 0)
+	var rxn_ok := rxn_text.begins_with("【剧变】碎裂 · 火+冰")
+	_check("C21 cell/row 文案两态：未收录「？？？/未收录」→ 收录「名+描述」；成就行未达成→已达成；"
+		+ "反应行表驱动前缀", unseen and seen_ok and row_ok and rxn_ok,
+		"unseen=%s seen=%s row=%s rxn=%s" % [str(unseen), str(seen_text.length()),
+			str(row_ok), rxn_text])
+
+
+# ══ C22：清档两击流（armed 文案 + 二击仲裁） ══════════════════════════
+func _test_c22_wipe_flow() -> void:
+	print("── C22 清档两击 ──")
+	_gl.meta_store.wipe()
+	_gl.meta_store.mark_chip_seen(&"CHIP_ATK")
+	_gl.meta_panel.open(_gl.meta_store)           # tab0（清档钮所在页）
+	var before_text := _gl.meta_panel.wipe_button_text()
+	_gl.meta_panel._on_wipe_pressed()             # 首击：armed
+	var armed_text := _gl.meta_panel.wipe_button_text()
+	var still_seen := _gl.meta_store.chip_seen(&"CHIP_ATK")
+	_gl.meta_panel._on_wipe_pressed()             # 二击：emit → GameLoop._on_meta_wipe 仲裁
+	var cleared := not _gl.meta_store.chip_seen(&"CHIP_ATK")
+	var reset_text := _gl.meta_panel.wipe_button_text()
+	var balance_ok := String(_gl.meta_panel._balance_label.text) == "结晶：0"
+	_check("C22 清档两击流：「清除存档」→ 首击「确认清除？」（未清）→ 二击仲裁清档 + 文案/armed 复位"
+		+ " + 余额归零回写",
+		before_text == "清除存档" and armed_text == "确认清除？" and still_seen and cleared \
+			and reset_text == "清除存档" and balance_ok)

@@ -1128,8 +1128,10 @@ func _boot_build_presentation() -> void:
 	meta_panel = MetaPanel.new()
 	meta_panel.name = "MetaPanel"
 	add_child(meta_panel)
+	meta_panel.setup(registry)                   # v1.4.0（A13）：图鉴 registry 注入
 	meta_panel.purchase_requested.connect(_on_meta_purchase)
 	meta_panel.close_requested.connect(_close_meta_panel)
+	meta_panel.wipe_requested.connect(_on_meta_wipe)   # v1.4.0（A13）：清档两击流仲裁
 	# v1.4.0（A13）：成就解锁跳字（本地信号订阅；wipe_requested 连线随 C4 面板扩展）
 	achievement_tracker.achievement_unlocked.connect(_on_achievement_unlocked)
 	menu_screen.meta_requested.connect(_on_meta_requested)
@@ -1163,6 +1165,17 @@ func _close_meta_panel() -> void:
 	# 返回钮收起 + 菜单统计行回写（购买后余额/战绩同源）
 	if meta_panel != null:
 		meta_panel.close()
+	_refresh_menu_meta()
+
+
+func _on_meta_wipe() -> void:
+	# v1.4.0（A13）清档仲裁：仅 MENU 态且面板开启且存档层就绪（MetaPanel 两击确认流后置）→
+	# wipe + 面板全量刷新 + 菜单统计行回写
+	if state != GameConst.GameStatus.MENU or meta_store == null \
+			or meta_panel == null or not meta_panel.is_open():
+		return
+	meta_store.wipe()
+	meta_panel.refresh()
 	_refresh_menu_meta()
 
 

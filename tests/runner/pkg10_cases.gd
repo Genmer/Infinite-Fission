@@ -475,7 +475,8 @@ func _test_m21_purchase_arbitration() -> void:
 func _test_m22_layout_contract() -> void:
 	print("── M22 布局契约 ──")
 	var rects := _gl.meta_panel.layout_rects()
-	var ok: bool = rects.size() == 6
+	# v1.4.0 授权更新（A13 C4）：layout_rects 6→10（默认 tab0 口径 = 3 tab + 返回 + 5 行 + 清档）
+	var ok: bool = rects.size() == 10
 	for i in range(rects.size()):
 		for j in range(i + 1, rects.size()):
 			if (rects[i] as Rect2).intersects(rects[j] as Rect2):
@@ -483,7 +484,7 @@ func _test_m22_layout_contract() -> void:
 	var stats_text: String = String(_gl.menu_screen._stats_label.text)
 	ok = ok and stats_text.contains("最佳波次") and stats_text.contains("总局数") \
 		and stats_text.contains("累计击杀") and stats_text.contains("结晶")
-	_check("M22 布局：layout_rects 6 项两两无交集；菜单统计行文本含四段", ok, stats_text)
+	_check("M22 布局：layout_rects 10 项两两无交集（v1.4.0 授权更新 tab0 口径）；菜单统计行文本含四段", ok, stats_text)
 
 
 # ══ M23：全 0 级与 v0.9.0 恒等锚 ══════════════════════════════════
