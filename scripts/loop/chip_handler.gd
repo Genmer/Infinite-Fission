@@ -42,6 +42,8 @@ var blessing_stats: Dictionary = {}            # v0.9.0：赐福 stat 三键（a
 var meta_stats: Dictionary = {}                # v1.0.0 局外 meta 段（A9）：★reset_run 不清——
                                                # 与 blessing_stats 关键差异；run 开始由
                                                # GameLoop._reset_run_state 显式 set_meta_stats 载入
+var meta_store: MetaStore = null               # v1.4.0（A13）注入：图鉴收录（equip 成功尾 mark_chip_seen）
+var achievement_tracker: AchievementTracker = null   # v1.4.0（A13）注入：芯片成就判定（equip 成功尾）
 var equipped: Array[Dictionary] = []           # 已装备（{chip: ChipData, rarity: int, substats: Array}）
 # ── 遥测（测试观测口） ──
 var chips_granted: int = 0                     # 芯片装备成功累计（Boss 掉落 + 商店购买共用 equip 单点）
@@ -137,6 +139,22 @@ func is_equipped(p_chip_id: StringName) -> bool:
 	return false
 
 
+func max_main_count() -> int:
+	# v1.4.0（A13）：已装备芯片中同主属性（stat_key）最大枚数（ach_chip_set 阈值判定；
+	# 无装备 / 全 null 项 → 0）
+	var counts: Dictionary = {}
+	for entry in equipped:
+		var chip: ChipData = entry.get("chip")
+		if chip == null:
+			continue
+		var key := String(chip.stat_key)
+		counts[key] = int(counts.get(key, 0)) + 1
+	var best := 0
+	for k in counts:
+		best = maxi(best, int(counts[k]))
+	return best
+
+
 func equip(p_chip_id: StringName, p_rarity: int, p_substats: Array = []) -> bool:
 	# 装备（五门 fail-fast）：registry null / get_chip null / 已装备 / 无空槽 → false。
 	# 成功：入列（带 substats 副词条，v0.8.0 所见即所得）+ max_hp 键特殊处理
@@ -162,6 +180,11 @@ func equip(p_chip_id: StringName, p_rarity: int, p_substats: Array = []) -> bool
 	_invalidate_all_weapon_panels()
 	chips_granted += 1
 	DebugStats.count(&"chip_equipped")
+	# v1.4.0（A13）：图鉴收录 + 成就判定（null 注入守卫——测试微夹具降级路径）
+	if meta_store != null:
+		meta_store.mark_chip_seen(p_chip_id)
+	if achievement_tracker != null:
+		achievement_tracker.on_chip_equipped(max_main_count(), equipped.size())
 	return true
 
 

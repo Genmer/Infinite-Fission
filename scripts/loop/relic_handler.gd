@@ -13,6 +13,7 @@ extends Node
 
 var registry: DataRegistry = null             # 注入（relic id → RelicData）
 var player: Node2D = null                     # 注入（治疗/复活/冷却重置宿主）
+var meta_store: MetaStore = null              # v1.4.0（A13）注入：图鉴收录（activate 成功尾 mark_relic_seen）
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()   # 概率掷骰（测试可注种子）
 
 var owned: Array[RelicData] = []              # 本局已激活遗物（unique 每场唯一）
@@ -83,6 +84,8 @@ func activate(p_id: StringName) -> bool:
 	bind_events()
 	_apply_passive(data)
 	DebugStats.count(&"relic_activated")
+	if meta_store != null:
+		meta_store.mark_relic_seen(p_id)        # v1.4.0（A13）：遗物图鉴首见收录
 	return true
 
 

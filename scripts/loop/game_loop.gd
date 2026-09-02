@@ -79,6 +79,7 @@ var blessing_handler: BlessingHandler = null   # v0.9.0：波次赐福处理器�
 var blessing_ui: BlessingUI = null             # v0.9.0：赐福界面（复用 SHOP 态宿主）
 var meta_store: MetaStore = null               # v1.0.0：局外成长存档层（A9，boot 首位组装）
 var meta_panel: MetaPanel = null               # v1.0.0：结晶强化面板（MENU 态宿主，A9）
+var achievement_tracker: AchievementTracker = null   # v1.4.0：成就判定器（A13，铁律 6 前置订阅）
 var current_character: CharacterData = null    # v0.8.0：本局选中角色（null = 默认兜底）
 var menu_screen: MenuScreen = null            # 集成包 A：主菜单屏（MENU 态宿主）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
@@ -915,6 +916,13 @@ func _boot_build_actors() -> void:
 	if DisplayServer.get_name() == "headless":
 		meta_store.set_save_path("user://meta_save_headless.cfg")
 	meta_store.load_save()
+	# ★ v1.4.0（A13）成就追踪器组装：setup 内 enemy_killed/wave_started 订阅必须先于下方
+	#   xp/gold/芯片掉落连接与 EnemySpawner 入树（铁律 6：连接序 = 派发序——Boss 三档成就
+	#   读 tags/data.id 必须先于 spawner 死亡归还清零）
+	achievement_tracker = AchievementTracker.new()
+	achievement_tracker.name = "AchievementTracker"
+	add_child(achievement_tracker)
+	achievement_tracker.setup(meta_store)
 	# 管线（工厂自动切真件）→ 遗物处理器 → 敌波（spawner/wave_director）→ 玩家 → 元素系统
 	# ★ 经验掉落订阅必须先于 EnemySpawner 入树（信号连接序 = 派发序：掉落侧读取
 	#   exp_value/position 必须先于 spawner 的死亡归还清零，集成包 B.1）
@@ -948,6 +956,8 @@ func _boot_build_actors() -> void:
 	elemental.pipeline = pipeline
 	elemental.enemy_grid = enemy_grid
 	elemental.chip_handler = chip_handler         # v0.7.0：附着强度芯片注入（A6 §3）
+	elemental.meta_store = meta_store             # v1.4.0（A13）：反应/共鸣图鉴收录
+	elemental.achievement_tracker = achievement_tracker   # v1.4.0（A13）：武器槽成就判定
 	# ★ wave_director 先于 spawner 入树（连接序 = 派发序）：F-19 Boss 击杀解锁读取
 	#   enemy.tags 必须先于 spawner 死亡归还的 tags 清零（_reset_state）——与上方 xp 掉落
 	#   订阅提前同因（集成包修复：此前 Boss 击杀解锁恒读 tags=0 失效，集成冒烟补断言）
@@ -993,7 +1003,10 @@ func _boot_build_actors() -> void:
 		"curse_handler": curse_handler,           # v0.8.0：诅咒受伤乘区问询通道（A7 §V6）
 	})
 	relic_handler.setup({"registry": registry, "player": player})
+	relic_handler.meta_store = meta_store         # v1.4.0（A13）：遗物图鉴收录（activate 成功尾）
 	chip_handler.setup({"registry": registry, "player": player, "curse_handler": curse_handler})
+	chip_handler.meta_store = meta_store          # v1.4.0（A13）：芯片图鉴收录（equip 成功尾）
+	chip_handler.achievement_tracker = achievement_tracker   # v1.4.0（A13）：芯片成就判定
 	chip_handler.bind_events()
 	curse_handler.setup({"player": player, "chip_handler": chip_handler})   # v0.8.0（A7 §V6）
 	# Q-4：首发手枪（形态工厂 add_weapon；v0.8.0：id 经 _starting_weapon_id 单点——boot 期无角色 = 默认）

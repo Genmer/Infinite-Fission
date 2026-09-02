@@ -25,6 +25,8 @@ const RESONANCE_ELEMENT_NAMES: Array[String] = ["动", "火", "冰", "雷", "水
 var pipeline: RefCounted = null                # 注入（DamagePipeline 或桩；独立结算通道）
 var enemy_grid: SpaceGrid = null               # 注入（连锁传导/范围扩散目标查询）
 var chip_handler: ChipHandler = null           # 注入（v0.7.0 A6 §3：附着强度芯片 ×(1+K_attach)）
+var meta_store: MetaStore = null               # v1.4.0（A13）注入：反应/共鸣图鉴收录
+var achievement_tracker: AchievementTracker = null   # v1.4.0（A13）注入：武器槽成就判定（rebuild 尾）
 var _hosts: Array[Node2D] = []                 # 已挂载状态容器的敌人（§1.3-3 白名单：状态宿主）
 
 var _reaction_mults: Dictionary = {}           # source_uid -> mult（ELE_REACTION_VOID ×1.8 聚合）
@@ -174,9 +176,11 @@ func rebuild_registries(p_player: Node2D) -> void:
 	var slots: Variant = p_player.get("weapon_slots")
 	if not (slots is Array):
 		return
+	var filled := 0                              # v1.4.0（A13）：有效武器计数（成就判定消费）
 	for w in slots:
 		if not (w is WeaponBase) or not is_instance_valid(w):
 			continue
+		filled += 1
 		var weapon := w as WeaponBase
 		if weapon.trait_stack == null:
 			continue
@@ -199,6 +203,14 @@ func rebuild_registries(p_player: Node2D) -> void:
 		var element := _weapon_element(weapon)
 		if element >= 0:
 			_resonance_counts[element] += 1
+	# v1.4.0（A13）：函数尾（早退不含——null player / 非 Array slots 不产判定）：
+	# 共鸣首达图鉴收录（counts[e]>=2 → REACTIONS 共鸣键）+ 武器槽成就
+	if meta_store != null:
+		for e in range(GameConst.Element.FIR, GameConst.Element.WAT + 1):
+			if _resonance_counts[e] >= 2:
+				meta_store.mark_reaction_seen(String(MetaStore.RESONANCE_SEEN_KEYS.get(e, "")))
+	if achievement_tracker != null:
+		achievement_tracker.on_weapon_slots_changed(filled)
 
 
 static func _weapon_element(p_weapon: Variant) -> int:
@@ -248,12 +260,18 @@ func consume_amplify(p_target: Node2D, p_hit_element: int) -> void:
 		if st.gauges[GameConst.Element.ICE] > 0.0:
 			st.clear_element(GameConst.Element.ICE)
 			DebugStats.count(&"amplify_melt")
+			if meta_store != null:              # v1.4.0（A13）：增幅图鉴收录
+				meta_store.mark_reaction_seen("amp_melt")
 		elif st.gauges[GameConst.Element.WAT] > 0.0:
 			st.clear_element(GameConst.Element.WAT)
 			DebugStats.count(&"amplify_quench")
+			if meta_store != null:
+				meta_store.mark_reaction_seen("amp_quench")
 	elif p_hit_element == GameConst.Element.ICE and st.gauges[GameConst.Element.FIR] > 0.0:
 		st.clear_element(GameConst.Element.FIR)
 		DebugStats.count(&"amplify_vapor")
+		if meta_store != null:
+			meta_store.mark_reaction_seen("amp_vapor")
 
 
 func _amp_factor(p_key: String, p_fallback: float) -> float:
@@ -419,6 +437,9 @@ func _reaction_condition(p_state: ElementalState, p_rxn: int) -> bool:
 
 func _trigger_reaction(p_enemy: Node2D, p_state: ElementalState, p_rxn: int) -> void:
 	# 构造反应 ctx（HIT_IS_REACTION + 快照面板）→ pipeline.resolve_reaction + 清双槽
+	# v1.4.0（A13）：反应图鉴收录 @ 入口位——先于一切早退（Boss 免疫冻结早退亦收录）
+	if meta_store != null:
+		meta_store.mark_reaction_seen(MetaStore.reaction_seen_key(p_rxn))
 	var tables: Dictionary = {}
 	if GameConfig.balance != null:
 		tables = GameConfig.balance.reaction_table

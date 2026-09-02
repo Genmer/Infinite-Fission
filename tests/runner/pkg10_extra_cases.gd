@@ -272,7 +272,12 @@ func _test_e7_save_key_layout() -> void:
 	var stat_keys: Array = Array(cfg.get_section_keys("stats"))
 	stat_keys.sort()
 	ok = ok and stat_keys == ["best_wave", "total_kills", "total_runs"]
-	ok = ok and cfg.get_sections().size() == 3    # 恰三节，无多余节
+	# v1.4.0 授权更新（A13 C1 冻结五节布局）：恰 3 节 → 恰 4 节——[seen] 恒写三键
+	#（chips/relics/reactions，零收录时各空 Dictionary）；[achievements] 无解锁时不建节
+	ok = ok and cfg.get_sections().size() == 4
+	var seen_keys: Array = Array(cfg.get_section_keys("seen"))
+	seen_keys.sort()
+	ok = ok and seen_keys == ["chips", "reactions", "relics"]
 	ok = ok and int(cfg.get_value("meta", "save_version", -1)) == 1 \
 		and int(cfg.get_value("meta", "crystal", -1)) == 7 \
 		and int(cfg.get_value("levels", "hpg", -1)) == 1 \
@@ -283,7 +288,7 @@ func _test_e7_save_key_layout() -> void:
 		and int(cfg.get_value("stats", "total_runs", -1)) == 2 \
 		and int(cfg.get_value("stats", "total_kills", -1)) == 9 \
 		and int(cfg.get_value("stats", "best_wave", -1)) == 5
-	_check("E7 存档键布局契约：[meta] 恰 2 键 / [levels] 恰 5 键（封闭表）/ [stats] 恰 3 键 / 恰 3 节 / 值逐项对账",
+	_check("E7 存档键布局契约：[meta] 恰 2 键 / [levels] 恰 5 键（封闭表）/ [stats] 恰 3 键 / 恰 4 节（v1.4.0 授权更新：+[seen] 三键，无解锁不建 [achievements]）/ 值逐项对账",
 		ok, str(cfg.get_sections()))
 
 
