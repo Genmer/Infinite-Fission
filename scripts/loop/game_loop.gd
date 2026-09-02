@@ -316,7 +316,8 @@ func _settle_run() -> void:
 	meta_store.add_crystal(gain)
 	meta_store.record_run(hud.kills, hud.wave)
 	# ★ v1.4.0（A13）：击杀档成就判定（读 record_run 后的累计击杀）先于取新成就清单
-	achievement_tracker.on_run_settled(meta_store.total_kills)
+	# v1.5.0（K7）：defer_save=true——解锁仅入内存，下行显式 save() 为结算期唯一写盘
+	achievement_tracker.on_run_settled(meta_store.total_kills, true)
 	meta_store.save()                            # 失败仅告警（MetaStore 内 push_warning）
 	game_over_screen.set_crystal_gain(gain)
 	game_over_screen.set_new_achievements(achievement_tracker.new_unlock_titles())

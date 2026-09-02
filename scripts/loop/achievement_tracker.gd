@@ -53,10 +53,12 @@ func on_weapon_slots_changed(p_filled: int) -> void:
 		_try_unlock(&"ach_weapons5")
 
 
-func on_run_settled(p_total_kills: int) -> void:
+func on_run_settled(p_total_kills: int, p_defer_save: bool = false) -> void:
 	# 击杀成就（GameLoop._settle_run 消费）：累计击杀 ≥1000 → 千锤百炼
+	# v1.5.0（K7）：p_defer_save 双写盘合并——true 时解锁仅入内存，落盘由结算期
+	# GameLoop 显式 save() 单点承担（默认 false = 既有行为恒等，其余调用点零改动）
 	if p_total_kills >= 1000:
-		_try_unlock(&"ach_kills1000")
+		_try_unlock(&"ach_kills1000", p_defer_save)
 
 
 func new_unlock_titles() -> Array[String]:
@@ -92,14 +94,14 @@ func _on_wave_started(p_wave: int) -> void:
 		_try_unlock(&"ach_wave10")
 
 
-func _try_unlock(p_id: StringName) -> void:
+func _try_unlock(p_id: StringName, p_defer_save: bool = false) -> void:
 	# 解锁仲裁：meta_store 缺失 → 忽略（降级）；已解锁 → 幂等短路；首解 → 入清单 +
-	# 本地信号 + 遥测
+	# 本地信号 + 遥测。v1.5.0（K7）：p_defer_save 透传 MetaStore（双写盘合并，默认 false）
 	if meta_store == null:
 		return
 	if meta_store.has_achievement(p_id):
 		return
-	if not meta_store.unlock_achievement(p_id):
+	if not meta_store.unlock_achievement(p_id, p_defer_save):
 		return
 	_new_unlocks.append(p_id)
 	achievement_unlocked.emit(p_id, _title_of(p_id))

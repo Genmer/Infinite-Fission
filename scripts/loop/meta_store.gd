@@ -312,9 +312,11 @@ func has_achievement(p_id: StringName) -> bool:
 	return _achievements.has(String(p_id))
 
 
-func unlock_achievement(p_id: StringName) -> bool:
+func unlock_achievement(p_id: StringName, p_defer_save: bool = false) -> bool:
 	# 成就解锁（AchievementTracker._try_unlock 消费）：未知 id → warning + false；
-	# 已解锁 no-op false；首次 → 置位 + save + true
+	# 已解锁 no-op false；首次 → 置位 + save + true。
+	# v1.5.0（K7）：p_defer_save=true 时仅置位不写盘（结算期由 GameLoop 显式 save 单点
+	# 落盘——解锁+结算合并为一次写；默认 false = 既有行为恒等）
 	if not ACHIEVEMENTS.has(p_id):
 		push_warning("[MetaStore] 未知成就 id（%s），拒绝解锁" % String(p_id))
 		return false
@@ -322,7 +324,8 @@ func unlock_achievement(p_id: StringName) -> bool:
 	if _achievements.has(key):
 		return false
 	_achievements[key] = true
-	save()
+	if not p_defer_save:
+		save()
 	return true
 
 
