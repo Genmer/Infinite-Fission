@@ -10,6 +10,12 @@
 #   ④ xp → GameLoop xp 链第 4 因子（meta_store.xp_mult）
 # · 定价：100 起逐级 ×1.6 后 round（★逐级迭代，非 pow 一次算——round(655.36)=655≠冻结 656）。
 # · 结转：GameLoop._settle_run（死亡一次闸）→ add_crystal(本局金币) + record_run + save。
+# v1.4.0（A13 Meta 二期）新增：图鉴与成就存档段——
+# · 图鉴三册：芯片（equip 首见）/ 遗物（activate 首见）/ 反应 13 键封闭表（六剧变 @
+#   _trigger_reaction 入口位 + 三增幅 @ consume_amplify 分支 + 四共鸣 @ rebuild_registries 首达），
+#   mark_* 首见即 save（悬空/脏键读侧逐键过滤容忍）。
+# · 成就 10 条封闭表（AchievementTracker 判定 → unlock_achievement，幂等）。
+# · 金币→结晶软上限 convert_gold：≤500 全额 / >500 超出部分 ×0.5（负钳 0）。
 class_name MetaStore
 extends Node
 
@@ -28,11 +34,58 @@ const UPGRADES: Dictionary = {
 	&"xp": {"display": "经验强化", "max_level": 5, "per_level": 0.05, "effect_text": "经验获取 +5%/级"},
 }
 
+# v1.4.0 结算软上限（A13）：死亡结转金币 → 结晶，≤500 全额 / 超出部分 ×0.5（floor）
+const SOFT_CAP: int = 500
+const SOFT_CAP_RATE: float = 0.5
+
+# v1.4.0 反应图鉴封闭表（13 键；行序 = MetaPanel 反应册行序）：剧变 6 → 增幅 3 → 共鸣 4
+const REACTIONS: Dictionary = {
+	&"rxn_fir_ice": {"group": "剧变", "display": "碎裂", "pair": "火+冰"},
+	&"rxn_fir_ltg": {"group": "剧变", "display": "过载", "pair": "火+雷"},
+	&"rxn_ice_ltg": {"group": "剧变", "display": "超导", "pair": "冰+雷"},
+	&"rxn_wat_ice": {"group": "剧变", "display": "冻结", "pair": "水+冰"},
+	&"rxn_wat_ltg": {"group": "剧变", "display": "导电", "pair": "水+雷"},
+	&"rxn_wat_fir": {"group": "剧变", "display": "汽爆", "pair": "水+火"},
+	&"amp_melt": {"group": "增幅", "display": "融化", "pair": "冰附+火击"},
+	&"amp_quench": {"group": "增幅", "display": "淬火", "pair": "水附+火击"},
+	&"amp_vapor": {"group": "增幅", "display": "蒸发", "pair": "火附+冰击"},
+	&"res_fire": {"group": "共鸣", "display": "火之共鸣", "pair": "火×2"},
+	&"res_ice": {"group": "共鸣", "display": "冰之共鸣", "pair": "冰×2"},
+	&"res_ltg": {"group": "共鸣", "display": "雷之共鸣", "pair": "雷×2"},
+	&"res_wat": {"group": "共鸣", "display": "水之共鸣", "pair": "水×2"},
+}
+
+# v1.4.0 共鸣图鉴键映射（Element 枚举 → REACTIONS 键；rebuild_registries 首达收录消费）
+const RESONANCE_SEEN_KEYS: Dictionary = {
+	GameConst.Element.FIR: "res_fire",
+	GameConst.Element.ICE: "res_ice",
+	GameConst.Element.LTG: "res_ltg",
+	GameConst.Element.WAT: "res_wat",
+}
+
+# v1.4.0 成就封闭表（10 条；行序 = MetaPanel 成就页行序；判定点 = AchievementTracker）
+const ACHIEVEMENTS: Dictionary = {
+	&"ach_boss1": {"title": "首破强敌", "desc": "击败第一位 Boss"},
+	&"ach_boss2": {"title": "深入险境", "desc": "击败第二位 Boss"},
+	&"ach_boss3": {"title": "巅峰试炼", "desc": "击败第三位 Boss"},
+	&"ach_wave10": {"title": "十波之约", "desc": "单局到达第 10 波"},
+	&"ach_wave20": {"title": "廿波征途", "desc": "单局到达第 20 波"},
+	&"ach_wave30": {"title": "卅波传奇", "desc": "单局到达第 30 波"},
+	&"ach_chip_set": {"title": "套装协同", "desc": "同时装备 2 枚同主属性芯片"},
+	&"ach_chip_full": {"title": "满配武装", "desc": "同时装备 6 枚芯片"},
+	&"ach_weapons5": {"title": "全副武装", "desc": "同时持有 5 把武器"},
+	&"ach_kills1000": {"title": "千锤百炼", "desc": "累计击杀 1000"},
+}
+
 var crystal: int = 0                           # 结晶余额（局外货币；购买扣减 / 死亡结转增加）
 var total_runs: int = 0                        # 总局数（仅死亡结算计，A9 假设清单）
 var total_kills: int = 0                       # 累计击杀
 var best_wave: int = 0                         # 最佳波次（单调不回退）
 var _levels: Dictionary = {}                   # {StringName id: int 等级}（键域 = UPGRADES 封闭表）
+var _chips_seen: Dictionary = {}               # v1.4.0 图鉴：{String chip id: true}（首见收录）
+var _relics_seen: Dictionary = {}              # v1.4.0 图鉴：{String relic id: true}
+var _reactions_seen: Dictionary = {}           # v1.4.0 图鉴：{String 反应键: true}（键域 = REACTIONS）
+var _achievements: Dictionary = {}             # v1.4.0 成就：{String ach id: true}（键域 = ACHIEVEMENTS）
 var _save_path: String = DEFAULT_SAVE_PATH     # 存档路径（测试可注入 set_save_path）
 
 
@@ -93,11 +146,20 @@ func load_save() -> void:
 	total_runs = _load_stat(cfg, "total_runs")
 	total_kills = _load_stat(cfg, "total_kills")
 	best_wave = _load_stat(cfg, "best_wave")
+	# v1.4.0 图鉴/成就段：缺节静默空（旧档零迁移）；脏型单键 warning + 空；悬空键容忍收录
+	_chips_seen = _load_seen_dict(cfg, "chips")
+	_relics_seen = _load_seen_dict(cfg, "relics")
+	_reactions_seen = _load_seen_dict(cfg, "reactions")
+	_achievements = _load_achievements(cfg)
 
 
 func save() -> bool:
-	# 写档（失败 push_warning + false；内存态保留——读写路径解耦）。键布局冻结：
-	# [meta] save_version/crystal；[levels] String(id) 五键；[stats] total_runs/total_kills/best_wave
+	# 写档（失败 push_warning + false；内存态保留——读写路径解耦）。键布局冻结（五节）：
+	# [meta] save_version/crystal；[levels] String(id) 五键；[stats] total_runs/total_kills/best_wave；
+	# [seen] chips/relics/reactions 三键（各 Dictionary：String id → true，v1.4.0 A13）；
+	# [achievements] 逐成就 id → true（v1.4.0 A13）。
+	# save_version 保持 1 双向兼容：v1.3.0 旧档缺 [seen]/[achievements] 节 → 读侧静默空
+	#（零迁移）；v1.4.0 新档被旧版读 → 旧版忽略未知节（ConfigFile 节语义），互不损坏。
 	var cfg := ConfigFile.new()
 	cfg.set_value("meta", "save_version", SAVE_VERSION)
 	cfg.set_value("meta", "crystal", crystal)
@@ -106,6 +168,11 @@ func save() -> bool:
 	cfg.set_value("stats", "total_runs", total_runs)
 	cfg.set_value("stats", "total_kills", total_kills)
 	cfg.set_value("stats", "best_wave", best_wave)
+	cfg.set_value("seen", "chips", _string_true_dict(_chips_seen))
+	cfg.set_value("seen", "relics", _string_true_dict(_relics_seen))
+	cfg.set_value("seen", "reactions", _string_true_dict(_reactions_seen))
+	for id in _achievements:
+		cfg.set_value("achievements", String(id), true)
 	var err := cfg.save(_save_path)
 	if err != OK:
 		push_warning("[MetaStore] 存档写入失败（err=%d），内存态保留" % err)
@@ -197,6 +264,86 @@ func meta_stats_snapshot() -> Dictionary:
 	}
 
 
+# ── 图鉴 / 成就（v1.4.0，A13） ─────────────────────────────────────
+static func convert_gold(p_gold: int) -> int:
+	# 金币 → 结晶软上限（_settle_run 消费）：≤500 全额（负钳 0）；>500 超出部分 ×SOFT_CAP_RATE
+	# 向下取整。例：600 → 500+floor(100×0.5)=550；1000 → 750。
+	if p_gold <= SOFT_CAP:
+		return maxi(p_gold, 0)
+	return SOFT_CAP + int(floor(float(p_gold - SOFT_CAP) * SOFT_CAP_RATE))
+
+
+func mark_chip_seen(p_id: StringName) -> bool:
+	# 芯片图鉴收录（ChipHandler.equip 成功尾消费）：空 id / 已见 → false；首见 → 置位 + save + true
+	return _mark_seen(_chips_seen, p_id)
+
+
+func mark_relic_seen(p_id: StringName) -> bool:
+	# 遗物图鉴收录（RelicHandler.activate 成功尾消费）：语义同 mark_chip_seen
+	return _mark_seen(_relics_seen, p_id)
+
+
+func mark_reaction_seen(p_id: String) -> bool:
+	# 反应图鉴收录（ElementalSystem 三站点消费）：非封闭表键 → warning + false（不收录）；
+	# 已见 → false；首见 → 置位 + save + true
+	if not REACTIONS.has(StringName(p_id)):
+		push_warning("[MetaStore] 未知反应图鉴键（%s），拒绝收录" % p_id)
+		return false
+	if _reactions_seen.has(p_id):
+		return false
+	_reactions_seen[p_id] = true
+	save()
+	return true
+
+
+func chip_seen(p_id: StringName) -> bool:
+	return _chips_seen.has(String(p_id))
+
+
+func relic_seen(p_id: StringName) -> bool:
+	return _relics_seen.has(String(p_id))
+
+
+func reaction_seen(p_id: String) -> bool:
+	return _reactions_seen.has(p_id)
+
+
+func has_achievement(p_id: StringName) -> bool:
+	return _achievements.has(String(p_id))
+
+
+func unlock_achievement(p_id: StringName) -> bool:
+	# 成就解锁（AchievementTracker._try_unlock 消费）：未知 id → warning + false；
+	# 已解锁 no-op false；首次 → 置位 + save + true
+	if not ACHIEVEMENTS.has(p_id):
+		push_warning("[MetaStore] 未知成就 id（%s），拒绝解锁" % String(p_id))
+		return false
+	var key := String(p_id)
+	if _achievements.has(key):
+		return false
+	_achievements[key] = true
+	save()
+	return true
+
+
+static func reaction_seen_key(p_rxn: int) -> String:
+	# ReactionType 中性 ID → REACTIONS 封闭表键（唯一映射口；未知 → ""，mark 侧拒绝收录）
+	match p_rxn:
+		GameConst.ReactionType.RXN_FIR_ICE:
+			return "rxn_fir_ice"
+		GameConst.ReactionType.RXN_FIR_LTG:
+			return "rxn_fir_ltg"
+		GameConst.ReactionType.RXN_ICE_LTG:
+			return "rxn_ice_ltg"
+		GameConst.ReactionType.RXN_WAT_ICE:
+			return "rxn_wat_ice"
+		GameConst.ReactionType.RXN_WAT_LTG:
+			return "rxn_wat_ltg"
+		GameConst.ReactionType.RXN_WAT_FIR:
+			return "rxn_wat_fir"
+	return ""
+
+
 # ── 结转 / 汇总 ───────────────────────────────────────────────────
 func add_crystal(p_amount: int) -> void:
 	crystal += maxi(p_amount, 0)                # 负值钳 0（防御）
@@ -243,6 +390,10 @@ func _reset_memory() -> void:
 	best_wave = 0
 	for id in UPGRADES:
 		_levels[id] = 0
+	_chips_seen = {}                           # v1.4.0：图鉴/成就四表随内存复位清空
+	_relics_seen = {}
+	_reactions_seen = {}
+	_achievements = {}
 
 
 func _max_level_of(p_id: StringName) -> int:
@@ -261,3 +412,52 @@ func _load_stat(p_cfg: ConfigFile, p_key: String) -> int:
 		push_warning("[MetaStore] 统计 %s 负值（%d），钳 0" % [p_key, v])
 		return 0
 	return v
+
+
+func _load_seen_dict(p_cfg: ConfigFile, p_key: String) -> Dictionary:
+	# v1.4.0 [seen] 三键读取（A13）：缺节缺键 → 静默空（旧档零迁移）；值非 Dictionary →
+	# warning + 空；Dictionary 内逐键 typeof(k)==TYPE_STRING 收录（悬空键容忍——
+	# 封闭性只在 mark 时仲裁），其余键型跳过
+	if not p_cfg.has_section_key("seen", p_key):
+		return {}
+	var raw: Variant = p_cfg.get_value("seen", p_key, {})
+	if typeof(raw) != TYPE_DICTIONARY:
+		push_warning("[MetaStore] seen.%s 类型异常（非 Dictionary），按空表继续" % p_key)
+		return {}
+	var out: Dictionary = {}
+	for k in (raw as Dictionary):
+		if typeof(k) == TYPE_STRING:
+			out[k] = true
+	return out
+
+
+func _load_achievements(p_cfg: ConfigFile) -> Dictionary:
+	# v1.4.0 [achievements] 节读取（A13）：缺节静默空；get_section_keys 直收
+	#（ConfigFile 节键恒 String，逐 id → true）
+	var out: Dictionary = {}
+	if not p_cfg.has_section("achievements"):
+		return out
+	for key in p_cfg.get_section_keys("achievements"):
+		if typeof(key) == TYPE_STRING:
+			out[key] = true
+	return out
+
+
+func _mark_seen(p_dict: Dictionary, p_id: StringName) -> bool:
+	# 图鉴收录单点（chip/relic 共用）：空 id / 已见 → false；首见 → String 键置位 + save + true
+	if p_id == &"":
+		return false
+	var key := String(p_id)
+	if p_dict.has(key):
+		return false
+	p_dict[key] = true
+	save()
+	return true
+
+
+static func _string_true_dict(p_dict: Dictionary) -> Dictionary:
+	# 写档投影：{String 键: true}（非 String 键理论不可达——mark 侧已归一，防御投影）
+	var out: Dictionary = {}
+	for k in p_dict:
+		out[String(k)] = true
+	return out
