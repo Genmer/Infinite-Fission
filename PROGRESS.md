@@ -51,6 +51,8 @@
 
 **v1.4.0 增量（2026-09-01，C1~C5）：Meta 二期·图鉴与成就（数值与裁定真源 = `docs/analysis/A13_v1.4.0_design.md`，含假设清单 H1~H4；★零新 EventBus 信号/MenuScreen 零改动/管线弹幕零触碰）。C1 MetaStore 扩展（图鉴三册存档段 [seen] chips/relics/reactions + [achievements] 节，save_version=1 双向兼容旧档缺节静默空/脏键逐键过滤；REACTIONS 13 键封闭表（剧变6→增幅3→共鸣4）+ ACHIEVEMENTS 10 条封闭表 + RESONANCE_SEEN_KEYS 映射；mark_chip/relic/reaction_seen 首见即存 + unlock_achievement 幂等 + static convert_gold 结算软上限 ≤500 全额/超出 ×0.5）/ C2 追踪接线（AchievementTracker 判定器——本地信号 achievement_unlocked 非总线；Boss 三档四层守卫精确匹配 E6_boss1/2/3、波次三档 ≥10/20/30、芯片 max_main_count≥2/满配≥6、武器有效槽≥5、累计击杀≥1000 五站点；chip/relic/elemental 图鉴收录——★反应收录在 _trigger_reaction 入口位含 Boss 免疫早退、增幅三分支、共鸣+武器槽 rebuild_registries 函数尾（早退不含）；GameLoop boot 铁律 6：tracker setup 订阅先于掉落侧与 spawner）/ C3 结算改造（_settle_run 结晶入账改 convert_gold 软上限 + on_run_settled ★先于取清单 + GameOverScreen 新成就行 y660「新成就：A · B」+ 成就解锁跳字「成就达成：×××」玩家上方 -64 + reset_run 随局清清单）/ C4 MetaPanel tab 化（0 强化/1 图鉴/2 成就三 tab + 图鉴三册芯片12格/遗物11格 String 升序/反应13行表序（数值段 balance 闸统一——未就绪不附无数值无字面量兜底）+ 成就10行 + 清档两击流「清除存档」→「确认清除？」→ wipe_requested 仲裁 + layout_rects 新口径 tab0=10/芯片册=19/遗物册=18/反应册=20/成就页=14 隐藏页不入列）/ C5 收尾（pkg14 24 项 C1~C24 恰额 + version 1.4.0 + 本档对账 + A13 留痕）。提交序：C1 ffae1c6 → C2 3e7298a → C3 01a2525 → C4 b2887ba → C5 本笔。授权更新：pkg10 M22（layout_rects 6→10 tab0 口径留痕）、pkg10_extra E7（存档恰 3 节→4 节+[seen] 三键，无解锁不建 [achievements]）、pkg8_extra V24/pkg12 V56/pkg13 V78（version 随版本推进 1.3.0→1.4.0）、project.godot version 1.4.0。**
 
+**v1.5.0 增量（2026-09-02/03，K1~K9）：TTK 复校与平衡回收（数值与工装真源 = `docs/analysis/A14_v1.5.0_design.md`；tests/sim/ 七件仿真工装——真件管线只读复用+直击时序复刻+P20 五文件源码守卫；对齐门 61 锚逐位 ==；360 行跑批+五点判定：p1/p2/p5 DRIFT 仅记录、p3/p4 RED 归因锚口径错配（静态构筑 vs 成长假设；V_max 1.5 旧锚）——★本版零调参，提案 PR-1~3 待用户拍板；Boss 映射/p5 复合锚两处工装复核修正（w10 误用 boss2 的 112s 伪影→修正后 36s 贴合 32s 设计锚）；K7 结算双写盘去重（加法式 p_defer_save）；pkg15 20 项（12 格帧基线冻结+自检翻红）；damage_pipeline 等五文件零改动）。**
+
 ## 3. 开发流水线（自创，非标准流水线）
 
 ```
@@ -142,7 +144,7 @@
 - 导入：`"$G" --headless --path "<项目根>" --import`
 - 跑测试：`"$G" --headless --path "<项目根>" -s tests/runner/test_pkg0.gd`（pkg1/pkg2/pkg3 同理）
 - 注意：`-s` 模式下入口脚本编译早于 autoload 注册，测试用「入口引导 + 运行时 load 用例体」两段式（pkg0~pkg3 都是这个模式，新测试照抄）
-- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836 基线口径；另有 pkg6_extra 33 / pkg7 175 / pkg7_extra 60 / pkg8 160 / pkg8_extra 31 / pkg9 59 / pkg9_extra 34 / pkg10 24 / pkg10_extra 9 / pkg11 16 / pkg11_extra 7 / pkg12 20 / pkg12_extra 8 / pkg13 22 / pkg13_extra 13 / pkg14 24，独立 runner；v1.4.0 实测对账全 runner 合计 1531（1494 + pkg13_extra 13 + pkg14 24——审查后对账修正：1518 漏加 fix-review aa3563e 的 pkg13_extra）全 PASS）**
+- 当前基线：**pkg0 129 / pkg1 108 / pkg2 140 / pkg3 128 / pkg4 98 / pkg5 118 / pkg6 115，全 PASS（共 836 基线口径；另有 pkg6_extra 33 / pkg7 175 / pkg7_extra 60 / pkg8 160 / pkg8_extra 31 / pkg9 59 / pkg9_extra 34 / pkg10 24 / pkg10_extra 9 / pkg11 16 / pkg11_extra 7 / pkg12 20 / pkg12_extra 8 / pkg13 22 / pkg13_extra 13 / pkg14 24 / pkg15 20，独立 runner；v1.5.0 实测对账全 runner 合计 1551（1531 + pkg15 20）全 PASS）**
 - v0.6.0 压力复测：**P95 = 5.559ms**（avg 2.191 / P50 1.791 / P99 6.968，判定线 8.3ms PASS）
 - v0.7.0 压力复测：**P95 = 5.714ms**（avg 2.302 / P50 1.912 / P99 6.515，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0）
 - v0.8.0 压力复测：**P95 = 5.924ms**（avg 2.419 / P50 1.998 / P99 7.144 / MAX 12.625，判定线 8.3ms PASS；六池 0 运行期实例化 / 污染 0 / 非法归还 0）

@@ -175,11 +175,14 @@ static func _p4_variance(p_rows: Array[Dictionary]) -> Dictionary:
 
 
 static func _p5_amp(p_rows: Array[Dictionary]) -> Dictionary:
-	# ⑤ w30 E1 DPS 增幅 vs T1：T7a 锚 +29%（n29×0.04×0.25）/ T7b 锚 +116%（n29×0.04）；
+	# ⑤ w30 E1 DPS 增幅 vs T1：T7a 锚 = (1+n·0.04·0.25)×(1+n·0.03·0.15)−1（复合攻击×射速，
+	# n=29 → ≈+45.9%——K4 复核修正：初版锚 +29% 漏算射速臂复合）/ T7b 锚 +116%（n29×0.04）；
 	# 相对偏差 ≤10% OK / ≤25% DRIFT / >25% RED
 	var out := {"point": "p5"}
 	var worst := "OK"
-	for entry in [["T7a", 0.29], ["T7b", 1.16]]:
+	var n := 29
+	var anchor_a := (1.0 + float(n) * 0.04 * 0.25) * (1.0 + float(n) * 0.03 * 0.15) - 1.0
+	for entry in [["T7a", anchor_a], ["T7b", 1.16]]:
 		var base := _dps_of(p_rows, "T1", 30, "E1")
 		var amp := _dps_of(p_rows, entry[0], 30, "E1")
 		var anchor := float(entry[1])

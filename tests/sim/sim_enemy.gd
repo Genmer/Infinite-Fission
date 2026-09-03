@@ -3,7 +3,7 @@
 # · make_data(p_base,p_kind)：EnemyData.duplicate(true) 派生——spd=0（静止靶）/
 #   ranged={}（无远程臂）/ Boss 段只留 phases+phase2_resist（弹幕+召唤清空——A14 §2 假设
 #   留痕：Boss 弹幕/召唤臂不进 TTK 口径）/ shield 保留（_ns 变体 spawn 后 strip_shield）。
-# · E6 按 w 映射：w<10→E6_boss1 / [10,20)→E6_boss2 / ≥20→E6_boss3（镜像 WaveDirector Boss 档）。
+# · E6 按 w 映射：slot=(w/10−1)%3（w10→b1/w20→b2/w30→b3/w40→b1；镜像 wave_director:488）。
 # · spawn(p_env,p_kind,p_wave)：池 acquire → spawn（E5 加 TAG_ELITE）→ position(360,300)
 #   → *_ns 变体 strip_shield → register_host + grid.rebuild（单敌快照）。
 # · make_formula_target(p_hp)：pkg1 DUMMY_ENEMY_SRC 逐字复用（tests/formula/
@@ -32,12 +32,21 @@ static var _dummy_script: GDScript = null
 
 
 static func boss_id_for_wave(p_wave: int) -> StringName:
-	# E6 Boss 档映射（WaveDirector 波表 Boss 波 w10/20/30 口径的连续化——A14 冻结）
-	if p_wave < 10:
-		return &"E6_boss1"
-	if p_wave < 20:
-		return &"E6_boss2"
-	return &"E6_boss3"
+	# E6 Boss 档映射（镜像 wave_director.gd:488 真源 slot=(w/10−1)%3：
+	# w10→boss1 / w20→boss2 / w30→boss3 / w40→boss1 轮换；w<10 兜底 boss1。
+	# 〔K4 复核修正 2026-09-02〕初版 [10,20)→boss2 错档一档——w10 实战刷 boss1(5324)
+	# 非 boss2(16537)，p2 Boss 锚 RED 系此伪影）
+	var decade := p_wave / 10
+	if decade < 1:
+		decade = 1
+	var slot := (decade - 1) % 3
+	match slot:
+		0:
+			return &"E6_boss1"
+		1:
+			return &"E6_boss2"
+		_:
+			return &"E6_boss3"
 
 
 static func make_data(p_base: EnemyData, p_kind: String) -> EnemyData:
