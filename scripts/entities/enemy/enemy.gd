@@ -81,6 +81,14 @@ var _spawn_left: float = 0.0                  # 出生弹入剩余（0→1 带 o
 var _dash_state: int = 0                      # E2 冲刺状态机（0 巡航/1 蓄力/2 冲刺/3 回弹）
 var _dash_left: float = 0.0                   # E2 当前阶段剩余
 var _dash_dir: Vector2 = Vector2.ZERO         # E2 冲刺锁定方向（蓄力期末采样）
+var _telegraph_line: Line2D = null            # E2 突刺红线激光走廊（地面 telegraph）
+
+# 重装防暴盾机制（E3 Bastion & E14 Boguard）
+const SHIELD_TURN_SPEED := 2.4                # 盾面平滑转向角速度 rad/s（惯性转向）
+var _shield_dir: Vector2 = Vector2.DOWN       # 盾面当前朝向
+
+# 精英怪专属词缀（TAG_ELITE 迫击炮轰炸，破坏站桩）
+var _mortar_timer: float = 2.5                # 轰炸发射倒计时（首发 2.5s，之后每 4.5s）
 
 # 方向 C 元素状态表现层（用户反馈 2026-08-29「闪电/灼烧等特效」；只读 ElementalState，
 # 零数值/碰撞副作用，_reset_state 全复位，共享贴图 + 无逐敌 shader）：
@@ -100,13 +108,12 @@ var _shock_impact: Sprite2D = null            # 落雷命中点四角星闪
 static var _arc_pattern_pool: Array[PackedVector2Array] = []   # 预生成电弧折线顶点池（全敌共享）
 static var _bolt_pattern_pool: Array[PackedVector2Array] = []  # 预生成落雷折线顶点池（全敌共享）
 
-# E2 疾冲冲刺周期（视觉+走位表现；数值真源 = 本块常量，用户裁定方向 C 敌人角色化：
-# 蓄力 0.3s telegraph（果冻压扁+微抖）→ 冲刺 0.35s×1.9 速（拉长 1.4×）→ 回弹 0.25s 半速）
-const DASH_CHARGE_TIME := 0.3               # 蓄力 telegraph 时长 s
-const DASH_GO_TIME := 0.35                  # 冲刺时长 s
-const DASH_RECOVER_TIME := 0.25             # 回弹恢复时长 s
-const DASH_CRUISE_TIME := 0.9               # 巡航时长 s
-const DASH_SPEED_MULT := 1.9                # 冲刺速度倍率
+# E2 疾冲冲刺周期（红线蓄力 telegraph 0.65s + 2.6x 高速突刺 + 回弹）
+const DASH_CHARGE_TIME := 0.65               # 蓄力 telegraph 时长 s（给玩家清晰闪避与反应窗口）
+const DASH_GO_TIME := 0.28                  # 冲刺时长 s（更迅猛）
+const DASH_RECOVER_TIME := 0.35             # 回弹恢复时长 s
+const DASH_CRUISE_TIME := 1.1               # 巡航时长 s
+const DASH_SPEED_MULT := 2.6                # 冲刺超高爆发速度倍率
 const DASH_STRETCH := 1.4                   # 冲刺拉长倍率（朝向轴）
 const DASH_CHARGE_SQUASH := 0.78            # 蓄力压扁比例
 
@@ -153,6 +160,13 @@ func _ready() -> void:
 	_fuse_ring.radius = VOLATILE_BLAST_RADIUS
 	_fuse_ring.visible = false
 	add_child(_fuse_ring)
+	_telegraph_line = Line2D.new()
+	_telegraph_line.name = "TelegraphLine"
+	_telegraph_line.width = 3.5
+	_telegraph_line.default_color = Color(1.0, 0.2, 0.25, 0.75)
+	_telegraph_line.visible = false
+	_telegraph_line.z_index = -1
+	add_child(_telegraph_line)
 	visible = false                            # 池内不可见（取出 spawn 后激活）
 
 
@@ -207,6 +221,10 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	_dash_state = 0
 	_dash_left = 0.0
 	_dash_dir = Vector2.ZERO
+	_shield_dir = Vector2.DOWN
+	_mortar_timer = 2.5
+	if _telegraph_line != null:
+		_telegraph_line.visible = false
 	_armor_cracked = false
 	_armor_jiggle_left = 0.0
 	if _armor_sprite != null:
@@ -249,6 +267,16 @@ func tick(p_game_delta: float) -> void:
 			if player != null:
 				if _kind == &"dart" or _kind == &"woodbird" or _kind == &"bogleaper":
 					_tick_dart_chase(p_game_delta, player, sf)
+				elif has_shield():
+					# 持盾重装怪：带有转向角速度惯性（SHIELD_TURN_SPEED），沿盾向正面缓进推进
+					var target_dir := (player.global_position - global_position).normalized()
+					if target_dir.length_squared() > 0.01:
+						var cur_ang := _shield_dir.angle()
+						var tar_ang := target_dir.angle()
+						var new_ang := rotate_toward(cur_ang, tar_ang, SHIELD_TURN_SPEED * p_game_delta)
+						_shield_dir = Vector2.from_angle(new_ang)
+					var spd := speed * sf
+					global_position += _shield_dir * spd * p_game_delta
 				else:
 					var dir := (player.global_position - global_position).normalized()
 					var spd := speed * sf
@@ -260,6 +288,12 @@ func tick(p_game_delta: float) -> void:
 			_tick_ranged(p_game_delta, player, sf)
 		_:
 			pass
+	# 精英怪专属机制：迫击炮定点轰炸（破坏原地挂机/割草站桩）
+	if is_elite() and not is_boss() and player != null and is_instance_valid(player):
+		_mortar_timer -= p_game_delta
+		if _mortar_timer <= 0.0:
+			_mortar_timer = 4.5
+			_launch_mortar(player.global_position)
 	# 接触伤害（Area2D 低频通道——玩家侧无敌帧 contact_tick 节流）
 	if _hit_area != null:
 		for area in _hit_area.get_overlapping_areas():
@@ -270,13 +304,34 @@ func tick(p_game_delta: float) -> void:
 
 func take_result(p_result: DamageResult) -> void:
 	# 受击入口（pipeline 步骤 9 之后由投射物侧调用）：扣血 + 受击闪白/果冻抖动 + 死亡广播
-	# 易伤标记：包 3 ElementalSystem 合入后经 elemental 容器承担（get_vuln_factor 已就绪）
+	if has_shield():
+		var atk_dir := Vector2.ZERO
+		if p_result.pos != Vector2.ZERO and p_result.pos.distance_squared_to(global_position) > 36.0:
+			atk_dir = (p_result.pos - global_position).normalized()
+		else:
+			var p_node := _player()
+			if p_node != null and is_instance_valid(p_node):
+				atk_dir = (p_node.global_position - global_position).normalized()
+
+		if atk_dir != Vector2.ZERO:
+			var dot: float = _shield_dir.dot(atk_dir)
+			if dot > 0.35:
+				# 正面命中物理防暴合金盾：格挡减免 80%
+				p_result.final_value *= 0.2
+				_armor_jiggle_left = 0.3
+				if SfxBank.I != null:
+					SfxBank.I.play(&"shield_block")
+			elif dot < -0.3:
+				# 背后弱点背刺：暴击增伤 40%
+				p_result.final_value *= 1.4
+				p_result.is_crit = true
+
 	apply_damage(p_result.final_value)
 	if not dead:
 		_flash_left = FLASH_TIME
 		_wobble_left = WOBBLE_TIME           # 方向 C：果冻抖动（squash & stretch）
-		if _kind == &"bastion":
-			_armor_jiggle_left = 0.18        # E3：甲板错位咔咔抖动
+		if has_shield():
+			_armor_jiggle_left = 0.22        # 重装甲板错位抖动
 		_apply_flash(1.0)
 
 
@@ -319,33 +374,54 @@ func is_volatile() -> bool:
 
 
 func _tick_dart_chase(p_game_delta: float, p_player: Node2D, p_speed_factor: float) -> void:
-	# E2 疾冲状态机（CHASE 分支内）：巡航 → 蓄力 telegraph（0.3s 原地压扁微抖）→
-	# 冲刺（0.35s×1.9 速锁定方向，撞界/贴身回弹）→ 回弹（0.25s 半速后撤）。game_delta 通道。
+	# E2/E10/E15 疾冲状态机：巡航 → 蓄力红线 telegraph（0.65s 瞄准锁定+收束预警）→
+	# 冲刺（0.28s×2.6 速极速贯穿，带残影）→ 回弹（0.35s 后撤调整）。
 	_dash_left -= p_game_delta
 	if _dash_left <= 0.0:
 		match _dash_state:
 			0:
 				_dash_state = 1                       # 巡航毕 → 蓄力 telegraph
 				_dash_left = DASH_CHARGE_TIME
-			1:
 				_dash_dir = (p_player.global_position - global_position).normalized()
-				_dash_state = 2
+			1:
+				_dash_state = 2                       # 蓄力毕 → 极速突刺
 				_dash_left = DASH_GO_TIME
+				if _telegraph_line != null:
+					_telegraph_line.visible = false
 			2:
-				_dash_state = 3
+				_dash_state = 3                       # 冲刺毕 → 回弹
 				_dash_left = DASH_RECOVER_TIME
+				if _telegraph_line != null:
+					_telegraph_line.visible = false
 			_:
-				_dash_state = 0
+				_dash_state = 0                       # 回弹毕 → 巡航
 				_dash_left = DASH_CRUISE_TIME
+				if _telegraph_line != null:
+					_telegraph_line.visible = false
 	match _dash_state:
 		0:
 			# 巡航：正常追击（受状态效果减速）
 			var dir := (p_player.global_position - global_position).normalized()
 			global_position += dir * speed * p_speed_factor * p_game_delta
+			if _telegraph_line != null:
+				_telegraph_line.visible = false
 		1:
-			pass                                    # 蓄力：原地 telegraph（压扁微抖在表现层）
+			# 蓄力：前 75% 时间持续微调朝向玩家，最后 25% 锁死方向给玩家闪避横移窗口
+			if _dash_left > DASH_CHARGE_TIME * 0.25:
+				_dash_dir = (p_player.global_position - global_position).normalized()
+			if _telegraph_line != null:
+				_telegraph_line.visible = true
+				var charge_pct := 1.0 - clampf(_dash_left / DASH_CHARGE_TIME, 0.0, 1.0)
+				_telegraph_line.width = lerpf(8.0, 3.5, charge_pct)
+				var alpha := lerpf(0.3, 0.85, charge_pct)
+				_telegraph_line.default_color = Color(1.0, 0.2, 0.25, alpha)
+				var start_pt := Vector2.ZERO
+				var end_pt := _dash_dir * 720.0
+				_telegraph_line.points = PackedVector2Array([start_pt, end_pt])
 		2:
-			# 冲刺：锁定方向 1.9×（不吃寒滞修正口径——与 E4 自爆冲刺同理）
+			# 冲刺：锁定方向 2.6× 超高速贯穿
+			if _telegraph_line != null:
+				_telegraph_line.visible = false
 			global_position += _dash_dir * speed * DASH_SPEED_MULT * p_game_delta
 			# 撞界回弹：钳出界即反弹方向并提前收势
 			var size := Vector2(720.0, 1280.0)
@@ -365,7 +441,9 @@ func _tick_dart_chase(p_game_delta: float, p_player: Node2D, p_speed_factor: flo
 				_dash_state = 3
 				_dash_left = DASH_RECOVER_TIME
 		3:
-			# 回弹：半速后撤（吃寒滞修正）
+			# 回弹：后撤（吃寒滞修正）
+			if _telegraph_line != null:
+				_telegraph_line.visible = false
 			var away := (global_position - p_player.global_position).normalized()
 			global_position += away * speed * 0.5 * p_speed_factor * p_game_delta
 
@@ -429,6 +507,8 @@ func is_elite() -> bool:
 func _on_died() -> void:
 	# 一次性死亡：置 dead → EventBus.emit_enemy_killed → 池归还（EnemySpawner 订阅承担）
 	dead = true
+	if _telegraph_line != null:
+		_telegraph_line.visible = false
 	_death_poison_splash()
 	_death_element_discharge()
 	EventBus.emit_enemy_killed(self)
@@ -564,6 +644,10 @@ func _reset_state() -> void:
 	_dash_state = 0
 	_dash_left = 0.0
 	_dash_dir = Vector2.ZERO
+	_shield_dir = Vector2.DOWN
+	_mortar_timer = 2.5
+	if _telegraph_line != null:
+		_telegraph_line.visible = false
 	_armor_cracked = false
 	_armor_jiggle_left = 0.0
 	_kind = &"grunt"
@@ -700,10 +784,15 @@ func _visual_kind() -> StringName:
 	return &"grunt"
 
 
+func has_shield() -> bool:
+	# 持盾重装单位判定：E3 Bastion（堡垒铁卫）与 E14 Boguard（沼泽重甲卫）
+	return _kind == &"bastion" or _kind == &"boguard"
+
+
 func _ensure_armor(p_kind: StringName) -> void:
-	# E3 重甲外甲板（双层甲板分层：外甲贴图叠在内芯上方，运行期错位摆动）；
-	# 非 E3 复用时仅隐藏（节点随池实例存活，跨复用零实例化）
-	var want := p_kind == &"bastion"
+	# E3/E14 重甲外甲板（双层甲板分层：外甲贴图叠在内芯上方，随盾向平滑旋转与错位摆动）；
+	# 非重甲复用时仅隐藏（节点随池实例存活，跨复用零实例化）
+	var want := p_kind == &"bastion" or p_kind == &"boguard"
 	if want and _armor_sprite == null:
 		_armor_sprite = Sprite2D.new()
 		_armor_sprite.name = "ArmorPlate"
@@ -810,7 +899,7 @@ func _tick_visual(p_game_delta: float) -> void:
 				_:
 					sx = _base_scale * 0.92
 					sy = _base_scale * 1.08
-		&"bastion":
+		&"bastion", &"boguard":
 			var breathe_b := 1.0 + 0.02 * sin(_anim_t * 3.4 + float(uid % 32))
 			sx = _base_scale * breathe_b
 			sy = _base_scale * (2.0 - breathe_b)
@@ -893,7 +982,7 @@ func _set_volatile_face(p_state: int) -> void:
 
 
 func _tick_bastion_armor(p_game_delta: float) -> void:
-	# E3 外甲板「咔咔」错位：低频相位摆 + 受击抖动加强；HP≤50% 换裂纹板
+	# E3/E14 外甲板：随盾面朝向平滑对齐 + 受击剧烈错位抖动；HP≤50% 换裂纹板
 	if _armor_sprite == null or not _armor_sprite.visible:
 		return
 	if not _armor_cracked and max_hp > 0.0 and hp <= max_hp * 0.5:
@@ -902,9 +991,10 @@ func _tick_bastion_armor(p_game_delta: float) -> void:
 	var sway := sin(_anim_t * 6.3) * 1.6 * _base_scale
 	if _armor_jiggle_left > 0.0:
 		_armor_jiggle_left = maxf(_armor_jiggle_left - p_game_delta, 0.0)
-		sway += sin(_armor_jiggle_left * 90.0) * 2.6 * _base_scale
+		sway += sin(_armor_jiggle_left * 90.0) * 3.6 * _base_scale
 	_armor_sprite.position = Vector2(sway, 0.0)
-	_armor_sprite.rotation = 0.02 * sin(_anim_t * 5.1)
+	# 盾牌基准角度随盾向朝向对齐（面向玩家），加微小呼吸摇摆
+	_armor_sprite.rotation = _shield_dir.angle() + PI * 0.5 + 0.03 * sin(_anim_t * 5.1)
 
 
 func _tick_elite_extras(p_hover: float) -> void:
@@ -1296,3 +1386,97 @@ class FuseRing:
 		if progress > 0.01:
 			draw_arc(Vector2.ZERO, radius * 0.86, -PI * 0.5,
 				-PI * 0.5 + TAU * progress, 48, PopPalette.XP, 5.0, true)
+
+
+func _launch_mortar(p_target_pos: Vector2) -> void:
+	# 精英怪向目标发射延时迫击预警圈
+	var hazard := MortarHazard.new()
+	hazard.global_position = p_target_pos
+	var parent := get_parent()
+	if parent != null:
+		parent.add_child(hazard)
+	elif is_inside_tree():
+		var root_node := get_tree().get_root()
+		if root_node != null:
+			root_node.add_child(hazard)
+		elif get_tree().current_scene != null:
+			get_tree().current_scene.add_child(hazard)
+	if SfxBank.I != null:
+		SfxBank.I.play(&"mortar_warn")
+
+
+# ── 精英迫击炮轰炸圈（晴空糖果·高饱和警示红 + 收缩倒计时 + 爆炸火光波纹） ──
+class MortarHazard:
+	extends Node2D
+
+	var fuse: float = 1.1
+	var total_fuse: float = 1.1
+	var radius: float = 65.0
+	var damage: float = 15.0
+	var exploded: bool = false
+	var flash_time: float = 0.16
+
+	func _ready() -> void:
+		z_index = -1
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		var tree := get_tree()
+		if tree != null and tree.paused:
+			return
+		var ts := 1.0
+		var gl = tree.get_first_node_in_group(&"game_loop") if tree != null else null
+		if gl != null and "time_scale" in gl:
+			ts = float(gl.get("time_scale"))
+		var step := delta * ts
+
+		if exploded:
+			flash_time -= step
+			queue_redraw()
+			if flash_time <= 0.0:
+				queue_free()
+			return
+
+		fuse -= step
+		queue_redraw()
+		if fuse <= 0.0:
+			_explode()
+
+	func _explode() -> void:
+		exploded = true
+		if SfxBank.I != null:
+			SfxBank.I.play(&"mortar_blast")
+		var tree := get_tree()
+		if tree != null:
+			var player := tree.get_first_node_in_group(&"player") as Player
+			if player != null and is_instance_valid(player):
+				if global_position.distance_to(player.global_position) <= radius:
+					player.take_contact_damage(damage)
+
+	func _draw() -> void:
+		if exploded:
+			# 爆炸火光与扩散波纹
+			var t := clampf(flash_time / 0.16, 0.0, 1.0)
+			var blast_r := radius * (1.3 - 0.3 * t)
+			draw_circle(Vector2.ZERO, blast_r, Color(1.0, 0.4, 0.2, 0.35 * t))
+			draw_arc(Vector2.ZERO, blast_r, 0.0, TAU, 36, Color(1.0, 0.85, 0.3, 0.9 * t), 4.0, true)
+			return
+
+		var p := 1.0 - clampf(fuse / total_fuse, 0.0, 1.0)
+		# 半透明红色警告底圈
+		draw_circle(Vector2.ZERO, radius, Color(1.0, 0.2, 0.25, 0.18))
+		# 外层虚线鲜红描边
+		var segs := 20
+		var seg_arc := TAU / float(segs * 2)
+		var edge_col := Color(1.0, 0.25, 0.28, 0.65 + 0.3 * p)
+		for i in range(segs):
+			var a0 := float(i) * seg_arc * 2.0
+			draw_arc(Vector2.ZERO, radius, a0, a0 + seg_arc, 6, edge_col, 3.0, true)
+		# 倒计时聚焦圆
+		var inner_r := radius * p
+		draw_circle(Vector2.ZERO, inner_r, Color(1.0, 0.18, 0.2, 0.32))
+		# 中心十字瞄准星
+		var cross_len := 12.0
+		var cross_col := Color(1.0, 0.95, 0.4, 0.85)
+		draw_line(Vector2(-cross_len, 0), Vector2(cross_len, 0), cross_col, 2.0)
+		draw_line(Vector2(0, -cross_len), Vector2(0, cross_len), cross_col, 2.0)

@@ -92,6 +92,10 @@ func _build_all() -> void:
 	# 量级分档联动音（P2 伤害数字分级）：紫档金属「叮」高频短音 / 金档重击低频
 	_make(&"tier_high", 0.09, 1760.0, 1480.0, "sine", 0.26)
 	_make(&"tier_epic", 0.22, 240.0, 70.0, "saw", 0.34)
+	# 战斗深度对抗音效：重装盾格挡脆响 + 迫击炮呼啸与爆炸
+	_make(&"shield_block", 0.08, 960.0, 420.0, "square", 0.28)
+	_make(&"mortar_warn", 0.32, 280.0, 580.0, "sine", 0.22)
+	_make(&"mortar_blast", 0.28, 180.0, 40.0, "noise", 0.36)
 
 
 func _make(p_name: StringName, p_dur: float, p_f0: float, p_f1: float,

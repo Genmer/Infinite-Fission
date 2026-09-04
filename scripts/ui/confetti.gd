@@ -111,9 +111,10 @@ func _process(p_delta: float) -> void:
 		return
 	var all_done := true
 	for piece: Dictionary in _pieces:
-		var sprite: Sprite2D = piece["node"]
-		if not is_instance_valid(sprite):
+		var node_var: Variant = piece.get("node", null)
+		if not is_instance_valid(node_var):
 			continue
+		var sprite := node_var as Sprite2D
 		var left: float = piece["left"] - p_delta
 		piece["left"] = left
 		if left <= 0.0:

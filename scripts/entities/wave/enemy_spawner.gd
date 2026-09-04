@@ -134,13 +134,36 @@ func _resolve_data(p_entry: Dictionary) -> EnemyData:
 
 
 func _pick_spawn_pos() -> Vector2:
-	# 出生点（任务书）：顶边（60%）+ 左右上 20% 区域（各 20%）——屏外余量入场
+	# 全向立体出兵：顶边（40%）+ 左右腰侧（各 15%）+ 底部后方偷袭包抄（30%）
+	# 破除单一直线排队割草，强迫玩家利用全屏 360° 走位
 	var size := Vector2(720.0, 1280.0)
 	if GameConfig.balance != null:
 		size = Vector2(GameConfig.balance.res_logic)
 	var roll := rng.randf()
-	if roll < 0.6:
-		return Vector2(rng.randf_range(0.0, size.x), -SPAWN_OFFSCREEN)
-	if roll < 0.8:
-		return Vector2(-SPAWN_OFFSCREEN, rng.randf_range(0.0, size.y * 0.2))
-	return Vector2(size.x + SPAWN_OFFSCREEN, rng.randf_range(0.0, size.y * 0.2))
+	var pos := Vector2.ZERO
+	if roll < 0.4:
+		# 顶部兵线常规压迫
+		pos = Vector2(rng.randf_range(0.0, size.x), -SPAWN_OFFSCREEN)
+	elif roll < 0.55:
+		# 左侧横切
+		pos = Vector2(-SPAWN_OFFSCREEN, rng.randf_range(size.y * 0.1, size.y * 0.8))
+	elif roll < 0.70:
+		# 右侧横切
+		pos = Vector2(size.x + SPAWN_OFFSCREEN, rng.randf_range(size.y * 0.1, size.y * 0.8))
+	else:
+		# 底部包抄，截断玩家无脑后撤退路
+		pos = Vector2(rng.randf_range(0.0, size.x), size.y + SPAWN_OFFSCREEN)
+
+	# 防猝死安全距离保护（>= 180px）：若生成点离玩家过近，则沿反向外推
+	var player: Node2D = null
+	if is_inside_tree():
+		player = get_tree().get_first_node_in_group("player") as Node2D
+	if player != null and is_instance_valid(player):
+		var p_pos := player.global_position
+		var dist := pos.distance_to(p_pos)
+		if dist < 180.0:
+			var push_dir := (pos - p_pos).normalized()
+			if push_dir.length_squared() < 0.01:
+				push_dir = Vector2.UP
+			pos = p_pos + push_dir * 200.0
+	return pos

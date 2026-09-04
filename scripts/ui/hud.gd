@@ -35,6 +35,7 @@ var _state_label: Label = null                # 状态提示（LEVEL_UP/PAUSED/G
 var _toast_label: Label = null                # 波次 toast（果冻 pop + lore 文案）
 var _toast_left: float = 0.0                  # toast 剩余展示时长（raw 通道）
 var _pause_btn: Button = null                 # 暂停按钮（▶⏸ 图形化贴纸；仅 PLAYING 态显示）
+var _badge_cap: Label = null                  # 波次徽章顶标（地图名或 WAVE）
 
 var kills: int = 0
 var wave: int = 0
@@ -93,15 +94,16 @@ func refresh_stats() -> void:
 			var s_ready: bool = player.get("shield_ready")
 			var s_timer: float = player.get("shield_timer")
 			var s_pct := 1.0 if s_ready else clampf(1.0 - s_timer / maxf(s_interval, 0.01), 0.05, 1.0)
-			_shield_fill.size = Vector2(maxf((148.0 - 6.0) * s_pct, 8.0), 36.0 - 6.0)
+			_shield_fill.size = Vector2(maxf((148.0 - 38.0) * s_pct, 8.0), 36.0 - 6.0)
 			_shield_fill_style.bg_color = PopPalette.PLAYER.lerp(
 				PopPalette.INK_SOFT, 0.35 * (1.0 - s_pct)) if not s_ready else PopPalette.PLAYER
 		var sig := _compute_build_sig()
 		if sig != _build_sig:
 			_build_sig = sig
 			_refresh_build()
-	_wave_label.text = ("%s · 第 %d 波" % [map_name, wave]) if map_name != "" \
-		else "第 %d 波" % wave
+	if _badge_cap != null:
+		_badge_cap.text = map_name if map_name != "" else "WAVE"
+	_wave_label.text = "第 %d 波" % wave
 	if _gold_label != null and player != null and is_instance_valid(player):
 		_gold_label.text = "◎ %d" % int(player.get("gold"))
 	if _skill_btn != null and player != null and is_instance_valid(player):
@@ -438,6 +440,7 @@ func _build_ui() -> void:
 	badge_cap.position = Vector2(0.0, 22.0)
 	badge_cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge.add_child(badge_cap)
+	_badge_cap = badge_cap
 	_wave_label = StickerTheme.label_sticker(Label.new(), 26, PopPalette.INK, 0, Color.WHITE, true)
 	_wave_label.name = "WaveText"
 	_wave_label.text = "第 0 波"

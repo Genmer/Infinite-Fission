@@ -52,6 +52,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_p2_daily()
 	_test_p2_characters()
 	_test_settings()
+	_test_combat_counterplay()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -1608,6 +1609,126 @@ func _make_killed_enemy_stub(p_boss: bool) -> Enemy:
 		d.tags = GameConst.TAG_BOSS
 	e.spawn(d, 1, 0)
 	return e
+
+
+func _test_combat_counterplay() -> void:
+	print("── 敌人对抗机制与全向战场 ──")
+	# 1. 全向立体出兵抽样验证
+	var spawner: EnemySpawner = _gl.spawner
+	var top_count := 0
+	var left_count := 0
+	var right_count := 0
+	var bottom_count := 0
+	for i in range(200):
+		var pos := spawner._pick_spawn_pos()
+		if pos.y < 0.0:
+			top_count += 1
+		elif pos.x < 0.0:
+			left_count += 1
+		elif pos.x > 720.0:
+			right_count += 1
+		elif pos.y > 1280.0:
+			bottom_count += 1
+	_check("全向出兵：顶部兵线有刷新 (>30 次)", top_count > 30)
+	_check("全向出兵：左侧横向有刷新 (>10 次)", left_count > 10)
+	_check("全向出兵：右侧横向有刷新 (>10 次)", right_count > 10)
+	_check("全向出兵：底部后方包抄有刷新 (>30 次)", bottom_count > 30)
+
+	# 2. 重装防暴盾机制（正面格挡 80%，背后弱点 140%）
+	var bastion_data: EnemyData = _gl.registry.get_enemy(&"E3_bastion")
+	var grunt_data: EnemyData = _gl.registry.get_enemy(&"E1_grunt")
+	_check("数据就绪：E3_bastion 存在", bastion_data != null)
+
+	var enemy_bastion := (_gl.pools[&"enemy"] as EnemyPool).acquire() as Enemy
+	enemy_bastion.spawn(bastion_data, 1, 0)
+	_check("重装判定：bastion 具有盾牌 (has_shield)", enemy_bastion.has_shield())
+
+	# 设置盾面朝向向下 (0, 1)
+	enemy_bastion._shield_dir = Vector2.DOWN
+	enemy_bastion.global_position = Vector2(360.0, 600.0)
+
+	# 正面攻击测试：攻击来自正下方 (360, 700)，与盾向一致 (dot > 0.35)
+	var res_front := DamageResult.new()
+	res_front.final_value = 100.0
+	res_front.pos = Vector2(360.0, 700.0)
+	var hp_before := enemy_bastion.hp
+	enemy_bastion.take_result(res_front)
+	var dealt_front := hp_before - enemy_bastion.hp
+	_check("正面格挡：100 点伤害仅扣 20 点血 (80% 减伤)", absf(dealt_front - 20.0) < 0.01)
+	_check("正面格挡：DamageResult 终值同步缩小为 20", absf(res_front.final_value - 20.0) < 0.01)
+
+	# 背后背刺测试：攻击来自正上方 (360, 500)，绕到背后 (dot < -0.3)
+	var res_back := DamageResult.new()
+	res_back.final_value = 100.0
+	res_back.pos = Vector2(360.0, 500.0)
+	hp_before = enemy_bastion.hp
+	enemy_bastion.take_result(res_back)
+	var dealt_back := hp_before - enemy_bastion.hp
+	_check("弱点背刺：100 点伤害暴击造成 140 点血 (140% 伤害)", absf(dealt_back - 140.0) < 0.01)
+	_check("弱点背刺：标记为暴击 (is_crit = true)", res_back.is_crit)
+
+	# 普通怪对照测试：没有盾牌，直接吃 100% 伤害
+	var enemy_grunt := (_gl.pools[&"enemy"] as EnemyPool).acquire() as Enemy
+	enemy_grunt.spawn(grunt_data, 1, 0)
+	enemy_grunt.max_hp = 500.0
+	enemy_grunt.hp = 500.0
+	_check("对照验证：grunt 无盾牌 (!has_shield)", not enemy_grunt.has_shield())
+	var res_grunt := DamageResult.new()
+	res_grunt.final_value = 100.0
+	res_grunt.pos = Vector2(360.0, 700.0)
+	hp_before = enemy_grunt.hp
+	enemy_grunt.take_result(res_grunt)
+	var dealt_grunt := hp_before - enemy_grunt.hp
+	_check("对照验证：普通怪正面命中无减免 (扣 100 点血)", absf(dealt_grunt - 100.0) < 0.01)
+
+	# 3. 刺客红线蓄力冲刺机制
+	var dart_data: EnemyData = _gl.registry.get_enemy(&"E2_runner")
+	var enemy_dart := (_gl.pools[&"enemy"] as EnemyPool).acquire() as Enemy
+	enemy_dart.spawn(dart_data, 1, 0)
+	_check("刺客就位：dart 实例生成", enemy_dart._kind == &"dart")
+
+	# 模拟进入蓄力阶段
+	enemy_dart._dash_state = 1
+	enemy_dart._dash_left = 0.5
+	var dummy_player := Node2D.new()
+	dummy_player.global_position = Vector2(360.0, 1000.0)
+	enemy_dart.global_position = Vector2(360.0, 400.0)
+	enemy_dart._tick_dart_chase(0.016, dummy_player, 1.0)
+	_check("红线预警：蓄力期间激光走廊可见 (_telegraph_line.visible)", enemy_dart._telegraph_line != null and enemy_dart._telegraph_line.visible)
+	_check("红线预警：激光走廊至少包含 2 个端点", enemy_dart._telegraph_line.points.size() >= 2)
+
+	# 模拟蓄力完成进入冲刺阶段
+	enemy_dart._dash_left = 0.001
+	enemy_dart._tick_dart_chase(0.016, dummy_player, 1.0)
+	_check("极速突刺：冲刺阶段激光走廊隐去", enemy_dart._telegraph_line != null and not enemy_dart._telegraph_line.visible)
+	_check("极速突刺：冲刺速度倍率为 2.6x 高速", absf(Enemy.DASH_SPEED_MULT - 2.6) < 0.01)
+
+	# 4. 精英迫击炮轰炸机制
+	var elite_grunt := (_gl.pools[&"enemy"] as EnemyPool).acquire() as Enemy
+	elite_grunt.spawn(grunt_data, 1, GameConst.TAG_ELITE)
+	_check("精英标识：带 TAG_ELITE", elite_grunt.is_elite())
+	_check("迫击机制：初始轰炸倒计时就位", elite_grunt._mortar_timer > 0.0)
+
+	# 触发迫击炮生成（挂载至 parent 容器）
+	elite_grunt._launch_mortar(Vector2(360.0, 800.0))
+	var hazard_found := false
+	var parent_node := elite_grunt.get_parent()
+	if parent_node != null:
+		for child in parent_node.get_children():
+			if child is Enemy.MortarHazard:
+				hazard_found = true
+				_check("迫击炮弹：轰炸区域节点就位", child.radius >= 60.0)
+				_check("迫击炮弹：延迟引爆时间 >= 1.0s", child.fuse >= 1.0)
+				child.queue_free()
+				break
+	_check("迫击发射：成功生成 MortarHazard 危险圈", hazard_found)
+
+	# 清理实例
+	dummy_player.free()
+	_gl.pools[&"enemy"].release(enemy_bastion)
+	_gl.pools[&"enemy"].release(enemy_grunt)
+	_gl.pools[&"enemy"].release(enemy_dart)
+	_gl.pools[&"enemy"].release(elite_grunt)
 
 
 # ── 工具 ─────────────────────────────────────────────────────────
