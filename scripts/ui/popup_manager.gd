@@ -15,12 +15,47 @@ const MAX_ACTIVE: int = 80                    # 同屏上限（超限合并/丢�
 var _merge_registry: Dictionary = {}
 var _active_list: Array[DamagePopup] = []
 var _dropped_count: int = 0                   # 满池且无可合并时的丢弃计数
+var _rxn_cooldowns: Dictionary = {}           # target_uid -> float 冷却（防高频 AOE 刷屏，0.2s）
+
+# 反应名牌文本与专属色板
+const REACTION_NAMES: Dictionary = {
+	GameConst.ReactionType.RXN_FIR_ICE: "碎裂！",
+	GameConst.ReactionType.RXN_FIR_LTG: "过载！",
+	GameConst.ReactionType.RXN_ICE_LTG: "超导 · 削抗！",
+	GameConst.ReactionType.RXN_WAT_ICE: "冻结！",
+	GameConst.ReactionType.RXN_WAT_LTG: "导电！",
+	GameConst.ReactionType.RXN_WAT_FIR: "汽爆！",
+}
+
+const REACTION_COLORS: Dictionary = {
+	GameConst.ReactionType.RXN_FIR_ICE: Color(1.0, 0.55, 0.3),       # 碎裂: 橙红
+	GameConst.ReactionType.RXN_FIR_LTG: Color(1.0, 0.85, 0.25),      # 过载: 金黄
+	GameConst.ReactionType.RXN_ICE_LTG: Color(0.85, 0.65, 1.0),      # 超导: 电浆紫
+	GameConst.ReactionType.RXN_WAT_ICE: Color(0.5, 0.85, 1.0),       # 冻结: 晶蓝
+	GameConst.ReactionType.RXN_WAT_LTG: Color(0.7, 0.6, 1.0),        # 导电: 雷电紫白
+	GameConst.ReactionType.RXN_WAT_FIR: Color(0.95, 0.95, 1.0),      # 汽爆: 雾气白
+}
 
 
 func setup(p_pool: PopupPool) -> void:
 	# 注入池 + 事件订阅（仅 Node 派生类，E-12 ✓）
 	popup_pool = p_pool
 	EventBus.damage_resolved.connect(on_damage_resolved)
+	EventBus.reaction_triggered.connect(on_reaction_triggered)
+
+
+func on_reaction_triggered(p_rxn: int, p_pos: Vector2, p_target_uid: int) -> void:
+	# 剧变反应名牌浮字（碎裂/过载/超导/冻结/导电/汽爆专属彩色汉字提示）
+	if not REACTION_NAMES.has(p_rxn):
+		return
+	if p_target_uid > 0:
+		var cd: float = float(_rxn_cooldowns.get(p_target_uid, 0.0))
+		if cd > 0.0:
+			return
+		_rxn_cooldowns[p_target_uid] = 0.2
+	var text: String = REACTION_NAMES[p_rxn]
+	var col: Color = REACTION_COLORS.get(p_rxn, Color(0.55, 0.85, 1.0))
+	show_text_popup(p_pos + Vector2(0.0, -22.0), text, col)
 
 
 func on_damage_resolved(p_result: DamageResult) -> void:
@@ -52,9 +87,24 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 	_merge_registry[uid] = {"popup": popup, "window_left": merge_window}
 	active_popups = _active_list.size()
 
+	# 增幅名牌浮字（融化/蒸发汉字名牌，与 ‼ 保持协同）
+	if p_result.pool_breakdown.has(&"amplify") and uid > 0:
+		var cd: float = float(_rxn_cooldowns.get(uid, 0.0))
+		if cd <= 0.0:
+			_rxn_cooldowns[uid] = 0.2
+			var amp_text := "增幅！"
+			var amp_col := Color(1.0, 0.8, 0.3)
+			if p_result.element == GameConst.Element.ICE:
+				amp_text = "蒸发！"
+				amp_col = Color(0.4, 0.8, 1.0)
+			elif p_result.element == GameConst.Element.FIR:
+				amp_text = "融化！"
+				amp_col = Color(1.0, 0.5, 0.2)
+			show_text_popup(p_result.pos + Vector2(0.0, -22.0), amp_text, amp_col)
 
-func show_text_popup(p_pos: Vector2, p_text: String) -> void:
-	# v0.7.0 文本跳字通道（金币狂欢 +N / Boss 芯片掉落提示）：target_uid=0 入 _active_list
+
+func show_text_popup(p_pos: Vector2, p_text: String, p_color: Color = Color.TRANSPARENT) -> void:
+	# v0.7.0 文本跳字通道（金币狂欢 +N / Boss 芯片掉落提示 / 反应名牌）：target_uid=0 入 _active_list
 	# 走既有 tick/归还；不入合并注册表（文本不参与数值合并）。popup_manager 未就绪 → 静默跳过。
 	if popup_pool == null:
 		return
@@ -66,7 +116,7 @@ func show_text_popup(p_pos: Vector2, p_text: String) -> void:
 		_dropped_count += 1
 		return
 	var popup := node as DamagePopup
-	popup.show_popup(p_pos, 0.0, GameConst.PopupStyle.NORMAL, 0, p_text)
+	popup.show_popup(p_pos, 0.0, GameConst.PopupStyle.NORMAL, 0, p_text, "", p_color)
 	_active_list.append(popup)
 	active_popups = _active_list.size()
 
@@ -90,6 +140,13 @@ func tick(p_raw_delta: float) -> void:
 		entry["window_left"] = float(entry["window_left"]) - p_raw_delta
 		if float(entry["window_left"]) <= 0.0:
 			_merge_registry.erase(uid)
+	# 反应名牌冷却衰减
+	for uid_key in _rxn_cooldowns.keys():
+		var cd_val: float = float(_rxn_cooldowns[uid_key]) - p_raw_delta
+		if cd_val <= 0.0:
+			_rxn_cooldowns.erase(uid_key)
+		else:
+			_rxn_cooldowns[uid_key] = cd_val
 	active_popups = _active_list.size()
 
 
@@ -109,6 +166,7 @@ func clear_all() -> void:
 			popup_pool.release(popup)
 		idx -= 1
 	_merge_registry.clear()
+	_rxn_cooldowns.clear()
 	active_popups = 0
 
 

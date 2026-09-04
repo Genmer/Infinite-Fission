@@ -164,7 +164,7 @@ func _rebuild_cards() -> void:
 		desc_label.add_theme_font_size_override("font_size", 13)
 		desc_label.position = Vector2(12.0, 52.0)
 		desc_label.size = Vector2(CARD_SIZE.x - 24.0, CARD_SIZE.y - 64.0)
-		desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 		desc_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		btn.add_child(desc_label)
 		_card_buttons.append(btn)

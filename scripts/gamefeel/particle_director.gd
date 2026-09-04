@@ -93,12 +93,18 @@ func apply_placeholder_material(p_emitter: GPUParticles2D) -> void:
 	if p_emitter != null and _shared_material != null:
 		p_emitter.process_material = _shared_material
 		if p_emitter.texture == null:
-			# 占位粒子贴图：4×4 白点（程序化；美术后续替换）
+			# 占位粒子贴图：8×8 柔和圆形光点（程序化）
 			p_emitter.texture = _placeholder_texture()
 
 
 static func _placeholder_texture() -> ImageTexture:
-	# 共享静态占位贴图（程序化生成）
-	var img := Image.create(4, 4, false, Image.FORMAT_RGBA8)
-	img.fill(Color(1.0, 0.9, 0.6, 1.0))
+	# 共享静态占位贴图：8×8 程序化抗锯齿圆形柔和光点
+	var sz := 8
+	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
+	var c := float(sz - 1) * 0.5
+	for y in range(sz):
+		for x in range(sz):
+			var dist := Vector2(float(x) - c, float(y) - c).length() / (c + 0.2)
+			var a := clampf(1.0 - dist * dist, 0.0, 1.0)
+			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a))
 	return ImageTexture.create_from_image(img)

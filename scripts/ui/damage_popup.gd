@@ -41,11 +41,15 @@ func _ready() -> void:
 	visible = false
 
 
+var _custom_color: Color = Color.TRANSPARENT
+
+
 func show_popup(p_pos: Vector2, p_value: float, p_style: int, p_target_uid: int = 0,
-		p_text: String = "", p_suffix: String = "") -> void:
+		p_text: String = "", p_suffix: String = "", p_color: Color = Color.TRANSPARENT) -> void:
 	# 池取出后初始化 + 动画启动。v0.7.0 增可选第 5 参 p_text（非空 = 文本模式——
 	# 金币狂欢/Boss 芯片提示；默认空串走数值路径，零影响）。
 	# v1.1.0 增可选第 6 参 p_suffix（数值模式后缀——amplify 增幅 ‼；merge 重渲染保留）。
+	# 增可选第 7 参 p_color（文本名牌专属色；默认 TRANSPARENT 走既有 style 配色）。
 	position = p_pos
 	_rise_from = p_pos
 	merged_value = maxf(p_value, 0.0)
@@ -53,6 +57,7 @@ func show_popup(p_pos: Vector2, p_value: float, p_style: int, p_target_uid: int 
 	target_uid = p_target_uid
 	_text = p_text
 	_suffix = p_suffix
+	_custom_color = p_color
 	_life_left = LIFE_TIME
 	is_active = true
 	_refresh_label()
@@ -88,6 +93,7 @@ func _reset_state() -> void:
 	target_uid = 0
 	_text = ""
 	_suffix = ""
+	_custom_color = Color.TRANSPARENT
 	is_active = false
 	_life_left = 0.0
 	modulate.a = 1.0
@@ -103,8 +109,20 @@ func _refresh_label() -> void:
 		return
 	var crit := style == GameConst.PopupStyle.CRIT
 	_label.text = _text if not _text.is_empty() else str(int(round(merged_value))) + _suffix
-	_label.self_modulate = STYLE_COLORS.get(style, Color.WHITE)
-	_label.scale = Vector2.ONE * (1.35 if crit else 1.0)
-	_label.add_theme_constant_override("outline_size", 4 if crit else 0)
-	_label.add_theme_color_override("font_outline_color",
-		Color(0.0, 0.0, 0.0, 0.9) if crit else Color(0.0, 0.0, 0.0, 0.0))
+	if _custom_color != Color.TRANSPARENT:
+		_label.self_modulate = _custom_color
+	else:
+		_label.self_modulate = STYLE_COLORS.get(style, Color.WHITE)
+	var is_badge := not _text.is_empty() and _custom_color != Color.TRANSPARENT
+	if crit:
+		_label.scale = Vector2.ONE * 1.35
+		_label.add_theme_constant_override("outline_size", 4)
+		_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.9))
+	elif is_badge:
+		_label.scale = Vector2.ONE * 1.15
+		_label.add_theme_constant_override("outline_size", 3)
+		_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.85))
+	else:
+		_label.scale = Vector2.ONE
+		_label.add_theme_constant_override("outline_size", 0)
+		_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.0))

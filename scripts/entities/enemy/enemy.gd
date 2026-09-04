@@ -71,6 +71,7 @@ var _fuse_left: float = 0.0                   # 引爆倒计时（game_delta 通
 var _fuse_ring: FuseRing = null               # 警示圈（程序化绘制）
 var _ring: ElementRing = null                 # v0.7.0 U8：附着环（FIR/ICE/LTG 扇区弧）
 var _ring_refresh_left: float = 0.0           # v0.7.0 U8：附着环 15Hz 降频相位
+var _frost_shell: FrostShell = null           # 冻结晶莹冰壳（程序化绘制）
 
 # ── 内部运行时 ─────────────────────────────────────────────────
 var _hit_area: Area2D = null                  # 接触伤害判定（低频通道）
@@ -123,6 +124,10 @@ func _ready() -> void:
 	_shield_ring.name = "ShieldRing"
 	_shield_ring.visible = false
 	add_child(_shield_ring)
+	_frost_shell = FrostShell.new()
+	_frost_shell.name = "FrostShell"
+	_frost_shell.visible = false
+	add_child(_frost_shell)
 	visible = false                            # 池内不可见（取出 spawn 后激活）
 
 
@@ -180,7 +185,11 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	if _ring != null:                          # v0.7.0 U8：附着环半径 = hitbox + 7px
 		_ring.radius = hitbox_r + 7.0
 		_ring.visible = false
+		_ring.reactable_mask = 0
 		_ring.set_gauges([0.0, 0.0, 0.0, 0.0, 0.0])
+	if _frost_shell != null:
+		_frost_shell.radius = hitbox_r + 4.0
+		_frost_shell.visible = false
 	# v1.2.0 元素盾（A11 §5）：data.shield 非空 → 盾血 = max_hp × capacity_ratio（max_hp
 	# 波次成长定型后口径）+ 盾环激活；空 → 三字段清零（池复用防残留）
 	if not data.shield.is_empty():
@@ -219,6 +228,11 @@ func tick(p_game_delta: float) -> void:
 	# v1.2.0 冻结全停判定（A11 §3：移动 sf=0 既有 + RANGED/Boss 行为门；
 	# 同一 freeze_timer 通道——既有 ICE 满槽冻结同步升级全停）
 	var frozen := elemental != null and elemental.freeze_timer > 0.0
+	if _frost_shell != null:
+		_frost_shell.visible = frozen
+		if frozen:
+			_frost_shell.radius = hitbox_r + 4.0
+			_frost_shell.tick(p_game_delta)
 	_tick_element_ring(p_game_delta)           # v0.7.0 U8：附着环驱动（15Hz 降频）
 	if _shield_ring != null:
 		_shield_ring.tick(p_game_delta)        # v1.2.0：盾环驱动（破盾 flash 余韵/隐藏）
@@ -597,21 +611,57 @@ const RING_REFRESH_HZ := 15.0                  # 附着环刷新频率（降频�
 func _tick_element_ring(p_game_delta: float) -> void:
 	# max(gauges[1..4]) > 1.0 → 显示 + 15Hz 降频 set_gauges/queue_redraw；否则隐藏（零开销门控；
 	# 审查 Q4：无附着路径零分配——不再每 tick 构造临时数组；v1.2.0 门 >=5 / peak 含 WAT，A11 §2）
-	if _ring == null:
-		return
-	if elemental != null and elemental.gauges.size() >= 5:
-		var gauges := elemental.gauges
-		var peak := maxf(gauges[1], maxf(gauges[2], maxf(gauges[3], gauges[4])))
-		if peak > 1.0:
-			if not _ring.visible:
-				_ring.visible = true
-			_ring_refresh_left -= p_game_delta
-			if _ring_refresh_left <= 0.0:
-				_ring_refresh_left = 1.0 / RING_REFRESH_HZ
-				_ring.set_gauges(gauges)
-			return
-	if _ring.visible:
-		_ring.visible = false
+	if _ring != null:
+		if elemental != null and elemental.gauges.size() >= 5:
+			var gauges := elemental.gauges
+			var peak := maxf(gauges[1], maxf(gauges[2], maxf(gauges[3], gauges[4])))
+			if peak > 1.0:
+				if not _ring.visible:
+					_ring.visible = true
+				_ring.tick(p_game_delta)
+				_ring_refresh_left -= p_game_delta
+				if _ring_refresh_left <= 0.0:
+					_ring_refresh_left = 1.0 / RING_REFRESH_HZ
+					_ring.set_gauges(gauges)
+					_ring.reactable_mask = _calc_reactable_mask()
+			elif _ring.visible:
+				_ring.visible = false
+		elif _ring.visible:
+			_ring.visible = false
+	if _shield_ring != null and _shield_ring.visible:
+		_shield_ring.is_countered = _calc_shield_countered()
+
+
+func _calc_reactable_mask() -> int:
+	var p := _player()
+	if p == null or elemental == null or elemental.gauges.size() < 5:
+		return 0
+	var w_counts := ElementalSystem.weapon_element_counts(p)
+	var mask := 0
+	for i in range(4):
+		var el := i + 1
+		if elemental.gauges[el] > 1.0:
+			for p_el in range(GameConst.Element.FIR, GameConst.Element.WAT + 1):
+				if p_el != el and w_counts[p_el] > 0:
+					mask |= (1 << i)
+					break
+	return mask
+
+
+func _calc_shield_countered() -> bool:
+	if shield_element < 0:
+		return false
+	var p := _player()
+	if p == null:
+		return false
+	var w_counts := ElementalSystem.weapon_element_counts(p)
+	var counter_el := -1
+	match shield_element:
+		GameConst.Element.FIR: counter_el = GameConst.Element.ICE
+		GameConst.Element.ICE: counter_el = GameConst.Element.FIR
+		GameConst.Element.LTG: counter_el = GameConst.Element.WAT
+		GameConst.Element.WAT: counter_el = GameConst.Element.LTG
+	return counter_el >= 0 and w_counts[counter_el] > 0
 
 
 func ring_visible() -> bool:
@@ -673,7 +723,10 @@ func _reset_state() -> void:
 		_fuse_ring.progress = 0.0
 	if _ring != null:
 		_ring.visible = false                    # v0.7.0 U8：附着环清零
+		_ring.reactable_mask = 0
 		_ring.set_gauges([0.0, 0.0, 0.0, 0.0, 0.0])
+	if _frost_shell != null:
+		_frost_shell.visible = false
 	_ring_refresh_left = 0.0
 	_flash_left = 0.0
 	_fade_left = 0.0
@@ -686,9 +739,10 @@ func _player() -> Node2D:
 	# 玩家引用缓存（组查找；包 4 集成期可改为显式注入——当前零接线成本）
 	if _player_cache == null or not is_instance_valid(_player_cache):
 		_player_cache = null
-		var tree := get_tree()
-		if tree != null:
-			_player_cache = tree.get_first_node_in_group(&"player") as Node2D
+		if is_inside_tree():
+			var tree := get_tree()
+			if tree != null:
+				_player_cache = tree.get_first_node_in_group(&"player") as Node2D
 	return _player_cache
 
 
@@ -780,7 +834,9 @@ class ElementRing:
 	const GAUGE_MAX := 100.0                     # ElementalState.GAUGE_MAX 同值（显示归一）
 
 	var radius: float = 21.0
+	var reactable_mask: int = 0                  # 连携引爆位掩码（bit0 FIR, bit1 ICE, bit2 LTG, bit3 WAT）
 	var _gauges: Array[float] = [0.0, 0.0, 0.0, 0.0]  # FIR/ICE/LTG/WAT 快照（v1.2.0 4 槽）
+	var _pulse_phase: float = 0.0
 
 	func set_gauges(p: Array[float]) -> void:
 		# 快照（p 为 ElementalState 5 槽 gauges——取 [1..4]）+ 重绘
@@ -795,16 +851,37 @@ class ElementRing:
 		var idx := clampi(p_element - 1, 0, 3)
 		return clampf(_gauges[idx] / GAUGE_MAX, 0.0, 1.0)
 
+	func tick(p_delta: float) -> void:
+		_pulse_phase += p_delta
+		if reactable_mask != 0:
+			queue_redraw()
+
 	func _draw() -> void:
 		# 每元素 90° 扇区弧：起点 = −PI/2 + idx×90°，扫角 = 90°×clamp(gauge/100)；
 		# 颜色 FIR 橙 / ICE 蓝 / LTG 紫 / WAT 水青，线宽 3，alpha 0.9
+		var pulse := 0.5 + 0.5 * sin(_pulse_phase * 6.0)
 		for i in range(4):
 			var frac := clampf(_gauges[i] / GAUGE_MAX, 0.0, 1.0)
 			if frac <= 0.0:
 				continue
 			var start := -PI / 2.0 + float(i) * SECTOR
-			draw_arc(Vector2.ZERO, radius, start, start + SECTOR * frac, 24,
-				RING_COLORS[i], 3.0, true)
+			var sweep := SECTOR * frac
+			var base_col: Color = RING_COLORS[i]
+			var is_reactable := (reactable_mask & (1 << i)) != 0
+
+			if is_reactable:
+				# 可引爆连携预提示：外侧柔和呼吸外晕 + 弧尖微光就绪点
+				var glow_a := 0.18 + 0.22 * pulse
+				var glow_col := Color(base_col.r, base_col.g, base_col.b, glow_a)
+				draw_arc(Vector2.ZERO, radius, start, start + sweep, 24, glow_col, 6.5, true)
+				var bright_col := Color(minf(base_col.r * 1.15, 1.0), minf(base_col.g * 1.15, 1.0), minf(base_col.b * 1.15, 1.0), 0.95)
+				draw_arc(Vector2.ZERO, radius, start, start + sweep, 24, bright_col, 3.5, true)
+				var tip_angle := start + sweep
+				var tip_pos := Vector2(cos(tip_angle), sin(tip_angle)) * radius
+				var dot_r := 2.0 + 1.2 * pulse
+				draw_circle(tip_pos, dot_r, Color(1.0, 1.0, 1.0, 0.8 + 0.2 * pulse))
+			else:
+				draw_arc(Vector2.ZERO, radius, start, start + sweep, 24, base_col, 3.0, true)
 
 
 # ── v1.2.0 元素盾环（A11 §5；程序化占位绘制，镜像 FuseRing/ElementRing） ──
@@ -824,6 +901,8 @@ class ShieldRing:
 	var _element: int = 0                       # Element 枚举（setup 钳 0..4）
 	var _progress: float = 1.0                  # 盾血余量 0~1
 	var _flash_left: float = 0.0                # 破盾白闪剩余
+	var is_countered: bool = false              # 玩家持克制属性标志
+	var _pulse_phase: float = 0.0
 
 	func setup(p_element: int, p_radius: float) -> void:
 		# 赋盾初始化（spawn 期）：元素 + 半径（hitbox_r + 11.0）+ 满进度 + 清 flash
@@ -831,6 +910,8 @@ class ShieldRing:
 		radius = p_radius
 		_progress = 1.0
 		_flash_left = 0.0
+		is_countered = false
+		_pulse_phase = 0.0
 		queue_redraw()
 
 	func set_progress(p: float) -> void:
@@ -848,10 +929,13 @@ class ShieldRing:
 
 	func tick(p_delta: float) -> void:
 		# flash 递减；flash 尽且盾空 → 隐藏（Enemy.tick 驱动）
+		_pulse_phase += p_delta
 		if _flash_left > 0.0:
 			_flash_left = maxf(_flash_left - p_delta, 0.0)
 			if _flash_left <= 0.0 and _progress <= 0.0:
 				visible = false
+			queue_redraw()
+		elif is_countered:
 			queue_redraw()
 
 	func _draw() -> void:
@@ -863,5 +947,37 @@ class ShieldRing:
 		if _progress > 0.0:
 			draw_arc(Vector2.ZERO, radius, -PI / 2.0, -PI / 2.0 + TAU * _progress, 48,
 				col, 3.0, true)
+			# 若被克制：在盾环外侧绘制微弱金色克制脉冲弧（提示弱点集火）
+			if is_countered:
+				var pulse := 0.5 + 0.5 * sin(_pulse_phase * 7.0)
+				var counter_col := Color(1.0, 0.88, 0.3, 0.25 + 0.35 * pulse)
+				draw_arc(Vector2.ZERO, radius + 3.0, -PI / 2.0, -PI / 2.0 + TAU * _progress, 48,
+					counter_col, 1.8, true)
 		if _flash_left > 0.0:
 			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 1.0), 3.0, true)
+
+
+# ── 冻结冰晶外壳（程序化占位绘制；受 freeze_timer 驱动） ──────────
+class FrostShell:
+	extends Node2D
+
+	var radius: float = 16.0
+	var _pulse_phase: float = 0.0
+
+	func tick(p_delta: float) -> void:
+		_pulse_phase += p_delta
+		queue_redraw()
+
+	func _draw() -> void:
+		# 程序化六边形晶莹冰棱外框 + 淡天蓝半透明填充
+		var pts: PackedVector2Array = []
+		var sides := 6
+		for i in range(sides):
+			var a := float(i) * TAU / float(sides)
+			var r := radius * (1.12 if (i % 2 == 0) else 0.92)
+			pts.append(Vector2(cos(a), sin(a)) * r)
+		draw_colored_polygon(pts, Color(0.4, 0.8, 1.0, 0.2))
+		pts.append(pts[0])
+		draw_polyline(pts, Color(0.65, 0.9, 1.0, 0.85), 2.0, true)
+		draw_line(pts[0] * 0.7, pts[3] * 0.7, Color(0.8, 0.95, 1.0, 0.5), 1.2, true)
+		draw_line(pts[1] * 0.7, pts[4] * 0.7, Color(0.8, 0.95, 1.0, 0.5), 1.2, true)
