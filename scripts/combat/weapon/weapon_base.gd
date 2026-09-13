@@ -281,6 +281,14 @@ func _player_rof_mult() -> float:
 	return maxf(float(player.get("rof_mult")) * float(player.get("map_rof_mult")), 0.1)
 
 
+func knockback_force() -> float:
+	# 武器击退力（R7：击退权移交霰弹枪——data.ballistic.knockback；0 = 无击退。
+	# 质量分级/冲量衰减/击退小字均在 Enemy.knockback 内统一处理）
+	if data == null:
+		return 0.0
+	return float(data.ballistic.get("knockback", 0.0))
+
+
 func _proj_spd_mult() -> float:
 	# AFF_PROJ_SPD（add_spd 池）弹速 ×(1+Σ)——弹道/自导两形态开火参数共用
 	#（2026-09-13 死卡接线：此前该池全工程零消费）

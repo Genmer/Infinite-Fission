@@ -15,8 +15,12 @@ var arc_slash: ArcSlash = null                # 周期挥斩实体（窗口期�
 var orbs_bonus: int = 0                       # 谐振轨道词条加成（MEC_ORBIT_LINK）
 
 
+var _enemy_bullet_grid: SpaceGrid = null      # 敌弹网格（消弹查询——R7 接线，此前从未注入）
+
+
 func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
 	super(p_data, p_player, p_deps)
+	_enemy_bullet_grid = p_deps.get("enemy_bullet_grid")
 	orbs_bonus = 0
 	orbit_field = null
 	arc_slash = null
@@ -89,7 +93,7 @@ func _ensure_arc_slash() -> void:
 	add_child(arc_slash)
 	arc_slash.weapon = self
 	arc_slash.enemy_grid = enemy_grid
-	arc_slash.enemy_bullet_grid = null         # 敌弹网格由 GameLoop 集成期注入（帧序③双网格）
+	arc_slash.enemy_bullet_grid = _enemy_bullet_grid   # R7 接线：消弹查询（此前恒 null = W9 消弹死功能）
 	arc_slash.spawn({
 		"slash_radius": float(data.melee.get("slash_radius", 150.0)),
 		"arc_deg": _leveled_param("arc_deg", float(data.melee.get("arc_deg", 120.0))),

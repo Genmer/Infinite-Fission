@@ -34,6 +34,9 @@ const DEVOUR_LIFE := 0.3                      # 吞噬内聚时长 s
 const DEVOUR_SPARKS := 4                      # 每次内卷火苗数（外圈 → 命中点）
 const DEVOUR_R0 := 26.0                       # 火苗起始半径 px
 const DEVOUR_CD := 0.09                       # 全局节流（激光每跳同源多触发的观感上限）
+const KNOCKTEXT_COUNT := 8                    # 击退小字并发池（R7：强击退提示）
+const KNOCKTEXT_LIFE := 0.55                  # 击退小字时长 s
+const KNOCKTEXT_CD := 0.12                    # 击退小字全局节流（多目标同帧去 spam）
 
 var _bolts: Array[Dictionary] = []            # [{root, core, glow, flash, left}]（池条目）
 var _bolt_idx: int = 0
@@ -54,6 +57,9 @@ var _impact_idx: int = 0
 var _devours: Array[Dictionary] = []          # [{flash, sparks[], vels[], left}]（吞噬内聚池）
 var _devour_idx: int = 0
 var _devour_cd: float = 0.0                   # 吞噬特效全局节流计时
+var _ktexts: Array[Dictionary] = []           # [{label, vel_y, left}]（击退小字池）
+var _ktext_idx: int = 0
+var _ktext_cd: float = 0.0                    # 击退小字节流
 
 
 func _ready() -> void:
@@ -67,7 +73,9 @@ func _ready() -> void:
 	_build_glows()
 	_build_impacts()
 	_build_devours()
+	_build_knocktexts()
 	EventBus.chain_lightning.connect(_on_chain_lightning)
+	EventBus.knockback_hit.connect(_on_knockback_hit)
 	EventBus.elemental_dot_fired.connect(_on_dot_fired)
 	EventBus.reaction_triggered.connect(_on_reaction_triggered)
 	EventBus.shield_blocked.connect(_on_shield_blocked)
@@ -85,6 +93,7 @@ func tick(p_raw_delta: float) -> void:
 	_tick_glows(p_raw_delta)
 	_tick_impacts(p_raw_delta)
 	_tick_devours(p_raw_delta)
+	_tick_knocktexts(p_raw_delta)
 
 
 # ── 感电连锁主锯齿闪电（签名特效） ────────────────────────────────
@@ -581,3 +590,45 @@ func _tick_devours(p_raw_delta: float) -> void:
 			sp.position += vels[j] * p_raw_delta
 			sp.scale = sp.scale * maxf(1.0 - 2.5 * p_raw_delta, 0.25)   # 卷入即缩（被吞）
 			sp.modulate.a = clampf(left / DEVOUR_LIFE * 1.5, 0.0, 1.0)
+
+
+# ── 击退小字（强击退生效提示——R7 用户反馈「击退小字蹦出来」） ──────────
+func _build_knocktexts() -> void:
+	for i in range(KNOCKTEXT_COUNT):
+		var lb := Label.new()
+		lb.name = "KnockText%d" % i
+		StickerTheme.label_sticker(lb, 15, PopPalette.ENEMY, 3, Color.WHITE, true)
+		lb.text = "击退!"
+		lb.visible = false
+		lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(lb)
+		_ktexts.append({"label": lb, "left": 0.0})
+
+
+func _on_knockback_hit(p_pos: Vector2) -> void:
+	if _ktext_cd > 0.0:
+		return
+	_ktext_cd = KNOCKTEXT_CD
+	var slot: Dictionary = _ktexts[_ktext_idx % KNOCKTEXT_COUNT]
+	_ktext_idx += 1
+	var lb: Label = slot["label"]
+	lb.position = p_pos + Vector2(randf_range(-10.0, 10.0), -30.0)
+	lb.visible = true
+	lb.modulate.a = 1.0
+	slot["left"] = KNOCKTEXT_LIFE
+
+
+func _tick_knocktexts(p_raw_delta: float) -> void:
+	_ktext_cd = maxf(_ktext_cd - p_raw_delta, 0.0)
+	for slot: Dictionary in _ktexts:
+		var left := float(slot["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		slot["left"] = left
+		var lb: Label = slot["label"]
+		if left <= 0.0:
+			lb.visible = false
+			continue
+		lb.position.y -= 46.0 * p_raw_delta          # 上飘
+		lb.modulate.a = clampf(left / KNOCKTEXT_LIFE * 1.5, 0.0, 1.0)

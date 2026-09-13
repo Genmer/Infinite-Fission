@@ -238,6 +238,13 @@ func _on_shop_requested(p_wave: int) -> void:
 		shop_ui.open(player, p_wave)
 
 
+func _on_wave_cleared_collect() -> void:
+	# R7：波清空全屏碎片磁吸回收（含 Boss 大珠——残留不消失兜底；资源不丢）
+	for shard in active_shards:
+		if is_instance_valid(shard):
+			shard.force_magnet()
+
+
 func _on_relic_shop_wave(p_wave: int) -> void:
 	# REL_BLACK_MARKET 追加商店波（w35 起每 10 波，排程真源 relic_handler）：波清空后
 	# 消费一次排程开黑市——同波表 SHOP 事件口径（PLAYING 守卫在 _on_shop_requested）
@@ -700,6 +707,8 @@ func _boot_build_presentation() -> void:
 	# REL_BLACK_MARKET 追加商店波消费（2026-09-13 死数据接线：排程计数 → 真实开店；
 	# 连接序在 relic_handler.bind_events 之后——同帧先排程后消费）
 	EventBus.wave_cleared.connect(_on_relic_shop_wave)
+	# R7：波次清空 → 全屏经验碎片强制磁吸（Boss 大珠残留兜底）
+	EventBus.wave_cleared.connect(_on_wave_cleared_collect)
 	sfx = SfxBank.new()
 	sfx.name = "SfxBank"
 	add_child(sfx)

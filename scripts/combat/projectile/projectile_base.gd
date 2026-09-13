@@ -327,6 +327,11 @@ func _on_settled(p_target: Node2D, p_result: DamageResult, p_tctx: TraitContext 
 	# 结算后（§4.4 ⑤）：结果应用 → 元素附着（本弹载荷 + ELE 词条请求）→ 穿透计数 →
 	# OnPierce 或回收判定；击杀证据回填（死亡新星输入）
 	_apply_result_to(p_target, p_result)
+	# 武器击退（R7：霰弹枪 knockback 参数——方向 = 弹道行进向；质量分级在 Enemy.knockback）
+	if weapon_ref != null and is_instance_valid(weapon_ref) and p_target.has_method(&"knockback"):
+		var kf: float = float(weapon_ref.call(&"knockback_force"))
+		if kf > 0.0 and velocity.length() > 1.0:
+			p_target.call(&"knockback", velocity.normalized() * kf)
 	if p_result != null:
 		killed_target = killed_target or p_result.killed
 		last_hit_pos = global_position

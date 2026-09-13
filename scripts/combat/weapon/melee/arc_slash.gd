@@ -1,5 +1,7 @@
 # scripts/combat/weapon/melee/arc_slash.gd
-# M-08 ArcSlash（架构 §2.8.5）：周期挥斩实体——固定角度弧形判定 + 击退 + 消弹。
+# M-08 ArcSlash（架构 §2.8.5）：周期挥斩实体——固定角度弧形判定 + 消弹。
+# R7：击退权移交霰弹枪（本武器 180px 强击退每刀推飞全屏怪 = 用户实测「闪退」根因）；
+# 视觉重做——z_index 提层 + 双层弧面 + 0.15s 窗口内扫动 + 前缘亮线（原单层低透明楔块被怪压住不可见）。
 # · 判定窗口 0.15s（窗口外无判定，AC-06.3 ±1° 扇形口径）；朝向 = 开窗时刻最近敌方向
 #   （窗口期内固定不扫摆）。
 # · 扇形判定：query_arc（中心角 facing、半角 arc_deg/2、半径 slash_radius）；
@@ -14,7 +16,7 @@ var arc_deg: float = 120.0                    # 扇形角
 var facing: float = 0.0                       # 固定角度窗口中心（rad）
 var window_left: float = 0.0                  # 判定窗口剩余（0.15s）
 var max_targets: int = 8                      # 单斩目标上限
-var knockback: float = 180.0
+var knockback: float = 0.0                   # R7：默认无击退（击退权在霰弹枪；保留参数位）
 var nullify: bool = false                     # 消弹开关（W9=true）
 var enemy_grid: SpaceGrid = null              # 注入（扇形判定）
 var enemy_bullet_grid: SpaceGrid = null       # 注入（消弹查询；GameLoop 帧序③双网格）
@@ -33,6 +35,7 @@ func spawn(p_params: Dictionary) -> void:
 	facing = 0.0
 	_struck.clear()
 	visible = false
+	z_index = 5                                  # 敌/玩家之上（R7：原默认 z 被怪精灵压住）
 
 
 func open_window(p_facing: float) -> void:
@@ -105,11 +108,6 @@ func _slash_hit(p_target: Node2D, p_center: Vector2) -> void:
 	if result != null and not (weapon.damage_pipeline is DamagePipeline) \
 			and p_target.has_method(&"take_result"):
 		p_target.call(&"take_result", result)
-	if knockback > 0.0 and p_target.has_method(&"knockback"):
-		var dir := ((p_target as Node2D).global_position - p_center).normalized()
-		if dir == Vector2.ZERO:
-			dir = Vector2.UP
-		p_target.call(&"knockback", dir * knockback)
 	DebugStats.count(&"arc_slash_hit")
 
 
@@ -135,14 +133,26 @@ func _reset_state() -> void:
 
 
 func _draw() -> void:
-	# 占位渲染：扇形楔块（窗口期可视化；美术后续替换）
+	# 挥斩视觉（R7 重做）：窗口 0.15s 内——
+	# ① 底层淡金扇面（全程，α 0.22）②扫动前缘亮弧（lerp 扫过扇角，白金色）③外缘描边
 	if not visible or window_left <= 0.0:
 		return
-	var color := Color(1.0, 0.9, 0.35, 0.35)
 	var half := deg_to_rad(arc_deg) * 0.5
-	var steps := maxi(int(arc_deg / 12.0), 3)
-	var points := PackedVector2Array([Vector2.ZERO])
+	var progress := 1.0 - window_left / OrbitWeapon.SLASH_WINDOW   # 0→1
+	var steps := maxi(int(arc_deg / 10.0), 4)
+	# ① 扇面
+	var pts := PackedVector2Array([Vector2.ZERO])
 	for i in range(steps + 1):
-		var a := facing - half + (2.0 * half) * float(i) / float(steps)
-		points.append(Vector2(cos(a), sin(a)) * slash_radius)
-	draw_colored_polygon(points, color)
+		var a := facing - half + 2.0 * half * float(i) / float(steps)
+		pts.append(Vector2(cos(a), sin(a)) * slash_radius)
+	draw_colored_polygon(pts, Color(1.0, 0.9, 0.4, 0.20))
+	# ② 扫动前缘（从 -half 扫到 +half：挥动感）
+	var sweep := facing - half + 2.0 * half * clampf(progress * 1.15, 0.0, 1.0)
+	draw_line(Vector2.ZERO, Vector2(cos(sweep), sin(sweep)) * slash_radius,
+		Color(1.0, 0.97, 0.8, 0.95), 5.0)
+	# ③ 外缘描边弧（亮金）
+	var rim := PackedVector2Array()
+	for i in range(steps + 1):
+		var a2 := facing - half + 2.0 * half * float(i) / float(steps)
+		rim.append(Vector2(cos(a2), sin(a2)) * slash_radius)
+	draw_polyline(rim, Color(1.0, 0.85, 0.3, 0.85), 3.0)

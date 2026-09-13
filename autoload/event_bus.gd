@@ -35,6 +35,7 @@ signal beam_impact(pos: Vector2, dir: Vector2)             # 光束命中点迸�
 signal reroll_granted(count: int)                          # 刷新次数获得（HUD toast；选卡刷新机制）
 signal trait_milestone(trait_id: StringName, name: String, mult: float)   # 词条满层质变（HUD 金色 toast）
 signal burn_devour_proc(pos: Vector2)                       # 烈焰吞噬乘区生效（表现层专用：橙色内聚吞噬特效）
+signal knockback_hit(pos: Vector2)                           # 强击退生效（表现层专用：击退小字，R7）
 signal mechanics_intro(text: String)                        # 大关新机制解锁横幅（HUD 开局长 toast）
 signal chain_fused(depth: int, trait_id: StringName)       # 链式/分叉深度熔断遥测
 signal card_chosen(card_id: StringName, target_kind: int)  # 选卡应用完成（遗物回响等）
@@ -191,6 +192,11 @@ func emit_trait_milestone(trait_id: StringName, p_name: String, p_mult: float) -
 func emit_burn_devour_proc(pos: Vector2) -> void:
 	_track_dispatch(&"burn_devour_proc")
 	burn_devour_proc.emit(pos)
+
+
+func emit_knockback_hit(pos: Vector2) -> void:
+	_track_dispatch(&"knockback_hit")
+	knockback_hit.emit(pos)
 
 
 func emit_mechanics_intro(text: String) -> void:

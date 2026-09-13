@@ -29,9 +29,12 @@ func is_shop_visible() -> bool:
 	return _root != null and _root.visible
 
 
+var _refresh_count: int = 0                    # 本次开店已刷新次数（R7：价格倍数递增）
+
 func open(p_player: Node, p_wave: int) -> void:
 	_player = p_player
 	_wave = p_wave
+	_refresh_count = 0
 	_reroll_wares(false)
 	_root.visible = true
 	_refresh()
@@ -118,10 +121,17 @@ func _buy(p_index: int) -> void:
 	_refresh()
 
 
+func refresh_cost() -> int:
+	# 刷新价 = 15 × 行情系数 × 1.5^已刷新次数（R7 用户反馈「应倍数提升，不该固定 15」：
+	# 同一次开店内累进 15→23→34→51…，关店重置）
+	return int(ceil(15.0 * market_mult(_wave, 9) * pow(1.5, float(_refresh_count))))
+
+
 func _on_refresh_pressed() -> void:
-	var cost := int(ceil(15.0 * market_mult(_wave, 9)))
+	var cost := refresh_cost()
 	if _player != null and int(_player.get("gold")) >= cost:
 		_player.set("gold", int(_player.get("gold")) - cost)
+		_refresh_count += 1
 		_reroll_wares(true)
 		_refresh()
 
@@ -207,7 +217,7 @@ func _refresh() -> void:
 		_list.add_child(_make_ware_row(idx, ware))
 		idx += 1
 	var refresh_btn := _root.get_node("ShopCard/ShopRefreshButton") as Button
-	refresh_btn.text = "刷新货架 (%d)" % int(ceil(15.0 * market_mult(_wave, 9)))
+	refresh_btn.text = "刷新货架 (%d)" % refresh_cost()
 
 
 func _make_ware_row(p_index: int, p_ware: Dictionary) -> Control:

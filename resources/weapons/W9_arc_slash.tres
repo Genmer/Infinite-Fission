@@ -72,7 +72,7 @@ threshold_traits = [{
 }]
 melee = {
 "orbit_radius": 90.0, "angular_speed": 240.0, "orbs": 1, "hit_cd": 0.5,
-"knockback": 180.0, "slash_radius": 150.0, "arc_deg": 120.0,
+"knockback": 0.0, "slash_radius": 150.0, "arc_deg": 120.0,
 "max_targets": 8, "nullify": true,
 "arc_deg_levels": [120.0, 120.0, 120.0, 120.0, 160.0]
 }

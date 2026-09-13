@@ -608,8 +608,17 @@ func _test_enemy() -> void:
 	_check("死亡只执行一次（E-06 短路）", int(_probe.get("enemy_killed_hits")) == kills0 + 1)
 	# 击退
 	var ek := _spawn_enemy_at(ed, Vector2(100, 100), 1)
-	ek.knockback(Vector2(50, 0))
-	_check("击退：位置位移 50px", is_equal_approx(ek.position.x, 150.0))
+	ek.knockback(Vector2(150, 0))
+	ek.tick(0.1)                                  # 冲量=位移×9 ⇒ 首帧积分 ≈ 150×9×0.1×衰减
+	var moved: float = ek.position.x - 100.0
+	_check("击退：滑行位移 ≈ 135px（非即时闪退）", moved > 100.0 and moved < 160.0,
+		"dx=%s" % str(moved))
+	var r7_boss_data := _make_enemy_data("E_R7BOSS", 100.0)
+	var bk := _enemy_pool.acquire() as Enemy
+	bk.spawn(r7_boss_data, 1, GameConst.TAG_BOSS)
+	bk.knockback(Vector2(300, 0))
+	_check("击退：Boss 免疫（质量分级）", bk.knock_vel == Vector2.ZERO)
+	bk.queue_free()
 	# 精英模板乘区
 	var elite_data := _make_enemy_data("E_ELITE", 72.0)
 	elite_data.elite_mult = {"hp": 4.2, "spd": 0.92, "dmg": 1.5, "exp": 8.0}

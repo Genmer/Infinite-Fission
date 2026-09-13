@@ -81,6 +81,11 @@ func activate(p_value: float) -> void:
 	_sync_visual()
 
 
+func force_magnet() -> void:
+	# 波次清空全屏回收（R7）：任何阶段直接转磁吸飞行——碎片任何情况下波末必回收
+	_magnet = true
+
+
 func merge_value(p_extra: float) -> void:
 	# 满池合并为大面值碎片（数值守恒，架构 §5.1；不重置磁吸/阶段态）
 	value += maxf(p_extra, 0.0)
@@ -108,8 +113,10 @@ func tick(p_game_delta: float) -> bool:
 		global_position = global_position.move_toward(player.global_position,
 			MAGNET_SPEED * p_game_delta)
 		return false
-	# 超时回归（用户裁定：任何位置的经验最终都能捡到）：亮一下 → 全屏加速追踪
-	if not _homing and _age >= RETURN_TIME:
+	# 超时回归（用户裁定：任何位置的经验最终都能捡到）：亮一下 → 全屏加速追踪。
+	# R7：大面值碎片（Boss/精英大珠，≥15）2s 即回归——用户反馈「大怪碎片残留不消失」
+	var return_time := RETURN_TIME if value < 15.0 else 2.0
+	if not _homing and _age >= return_time:
 		_homing = true
 		_homing_flash = HOMING_FLASH_TIME
 		_homing_speed = HOMING_SPEED_INIT

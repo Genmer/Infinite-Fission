@@ -72,7 +72,7 @@ threshold_traits = [{
 }]
 ballistic = {
 "proj_speed": 560.0, "range": 420.0, "spread_deg": 26.0,
-"pierce": 1, "pellets": 7, "spin_up_time": 0.0, "rof_hot": 0.0,
+"pierce": 1, "pellets": 7, "spin_up_time": 0.0, "rof_hot": 0.0, "knockback": 130.0,
 "spread_deg_levels": [26.0, 26.0, 26.0, 26.0, 20.0]
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

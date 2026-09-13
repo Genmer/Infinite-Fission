@@ -13,6 +13,7 @@ extends Node2D
 var uid: int = 0
 var data: EnemyData = null
 var tags: int = 0                             # TAG_ELITE / TAG_BOSS
+var knock_vel: Vector2 = Vector2.ZERO         # 击退冲量速度（衰减式位移——R7 闪退根因修复）
 var hp: float = 1.0
 var max_hp: float = 1.0
 var speed: float = 75.0                       # 波次成长后终值
@@ -244,6 +245,10 @@ func tick(p_game_delta: float) -> void:
 		else:
 			sf *= ext_slow_mult
 	var player := _player()
+	# 击退冲量衰减位移（R7：与追击位移叠加，指数衰减——9/s 阻尼约 0.11s 消散）
+	if knock_vel != Vector2.ZERO:
+		global_position += knock_vel * p_game_delta
+		knock_vel = knock_vel.lerp(Vector2.ZERO, minf(9.0 * p_game_delta, 1.0))
 	match behavior:
 		GameConst.EnemyBehavior.CHASE:
 			if player != null:
@@ -307,10 +312,19 @@ func get_vuln_factor() -> float:
 
 
 func knockback(p_force: Vector2) -> void:
-	# 近战击退（A3 §3.9：击退可打断自爆引导）；M1 即时位移
-	global_position += p_force
+	# 近战/弹丸击退（A3 §3.9：打断自爆引导）。R7 重构（用户实测「全屏怪被打闪退」）：
+	# ① 质量分级——Boss 完全免疫、精英 ×0.35（大怪不再被推飞）
+	# ② 冲量速度衰减位移（原即时 += 位移一步跳半个屏 = 「闪退」观感根因）
+	if is_boss():
+		return
+	# p_force 语义 = 总位移 px（设计直观：参数即击退距离）。冲量 = 位移 × 阻尼
+	#（阻尼 9/s ⇒ 约 0.33s 内滑完 95%，滑行观感而非闪退）
+	var scaled := p_force * (0.35 if (tags & GameConst.TAG_ELITE) != 0 else 1.0)
+	knock_vel += scaled * 9.0
 	if _fuse_armed:
 		_cancel_fuse()
+	if scaled.length() >= 100.0:
+		EventBus.emit_knockback_hit(global_position)   # 击退小字（强击退才提示）
 
 
 func is_volatile() -> bool:
@@ -520,6 +534,7 @@ func _check_boss_phase() -> void:
 
 
 func _reset_state() -> void:
+	knock_vel = Vector2.ZERO                     # R7：击退冲量归还清零
 	# 归还清零契约（E-04/E-05：状态容器/行为参数/计时/位标志；uid 保留——同帧网格快照去重依赖）
 	data = null
 	tags = 0

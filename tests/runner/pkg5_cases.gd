@@ -197,7 +197,10 @@ func _test_full_chain_smoke() -> void:
 		b.apply_damage(9999999.0)
 	_check("F-19：Boss1 击杀 → 槽位 4 解锁（真实派发序，修复回归）",
 		_gl.player.unlocked_slots == maxi(slots_before, 4))
-	# 死亡 → 结算 → 重开（AC-16.1 尾段）
+	# 死亡 → 结算 → 重开（AC-16.1 尾段）。R7 备忘：测试存档含养成「应急协议」复活
+	# （verify 养成用例购买后持久化）——死亡用例必须显式清零 revives_left，否则首击被
+	# 复活吃掉回满血（batch26 实测 hp 999999 后仍 60 的根因）
+	_gl.player.revives_left = 0
 	_gl.player.invuln_left = 0.0
 	_gl.player.take_contact_damage(999999.0)
 	_check("死亡仲裁：PLAYING→GAME_OVER（E-16 最高优先）",
@@ -541,6 +544,14 @@ func _test_relic_handler() -> void:
 	EventBus.emit_wave_cleared(36)
 	_check("REL_BLACK_MARKET：w36 不排程（保持 PLAYING）",
 		_gl.state == GameConst.GameStatus.PLAYING and not _gl.shop_ui.is_shop_visible())
+	# R7 波末磁吸联动清尾：波清空会强磁吸全屏碎片 → 4.5s 内陆续吸收入账——
+	# 压平经验防 LEVEL_UP 劫持后续死亡仲裁用例，并驱动至碎片清空
+	_gl.player.xp = 0.0
+	_gl.player.xp_need = 999999.0
+	for i in range(240):
+		if _gl.active_shards.is_empty():
+			break
+		_drive(2)
 	# REL_PHOENIX：致死保留 1 HP + 清屏冲击（每场 1 次）——放最后（含死亡分支）
 	# 幂等护栏（同 REL_GAMBLER/REL_BLACK_MARKET 先例）：冒烟选卡可能随机抽中 PHOENIX
 	# （card_chosen 通道自动激活）→ 显式 activate 被「每场唯一」拒绝属业务正确，已持有即生效
@@ -552,6 +563,7 @@ func _test_relic_handler() -> void:
 	_check("REL_PHOENIX：致死保留 1 HP（不死鸟触发）",
 		_gl.player.hp == 1.0 and h.phoenix_triggered == 1
 		and _gl.state == GameConst.GameStatus.PLAYING)
+	_gl.player.revives_left = 0                 # R7：同上——测试档养成复活不拦截死亡仲裁
 	_gl.player.invuln_left = 0.0
 	_gl.player.take_contact_damage(999999.0)
 	_check("REL_PHOENIX：次数耗尽 → 死亡放行（E-16）",
@@ -836,6 +848,7 @@ func _test_battlefield_reset() -> void:
 		"tick_atk": 1.0, "panel_snapshot": {}})
 	_check("清场前：投射物/光束池 live > 0",
 		int(pool.stats()["live"]) > 0 and int(laser_pool.stats()["live"]) > 0)
+	_gl.player.revives_left = 0                 # R7：同前——测试档养成复活不拦截死亡仲裁
 	_gl.player.invuln_left = 0.0
 	_gl.player.take_contact_damage(999999.0)
 	_check("重开前：GAME_OVER（E-16）", _gl.state == GameConst.GameStatus.GAME_OVER)

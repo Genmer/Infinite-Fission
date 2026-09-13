@@ -107,8 +107,7 @@ func refresh_stats() -> void:
 		if sig != _build_sig:
 			_build_sig = sig
 			_refresh_build()
-	_wave_label.text = ("%s · 第 %d 波" % [map_name, wave]) if map_name != "" \
-		else "第 %d 波" % wave
+	_wave_label.text = "第 %d 波" % wave   # R7 修复（§5.12 P0）：徽章只显波数——图名前缀在 106px 圆内溢出裁切 = 波次看不见根因
 	if _gold_label != null and player != null and is_instance_valid(player):
 		_gold_label.text = "◎ %d" % int(player.get("gold"))
 	if _skill_btn != null and player != null and is_instance_valid(player):
@@ -501,11 +500,11 @@ func _build_ui() -> void:
 	badge_cap.position = Vector2(0.0, 22.0)
 	badge_cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge.add_child(badge_cap)
-	_wave_label = StickerTheme.label_sticker(Label.new(), 26, PopPalette.INK, 0, Color.WHITE, true)
+	_wave_label = StickerTheme.label_sticker(Label.new(), 22, PopPalette.INK, 0, Color.WHITE, true)
 	_wave_label.name = "WaveText"
 	_wave_label.text = "第 0 波"
-	_wave_label.size = Vector2(106.0, 30.0)
-	_wave_label.position = Vector2(0.0, 44.0)
+	_wave_label.size = Vector2(106.0, 34.0)
+	_wave_label.position = Vector2(0.0, 42.0)
 	_wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge.add_child(_wave_label)
 

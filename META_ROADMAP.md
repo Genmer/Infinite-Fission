@@ -157,6 +157,20 @@
 | P1 | 本身的暴击率/射速/冷却/间隔等属性应该显示 | 构筑详情卡（左下角点击）每把武器头部新增**实际生效属性行**：攻击 / 暴击率 ×暴伤 / 出招间隔（发/s）——数据源 build_panel_snapshot + _fire_interval（含词条加成/稀有度缩放/养成修正，非基础值口径） |
 | P0 | 不存在的功能整体检查（全量审计） | **死卡接线 ×4**：AFF_PROJ_SPD 弹速池（自导接线，弹道已有 _projectile_speed 消费——审计 grep 漏检教训记录）、AFF_AREA 体积池（弹道+自导 hitbox_radius ×(1+Σ)，子弹药独立取乘数）、AFF_PICKUP 磁吸（Player 跨武器聚合 + 挂卡/换角刷新磁吸圈）、**AFF_MOVE_SWIFT 重做为 AFF_SKILL_HASTE 技能急速**（拖动 1:1 操控下移速无消费点 → add_skillcdr 池 ×(1−Σ) 入技能冷却基线，挂卡刷新）。**形态/武器适配门**（§5.12 P0 根修）：TraitData.params.required_forms / required_weapon → CardGenerator 按目标武器过滤货架——谐振轨道仅 W8、弹丸数/穿透仅弹道、体积/弹速/反弹/分裂仅弹道+自导、CDR 仅 cd 型（弹道除外+文案明示）、射速仅弹道+激光。**REL_BLACK_MARKET 死数据接线**：排程计数 → 波清空真实开店（GameLoop._on_relic_shop_wave，pkg5 占位断言随新语义更新）。审计确认完好：全部 ELE/条件乘区/其余遗物（PHOENIX/HARVEST/MOMENTUM/CRIT_CHAIN/OVERCLOCK/WORDS_TIDE/ECHO/MIDAS/BOSS_TROPHY）均有实现与测试 |
 
+## 5.16 八轮反馈批次（2026-09-13 五批，已落地；反馈追踪迁移 FEEDBACK_TRACKER.md）
+
+> 自本轮起：**用户反馈/缺陷的唯一追踪入口 = FEEDBACK_TRACKER.md**（每条先登记再动工，完成不删行）；
+> ROADMAP 只记版本史。怪物攻击多样化立项为专项策划（两份设计文档见 docs/design/）。
+
+| 优先级 | 项 | 落地 |
+|---|---|---|
+| P0 | 击退「闪退」（全屏怪被打回跳） | 根因=周期挥斩 180px 击退即时位移。重构：Enemy.knockback 改冲量速度衰减（约 0.33s 滑行）+ 质量分级（Boss 免疫/精英 ×0.35，设计文档 §7 同结论）；挥斩击退移除、击退权移交霰弹枪（data.ballistic.knockback=130，弹道方向）；强击退弹「击退!」小字（EventBus.knockback_hit → FX 层小字池） |
+| P0 | 波次进度不显示（§5.12 P0 确认） | 徽章 106px 内「图名 · 第 N 波」26px 溢出裁切；徽章只显示「第 N 波」（22px），图名由横幅/toast 承担 |
+| P0 | 大怪死亡碎片球残留 | 大面值碎片（≥15）回归阈值 4.5s→2s；波次清空全屏强制磁吸（GameLoop._on_wave_cleared_collect） |
+| P1 | 刷新货架固定 15 | 黑市刷新价 = 15×行情×1.5^已刷新次数（开店内累进，关店重置） |
+| P1 | 周期挥砍无特效 | 视觉重做（z5 + 扇面/前缘扫动线/外缘描边）；顺带修复 W9 消弹死功能（enemy_bullet_grid 从未注入 → OrbitWeapon.setup deps 接线） |
+| 🎨 | 怪物攻击多样化（用户点名"闪现爆炸"等，要求多智能体策划） | 立项两份设计文档：docs/design/ENEMY_BOSS_TELEGRAPH.md（预警体系总规范/Boss 技能库 B1~B8/阶段模板/四图配置/精英词缀/实装排期）；ENEMY_PATTERNS_BASIC.md（行为族清单——进行中）。合成评审后按 P1 弹幕三件套 → P2 扫线/地雷 → P3 狂暴/韧性 排期 |
+
 ## 6. 落地顺序建议
 
 ```
