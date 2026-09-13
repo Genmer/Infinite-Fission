@@ -235,6 +235,24 @@ func _rebuild_details() -> void:
 		(c as Node).queue_free()
 	if _player_ref == null or not is_instance_valid(_player_ref):
 		return
+	# 玩家侧属性行（R7 遗漏补齐——用户点名的「生存本能（=最大生命词条）」等玩家属性：
+	# 生命上限 / 磁吸半径 / 技能冷却基线；武器侧攻击/暴击/间隔见各区块头）
+	var pstats := Panel.new()
+	pstats.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 3, false))
+	pstats.custom_minimum_size = Vector2(576.0, 44.0)
+	pstats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pstats.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var pinfo := Label.new()
+	StickerTheme.label_sticker(pinfo, 15, PopPalette.INK, 0, Color.WHITE, true)
+	pinfo.text = "生命上限 %d　磁吸 %dpx　技能冷却 %.0fs" % [
+		int(float(_player_ref.get("max_hp"))),
+		int(float(_player_ref.get("pickup_radius"))),
+		float(_player_ref.get("skill_cd_base"))]
+	pinfo.position = Vector2(12.0, 12.0)
+	pinfo.size = Vector2(552.0, 20.0)
+	pinfo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pstats.add_child(pinfo)
+	_details_list.add_child(pstats)
 	var slots: Array = _player_ref.get("weapon_slots")
 	var any := false
 	for w in slots:

@@ -297,8 +297,12 @@ func _test_build_details_panel() -> void:
 	_check("点击 → 进入 PAUSED", _gl.state == GameConst.GameStatus.PAUSED)
 	_check("构筑详情卡可见", _gl.pause_overlay.is_details_visible())
 	# 内容断言（2026-09-13：此前仅断可见性——属性行/武器区块构建无回归护栏）
-	_check("构筑详情卡内容 ≥1 武器区块",
-		(_gl.pause_overlay._details_list as Node).get_child_count() >= 1)
+	_check("构筑详情卡内容 ≥2（玩家属性行 + ≥1 武器区块）",
+		(_gl.pause_overlay._details_list as Node).get_child_count() >= 2)
+	var kid0: Control = (_gl.pause_overlay._details_list as Node).get_child(0)
+	var ptext: String = (kid0.get_child(0) as Label).text if kid0.get_child_count() > 0 else ""
+	_check("玩家属性行：含 生命上限/磁吸/技能冷却",
+		"生命上限" in ptext and "磁吸" in ptext and "技能冷却" in ptext, ptext)
 	_check("暂停卡隐藏（双卡互斥）", not _gl.pause_overlay.is_pause_visible()
 		or _gl.pause_overlay._card.visible == false)
 	_gl.pause_overlay.toggle_details()
