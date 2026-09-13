@@ -206,7 +206,8 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 # ── 内部：roll 链 ─────────────────────────────────────────────────
 func _roll_one(p_player: Node, p_wave: int, p_picked: Array[StringName]) -> Dictionary:
 	# 单张：类别 roll（池空重 roll）→ 稀有度 roll → 候选过滤 → 随机抽 1
-	var relic_available := _unowned_relic_ids().size() > 0
+	# 遗物类目门控（MechanicGate）：第 1 关不上架遗物——重 roll 为乘区（同抽空口径）
+	var relic_available := MechanicGate.relics_unlocked() and _unowned_relic_ids().size() > 0
 	for attempt in range(8):
 		var category: Variant = _weighted_key(category_weights)
 		if category == "RELIC" and not relic_available:
@@ -274,6 +275,8 @@ func _trait_candidates(p_category: String, p_player: Node, p_picked: Array[Strin
 			continue
 		if used_layers.get(tid, 0) >= t.stack_max:
 			continue                            # 叠层上限（§6.4）
+		if not MechanicGate.trait_allowed(t):
+			continue                            # 元素解锁门（火/冰 第 2 关 · 雷 第 3 关）
 		out.append(tid)
 	return out
 
@@ -338,12 +341,12 @@ func _make_weapon_card(p_wdata: WeaponData) -> Dictionary:
 
 
 func _unowned_relic_ids() -> Array[StringName]:
-	# 未获得遗物（unique 每场唯一）
+	# 未获得遗物（unique 每场唯一）+ 大关门（常规遗物第 2 关起 / 赌徒诅咒终关）
 	var out: Array[StringName] = []
 	if registry == null:
 		return out
 	for rid in registry.relics:
-		if not owned_relics.has(rid):
+		if not owned_relics.has(rid) and MechanicGate.relic_allowed(rid):
 			out.append(rid)
 	return out
 
@@ -358,10 +361,11 @@ func _make_trait_card(p_tid: StringName, p_wave: int, p_target: WeaponBase = nul
 	if t != null:
 		data = t.duplicate() as TraitData
 	# 满层质变预览（2026-08-31）：本卡若挂上即满层（ADD 池 stack_max ≥2 且现有层 = max−1）
-	# → 卡面标注「质变」，描述补「全部层数 ×1.6」（质变实装在 WeaponBase.attach_trait）
+	# → 卡面标注「质变」，描述补「全部层数 ×1.6」（质变实装在 WeaponBase.attach_trait；
+	#   大关门：满层质变第 4 关解锁——未解锁期不上架预告）
 	var milestone := false
-	if t != null and t.pool == GameConst.PoolClass.ADD and t.stack_max >= 2 \
-			and p_target != null and is_instance_valid(p_target):
+	if MechanicGate.milestone_unlocked() and t != null and t.pool == GameConst.PoolClass.ADD \
+			and t.stack_max >= 2 and p_target != null and is_instance_valid(p_target):
 		var cur := 0
 		var tstack: Variant = p_target.get("trait_stack")
 		if tstack != null and tstack.get("traits") != null:

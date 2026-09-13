@@ -1683,6 +1683,9 @@ func _test_r2_reroll() -> void:
 
 func _test_r2_milestone() -> void:
 	# 满层质变：ADD 池词条挂至 stack_max → value_mult ×1.6 + 里程碑广播
+	# （大关门 2026-09-13：质变第 4 关解锁——本用例以树海局口径运行，收尾还原）
+	var saved_map: StringName = Meta.run_map_id()
+	Meta.set_run_map(&"world_grove")
 	var w := BallisticWeapon.new()
 	_gl.add_child(w)
 	w.setup(_gl.registry.get_weapon(&"W1_pistol"), _gl.player, {})
@@ -1708,8 +1711,28 @@ func _test_r2_milestone() -> void:
 	# 再挂同词条：拒绝（满层）且不重复质变
 	w.attach_trait(t)
 	_check("质变：满层后再挂拒绝（无重复广播）", hits[0] == 1)
+	# 大关门口径：未解锁关（草原局）挂满层不质变（门关：无广播无乘区）
+	Meta.set_run_map(&"world_grass")
+	var hits1: Array = [0]
+	var cb1 := func(_tid: StringName, _n: String, _m: float) -> void: hits1[0] += 1
+	EventBus.trait_milestone.connect(cb1)
+	var w2 := BallisticWeapon.new()
+	_gl.add_child(w2)
+	w2.setup(_gl.registry.get_weapon(&"W1_pistol"), _gl.player, {})
+	for i in range(t.stack_max):
+		w2.attach_trait(t)
+	var mounted2: TraitBase = null
+	for tb in w2.trait_stack.traits:
+		if tb.data.id == &"AFF_ATK_UP":
+			mounted2 = tb
+	_check("质变门：草原局挂满层不质变（value_mult = 1，无广播）",
+		hits1[0] == 0 and mounted2 != null and absf(mounted2.value_mult - 1.0) <= 0.001,
+		"hits=%d mult=%f" % [hits1[0], float(mounted2.value_mult) if mounted2 != null else -1.0])
 	EventBus.trait_milestone.disconnect(cb)
+	EventBus.trait_milestone.disconnect(cb1)
+	Meta.set_run_map(saved_map)
 	w.queue_free()
+	w2.queue_free()
 
 
 func _test_r2_burn_floor_and_spread() -> void:

@@ -79,8 +79,10 @@ func attach_trait(p_trait: TraitData) -> bool:
 	if attached:
 		# 满层质变（2026-08-31 用户反馈「哪些 buff 到什么程度会质变」）：ADD 池词条挂至
 		# stack_max → 数值乘区 ×1.6（TraitBase.value_mult，聚合侧消费）+ 里程碑广播
-		#（HUD 金色 toast + 音效——「一大波爽感」节点）。幂等：已质变（mult>1）不重触
-		if p_trait.pool == GameConst.PoolClass.ADD and p_trait.stack_max >= 2:
+		#（HUD 金色 toast + 音效——「一大波爽感」节点）。幂等：已质变（mult>1）不重触。
+		# 大关门（2026-09-13）：满层质变第 4 关「翡翠树海」解锁（MechanicGate 节奏表）
+		if p_trait.pool == GameConst.PoolClass.ADD and p_trait.stack_max >= 2 \
+				and MechanicGate.milestone_unlocked():
 			for mounted in trait_stack.traits:
 				if mounted.data != null and mounted.data.id == p_trait.id \
 						and mounted.layers >= p_trait.stack_max \

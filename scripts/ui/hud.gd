@@ -47,6 +47,7 @@ var _fallback_timer: float = 0.0              # 1Hz 兜底刷新
 const HP_BAR_SIZE := Vector2(340.0, 30.0)
 const XP_BAR_SIZE := Vector2(292.0, 14.0)
 const TOAST_TIME := 1.7                       # 波次 toast 展示时长 s
+const INTRO_TOAST_TIME := 3.4                 # 大关新机制横幅时长 s（文案长，需读完）
 const TOAST_FADE := 0.3                       # 末段淡出 s
 
 
@@ -69,6 +70,7 @@ func bind_events() -> void:
 	EventBus.card_chosen.connect(_on_card_chosen_build)
 	EventBus.trait_milestone.connect(_on_trait_milestone_toast)
 	EventBus.reroll_granted.connect(_on_reroll_toast)
+	EventBus.mechanics_intro.connect(_on_mechanics_intro)
 
 
 func setup(p_player: Node2D) -> void:
@@ -260,6 +262,11 @@ func _on_reroll_toast(p_count: int) -> void:
 	tw.tween_interval(1.4)
 	tw.tween_property(toast, "modulate:a", 0.0, 0.4)
 	tw.tween_callback(toast.queue_free)
+
+
+func _on_mechanics_intro(p_text: String) -> void:
+	# 大关新机制解锁横幅（开局宣告）：复用波次 toast 位 + 加长展示时长（文案需读完）
+	_show_toast(p_text, INTRO_TOAST_TIME)
 
 
 func _on_achievement_toast(p_ach_id: StringName) -> void:
@@ -686,10 +693,10 @@ func _sticker_panel(p_parent: Control, p_pos: Vector2, p_size: Vector2, p_radius
 	return panel
 
 
-func _show_toast(p_text: String) -> void:
+func _show_toast(p_text: String, p_time: float = TOAST_TIME) -> void:
 	# 波次 toast：果冻 squash & stretch 出现（重要 UI 元素全局动效口径）
 	_toast_label.text = p_text
 	_toast_label.visible = true
 	_toast_label.modulate.a = 1.0
-	_toast_left = TOAST_TIME
+	_toast_left = p_time
 	StickerTheme.squash_pop(_toast_label)

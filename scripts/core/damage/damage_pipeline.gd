@@ -301,8 +301,11 @@ func _finalize(p_ctx: DamageContext, p_stack: ModifierStack, p_result: DamageRes
 
 func _broadcast(p_result: DamageResult) -> void:
 	# 9c. EventBus 广播（唯一广播点，禁止绕过）：damage_resolved 每次成功结算；
-	#     damage_alarm 一局一次（后续超限仍记 audit.alarm 与 alarms 计数，仅不重复广播）
+	#     damage_alarm 一局一次（后续超限仍记 audit.alarm 与 alarms 计数，仅不重复广播）；
+	#     burn_devour_proc 烈焰吞噬乘区生效（pool_breakdown 含 burn_dmg → 表现层内聚火焰）
 	EventBus.emit_damage_resolved(p_result)
+	if p_result.pool_breakdown.has(&"burn_dmg"):
+		EventBus.emit_burn_devour_proc(p_result.pos)
 	if p_result.audit != null and p_result.audit.alarm and not _alarm_emitted:
 		_alarm_emitted = true
 		EventBus.emit_damage_alarm(p_result)

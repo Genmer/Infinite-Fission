@@ -295,6 +295,11 @@ func set_run_map(p_map_id: StringName) -> void:
 	_run_map = p_map_id
 
 
+func run_map_id() -> StringName:
+	# 当前局地图 id（MechanicGate 解锁门查询口）；无局 → 空串（门控全开口径）
+	return _run_map
+
+
 func is_map_cleared(p_map_id: StringName) -> bool:
 	return maps_cleared.has(String(p_map_id))
 

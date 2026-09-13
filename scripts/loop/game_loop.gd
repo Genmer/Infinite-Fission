@@ -365,6 +365,13 @@ func _on_menu_start(p_map_id: StringName) -> void:
 		return
 	current_map_id = p_map_id
 	start_run()
+	# 大关新机制横幅（2026-09-13 解锁节奏表：每张大关一个新体验主题，开局宣告。
+	# 第 1 关为起点口径不上横幅；continue_run 不重复宣告——选关面板行已常驻展示）
+	var m_idx := MapTable.get_map_index(p_map_id)
+	var intro := MechanicGate.intro_for_map(m_idx)
+	if m_idx >= 1 and not intro.is_empty():
+		EventBus.emit_mechanics_intro("【%s】新解锁：%s"
+			% [String(MapTable.get_map(p_map_id).get("name", "")), intro])
 
 
 func restart_run() -> bool:

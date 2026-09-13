@@ -136,6 +136,8 @@ func tick(p_game_delta: float) -> void:
 	if not _live:
 		return
 	_sync_visual()
+	if element == GameConst.Element.LTG and _sprite != null:
+		_sprite.rotation += p_game_delta * 10.0   # 电花自旋（星形电弹读感——去球化配套）
 	_dispatch_event(GameConst.TraitEvent.ON_TICK,
 		{"game_delta": p_game_delta})
 	_check_collision()
@@ -589,7 +591,11 @@ func _sync_visual() -> void:
 			GameConst.Element.ICE:
 				fill = PopPalette.PLAYER.lerp(Color.WHITE, 0.5)        # 淡冰蓝
 			GameConst.Element.LTG:
-				fill = PopPalette.SHOCK                                 # 葡萄紫
+				# 电花四角星（2026-09-13 用户反馈「感电还有紫色圆球」：电弹去球化——
+				# 星形电花 + tick 自旋，与连锁锯齿闪电同族；白芯提亮保辨识）
+				_sprite.texture = TextureFactory.star(TEX_SIZE,
+					PopPalette.SHOCK.lerp(Color.WHITE, 0.25))
+				return
 	_sprite.texture = TextureFactory.bead(fill, TEX_SIZE)
 
 

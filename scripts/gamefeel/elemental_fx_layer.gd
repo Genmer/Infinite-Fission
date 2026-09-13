@@ -29,6 +29,11 @@ const GLOW_LIFE := 0.18                       # 橙光晕时长 s
 const IMPACT_COUNT := 10                      # 光束命中迸裂并发池（脉冲激光每跳，用户反馈 2026-08-31）
 const IMPACT_LIFE := 0.16                     # 迸裂星闪时长 s
 const IMPACT_SPARKS := 3                      # 每次迸裂迸溅火花数（束色圆珠）
+const DEVOUR_COUNT := 10                      # 烈焰吞噬内聚并发池（burn_dmg 乘区生效，2026-09-13）
+const DEVOUR_LIFE := 0.3                      # 吞噬内聚时长 s
+const DEVOUR_SPARKS := 4                      # 每次内卷火苗数（外圈 → 命中点）
+const DEVOUR_R0 := 26.0                       # 火苗起始半径 px
+const DEVOUR_CD := 0.09                       # 全局节流（激光每跳同源多触发的观感上限）
 
 var _bolts: Array[Dictionary] = []            # [{root, core, glow, flash, left}]（池条目）
 var _bolt_idx: int = 0
@@ -46,6 +51,9 @@ var _glows: Array[Dictionary] = []            # [{sprite, left}]（DOT 橙光晕
 var _glow_idx: int = 0
 var _impacts: Array[Dictionary] = []          # [{flash, sparks[], vels[], left}]（光束命中迸裂池）
 var _impact_idx: int = 0
+var _devours: Array[Dictionary] = []          # [{flash, sparks[], vels[], left}]（吞噬内聚池）
+var _devour_idx: int = 0
+var _devour_cd: float = 0.0                   # 吞噬特效全局节流计时
 
 
 func _ready() -> void:
@@ -58,13 +66,14 @@ func _ready() -> void:
 	_build_zaps()
 	_build_glows()
 	_build_impacts()
+	_build_devours()
 	EventBus.chain_lightning.connect(_on_chain_lightning)
 	EventBus.elemental_dot_fired.connect(_on_dot_fired)
 	EventBus.reaction_triggered.connect(_on_reaction_triggered)
 	EventBus.shield_blocked.connect(_on_shield_blocked)
 	EventBus.bullet_nullified.connect(_on_bullet_nullified)
 	EventBus.beam_impact.connect(_on_beam_impact)
-
+	EventBus.burn_devour_proc.connect(_on_burn_devour)
 
 func tick(p_raw_delta: float) -> void:
 	# GameLoop ⑦ feel 阶段驱动（raw 通道）；非战斗状态不被驱动 → 表现件自然冻结
@@ -75,6 +84,7 @@ func tick(p_raw_delta: float) -> void:
 	_tick_zaps(p_raw_delta)
 	_tick_glows(p_raw_delta)
 	_tick_impacts(p_raw_delta)
+	_tick_devours(p_raw_delta)
 
 
 # ── 感电连锁主锯齿闪电（签名特效） ────────────────────────────────
@@ -489,3 +499,85 @@ func _tick_impacts(p_raw_delta: float) -> void:
 			sp.position += vel * p_raw_delta
 			sp.modulate.a = clampf(left / IMPACT_LIFE * 1.4, 0.0, 1.0)
 		root.modulate.a = clampf(1.2 - progress, 0.0, 1.0)
+
+
+# ── 烈焰吞噬内聚（burn_dmg 乘区生效：外圈火苗向命中点旋入——2026-09-13 用户反馈） ──
+func _build_devours() -> void:
+	# 预建池：每槽 = 橙色四角星闪 ×1 + 火苗 ×4（由外圈向命中点内卷，与点燃火星同源贴图）
+	for i in range(DEVOUR_COUNT):
+		var root := Node2D.new()
+		root.name = "BurnDevour%d" % i
+		root.visible = false
+		var flash := Sprite2D.new()
+		flash.name = "Flash"
+		flash.texture = TextureFactory.star(46, PopPalette.ENEMY.lerp(PopPalette.XP, 0.55))
+		flash.modulate = Color(1.0, 1.0, 1.0, 0.9)
+		root.add_child(flash)
+		var sparks: Array[Sprite2D] = []
+		for j in range(DEVOUR_SPARKS):
+			var sp := Sprite2D.new()
+			sp.name = "Flame%d" % j
+			sp.texture = TextureFactory.flame_bit()
+			root.add_child(sp)
+			sparks.append(sp)
+		add_child(root)
+		_devours.append({"root": root, "flash": flash, "sparks": sparks,
+			"vels": PackedVector2Array(), "left": 0.0})
+
+
+func _on_burn_devour(p_pos: Vector2) -> void:
+	# 取池内下一槽（轮换）+ 全局节流：星闪原地放大渐隐 + 火苗切向内卷（吞噬观感）
+	if _devour_cd > 0.0:
+		return
+	_devour_cd = DEVOUR_CD
+	var dv: Dictionary = _devours[_devour_idx % DEVOUR_COUNT]
+	_devour_idx += 1
+	var root: Node2D = dv["root"]
+	root.position = p_pos
+	root.visible = true
+	root.modulate.a = 1.0
+	var flash: Sprite2D = dv["flash"]
+	flash.rotation = randf() * TAU
+	flash.scale = Vector2.ONE * 0.7
+	var sparks: Array = dv["sparks"]
+	var vels := PackedVector2Array()
+	for j in range(sparks.size()):
+		var sp: Sprite2D = sparks[j]
+		var ang := TAU * float(j) / float(sparks.size()) + randf_range(-0.3, 0.3)
+		var dir := Vector2.from_angle(ang)
+		sp.position = dir * DEVOUR_R0 * randf_range(0.85, 1.15)
+		sp.scale = Vector2.ONE * randf_range(0.8, 1.2)
+		sp.visible = true
+		# 内卷速度：指向中心为主 + 0.35 切向（旋入）；稍快于 R0/LIFE 保证贴到中心才熄
+		vels.append((-dir + Vector2.from_angle(ang + PI * 0.5) * 0.35).normalized()
+			* (DEVOUR_R0 / DEVOUR_LIFE * 1.15))
+	dv["vels"] = vels
+	dv["left"] = DEVOUR_LIFE
+
+
+func _tick_devours(p_raw_delta: float) -> void:
+	_devour_cd = maxf(_devour_cd - p_raw_delta, 0.0)
+	for dv: Dictionary in _devours:
+		var left := float(dv["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		dv["left"] = left
+		var root: Node2D = dv["root"]
+		if left <= 0.0:
+			root.visible = false
+			continue
+		var progress := 1.0 - left / DEVOUR_LIFE
+		var flash: Sprite2D = dv["flash"]
+		flash.rotation += p_raw_delta * 16.0
+		flash.scale = Vector2.ONE * lerpf(0.7, 1.3, progress)   # 中心星闪放大 = 汲取聚拢
+		flash.modulate.a = 0.9 * (1.0 - progress)
+		var sparks: Array = dv["sparks"]
+		var vels: PackedVector2Array = dv["vels"]
+		for j in range(sparks.size()):
+			var sp: Sprite2D = sparks[j]
+			if not sp.visible:
+				continue
+			sp.position += vels[j] * p_raw_delta
+			sp.scale = sp.scale * maxf(1.0 - 2.5 * p_raw_delta, 0.25)   # 卷入即缩（被吞）
+			sp.modulate.a = clampf(left / DEVOUR_LIFE * 1.5, 0.0, 1.0)

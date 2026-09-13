@@ -132,6 +132,16 @@
 | P1 | 前期构筑太慢 / 无远程刮痧 / 走位单一 | 三管齐下：① 武器卡更早更多——CATEGORY_WEIGHTS.WEAPON 10→14 + 首次升级货架保底 ≥1 张武器卡（generate_candidates 加 early 保证位，w<5 或 level≤3 时）；② 槽位提前——w3 解锁槽2 提前到 w2（WaveDirector tick 内 current_wave==3 的 slot_unlocked(2)）；③ 早期伤害——W1 手枪 L1-2 base_atk 12→14/16（弱加强，观感为主）。远程缺口由 ①② 自然补（W4 激光/W6 微导/W7 集束都在新武器池） |
 | — | （用户流程要求）完工后 git 提交并推送远程 | 本轮起用户明确要求每轮完工推送 origin art/daylight-pop |
 
+## 5.13 四轮反馈批次（2026-09-13 已全量落地）
+
+> 用户原话：①「感电特效为何还有紫色圆球这种特效」②「烈焰吞噬好像没特效」③「机制太多，包括元素反应……严谨设计什么时候解锁什么机制，可以大关卡大关卡地来，不用每次小关卡就急着解锁，最好让每关都有新体验」。
+
+| 项 | 落地 |
+|---|---|
+| P0 感电「紫色圆球」 | 根因 = 电元素弹 _sync_visual 染色为葡萄紫 bead 圆珠（上一轮只去掉了连锁闪光点软球，弹体本身仍是球）。落地：电弹换 TextureFactory.star 四角星（SHOCK 白芯提亮保辨识）+ tick 自旋 10rad/s（projectile_base.tick），与连锁锯齿闪电同族「电花」观感 |
+| P0 烈焰吞噬无特效 | 根因 = SYN_BURN_DEVOUR 是条件乘区（burn_dmg 池），命中生效时零表现。落地：DamagePipeline._broadcast 检测 result.pool_breakdown 含 burn_dmg → EventBus.burn_devour_proc → ElementalFxLayer 新增内聚池（橙色星闪放大 + 4 火苗外圈向命中点旋入即缩，全局节流 0.09s）——「吞噬 = 火被吸进去」与点燃火星（外喷）方向相反 |
+| P1 机制解锁节奏 | 新真源 scripts/meta/mechanic_gate.gd（MechanicGate）——门只设在「来源侧」（卡池上架 + 质变挂载），不动 ElementalSystem 结算核：① 第 1 关草原 = 纯基础构筑（ADD/MULT/MECH/精通/新武器/换一批），无元素无遗物；② 第 2 关冰原 = 火/冰元素卡 + 遗物类目（碎裂反应由双元素自然初见）；③ 第 3 关魔域 = 感电卡（过载/超导随三元素齐而可发生）；④ 第 4 关树海 = 满层质变 ×1.6；⑤ 第 5 关沼泽 = 赌徒诅咒卡（REL_GAMBLER 终关上架）。展示面：选关面板每图「✦ 新解锁」金行（MechanicGate.intro_for_map）+ 开局 HUD 横幅（EventBus.mechanics_intro，3.4s 长 toast，仅 _on_menu_start 新开局宣一次）。查询口径：无局态（菜单/测试，run_map_id 空）门控全开——293+731 验收基线不受影响 |
+
 ## 6. 落地顺序建议
 
 ```

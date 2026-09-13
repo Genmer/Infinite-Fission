@@ -229,7 +229,7 @@ func _open_map_select() -> void:
 		var status := ("已通关 ★" if cleared else "可挑战") if unlocked else "🔒 通关上一关解锁"
 		var row := Panel.new()
 		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(14.0, 3, false))
-		row.custom_minimum_size = Vector2(576.0, 96.0)
+		row.custom_minimum_size = Vector2(576.0, 118.0)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var idx_l := Label.new()
@@ -270,12 +270,20 @@ func _open_map_select() -> void:
 		curse_l.size = Vector2(500.0, 18.0)
 		curse_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(curse_l)
+		# 大关新机制行（2026-09-13 解锁节奏表：MechanicGate 真源——选关即见本关主题）
+		var note_l := Label.new()
+		StickerTheme.label_sticker(note_l, 12, PopPalette.GOLD)
+		note_l.text = "✦ %s" % MechanicGate.intro_for_map(i)
+		note_l.position = Vector2(64.0, 94.0)
+		note_l.size = Vector2(500.0, 18.0)
+		note_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(note_l)
 		if unlocked:
 			var play_btn := Button.new()
 			play_btn.text = "出发"
 			play_btn.add_theme_font_size_override("font_size", 15)
 			play_btn.add_theme_font_override("font", StickerTheme.font_bold())
-			play_btn.position = Vector2(486.0, 28.0)
+			play_btn.position = Vector2(486.0, 39.0)
 			play_btn.size = Vector2(76.0, 40.0)
 			play_btn.focus_mode = Control.FOCUS_NONE
 			play_btn.pressed.connect(_on_map_pick.bind(mid))

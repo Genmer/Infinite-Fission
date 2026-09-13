@@ -34,6 +34,8 @@ signal pool_exhausted(pool_id: StringName)                 # 池满降级计数�
 signal beam_impact(pos: Vector2, dir: Vector2)             # 光束命中点迸裂（脉冲激光每跳结算，表现层专用）
 signal reroll_granted(count: int)                          # 刷新次数获得（HUD toast；选卡刷新机制）
 signal trait_milestone(trait_id: StringName, name: String, mult: float)   # 词条满层质变（HUD 金色 toast）
+signal burn_devour_proc(pos: Vector2)                       # 烈焰吞噬乘区生效（表现层专用：橙色内聚吞噬特效）
+signal mechanics_intro(text: String)                        # 大关新机制解锁横幅（HUD 开局长 toast）
 signal chain_fused(depth: int, trait_id: StringName)       # 链式/分叉深度熔断遥测
 signal card_chosen(card_id: StringName, target_kind: int)  # 选卡应用完成（遗物回响等）
 
@@ -184,6 +186,16 @@ func emit_reroll_granted(count: int) -> void:
 func emit_trait_milestone(trait_id: StringName, p_name: String, p_mult: float) -> void:
 	_track_dispatch(&"trait_milestone")
 	trait_milestone.emit(trait_id, p_name, p_mult)
+
+
+func emit_burn_devour_proc(pos: Vector2) -> void:
+	_track_dispatch(&"burn_devour_proc")
+	burn_devour_proc.emit(pos)
+
+
+func emit_mechanics_intro(text: String) -> void:
+	_track_dispatch(&"mechanics_intro")
+	mechanics_intro.emit(text)
 
 
 # ── 计数 / 风暴防护 / 订阅纪律 ─────────────────────────────────────
