@@ -15,6 +15,12 @@ func handle(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 		GameConst.TraitEvent.ON_SPAWN:
 			if p_trait.data.pool == GameConst.PoolClass.MECH:
 				p_ctx.projectile.bounces_left += int(p_trait.data.value) * p_trait.layers
+				# R9b：带反弹预算的子弹射程大幅延长——手枪 680/霰弹 420 射程在 1280 屏内
+				# 大概率碰不到边就到寿，反弹预算永不触发（用户实测「有反弹这个动作吗」根因）。
+				# ×2.5（钳 [2.2, 8.0]s）保证至少穿屏一次撞边弹回
+				if p_ctx.projectile.bounces_left > 0:
+					p_ctx.projectile.lifetime_left = clampf(
+						p_ctx.projectile.lifetime_left * 2.5, 2.2, 8.0)
 		GameConst.TraitEvent.ON_BOUNCE:
 			_maybe_eternal(p_trait, p_ctx)
 

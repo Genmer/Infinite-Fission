@@ -291,10 +291,12 @@ func _form_allows(p_t: TraitData, p_target: WeaponBase) -> bool:
 	# · 两键缺省 = 全形态通用（攻击/暴击/HP/元素/条件乘区等）。
 	var forms: Variant = p_t.params.get("required_forms", null)
 	var weapon_req: Variant = p_t.params.get("required_weapon", null)
-	if forms == null and weapon_req == null:
+	var need_trait: Variant = p_t.params.get("requires_trait", null)
+	if forms == null and weapon_req == null and need_trait == null:
 		return true
 	var form := -1
 	var wid := &""
+	var has_trait_req := false
 	if p_target != null and is_instance_valid(p_target):
 		var wd: Variant = p_target.get("data")
 		if wd != null:
@@ -302,7 +304,18 @@ func _form_allows(p_t: TraitData, p_target: WeaponBase) -> bool:
 			form = int(form_v) if form_v != null else -1
 			var id_v: Variant = wd.get("id")
 			wid = StringName(String(id_v)) if id_v != null else &""
+		if need_trait != null:
+			# 组合卡门（R9b：反弹谱变需先持有边界反弹——前置词条不在，组合卡不上架）
+			var tstack: Variant = p_target.get("trait_stack")
+			if tstack != null and tstack.get("traits") != null:
+				for tb: Variant in (tstack.get("traits") as Array):
+					var td: Variant = tb.get("data")
+					if td != null and StringName(str(td.get("id"))) == StringName(String(need_trait)):
+						has_trait_req = true
+						break
 	if weapon_req != null and wid != StringName(String(weapon_req)):
+		return false
+	if need_trait != null and not has_trait_req:
 		return false
 	if forms is Array and not (forms as Array).is_empty() and not (forms as Array).has(form):
 		return false

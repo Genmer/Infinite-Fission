@@ -1035,16 +1035,21 @@ func _test_aff_hp_up_wiring() -> void:
 		"display_name": String(t.display_name),
 		"description": String(t.description),
 	}
+	# 基线层数（槽内可能已有先前用例挂载的同 ID 词条——卡池随机序列敏感，R9b 改增量口径）
+	var base_layers := 0
+	for tb: TraitBase in _gl.player.weapon_slots[0].trait_stack.traits:
+		if tb.data.id == &"AFF_HP_UP":
+			base_layers = tb.layers
 	_gl.card_generator.apply_choice(card, _gl.player)   # 第 1 层（选卡应用）
 	_gl.card_generator.apply_choice(card, _gl.player)   # 第 2 层（同 ID 叠层）
 	var layers := 0
 	for tb: TraitBase in _gl.player.weapon_slots[0].trait_stack.traits:
 		if tb.data.id == &"AFF_HP_UP":
 			layers = tb.layers
-	_check("AFF_HP_UP 接线：2 层 → max_hp = 60+25×2 = 110 且 hp 等量回补",
-		layers == 2 and is_equal_approx(_gl.player.max_hp, 110.0)
+	_check("AFF_HP_UP 接线：+2 层（基线 %d）→ max_hp = 60+25×2 = 110 且 hp 等量回补" % base_layers,
+		layers == base_layers + 2 and is_equal_approx(_gl.player.max_hp, 110.0)
 		and is_equal_approx(_gl.player.hp, 110.0),
-		"layers=%d max_hp=%s hp=%s" % [layers, str(_gl.player.max_hp), str(_gl.player.hp)])
+		"layers=%d base=%d max_hp=%s hp=%s" % [layers, base_layers, str(_gl.player.max_hp), str(_gl.player.hp)])
 
 
 # ── 支撑（原有） ──────────────────────────────────────────────────

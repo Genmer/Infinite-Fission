@@ -2012,4 +2012,39 @@ func _test_round7_audit() -> void:
 	_check("经验倍率卡：挂卡后 10 经验入账 > 10（×1.15）", xp_gain > 10.0,
 		"gain=%s" % str(xp_gain))
 	_gl.quit_to_menu()
+	# ⑨ 反弹动作实感修复（R9b）：①带预算子弹寿命延长 ②反弹谱变组合门
+	var bounce_t: TraitData = _gl.registry.get_trait(&"MEC_BOUNCE")
+	var spec_t: TraitData = _gl.registry.get_trait(&"SYN_BOUNCE_SPEC")
+	_check("夹具：MEC_BOUNCE / SYN_BOUNCE_SPEC 就位", bounce_t != null and spec_t != null)
+	var wb: WeaponBase = _gl.player.weapon_slots[0]
+	var gen9 := _gl.card_generator
+	var add_plain: Array[StringName] = gen9._trait_candidates("MULT", _gl.player, [], wb)
+	_check("反弹组合门：未持「边界反弹」时「反弹谱变」不上架", not add_plain.has(&"SYN_BOUNCE_SPEC"))
+	wb.attach_trait(bounce_t)
+	var add_with: Array[StringName] = gen9._trait_candidates("MULT", _gl.player, [], wb)
+	_check("反弹组合门：持有「边界反弹」后「反弹谱变」上架", add_with.has(&"SYN_BOUNCE_SPEC"))
+	var bproj_params := {"lifetime": 1.6}
+	var bounce_proj: ProjectileBase = (_gl.pools[&"projectile"] as ProjectilePool).acquire()
+	if bounce_proj != null:
+		_bounce_probe(bounce_proj, bounce_t, bproj_params)
+	_check("反弹动作：带预算子弹寿命延长（1.6s → ≥2.2s，至少穿屏撞边）",
+		bounce_proj == null or float(bounce_proj.lifetime_left) >= 2.2,
+		"life=%s" % str(bounce_proj.lifetime_left) if bounce_proj != null else "no-proj")
+	if bounce_proj != null:
+		(bounce_proj as ProjectileBase).nullify()
 	print("── 七轮反馈完 ──")
+
+
+func _bounce_probe(p_proj: ProjectileBase, p_bounce: TraitData, p_params: Dictionary) -> void:
+	# 反弹寿命探针：模拟 ON_SPAWN 注入（attach 后 trait_effect_bounce 走事件派发）
+	p_proj.spawn({
+		"position": Vector2(360, 640), "velocity": Vector2(0, -600), "lifetime": p_params.lifetime,
+		"pierce": 1, "bounces": 0, "hitbox_radius": 6.0, "element": 0, "attach_value": 0.0,
+		"generation": 0, "weapon_uid": 0, "panel_snapshot": {}, "team": 0,
+	})
+	var tctx := TraitContext.new()
+	tctx.event = GameConst.TraitEvent.ON_SPAWN
+	tctx.projectile = p_proj
+	var tb := TraitBase.new()
+	tb.setup(p_bounce)
+	tb.on_event(GameConst.TraitEvent.ON_SPAWN, tctx)   # 效果入口（闸门→effect.handle）

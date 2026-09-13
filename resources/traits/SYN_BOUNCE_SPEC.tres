@@ -6,13 +6,13 @@
 script = ExtResource("1_td")
 id = &"SYN_BOUNCE_SPEC"
 display_name = "反弹谱变"
-description = "反弹后命中伤害 ×1.4，叠 2 层合并为 ×1.8（A3 §4.3）"
+description = "「边界反弹」弹体反弹后命中伤害 ×1.4，叠 2 层合并为 ×1.8（组合卡：需该武器已持有「边界反弹」后才上架）"
 pool = 1
 pool_id = &"bounce_dmg"
 effect_id = &"EF_STAT"
 value = 0.4
 value2 = 0.0
-params = {}
+params = {"requires_trait": &"MEC_BOUNCE"}
 event_hooks = [4, 2]
 stack_max = 2
 decay_delta = 0.0
