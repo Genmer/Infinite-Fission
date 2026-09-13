@@ -2,8 +2,13 @@
 # CharacterTable（用户反馈「不同的角色有不同的技能」）：可选角色定义表——基础血量 /
 # 攻击修正 / 主动技能（名称/描述/冷却）。选择持久化在 Meta.character_id；开局由
 # Player.set_character 应用（含局外养成加成——META_ROADMAP M8 同批落地）。
-# 解锁门型（可空多选一，Meta.is_character_unlocked 判定）：unlock_map = 通关某图；
-# unlock_kills = 图鉴累计击杀；unlock_depth = 任意图无尽深度（P2 扩展 ×2）。
+# 解锁矩阵（2026-09-13 用户反馈「一些通关，一些购买，一些成就解锁」——大部分角色
+# 需要解锁而非随意使用，三类门型混合给长线目标）：
+# · 通关门 unlock_map ×3：veles①草原 / bulwark②冰原 / mank⑤沼泽；
+# · 购买门 unlock_price ×2（结晶永久解锁，Meta.purchase_character 扣费）：
+#   ranger 80💎 / zero 160💎（结晶 = 局内波次+击杀+成就产出，纯游玩经济）；
+# · 成就/挑战门 ×2：vera = 图鉴累计击杀 500；noah = 成就「深入敌阵」（单局 20 波）。
+# · sentinel 初始免费（新手底座）。
 class_name CharacterTable
 extends RefCounted
 
@@ -34,14 +39,14 @@ const CHARACTERS: Array[Dictionary] = [
 		"hp": 52.0, "atk_pct": 0.10,
 		"skill_name": "影袭瞬步", "skill_desc": "朝移动方向瞬步 260px 并短暂无敌",
 		"cd": 120.0,
-		"unlock_map": &"world_demon",
+		"unlock_price": 80,                 # 结晶购买解锁（80💎，永久）
 	},
 	{
 		"id": &"zero", "name": "演算者·零", "desc": "战术演算体（血 65 / 攻 +15%），控场终局",
 		"hp": 65.0, "atk_pct": 0.15,
 		"skill_name": "时滞力场", "skill_desc": "全场敌人静止 2.5 秒（无视免疫）",
 		"cd": 120.0,
-		"unlock_map": &"world_grove",       # 通关④翡翠树海解锁
+		"unlock_price": 160,                # 结晶购买解锁（160💎，永久）
 	},
 	{
 		"id": &"mank", "name": "腐化者·莽", "desc": "毒沼共生体（血 58 / 攻 +12%），终局毒核",
@@ -55,14 +60,14 @@ const CHARACTERS: Array[Dictionary] = [
 		"hp": 55.0, "atk_pct": 0.08,
 		"skill_name": "毒云领域", "skill_desc": "展开 300px 毒云 6 秒：域内敌人每 0.5 秒受 8% 攻击毒伤并减速 20%",
 		"cd": 120.0,
-		"unlock_kills": 500,                # 图鉴累计击杀 500 只解锁（P2 新门型）
+		"unlock_kills": 500,                # 图鉴累计击杀 500 只解锁（挑战门）
 	},
 	{
 		"id": &"noah", "name": "召唤师·诺亚", "desc": "僚机使役者（血 50 / 攻 +5%），环绕增援",
 		"hp": 50.0, "atk_pct": 0.05,
 		"skill_name": "召唤僚机", "skill_desc": "召唤 2 只环绕僚机，持续 10 秒后离场",
 		"cd": 120.0,
-		"unlock_depth": 5,                  # 任意图无尽深度 ≥5 解锁（P2 新门型）
+		"unlock_achievement": &"wave_20",   # 成就「深入敌阵」（单局抵达第 20 波）解锁
 	},
 ]
 

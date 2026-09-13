@@ -667,8 +667,15 @@ func _rebuild_char_select() -> void:
 				unlock_hint = "　🔒 通关「%s」解锁" % String(MapTable.get_map(umap).get("name", "?"))
 			elif int(def.get("unlock_kills", 0)) > 0:
 				unlock_hint = "　🔒 图鉴累计击杀 %d 解锁" % int(def.get("unlock_kills", 0))
-			elif int(def.get("unlock_depth", 0)) > 0:
-				unlock_hint = "　🔒 任意图无尽深度 ≥%d 解锁" % int(def.get("unlock_depth", 0))
+			elif def.get("unlock_achievement", &"") != &"":
+				var uach: StringName = def.get("unlock_achievement", &"")
+				var aname := String(uach)
+				for a in Meta.ACHIEVEMENTS:
+					if a.id == uach:
+						aname = String(a.name)
+				unlock_hint = "　🏆 成就「%s」解锁" % aname
+			elif int(def.get("unlock_price", 0)) > 0:
+				unlock_hint = "　🔒 结晶解锁 %d💎（当前 %d💎）" % [int(def.get("unlock_price", 0)), Meta.crystals]
 		name_l.text = String(def.name) + ("　✓ 当前" if picked else "") + unlock_hint
 		name_l.position = Vector2(74.0, 12.0)
 		name_l.size = Vector2(406.0, 28.0)
@@ -701,11 +708,34 @@ func _rebuild_char_select() -> void:
 			pick_btn.pressed.connect(_on_char_pick.bind(def.id))
 			pick_btn.button_down.connect(func() -> void: StickerTheme.press_punch(pick_btn))
 			row.add_child(pick_btn)
+		elif not picked and int(def.get("unlock_price", 0)) > 0:
+			# 购买门：解锁按钮（结晶不足置灰——purchase_character 不足返回 false 口径）
+			var price := int(def.get("unlock_price", 0))
+			var buy_btn := Button.new()
+			buy_btn.text = "解锁 %d💎" % price
+			buy_btn.add_theme_font_size_override("font_size", 14)
+			buy_btn.add_theme_font_override("font", StickerTheme.font_bold())
+			buy_btn.position = Vector2(478.0, 38.0)
+			buy_btn.size = Vector2(84.0, 44.0)
+			buy_btn.focus_mode = Control.FOCUS_NONE
+			buy_btn.disabled = Meta.crystals < price
+			buy_btn.pressed.connect(_on_char_buy.bind(def.id))
+			buy_btn.button_down.connect(func() -> void: StickerTheme.press_punch(buy_btn))
+			row.add_child(buy_btn)
 		_panel_list.add_child(row)
 
 
 func _on_char_pick(p_id: StringName) -> void:
 	Meta.set_character_id(p_id)
+	_rebuild_char_select()
+	_refresh_lobby_counts()
+
+
+func _on_char_buy(p_id: StringName) -> void:
+	# 结晶购买角色（Meta 扣费 + 永久记录；成功音同「换一批次数」金币音——购买爽感反馈）
+	if Meta.purchase_character(p_id):
+		if SfxBank.I != null:
+			SfxBank.I.play(&"coin")
 	_rebuild_char_select()
 	_refresh_lobby_counts()
 

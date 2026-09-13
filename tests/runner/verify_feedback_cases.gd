@@ -562,16 +562,47 @@ func _test_swamp_eco() -> void:
 # ── ⑱ 角色系统 + 局外养成（M8 落地验收） ─────────────────────────
 func _test_char_meta() -> void:
 	print("── 角色与局外养成 ──")
-	_check("CharacterTable：8 角色（解锁链完整——P2 薇拉/诺亚 +2）", CharacterTable.count() == 8)
-	# 解锁链：全图通关（测试环境解锁全部角色）
+	_check("CharacterTable：8 角色（解锁矩阵完整——通关3/购买2/挑战2/初始1）",
+		CharacterTable.count() == 8)
+	# 解锁矩阵（2026-09-13）：ranger/zero 转结晶购买门——全图通关不再解锁二者
 	for m in MapTable.MAPS:
 		Meta.mark_map_cleared(m.id)
-	_check("解锁链：哨兵恒解锁 / 零需树海通关",
-		Meta.is_character_unlocked(&"sentinel") and Meta.is_character_unlocked(&"zero"))
+	_check("解锁矩阵：哨兵恒解锁 / 通关门(薇拉·磐·莽)全开",
+		Meta.is_character_unlocked(&"sentinel") and Meta.is_character_unlocked(&"veles")
+		and Meta.is_character_unlocked(&"bulwark") and Meta.is_character_unlocked(&"mank"))
+	_check("解锁矩阵：购买门(岚80/零160)不随通关解锁",
+		not Meta.is_character_unlocked(&"ranger") and not Meta.is_character_unlocked(&"zero"))
+	# 购买流程：结晶充足 → 扣费 + 永久解锁；不足 → false；重复购买 → false
+	var saved_crystals: int = Meta.crystals
+	var saved_unlocked: Dictionary = Meta.unlocked_characters.duplicate()
+	Meta.unlocked_characters = {}
+	Meta.crystals = 100
+	_check("购买：结晶不足（岚 80 vs 0💎）→ 前置锁定",
+		not Meta.is_character_unlocked(&"ranger"))
+	Meta.crystals = 100
+	_check("购买：100💎 买岚(80) → 成功 + 余额 20",
+		Meta.purchase_character(&"ranger") and Meta.crystals == 20
+		and Meta.is_character_unlocked(&"ranger"))
+	Meta.crystals = 20
+	_check("购买：余额不足买零(160) → false 且不解锁",
+		not Meta.purchase_character(&"zero") and not Meta.is_character_unlocked(&"zero"))
+	_check("购买：重复购买岚 → false（已解锁幂等）",
+		not Meta.purchase_character(&"ranger"))
+	# 选择守卫：锁定角色 set_character_id 拒绝；解锁后放行
+	var saved_char: StringName = Meta.character_id
+	Meta.character_id = &"sentinel"
+	Meta.set_character_id(&"zero")
+	_check("选择守卫：锁定零 set_character_id 拒绝（保持哨兵）",
+		Meta.character_id == &"sentinel")
+	Meta.set_character_id(&"ranger")
+	_check("选择守卫：已购岚 set_character_id 放行", Meta.character_id == &"ranger")
+	Meta.character_id = saved_char
+	Meta.crystals = saved_crystals
+	Meta.unlocked_characters = saved_unlocked.duplicate()
 	Meta.maps_cleared = {}
 	Meta.mark_map_cleared(&"world_grass")
-	_check("解锁链：薇拉解锁（草原） / 零回落锁定（树海未清）",
-		Meta.is_character_unlocked(&"veles") and not Meta.is_character_unlocked(&"zero"))
+	_check("解锁链：薇拉解锁（草原） / 磐回落锁定（冰原未清）",
+		Meta.is_character_unlocked(&"veles") and not Meta.is_character_unlocked(&"bulwark"))
 	for m in MapTable.MAPS:
 		Meta.mark_map_cleared(m.id)
 	# 角色应用：薇拉（45 血 + 25% 攻）
@@ -601,7 +632,9 @@ func _test_char_meta() -> void:
 	p.call(&"set_character", &"bulwark")
 	_check("角色：磐血量 95 + 养成（增强 -5% 攻口径）",
 		absf(float(p.get("max_hp")) - (95.0 + Meta.hp_bonus())) <= 0.01)
-	# 零：时滞力场（全场静止）
+	# 零：时滞力场（全场静止）。零为结晶购买门（2026-09-13 矩阵）——技能验收直接置解锁位
+	#（Player.set_character 锁定回落哨兵；购买流已在上方购买用例单测；游侠同理由 _test_economy 局部管理）
+	Meta.unlocked_characters["zero"] = true
 	var stop_target := (_gl.pools[&"enemy"] as EnemyPool).acquire()
 	stop_target.spawn(_fixture_enemy(&"E_TS", 100.0), 1, 0)
 	_gl.enemy_grid.rebuild([stop_target])
@@ -660,6 +693,7 @@ func _test_char_meta() -> void:
 	Meta.character_id = &"sentinel"
 	Meta.upgrades = {}
 	Meta.crystals = 0
+	Meta.unlocked_characters = saved_unlocked.duplicate()   # 购买位还原（duplicate 断别名——引用赋值会被后续置位污染快照）
 	Meta._save()                                  # 养成测试不留痕（防污染 pkg 字面量断言）
 
 
@@ -703,8 +737,10 @@ func _test_economy() -> void:
 	_check("黑市：刷新扣费", int(_gl.player.get("gold")) <= g1 - 10)
 	shop.close()
 	_check("黑市：出击 → PLAYING（含宽限）", _gl.state == GameConst.GameStatus.PLAYING)
-	# 游侠闪现
+	# 游侠闪现（购买门角色——技能验收临时置解锁位，函数尾还原）
 	var p: Node = _gl.player
+	var saved_unlocked_econ: Dictionary = Meta.unlocked_characters.duplicate()
+	Meta.unlocked_characters["ranger"] = true
 	Meta.character_id = &"ranger"
 	p.call(&"set_character", &"ranger")
 	var pos0: Vector2 = (p as Node2D).global_position
@@ -713,6 +749,7 @@ func _test_economy() -> void:
 	_check("游侠：瞬步位移 + 无敌", ((p as Node2D).global_position - pos0).length() > 200.0
 		and float(p.get("invuln_left")) > 0.5)
 	Meta.character_id = &"sentinel"
+	Meta.unlocked_characters = saved_unlocked_econ.duplicate()
 	# 音效库
 	_check("音效：8 种程序化音色就绪", SfxBank.I != null and SfxBank.I._streams.size() >= 9)
 	SfxBank.I.play(&"kill")
@@ -1399,23 +1436,25 @@ func _test_p2_characters() -> void:
 		String(vera.get("id")) == "vera" and String(noah.get("id")) == "noah"
 		and absf(float(vera.get("cd", 0.0)) - 120.0) <= 0.01
 		and absf(float(noah.get("cd", 0.0)) - 120.0) <= 0.01)
-	# 解锁门：薇拉 = 图鉴累计击杀 500；诺亚 = 任意图无尽深度 ≥5
+	# 解锁门：薇拉 = 图鉴累计击杀 500；诺亚 = 成就「深入敌阵」（wave_20，2026-09-13 矩阵）
 	var saved_kills: int = int(Meta.records["total_kills"])
 	var saved_maps: Dictionary = Meta.map_records
+	var saved_ach: Dictionary = Meta.achievements_done
+	var saved_unlocked: Dictionary = Meta.unlocked_characters.duplicate()
 	Meta.records["total_kills"] = 499
-	Meta.map_records = {}
-	_check("解锁门：薇拉 499 杀锁定 / 诺亚深度 0 锁定",
+	Meta.achievements_done = {}
+	_check("解锁门：薇拉 499 杀锁定 / 诺亚无成就锁定",
 		not Meta.is_character_unlocked(&"vera") and not Meta.is_character_unlocked(&"noah"))
 	Meta.records["total_kills"] = 500
 	_check("解锁门：薇拉 500 杀解锁", Meta.is_character_unlocked(&"vera"))
 	Meta.records["total_kills"] = saved_kills
-	Meta.map_records = {"world_frost": {"endless_depth": 5}}
-	_check("解锁门：诺亚任意图深度 ≥5 解锁", Meta.is_character_unlocked(&"noah"))
-	Meta.map_records = saved_maps
+	Meta.achievements_done = {"wave_20": true}
+	_check("解锁门：诺亚成就「深入敌阵」达成解锁", Meta.is_character_unlocked(&"noah"))
+	Meta.achievements_done = saved_ach
 	# 薇拉：毒云领域（直结算通道——域内敌每 0.5s 受 8% 主武器 ATK + 减速 20%）
 	_gl.state = GameConst.GameStatus.MENU
 	Meta.records["total_kills"] = maxi(saved_kills, 500)   # 解锁门满足（守卫回落哨兵口径）
-	Meta.map_records = {"world_frost": {"endless_depth": 5}}
+	Meta.achievements_done["wave_20"] = true
 	Meta.character_id = &"vera"
 	p.call(&"set_character", &"vera")
 	_check("角色：薇拉血量 55 + 养成加成",
@@ -1485,6 +1524,9 @@ func _test_p2_characters() -> void:
 	# 选人面板：8 格（锁定态展示——薇拉/诺亚解锁门文案）
 	Meta.records["total_kills"] = saved_kills
 	Meta.map_records = saved_maps                 # 解锁门快照还原（测试不留痕）
+	Meta.achievements_done = saved_ach
+	Meta.unlocked_characters = saved_unlocked.duplicate()   # 购买位还原（duplicate 断别名）
+	Meta._save()                                  # 立即落盘干净态（覆盖污染窗口内的中途存档）
 	Meta.character_id = &"sentinel"
 	var menu: MenuScreen = _gl.menu_screen
 	menu._on_lobby_pressed("char")

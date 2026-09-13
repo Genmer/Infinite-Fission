@@ -151,7 +151,13 @@ func _test_full_chain_smoke() -> void:
 	# 选卡 → 词条生效 → 恢复 PLAYING
 	var card: Dictionary = _gl.current_candidates[0]
 	var kind := int(card.get("kind", -1))
+	# MASTERY/TRAIT 目标武器随机（多持时 rng 直选）——断言跟卡面目标走（卡池每局随机，
+	# 写死 slots[0] 在随机命中其他武器时误报，2026-09-13 batch5 实测）
 	var w: WeaponBase = _gl.player.weapon_slots[0]
+	if card.get("weapon") is WeaponBase and is_instance_valid(card["weapon"]):
+		w = card["weapon"]                        # MASTERY 目标
+	elif card.get("target_weapon") is WeaponBase and is_instance_valid(card["target_weapon"]):
+		w = card["target_weapon"]                 # TRAIT 目标（随机武器）
 	var traits0: int = w.trait_stack.traits.size()
 	var wlevel0: int = w.level
 	var relics0: int = _gl.card_generator.owned_relics.size()

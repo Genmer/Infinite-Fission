@@ -57,6 +57,7 @@ var _run_daily: bool = false                  # 当前局为每日挑战（结�
 var crystals: int = 0                         # 裂变结晶（每局结算产出）
 var upgrades: Dictionary = {}                 # upgrade_id(String) → 等级
 var character_id: StringName = &"sentinel"    # 当前选用角色（大厅选人）
+var unlocked_characters: Dictionary = {}      # 购买解锁的角色 id(String) → true（永久，存档）
 
 # 永久升级定义表（cost = base_cost × (当前级+1)）
 const UPGRADES: Array[Dictionary] = [
@@ -171,15 +172,21 @@ func revive_charges() -> int:
 
 
 func set_character_id(p_id: StringName) -> void:
+	# 选择守卫（2026-09-13 解锁矩阵）：锁定角色拒绝选用（UI 选用按钮本就只对解锁
+	# 角色上架——此为程序化路径兜底；直接字段写不受守卫约束 = 测试探针口径）
+	if not is_character_unlocked(p_id):
+		push_warning("[Meta] 角色未解锁（%s）——拒绝选用" % String(p_id))
+		return
 	character_id = p_id
 	_save()
 
 
 func is_character_unlocked(p_id: StringName) -> bool:
-	# 角色解锁链（用户反馈「通关大关解锁，每个大关一个」）：unlock_map 空 = 初始；
-	# 否则 = 对应大关已通关（派生自 maps_cleared——零新增存档字段）。
-	# P2 扩展两门（CharacterTable 新键，按序判定）：unlock_kills = 图鉴累计击杀门；
-	# unlock_depth = 任意图无尽深度门（读既有 map_records.endless_depth——零新增字段）
+	# 角色解锁矩阵（2026-09-13 用户反馈「一些通关，一些购买，一些成就解锁」）：
+	# unlock_map = 通关某图（派生自 maps_cleared——零新增存档字段）；
+	# unlock_kills = 图鉴累计击杀；unlock_achievement = 成就达成（achievements_done）；
+	# unlock_price = 结晶购买（unlocked_characters 永久记录——唯一新增存档键）。
+	# 空 = 初始角色（sentinel）恒解锁。
 	var def := CharacterTable.get_character(p_id)
 	var unlock_map: StringName = def.get("unlock_map", &"")
 	if unlock_map != &"":
@@ -187,20 +194,27 @@ func is_character_unlocked(p_id: StringName) -> bool:
 	var unlock_kills := int(def.get("unlock_kills", 0))
 	if unlock_kills > 0:
 		return int(records["total_kills"]) >= unlock_kills
-	var unlock_depth := int(def.get("unlock_depth", 0))
-	if unlock_depth > 0:
-		return max_endless_depth() >= unlock_depth
+	var unlock_achievement: StringName = def.get("unlock_achievement", &"")
+	if unlock_achievement != &"":
+		return achievements_done.has(String(unlock_achievement))
+	var unlock_price := int(def.get("unlock_price", 0))
+	if unlock_price > 0:
+		return unlocked_characters.has(String(p_id))
 	return true
 
 
-func max_endless_depth() -> int:
-	# 任意图历史无尽深度最大值（P2 角色解锁门；无记录 → 0）
-	var best := 0
-	for key: Variant in map_records:
-		var mr: Variant = map_records[key]
-		if mr is Dictionary:
-			best = maxi(best, int((mr as Dictionary).get("endless_depth", 0)))
-	return best
+func purchase_character(p_id: StringName) -> bool:
+	# 结晶购买角色（永久解锁；不足/已解锁/无价格 → false——UI 解锁按钮置灰口径）
+	var def := CharacterTable.get_character(p_id)
+	var price := int(def.get("unlock_price", 0))
+	if price <= 0 or unlocked_characters.has(String(p_id)):
+		return false
+	if crystals < price:
+		return false
+	crystals -= price
+	unlocked_characters[String(p_id)] = true
+	_save()
+	return true
 
 
 # ── 每日挑战（P2：固定种子 + 当日词缀 + daily_best，不混常规记录） ──
@@ -474,6 +488,7 @@ func _save() -> void:
 	cfg.set_value("meta", "crystals", crystals)
 	cfg.set_value("meta", "upgrades", upgrades)
 	cfg.set_value("meta", "character", String(character_id))
+	cfg.set_value("characters", "unlocked", unlocked_characters.keys())
 	cfg.set_value("settings", "values", _settings)
 	cfg.save(SAVE_PATH)
 
@@ -506,6 +521,9 @@ func _load() -> void:
 	if ups is Dictionary:
 		upgrades = ups
 	character_id = StringName(String(cfg.get_value("meta", "character", "sentinel")))
+	unlocked_characters = {}
+	for cid in cfg.get_value("characters", "unlocked", []):
+		unlocked_characters[String(cid)] = true
 	# 设置段（P3）：逐键白名单归一（脏档键值丢弃 → 缺键回默认表）
 	_settings = {}
 	var saved_settings: Variant = cfg.get_value("settings", "values", {})
