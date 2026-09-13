@@ -24,8 +24,10 @@ func run(p_tree: SceneTree) -> void:
 	tree = p_tree
 	seed(42)
 	_boot_game_loop()
-	# R13：套件启动即清购买位（防历史崩溃运行残留在测试档中被往返携带）
+	# R13：套件启动即清购买位/角色选择（防历史崩溃运行残留在测试档中被往返携带
+	# ——pkg4 HUD 用例曾因测试档残留「堡垒」出生 95 血而误报）
 	Meta.unlocked_characters = {}
+	Meta.character_id = &"sentinel"
 	_test_level_up_full_heal()
 	_test_weapon_card_equip_chain()
 	_test_weapon_card_slot_guard()
