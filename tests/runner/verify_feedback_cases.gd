@@ -2103,6 +2103,34 @@ func _test_round7_audit() -> void:
 	for c in (_gl.pools[&"projectile"] as Node).get_children():
 		if c is ProjectileBase and bool(c.get("_live")):
 			(c as ProjectileBase).nullify()
+	# ⑪ R15：经验萃取卡显示【通用】（不再挂武器名）
+	var xp_card: Dictionary = gen._make_trait_card(&"AFF_XP_GAIN", 1, w_pistol)
+	_check("通用前缀：经验萃取卡含【通用】（不再挂武器名）",
+		"【通用】" in String(xp_card.get("display_name")),
+		str(xp_card.get("display_name")))
+	# ⑫ R15：自导武器边界反弹（此前自导 tick 无边界反弹路径）
+	var homing_w: WeaponBase = _gl.player.call(&"add_weapon", _gl.registry.get_weapon(&"W6_micro_missile"))
+	if homing_w != null:
+		homing_w.attach_trait(bounce_t)
+		homing_w.try_fire()
+		var bounced := false
+		var homing_live := 0
+		for c in (_gl.pools[&"projectile"] as Node).get_children():
+			var pr2: Variant = c
+			if pr2 != null and is_instance_valid(pr2) and bool(pr2.get("_live")) 					and int(pr2.get("weapon_uid")) == homing_w.uid:
+				homing_live += 1
+				if int(pr2.get("bounces_left")) > 0 and float(pr2.get("lifetime_left")) >= 20.0:
+					bounced = true
+		_check("自导反弹：导弹带预算（射程无限 + 预算注入）", homing_live > 0 and bounced,
+			"live=%d" % homing_live)
+	# ⑬ R15：冰原通关 → 解锁魔域（通关链 + 胜利流程联动）
+	_gl.quit_to_menu()
+	_gl.current_map_id = &"world_frost"
+	_gl.start_run()
+	_gl.wave_director.current_wave = 15
+	EventBus.emit_wave_cleared(15)
+	_check("冰原通关：w15 清空 → 冰原已通关标记", Meta.is_map_cleared(&"world_frost"))
+	_check("冰原通关：魔域随之解锁", Meta.is_map_unlocked(&"world_demon"))
 	print("── 七轮反馈完 ──")
 
 

@@ -81,7 +81,8 @@ var elemental_fx: ElementalFxLayer = null     # 方向 C：元素签名特效层
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
 var confetti: ConfettiBurst = null            # 方向 C：Boss 死亡彩纸屑（actors 段前置订阅）
 var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp}
-var resume_grace_left: float = 0.0            # 恢复输入忽略剩余（raw 通道；测试观测）
+var resume_grace_left: float = 0.0
+var _victory_pending_left: float = 0.0        # 通关结算延迟窗（R15：给磁吸碎片收集时间）
 
 var frame_order: Array[StringName] = []       # 帧序探针（每帧重建；测试断言固定帧序）
 var current_candidates: Array[Dictionary] = []   # 当前货架（测试观测）
@@ -134,6 +135,7 @@ func _physics_process(p_raw_delta: float) -> void:
 			if resume_grace_left > 0.0:
 				resume_grace_left = maxf(resume_grace_left - p_raw_delta, 0.0)
 			player.input_enabled = resume_grace_left <= 0.0
+			_tick_victory_pending(p_raw_delta)  # R15：通关结算延迟窗（碎片收集收尾）
 			# ② 玩家（移动/受击/拾取；内含武器冷却+开火调度——包 2 Player.tick 落地口径）
 			frame_order.append(&"player")
 			player.tick(gd, Vector2.ZERO)
@@ -247,13 +249,28 @@ func _on_wave_cleared_collect() -> void:
 
 func _on_wave_cleared_victory(p_wave: int) -> void:
 	# 通关即结算（R10 用户反馈「波次结束不结束当前关卡吗，波次怎么还在叠加」）：
-	# 清完 final 波（Boss 波）→ 胜利结算屏；下一关由选关解锁链承接。局内存档清除
-	#（通关 = 局终；与死亡清档同口径）
+	# 清完 final 波（Boss 波）→ 胜利结算屏；下一关由选关解锁链承接。
+	# R15：不立刻切结算——Boss 爆炸的碎片球/彩纸需要收尾（用户实测「彩色球残留屏幕」
+	# =结算瞬间停帧把表现件冻在屏上）。开 2.2s 收尾窗：波末磁吸继续工作，窗口结束
+	# 回收残余碎片 + RunSave.clear + 胜利结算
 	if state != GameConst.GameStatus.PLAYING or current_map_id == StringName(""):
 		return
 	var final_wave := int(MapTable.get_map(current_map_id).get("final_wave", 1 << 30))
 	if p_wave < final_wave:
 		return
+	_victory_pending_left = 2.2
+
+
+func _tick_victory_pending(p_raw_delta: float) -> void:
+	if _victory_pending_left <= 0.0:
+		return
+	_victory_pending_left = maxf(_victory_pending_left - p_raw_delta, 0.0)
+	if _victory_pending_left > 0.0 or state != GameConst.GameStatus.PLAYING:
+		return
+	for shard in active_shards.duplicate():
+		if is_instance_valid(shard):
+			(pools[&"xp"] as XPPool).release(shard)
+			active_shards.erase(shard)
 	RunSave.clear()
 	if change_state(GameConst.GameStatus.GAME_OVER):
 		game_over_screen.show_victory()

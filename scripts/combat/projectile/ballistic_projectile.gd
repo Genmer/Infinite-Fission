@@ -31,7 +31,9 @@ func _move(p_game_delta: float) -> void:
 			velocity = dir * spd
 	global_position += velocity * p_game_delta
 	_traveled += velocity.length() * p_game_delta
-	if range_left > 0.0 and _traveled >= range_left:
+	# R15：带反弹预算 = 射程无限（用户裁定「打空必达边界」）——跳过射程回收，
+	# 生命周期由边界反弹次数接管（预算耗尽 → 边缘 BOUNCE_DEPLETED 回收）
+	if range_left > 0.0 and _traveled >= range_left and bounces_left <= 0:
 		_recycle(GameConst.RecycleReason.EXPIRED)   # 超射程（range 快照）→ EXPIRED
 		return
 	_check_edge_bounce()

@@ -196,6 +196,16 @@ func _listens(p_effect_id: StringName, p_event: StringName) -> bool:
 	return false
 
 
+func _weapon_by_uid(p_uid: int) -> WeaponBase:
+	# 来源武器解析（R15：暴击谐振按暴击来源重置；未命中任何槽位 → null）
+	if player == null or not is_instance_valid(player):
+		return null
+	for w in player.get("weapon_slots"):
+		if w != null and is_instance_valid(w) and int(w.get("uid")) == p_uid:
+			return w
+	return null
+
+
 func _owned_effect(p_effect_id: StringName) -> RelicData:
 	for data in owned:
 		if data.effect_id == p_effect_id:
@@ -285,11 +295,19 @@ func _on_damage_resolved(p_result: DamageResult) -> void:
 	if _listens(&"REL_EF_CRIT_CHAIN", &"damage_resolved") and p_result.is_crit:
 		var chance := float(_effect_param(&"REL_EF_CRIT_CHAIN", "chance", 0.15))
 		if rng.randf() < chance:
-			var weapon := _primary_weapon()
+			# R15b（用户裁定）：暴击谐振的重置对象 = **角色技能冷却**（120s 大招——
+			# 武器开火间隔的“冷却”玩家无感）+ 顺手重置暴击来源武器的开火冷却。
+			# 生效全屏提示
+			var weapon := _weapon_by_uid(p_result.source_uid)
+			if weapon == null:
+				weapon = _primary_weapon()
 			if weapon != null:
 				weapon.cooldown_left = 0.0
-				crit_chain_resets += 1
-				DebugStats.count(&"relic_crit_chain")
+			if player != null and is_instance_valid(player):
+				player.set("skill_cd_left", 0.0)   # skill_ready 由 cd<=0 派生
+			crit_chain_resets += 1
+			EventBus.emit_mechanics_intro("⚡ 暴击谐振：角色技能冷却已重置！")
+			DebugStats.count(&"relic_crit_chain")
 	if p_result.pool_breakdown.has(&"elite_dmg"):
 		elite_dmg_hits += 1
 	if p_result.pool_breakdown.has(&"bounce_dmg"):

@@ -19,10 +19,16 @@ var effect: TraitEffect = null                # effect_id → builtin 处理器�
 var _last_trigger_frame: int = -1             # frame_triggered 的帧号真源（懒重置）
 
 
+var layer_values: Array[float] = []            # 每层自身数值（R12c：同 ID 不同品级逐层独立贡献）
+var layer_rarities: Array[int] = []            # 每层稀有度（显示取最高）
+
+
 func setup(p_data: TraitData) -> void:
 	# 绑定定义 + 解析 effect 处理器 + 掷骰流初始化（种子 = hash(id)，可复现）
 	data = p_data
 	layers = 1
+	layer_values = [p_data.value]
+	layer_rarities = [p_data.rarity]
 	value_mult = 1.0
 	cooldown_left = 0.0
 	frame_triggered = false
@@ -31,6 +37,27 @@ func setup(p_data: TraitData) -> void:
 	proc_rng = RandomNumberGenerator.new()
 	proc_rng.seed = hash(p_data.id)
 	effect = TraitEffect.resolve(p_data.effect_id)
+
+
+func stacked_add_total() -> float:
+	# 叠层当前生效总值（R14 用户裁定改直接叠加）：每层全额贡献——1 层 12%、2 层 24%，
+	# 直接线性，不再递减。同 ID 混品级时各按自身品级数值全额相加。
+	var total := 0.0
+	for v in layer_values:
+		total += v * value_mult
+	return total
+
+
+func td_delta() -> float:
+	return data.decay_delta if data != null else 0.0
+
+
+func max_rarity() -> int:
+	# 当前生效定义的稀有度（取高层最高——显示着色用）
+	var best := 0
+	for r in layer_rarities:
+		best = maxi(best, int(r))
+	return best
 
 
 func can_trigger(p_ctx: TraitContext) -> bool:

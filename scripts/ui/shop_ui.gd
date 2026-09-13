@@ -188,7 +188,7 @@ func _build_ui() -> void:
 	refresh_btn.name = "ShopRefreshButton"
 	refresh_btn.add_theme_font_size_override("font_size", 17)
 	refresh_btn.add_theme_font_override("font", StickerTheme.font_bold())
-	refresh_btn.position = Vector2(211.0, 838.0)
+	refresh_btn.position = Vector2(211.0, 806.0)   # R14：原 838 与出击钮(872)重叠 14px
 	refresh_btn.size = Vector2(210.0, 48.0)
 	refresh_btn.pressed.connect(_on_refresh_pressed)
 	refresh_btn.button_down.connect(func() -> void: StickerTheme.press_punch(refresh_btn))
@@ -198,7 +198,7 @@ func _build_ui() -> void:
 	leave_btn.text = "出击！"
 	leave_btn.add_theme_font_size_override("font_size", 20)
 	leave_btn.add_theme_font_override("font", StickerTheme.font_bold())
-	leave_btn.position = Vector2(211.0, 872.0)
+	leave_btn.position = Vector2(211.0, 868.0)
 	leave_btn.size = Vector2(210.0, 60.0)
 	leave_btn.pressed.connect(_on_leave_pressed)
 	leave_btn.button_down.connect(func() -> void: StickerTheme.press_punch(leave_btn))

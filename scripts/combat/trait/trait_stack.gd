@@ -30,9 +30,14 @@ func attach(p_data: TraitData) -> bool:
 			if mounted.layers >= p_data.stack_max:
 				DebugStats.count(&"trait_attach_rejected_stack")
 				return false
-			# R12 同 ID 品级取优：后拿的同名卡若数值更高（如金 > 蓝），覆盖定义——
-			# 否则高品级副本被静默丢弃（用户实测「蓝金点燃看不到差别」根因）
-			if float(p_data.value) > float(mounted.data.value):
+			# R12c 分池语义：
+			# · ADD（可叠数值型）→ 逐层独立品级：每张卡按自身数值贡献（白+蓝=白全额+蓝×δ），
+			#   没有任何一张「白选」；层基数不再取优覆盖
+			# · MULT/ELE（机制合并表/每次附着定值）→ 取优（高品级定义覆盖），叠加计层
+			if p_data.pool == GameConst.PoolClass.ADD:
+				mounted.layer_values.append(p_data.value)
+				mounted.layer_rarities.append(p_data.rarity)
+			elif float(p_data.value) > float(mounted.data.value):
 				mounted.data = p_data
 			mounted.layers += 1
 			return true
@@ -128,12 +133,17 @@ func aggregate_panel() -> Dictionary:
 		if mounted.data.pool != GameConst.PoolClass.ADD:
 			continue
 		var pool_id: StringName = mounted.data.pool_id
-		var effective_value := mounted.data.value * mounted.value_mult
 		var effective := 0.0
-		if LINEAR_ADD_POOLS.has(pool_id):
-			effective = effective_value * float(mounted.layers)
+		if mounted.layer_values.size() > 0:
+			# R14 直接叠加：每层全额（1 层 12%、2 层 24%），不再 F3 递减
+			for k in mounted.layer_values.size():
+				effective += mounted.layer_values[k] * mounted.value_mult
 		else:
-			effective = decay_sum(effective_value, mounted.layers, mounted.data.decay_delta)
+			var effective_value := mounted.data.value * mounted.value_mult
+			if LINEAR_ADD_POOLS.has(pool_id):
+				effective = effective_value * float(mounted.layers)
+			else:
+				effective = decay_sum(effective_value, mounted.layers, mounted.data.decay_delta)
 		sums[pool_id] = float(sums.get(pool_id, 0.0)) + effective
 	return sums
 
@@ -141,19 +151,22 @@ func aggregate_panel() -> Dictionary:
 func aggregate_add_entries() -> Array[Dictionary]:
 	# add_atk 池 → DamageContext.add_entries（管线步骤 3 F3 衰减真源；面板段唯一入列池）
 	var out: Array[Dictionary] = []
+	# R14 直接叠加：每层一条贡献（层内全额；同 ID 混品级各按自身数值）
 	for mounted in traits:
 		if mounted.data.pool != GameConst.PoolClass.ADD:
 			continue
 		if mounted.data.pool_id != &"add_atk":
 			continue
-		out.append({
-			"trait_id": mounted.data.id,
-			"pool_id": mounted.data.pool_id,
-			"layer": mounted.layers,
-			"contrib": mounted.data.value * mounted.value_mult,
-			"decay_delta": mounted.data.decay_delta,
-			"is_curse": mounted.data.value < 0.0,
-		})
+		for k in mounted.layer_values.size():
+			var v_k := mounted.layer_values[k] * mounted.value_mult
+			out.append({
+				"trait_id": mounted.data.id,
+				"pool_id": mounted.data.pool_id,
+				"layer": 1,                     # R14 直接叠加：每层全额（无衰减）
+				"contrib": v_k,
+				"decay_delta": mounted.data.decay_delta,
+				"is_curse": v_k < 0.0,
+			})
 	return out
 
 

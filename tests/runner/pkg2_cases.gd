@@ -333,12 +333,18 @@ func _test_event_dispatch_order() -> void:
 		"hitbox_radius": 6.0,
 	}, [ta, tb, tc])
 	proj.tick(DT)                                     # tick1：ON_TICK → ON_HIT → ON_PIERCE（pierce 2→1）
+	print("[DEBUG t1] live=%s bl=%d shared=%s" % [str(proj._live), proj.bounces_left, str(shared)])
 	proj.position = Vector2(3, 640)
 	proj.velocity = Vector2(-100, 0)
 	proj.tick(DT)                                     # tick2：ON_BOUNCE（左缘反射）→ ON_TICK
+	print("[DEBUG t2] live=%s bl=%d pos=%s vel=%s shared_tail=%s" % [str(proj._live),
+		proj.bounces_left, str(proj.position), str(proj.velocity),
+		str(shared.slice(maxi(shared.size() - 4, 0)))])
 	proj.position = Vector2(360, 640)
 	proj.velocity = Vector2(100, 0)
 	proj.tick(DT)                                     # tick3：ON_TICK → ON_HIT → ON_EXPIRE（pierce 1→0 回收）
+	print("[DEBUG t3] live=%s shared_tail=%s hp=%s" % [str(proj._live),
+		str(shared.slice(maxi(shared.size() - 4, 0))), str(enemy.hp)])
 	var log_a: Array = ta.get("log") as Array
 	var log_b: Array = tb.get("log") as Array
 	var log_c: Array = tc.get("log") as Array

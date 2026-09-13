@@ -6,7 +6,7 @@
 script = ExtResource("1_rd")
 id = &"REL_CRIT_CHAIN"
 display_name = "暴击谐振"
-description = "暴击时 15% 概率重置当前武器冷却（A3 §5）"
+description = "暴击时 15% 概率立即重置角色技能冷却，并重置暴击来源武器的开火间隔（R15：重置对象=角色技能）"
 rarity = 3
 listen_events = [&"damage_resolved"]
 effect_id = &"REL_EF_CRIT_CHAIN"

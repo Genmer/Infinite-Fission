@@ -426,9 +426,9 @@ func _test_trait_stack_core() -> void:
 	s3.attach(d_atk)
 	var panel: Dictionary = s3.aggregate_panel()
 	var entries: Array[Dictionary] = s3.aggregate_add_entries()
-	_check("面板聚合：add_atk 2 层 F3 = 18.5 + add_entries 单项 layer 2",
-		_approx(float(panel.get("add_atk", 0.0)), 18.5, 0.001)
-			and (entries.size() == 1 and int(entries[0]["layer"]) == 2))
+	_check("面板聚合：add_atk 2 层线性 = 20 + add_entries 每层一条（R14 直接叠加）",
+		_approx(float(panel.get("add_atk", 0.0)), 20.0, 0.001)
+			and (entries.size() == 2 and int(entries[0]["layer"]) == 1))
 	# 整数线性池：add_pierce ×2 层 = 2.0（不走 F3）
 	var d_pierce := _make_trait_data("TRAIT_PIERCE", GameConst.PoolClass.ADD, &"add_pierce",
 		&"EF_STAT", 1.0, [])

@@ -402,8 +402,9 @@ func _make_weapon_section(p_w: Node) -> Control:
 		var sm_v: Variant = td.get("stack_max")
 		var stack_max := int(sm_v) if sm_v != null else 1
 		var tname := Label.new()
+		var eff_rarity := (t as TraitBase).max_rarity() if t is TraitBase else int(td.get("rarity"))
 		var rarity_col: Color = [PopPalette.INK, Color("4a9eff"), PopPalette.SHOCK,
-			PopPalette.GOLD][clampi(int(td.get("rarity")), 0, 3)]
+			PopPalette.GOLD][clampi(eff_rarity, 0, 3)]
 		StickerTheme.label_sticker(tname, 16, rarity_col, 0, Color.WHITE, true)
 		# R11 叠层可视化：可叠词条显示「当前/上限 层」（如 2/3）
 		tname.text = String(td.get("display_name")) + ("　%d/%d 层" % [layers, stack_max] 			if stack_max > 1 else ("　×%d" % layers if layers > 1 else ""))
@@ -432,7 +433,7 @@ func _trait_desc_bbcode(p_tb: TraitBase) -> String:
 	var desc := String(td.description)
 	if td == null or td.pool != GameConst.PoolClass.ADD:
 		return desc
-	var eff := TraitStack.decay_sum(td.value * p_tb.value_mult, p_tb.layers, td.decay_delta)
+	var eff := p_tb.stacked_add_total()   # R12c 逐层品级真值
 	if eff <= 0.0:
 		return desc
 	var re_num := RegEx.create_from_string("\\+\\d(\\.\\d)?%?")

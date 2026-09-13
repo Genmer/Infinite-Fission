@@ -132,6 +132,9 @@ func tick(p_game_delta: float) -> void:
 	_move(p_game_delta)
 	if not _live:
 		return
+	_check_edge_bounce()                        # R15：基类统一边界反弹（弹道覆写内亦有调用——幂等）
+	if not _live:
+		return
 	_check_offscreen()
 	if not _live:
 		return
@@ -501,6 +504,8 @@ func _check_edge_bounce() -> void:
 		normal = Vector2(0, -1)
 	if normal == Vector2.ZERO:
 		return
+	if velocity.dot(normal) > 0.0:
+		return                                  # 已在离面方向（R15 基类统一后幂等——防边界处同帧双弹）
 	if bounces_left > 0:
 		_apply_bounce(normal)
 	elif _had_bounces:
