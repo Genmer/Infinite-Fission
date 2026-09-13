@@ -277,8 +277,36 @@ func _trait_candidates(p_category: String, p_player: Node, p_picked: Array[Strin
 			continue                            # 叠层上限（§6.4）
 		if not MechanicGate.trait_allowed(t):
 			continue                            # 元素解锁门（火/冰 第 2 关 · 雷 第 3 关）
+		if not _form_allows(t, p_target):
+			continue                            # 形态/武器适配门（错形态词条不上架——§5.12 P0）
 		out.append(tid)
 	return out
+
+
+func _form_allows(p_t: TraitData, p_target: WeaponBase) -> bool:
+	# 形态/武器适配（TraitData.params，2026-09-13 全量审计接线）：
+	# · required_forms = WeaponForm 数组（0 弹道/1 激光/2 自导/3 近战）——投射物专属词条
+	#   （反弹/分裂/体积/弹速/穿透/弹丸数）不上架错形态武器；
+	# · required_weapon = 单武器 id（MEC_ORBIT_LINK 仅环绕力场 W8——谐振轨道上手枪误刷根修）；
+	# · 两键缺省 = 全形态通用（攻击/暴击/HP/元素/条件乘区等）。
+	var forms: Variant = p_t.params.get("required_forms", null)
+	var weapon_req: Variant = p_t.params.get("required_weapon", null)
+	if forms == null and weapon_req == null:
+		return true
+	var form := -1
+	var wid := &""
+	if p_target != null and is_instance_valid(p_target):
+		var wd: Variant = p_target.get("data")
+		if wd != null:
+			var form_v: Variant = wd.get("form")
+			form = int(form_v) if form_v != null else -1
+			var id_v: Variant = wd.get("id")
+			wid = StringName(String(id_v)) if id_v != null else &""
+	if weapon_req != null and wid != StringName(String(weapon_req)):
+		return false
+	if forms is Array and not (forms as Array).is_empty() and not (forms as Array).has(form):
+		return false
+	return true
 
 
 func _mastery_candidates(p_player: Node) -> Array:

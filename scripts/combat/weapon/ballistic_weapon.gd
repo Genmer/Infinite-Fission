@@ -26,7 +26,8 @@ func try_fire() -> bool:
 	if data == null or projectile_pool == null:
 		return false
 	var pellets := _pellet_count()
-	var speed := _projectile_speed()
+	var speed := _projectile_speed()   # AFF_PROJ_SPD 弹速池消费在 _projectile_speed 内（勿二次叠乘）
+	var size_mult := _proj_size_mult()                    # AFF_AREA 体积池（死卡接线）
 	var dir := aim_direction()
 	var fired := 0
 	for i in range(pellets):
@@ -43,7 +44,7 @@ func try_fire() -> bool:
 			"range": range_left,
 			"pierce": _pierce_count(),
 			"bounces": 0,
-			"hitbox_radius": data.hitbox_r,
+			"hitbox_radius": data.hitbox_r * size_mult,
 			"element": GameConst.Element.KIN,
 			"attach_value": 0.0,
 			"generation": 0,

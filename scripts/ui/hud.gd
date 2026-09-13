@@ -100,7 +100,7 @@ func refresh_stats() -> void:
 			var s_ready: bool = player.get("shield_ready")
 			var s_timer: float = player.get("shield_timer")
 			var s_pct := 1.0 if s_ready else clampf(1.0 - s_timer / maxf(s_interval, 0.01), 0.05, 1.0)
-			_shield_fill.size = Vector2(maxf((148.0 - 6.0) * s_pct, 8.0), 36.0 - 6.0)
+			_shield_fill.size = Vector2(maxf((148.0 - 34.0 - 3.0) * s_pct, 8.0), 36.0 - 6.0)
 			_shield_fill_style.bg_color = PopPalette.PLAYER.lerp(
 				PopPalette.INK_SOFT, 0.35 * (1.0 - s_pct)) if not s_ready else PopPalette.PLAYER
 		var sig := _compute_build_sig()
@@ -566,8 +566,9 @@ func _build_ui() -> void:
 	_skill_cd_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_skill_cd_label.text = ""
 	skill_btn.add_child(_skill_cd_label)
-		# 金币 pill（左上，护盾条同款贴纸风——战地黑市货币）
-	var gold_pill := _sticker_panel(root, Vector2(24.0, 44.0), Vector2(132.0, 36.0), 18.0)
+	# 金币 pill（击杀/计时/护盾同行末段——2026-08-31 P0 反馈「金币压血条」修复落位；
+	# 原 (24,44) 与血条 24~54/经验条 63~77 双重叠，现移至护盾条右侧 464~596）
+	var gold_pill := _sticker_panel(root, Vector2(464.0, 92.0), Vector2(132.0, 36.0), 18.0)
 	gold_pill.name = "GoldPill"
 	gold_pill.modulate.a = 0.94
 	_gold_label = StickerTheme.label_sticker(Label.new(), 17, PopPalette.XP, 0, Color.WHITE, true)

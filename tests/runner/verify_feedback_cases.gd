@@ -54,6 +54,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_settings()
 	_test_round2_feedback()
 	_test_round5_early_xp()
+	_test_round7_audit()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -295,6 +296,9 @@ func _test_build_details_panel() -> void:
 	_gl.hud.build_details_requested.emit()
 	_check("点击 → 进入 PAUSED", _gl.state == GameConst.GameStatus.PAUSED)
 	_check("构筑详情卡可见", _gl.pause_overlay.is_details_visible())
+	# 内容断言（2026-09-13：此前仅断可见性——属性行/武器区块构建无回归护栏）
+	_check("构筑详情卡内容 ≥1 武器区块",
+		(_gl.pause_overlay._details_list as Node).get_child_count() >= 1)
 	_check("暂停卡隐藏（双卡互斥）", not _gl.pause_overlay.is_pause_visible()
 		or _gl.pause_overlay._card.visible == false)
 	_gl.pause_overlay.toggle_details()
@@ -1907,3 +1911,81 @@ func _test_round5_early_xp() -> void:
 		_gl.active_shards.pop_back()
 	e.queue_free()
 	_gl.wave_director.current_wave = saved_wave
+
+
+# ── 2026-09-13 七轮反馈（护盾溢出修复 / 属性展示 / 全量死卡审计接线） ──
+func _test_round7_audit() -> void:
+	print("── 七轮反馈（护盾溢出/属性展示/死卡审计） ──")
+	var p: Node = _gl.player
+	# ① 护盾条填充不溢出面板（填充起点 x=34、面板宽 148 → 上限 111）
+	var hud: HUD = _gl.hud
+	var shield_panel: Control = hud.get_node("Root/ShieldBar")
+	var shield_fill: Panel = shield_panel.get_node("ShieldFill")
+	p.set("shield_interval", 8.0)
+	p.set("shield_ready", true)
+	p.set("shield_timer", 0.0)
+	hud.refresh_stats()
+	_check("护盾条：满充能填充宽度 ≤ 111（不溢出 148 面板）",
+		float(shield_fill.size.x) <= 111.5,
+		"fill_w=%s" % str(shield_fill.size))
+	# ② 构筑详情卡属性行（攻击/暴击/间隔实际生效值）
+	var w0: WeaponBase = p.weapon_slots[0]
+	var line: String = _gl.pause_overlay._weapon_stat_line(w0)
+	_check("属性展示：详情卡属性行含 攻击/暴击/间隔 三段",
+		"攻击" in line and "暴击" in line and "间隔" in line, line)
+	# ③ AFF_PROJ_SPD / AFF_AREA 死卡接线（弹道弹速 / 碰撞半径乘数）
+	var spd_t: TraitData = _gl.registry.get_trait(&"AFF_PROJ_SPD")
+	var area_t: TraitData = _gl.registry.get_trait(&"AFF_AREA")
+	var mult0: float = float(w0.call("_proj_spd_mult"))
+	var size0: float = float(w0.call("_proj_size_mult"))
+	w0.attach_trait(spd_t)
+	w0.attach_trait(area_t)
+	var mult1: float = float(w0.call("_proj_spd_mult"))
+	var size1: float = float(w0.call("_proj_size_mult"))
+	_check("死卡接线：弹速池/体积池挂卡后乘数 > 1（衰减聚合）",
+		mult0 == 1.0 and size0 == 1.0 and mult1 > 1.1 and size1 > 1.08,
+		"spd %s→%s size %s→%s" % [mult0, mult1, size0, size1])
+	# ④ AFF_SKILL_HASTE（原移速卡重做）：挂卡 → 技能基线缩短
+	var haste_t: TraitData = _gl.registry.get_trait(&"AFF_SKILL_HASTE")
+	_check("夹具：AFF_SKILL_HASTE 就位（add_skillcdr 池）",
+		haste_t != null and String(haste_t.pool_id) == "add_skillcdr")
+	var cd0: float = float(p.get("skill_cd_base"))
+	p.call("refresh_skill_cd")
+	w0.attach_trait(haste_t)
+	p.call("refresh_skill_cd")
+	var cd1: float = float(p.get("skill_cd_base"))
+	_check("死卡接线：技能急速挂卡 → 技能冷却基线缩短", cd1 < cd0,
+		"%s→%s" % [cd0, cd1])
+	# ⑤ AFF_PICKUP 死卡接线：磁吸半径增长
+	var pick_t: TraitData = _gl.registry.get_trait(&"AFF_PICKUP")
+	var r0: float = float(p.get("pickup_radius"))
+	w0.attach_trait(pick_t)
+	p.call("refresh_pickup_radius")
+	var r1: float = float(p.get("pickup_radius"))
+	_check("死卡接线：拾取半径词条 → 磁吸半径增长", r1 > r0, "%s→%s" % [r0, r1])
+	# ⑥ 形态/武器适配门：谐振轨道不上手枪货架、环绕武器可得上；弹丸数/穿透不进近战
+	var gen := _gl.card_generator
+	var orbit_w: WeaponBase = OrbitWeapon.new()
+	_gl.add_child(orbit_w)
+	orbit_w.setup(_gl.registry.get_weapon(&"W8_orbit_field"), null, {})
+	var mech_pistol: Array[StringName] = gen._trait_candidates("MECH", p, [], w0)
+	var mech_orbit: Array[StringName] = gen._trait_candidates("MECH", p, [], orbit_w)
+	_check("形态门：手枪货架无谐振轨道（§5.12 P0 根修）", not mech_pistol.has(&"MEC_ORBIT_LINK"))
+	_check("形态门：环绕武器货架有谐振轨道", mech_orbit.has(&"MEC_ORBIT_LINK"))
+	var multi_orbit: Array[StringName] = gen._trait_candidates("ADD", p, [], orbit_w)
+	_check("形态门：非弹道武器无弹丸数/穿透卡",
+		not multi_orbit.has(&"AFF_MULTI") and not multi_orbit.has(&"AFF_PIERCE"))
+	orbit_w.queue_free()
+	# ⑦ REL_BLACK_MARKET：排程 → 波清空后真实开店（LEVEL_UP 态 + 商店可见）
+	if _gl.state != GameConst.GameStatus.MENU:
+		_gl.quit_to_menu()
+	_gl.start_run()
+	_gl.relic_handler.activate(&"REL_BLACK_MARKET")
+	EventBus.emit_wave_cleared(35)
+	_check("黑市遗物：w35 清空 → 排程消费并开店（LEVEL_UP + 可见）",
+		_gl.relic_handler.pending_shop_waves == 0
+		and _gl.state == GameConst.GameStatus.LEVEL_UP
+		and _gl.shop_ui.is_shop_visible())
+	_gl.shop_ui.close()
+	_gl.quit_to_menu()
+	print("── 七轮反馈完 ──")

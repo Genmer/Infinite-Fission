@@ -4,23 +4,24 @@
 
 [resource]
 script = ExtResource("1_td")
-id = &"AFF_MOVE_SWIFT"
-display_name = "疾行"
-description = "移动速度 +10%，可叠 2 层（A3 §4.2）"
+id = &"AFF_SKILL_HASTE"
+display_name = "技能急速"
+description = "角色技能冷却 -12%，可叠 2 层（2026-09-13 由「迅捷移动」重做——拖动 1:1 操控下移速词条无实际消费点，重做为真实生效的技能急速）"
 pool = 0
-pool_id = &"add_move"
+pool_id = &"add_skillcdr"
 effect_id = &"EF_STAT"
-value = 0.1
+value = 0.12
 value2 = 0.0
-params = {"stat": "move_pct"}
+params = {
+	"stat": "skill_cdr"
+}
 event_hooks = []
 stack_max = 2
 decay_delta = 0.85
 cap_pool_p = 0.0
-cap_local = 0.0
 inheritable = false
 proc_chance = 1.0
 cooldown = 0.0
-rarity = 0
+rarity = 1
 tags = 0
 condition = {}

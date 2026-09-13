@@ -149,6 +149,14 @@
 | P1 | 早期叠不起来，「下个 buff 一定要起飞」——早期默认经验倍率 +25% | BalanceTables.early_xp_boost = {mult: 1.25, until_wave: 6}（validator 规则 mult≥1/until_wave≥1）：第 1~5 波经验球面值 ×1.25，第 6 波起回落 1.0。实现走**掉落侧折算**（GameLoop._early_xp_mult，同 REL_MIDAS 口径）——gain_xp/xp 曲线口径保持纯净（pkg2 曲线断言不动）；无尽/续局波数自然越界回落。早期 ~+25% 升级速度 ≈ 前 5 波多 1~2 次选卡，构筑成型提前（verify 新增 7 项用例；pkg5 两处掉落面值断言随新口径更新） |
 | P1 | 角色解锁矩阵：大部分角色需要解锁而非随意使用——一些通关、一些购买、一些成就解锁 | CharacterTable 重排（8 角色）：哨兵初始免费；**通关门 ×3** = 薇拉①草原 / 磐②冰原 / 莽⑤沼泽；**购买门 ×2** = 游侠·岚 80💎 / 演算者·零 160💎（结晶购买永久解锁，纯游玩经济——结晶产出=波次×1.5+击杀/25+成就奖励）；**成就/挑战门 ×2** = 毒系学者·薇拉 图鉴击杀 500 / 召唤师·诺亚 成就「深入敌阵」（单局 20 波，替代原无尽深度门）。配套：Meta.purchase_character（扣费+永久记录+存档键 characters/unlocked）、set_character_id 选择守卫（锁定拒绝，程序化路径兜底）、选人 UI 解锁按钮（结晶不足置灰+当前余额提示）+ 🏆 成就提示文案；删除死门型 unlock_depth/max_endless_depth。verify 新增购买流程/选择守卫/矩阵分布断言 |
 
+## 5.15 七轮反馈批次（2026-09-13 三批，已落地）
+
+| 优先级 | 项 | 落地 |
+|---|---|---|
+| P0 | 临时护盾显示依旧溢出 | 填充条算式 (148−6) 未扣图标偏移（起点 x=34）→ 右侧溢出 28px；修正为 (148−34−3)=111 上限。同批落位 §5.12 P0「金币压血条」：金币 pill (24,44) 移至击杀/计时/护盾同行末段 (464,92)——原位与血条 24~54 / 经验条 63~77 双重叠 |
+| P1 | 本身的暴击率/射速/冷却/间隔等属性应该显示 | 构筑详情卡（左下角点击）每把武器头部新增**实际生效属性行**：攻击 / 暴击率 ×暴伤 / 出招间隔（发/s）——数据源 build_panel_snapshot + _fire_interval（含词条加成/稀有度缩放/养成修正，非基础值口径） |
+| P0 | 不存在的功能整体检查（全量审计） | **死卡接线 ×4**：AFF_PROJ_SPD 弹速池（自导接线，弹道已有 _projectile_speed 消费——审计 grep 漏检教训记录）、AFF_AREA 体积池（弹道+自导 hitbox_radius ×(1+Σ)，子弹药独立取乘数）、AFF_PICKUP 磁吸（Player 跨武器聚合 + 挂卡/换角刷新磁吸圈）、**AFF_MOVE_SWIFT 重做为 AFF_SKILL_HASTE 技能急速**（拖动 1:1 操控下移速无消费点 → add_skillcdr 池 ×(1−Σ) 入技能冷却基线，挂卡刷新）。**形态/武器适配门**（§5.12 P0 根修）：TraitData.params.required_forms / required_weapon → CardGenerator 按目标武器过滤货架——谐振轨道仅 W8、弹丸数/穿透仅弹道、体积/弹速/反弹/分裂仅弹道+自导、CDR 仅 cd 型（弹道除外+文案明示）、射速仅弹道+激光。**REL_BLACK_MARKET 死数据接线**：排程计数 → 波清空真实开店（GameLoop._on_relic_shop_wave，pkg5 占位断言随新语义更新）。审计确认完好：全部 ELE/条件乘区/其余遗物（PHOENIX/HARVEST/MOMENTUM/CRIT_CHAIN/OVERCLOCK/WORDS_TIDE/ECHO/MIDAS/BOSS_TROPHY）均有实现与测试 |
+
 ## 6. 落地顺序建议
 
 ```

@@ -281,6 +281,22 @@ func _player_rof_mult() -> float:
 	return maxf(float(player.get("rof_mult")) * float(player.get("map_rof_mult")), 0.1)
 
 
+func _proj_spd_mult() -> float:
+	# AFF_PROJ_SPD（add_spd 池）弹速 ×(1+Σ)——弹道/自导两形态开火参数共用
+	#（2026-09-13 死卡接线：此前该池全工程零消费）
+	if trait_stack == null:
+		return 1.0
+	return 1.0 + float(trait_stack.aggregate_panel().get("add_spd", 0.0))
+
+
+func _proj_size_mult() -> float:
+	# AFF_AREA（add_size 池）弹体碰撞半径 ×(1+Σ)——同上死卡接线（与 MEC_SIZE_STACK
+	# 的 size_mult 独立叠乘：一为常驻池、一为该词条专属质变通道）
+	if trait_stack == null:
+		return 1.0
+	return 1.0 + float(trait_stack.aggregate_panel().get("add_size", 0.0))
+
+
 func _fire_interval() -> float:
 	# 节拍间隔：BALLISTIC = 1/rof（子类覆写射速口径）；其余形态 = cd × (1−ΣCDR)
 	if data == null:

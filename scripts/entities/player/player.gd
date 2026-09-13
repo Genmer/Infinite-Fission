@@ -342,15 +342,48 @@ func set_character(p_id: StringName) -> void:
 	reroll_charges = 2 + Meta.reroll_bonus()     # 刷新次数（基础 2 + 养成·预案推演，选卡刷新机制）
 	revives_left = Meta.revive_charges()         # 应急协议（每局重置）
 	character_atk_pct = float(def.get("atk_pct", 0.0))
-	skill_cd_base = float(def.get("cd", 30.0)) * (1.0 - Meta.skill_cdr_pct())
+	refresh_skill_cd()
 	skill_cd_left = 0.0
 	rof_mult = 1.0
+	refresh_pickup_radius()
 	_reset_skill_temp_state()                    # 换角色即时清临时态（毒云/僚机还原）
 	# 攻击修正动态注入（真修：武器面板若只在实例化期定格，大厅买养成/选角后开局不生效）
 	for w in weapon_slots:
 		if is_instance_valid(w) and w is WeaponBase:   # freed 实例上评估 is 会报脚本错——判序 valid 在前
 			(w as WeaponBase).meta_atk_pct = Meta.atk_pct() + character_atk_pct
 			(w as WeaponBase).call(&"_invalidate_panel")
+
+
+func _weapon_pool_sum(p_pool: StringName) -> float:
+	# 跨武器聚合某 ADD 池合计（玩家侧词条的消费口：AFF_PICKUP 磁吸 / AFF_SKILL_HASTE 技能急速）
+	var total := 0.0
+	for w in weapon_slots:
+		if w == null or not is_instance_valid(w):
+			continue
+		var stack: Variant = w.get("trait_stack")
+		if stack == null:
+			continue
+		var agg: Dictionary = stack.call(&"aggregate_panel")
+		total += float(agg.get(p_pool, 0.0))
+	return total
+
+
+func refresh_pickup_radius() -> void:
+	# 磁吸半径 = 基准 ×(1 + 养成磁吸 + AFF_PICKUP 词条池)（2026-09-13 死卡接线；挂卡后重算）
+	var bal := GameConfig.balance
+	var base := bal.pickup_radius if bal != null else 120.0
+	pickup_radius = base * (1.0 + Meta.magnet_pct()
+		+ clampf(_weapon_pool_sum(&"add_pickup"), 0.0, 2.0))
+	if _pickup_shape != null and _pickup_shape.shape is CircleShape2D:
+		(_pickup_shape.shape as CircleShape2D).radius = pickup_radius   # 磁吸判定圈同步
+
+
+func refresh_skill_cd() -> void:
+	# 技能冷却基线 = 角色 cd ×(1 − 养成CDR) ×(1 − 技能急速池)
+	#（AFF_SKILL_HASTE 2026-09-13 重做接线；挂卡后由 GameLoop 触发重算）
+	var base := float(CharacterTable.get_character(character_id).get("cd", 120.0))
+	skill_cd_base = base * (1.0 - Meta.skill_cdr_pct()) \
+		* (1.0 - clampf(_weapon_pool_sum(&"add_skillcdr"), 0.0, 0.6))
 
 
 func _skill_time_stop() -> void:

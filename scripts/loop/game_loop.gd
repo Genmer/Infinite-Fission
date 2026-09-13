@@ -238,6 +238,14 @@ func _on_shop_requested(p_wave: int) -> void:
 		shop_ui.open(player, p_wave)
 
 
+func _on_relic_shop_wave(p_wave: int) -> void:
+	# REL_BLACK_MARKET 追加商店波（w35 起每 10 波，排程真源 relic_handler）：波清空后
+	# 消费一次排程开黑市——同波表 SHOP 事件口径（PLAYING 守卫在 _on_shop_requested）
+	if relic_handler != null and relic_handler.pending_shop_waves > 0:
+		relic_handler.pending_shop_waves -= 1
+		_on_shop_requested(p_wave)
+
+
 func _on_build_details() -> void:
 	# 左下角构筑面板点击（用户反馈「点击左下角，可以看 buff 详情」）：战斗中 → 申请暂停
 	# 并进详情卡；已暂停 → 暂停卡/详情卡切换；LEVEL_UP/GAME_OVER 等态不响应
@@ -689,6 +697,9 @@ func _boot_build_presentation() -> void:
 	add_child(shop_ui)
 	shop_ui.closed.connect(request_resume)       # 出击 → LEVEL_UP → PLAYING（含宽限）
 	wave_director.shop_requested.connect(_on_shop_requested)
+	# REL_BLACK_MARKET 追加商店波消费（2026-09-13 死数据接线：排程计数 → 真实开店；
+	# 连接序在 relic_handler.bind_events 之后——同帧先排程后消费）
+	EventBus.wave_cleared.connect(_on_relic_shop_wave)
 	sfx = SfxBank.new()
 	sfx.name = "SfxBank"
 	add_child(sfx)
@@ -696,6 +707,11 @@ func _boot_build_presentation() -> void:
 	EventBus.enemy_killed.connect(func(_e: Node2D) -> void: sfx.play(&"kill"))
 	EventBus.level_up.connect(func(_l: int) -> void: sfx.play(&"level"))
 	EventBus.card_chosen.connect(func(_i: StringName, _k: int) -> void: sfx.play(&"coin"))
+	# 玩家侧词条挂卡生效刷新（2026-09-13 死卡接线：AFF_PICKUP 磁吸 / AFF_SKILL_HASTE 技能急速）
+	EventBus.card_chosen.connect(func(_i: StringName, _k: int) -> void:
+		if player != null and is_instance_valid(player):
+			player.refresh_pickup_radius()
+			player.refresh_skill_cd())
 	EventBus.shield_blocked.connect(func(_p: Vector2) -> void: sfx.play(&"shield"))
 	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
 	EventBus.wave_cleared.connect(_on_wave_cleared_bless_heal)   # 祝福·滋养（词缀二期）

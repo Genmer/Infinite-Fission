@@ -31,13 +31,15 @@ func try_fire() -> bool:
 	var dir := (target.global_position - muzzle_position()).normalized()
 	if dir == Vector2.ZERO:
 		dir = AIM_FALLBACK
+	var spd_mult := _proj_spd_mult()      # AFF_PROJ_SPD 弹速池（死卡接线）
+	var size_mult := _proj_size_mult()    # AFF_AREA 体积池（死卡接线）
 	proj.spawn({
 		"position": muzzle_position(),
-		"velocity": dir * float(data.homing.get("proj_speed_init", 240.0)),
+		"velocity": dir * float(data.homing.get("proj_speed_init", 240.0)) * spd_mult,
 		"lifetime": 6.0,
 		"pierce": 1,
 		"bounces": 0,
-		"hitbox_radius": data.hitbox_r,
+		"hitbox_radius": data.hitbox_r * size_mult,
 		"element": GameConst.Element.KIN,
 		"attach_value": 0.0,
 		"generation": 0,
@@ -48,8 +50,8 @@ func try_fire() -> bool:
 		"team": 0,
 		"target_uid": int(target.get("uid")),
 		"turn_rate": float(data.homing.get("turn_rate", 480.0)),
-		"speed_init": float(data.homing.get("proj_speed_init", 240.0)),
-		"speed_max": float(data.homing.get("proj_speed_max", 720.0)),
+		"speed_init": float(data.homing.get("proj_speed_init", 240.0)) * spd_mult,
+		"speed_max": float(data.homing.get("proj_speed_max", 720.0)) * spd_mult,
 		"accel": float(data.homing.get("accel", 900.0)),
 		"arm_delay": float(data.homing.get("arm_delay", 0.15)),
 		"blast_radius": _leveled_param("blast_r", float(data.homing.get("blast_r", 45.0))),
@@ -85,7 +87,7 @@ func _launch_sub_warheads(p_pos: Vector2) -> void:
 			"lifetime": 5.0,
 			"pierce": 1,
 			"bounces": 0,
-			"hitbox_radius": data.hitbox_r,
+			"hitbox_radius": data.hitbox_r * _proj_size_mult(),
 			"element": GameConst.Element.KIN,
 			"attach_value": 0.0,
 			"generation": 1,

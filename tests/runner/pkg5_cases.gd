@@ -527,11 +527,20 @@ func _test_relic_handler() -> void:
 	# 幂等口径（修复 B 双保险）：同 GAMBLER——卡牌流提前抽中时已持有即生效
 	_check("REL_BLACK_MARKET：激活（卡牌流提前入场 → 已持有即生效）",
 		h.activate(&"REL_BLACK_MARKET") or h.has_relic(&"REL_BLACK_MARKET"))
+	# 2026-09-13 死数据接线：波清空 → 排程消费 → 真实开店（_on_relic_shop_wave）；
+	# w35/w45 开店、w36 不排程
 	EventBus.emit_wave_cleared(35)
+	_check("REL_BLACK_MARKET：w35 清空 → 排程消费并开店（LEVEL_UP + 可见）",
+		h.pending_shop_waves == 0 and _gl.state == GameConst.GameStatus.LEVEL_UP
+		and _gl.shop_ui.is_shop_visible())
+	_gl.shop_ui.close()                        # 出击 → PLAYING（含宽限）
 	EventBus.emit_wave_cleared(45)
+	_check("REL_BLACK_MARKET：w45 再次排程开店", _gl.state == GameConst.GameStatus.LEVEL_UP
+		and _gl.shop_ui.is_shop_visible())
+	_gl.shop_ui.close()
 	EventBus.emit_wave_cleared(36)
-	_check("REL_BLACK_MARKET：w35/w45 排程、w36 不排程（占位计数 2）",
-		h.pending_shop_waves == 2)
+	_check("REL_BLACK_MARKET：w36 不排程（保持 PLAYING）",
+		_gl.state == GameConst.GameStatus.PLAYING and not _gl.shop_ui.is_shop_visible())
 	# REL_PHOENIX：致死保留 1 HP + 清屏冲击（每场 1 次）——放最后（含死亡分支）
 	# 幂等护栏（同 REL_GAMBLER/REL_BLACK_MARKET 先例）：冒烟选卡可能随机抽中 PHOENIX
 	# （card_chosen 通道自动激活）→ 显式 activate 被「每场唯一」拒绝属业务正确，已持有即生效

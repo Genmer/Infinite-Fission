@@ -259,14 +259,14 @@ func _make_weapon_section(p_w: Node) -> Control:
 	section.add_theme_constant_override("separation", 4)
 	var head := Panel.new()
 	head.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 3, false))
-	head.custom_minimum_size = Vector2(576.0, 52.0)
+	head.custom_minimum_size = Vector2(576.0, 78.0)
 	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	section.add_child(head)
 	var icon := TextureRect.new()
 	icon.texture = TextureFactory.weapon_icon(
 		StringName(str(wdata.get("id"))) if wdata != null else &"W_MISSING")
-	icon.position = Vector2(8.0, 6.0)
+	icon.position = Vector2(8.0, 18.0)
 	icon.custom_minimum_size = Vector2(40.0, 40.0)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -276,10 +276,19 @@ func _make_weapon_section(p_w: Node) -> Control:
 	StickerTheme.label_sticker(wname, 19, PopPalette.INK, 0, Color.WHITE, true)
 	wname.text = "%s  Lv%d" % [String(wdata.get("display_name")) if wdata != null else "?",
 		int(p_w.get("level"))]
-	wname.position = Vector2(58.0, 14.0)
+	wname.position = Vector2(58.0, 8.0)
 	wname.size = Vector2(500.0, 26.0)
 	wname.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(wname)
+	# 核心属性行（2026-09-13 用户反馈「暴击率/射速/冷却/间隔等属性也应该显示」）：
+	# 面板快照实际生效值（含词条加成/稀有度缩放/养成修正）——非基础值口径
+	var wstats := Label.new()
+	StickerTheme.label_sticker(wstats, 13, PopPalette.INK_SOFT)
+	wstats.text = _weapon_stat_line(p_w)
+	wstats.position = Vector2(58.0, 40.0)
+	wstats.size = Vector2(508.0, 20.0)
+	wstats.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(wstats)
 
 	var stack: Variant = p_w.get("trait_stack")
 	var traits: Array = (stack.get("traits") as Array) if stack != null \
@@ -327,6 +336,20 @@ func _make_weapon_section(p_w: Node) -> Control:
 		row.add_child(col)
 		section.add_child(row)
 	return section
+
+
+func _weapon_stat_line(p_w: Node) -> String:
+	# 单武器核心属性行（面板快照实际生效值；防御式取值——桩/缺字段回退 0）
+	var snap: Dictionary = p_w.call("build_panel_snapshot") if p_w.has_method("build_panel_snapshot") \
+		else {}
+	var atk := float(snap.get("base_atk", 0.0))
+	var crit_rate := float(snap.get("crit_rate", 0.0))
+	var crit_mult := float(snap.get("crit_mult", 0.0))
+	var interval := 1.0
+	if p_w.has_method("_fire_interval"):
+		interval = maxf(float(p_w.call("_fire_interval")), 0.01)
+	return "攻击 %.1f　暴击 %.0f%% ×%.1f　间隔 %.2fs（%.1f 发/s）" % [atk,
+		crit_rate * 100.0, crit_mult, interval, 1.0 / interval]
 
 
 func _on_restart_pressed() -> void:
