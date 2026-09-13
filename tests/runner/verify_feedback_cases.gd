@@ -400,9 +400,9 @@ func _test_meta_systems() -> void:
 		return
 	# 存档隔离：先备份并清空既有存档（含运行期状态复位）——跨次运行不互相污染
 	var save_backup := ""
-	if FileAccess.file_exists("user://meta_save.cfg"):
-		save_backup = FileAccess.get_file_as_string("user://meta_save.cfg")
-		DirAccess.remove_absolute("user://meta_save.cfg")
+	if FileAccess.file_exists(Meta.save_path()):
+		save_backup = FileAccess.get_file_as_string(Meta.save_path())
+		DirAccess.remove_absolute(Meta.save_path())
 	Meta.codex_kills = {}
 	Meta.codex_weapons = {}
 	Meta.codex_traits = {}
@@ -427,7 +427,7 @@ func _test_meta_systems() -> void:
 		int(Meta.records["total_runs"]) == runs0 + 1)
 	_check("成就：wave_10 解锁", Meta.is_ach_done(&"wave_10"))
 	_check("成就：first_blood 解锁", Meta.is_ach_done(&"first_blood"))
-	_check("持久化：user://meta_save.cfg 已落盘", FileAccess.file_exists("user://meta_save.cfg"))
+	_check("持久化：user://meta_save.cfg 已落盘", FileAccess.file_exists(Meta.save_path()))
 	# 大厅 UI：入口 + 面板
 	var menu: MenuScreen = _gl.menu_screen
 	_check("大厅：registry 已注入", menu.registry != null)
@@ -450,11 +450,11 @@ func _test_meta_systems() -> void:
 	# 恢复既有存档（测试隔离）
 	var cfg := ConfigFile.new()
 	if save_backup != "":
-		var f := FileAccess.open("user://meta_save.cfg", FileAccess.WRITE)
+		var f := FileAccess.open(Meta.save_path(), FileAccess.WRITE)
 		f.store_string(save_backup)
 		f.close()
 	else:
-		DirAccess.remove_absolute("user://meta_save.cfg")
+		DirAccess.remove_absolute(Meta.save_path())
 
 
 # ── ⑯ 多地图 / 新怪 / 通关解锁链（M2 落地验收） ──────────────────

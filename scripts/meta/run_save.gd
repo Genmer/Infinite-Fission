@@ -11,17 +11,19 @@
 class_name RunSave
 extends RefCounted
 
-const SAVE_PATH := "user://run_save.cfg"
+static func save_path() -> String:
+	# headless（自动化测试）→ 独立测试档（同 Meta.save_path 口径——套件不写真实局内存档）
+	return "user://run_save_test.cfg" if DisplayServer.get_name() == "headless" 		else "user://run_save.cfg"
 
 
 static func exists() -> bool:
-	return FileAccess.file_exists(SAVE_PATH)
+	return FileAccess.file_exists(save_path())
 
 
 static func clear() -> void:
 	# 局终/放弃旧档（无档静默——幂等）
 	if exists():
-		DirAccess.open("user://").remove(SAVE_PATH.trim_prefix("user://"))
+		DirAccess.open("user://").remove(save_path().trim_prefix("user://"))
 
 
 static func save_run(p_data: Dictionary) -> void:
@@ -31,13 +33,13 @@ static func save_run(p_data: Dictionary) -> void:
 	var cfg := ConfigFile.new()
 	for key in p_data:
 		cfg.set_value("run", String(key), p_data[key])
-	cfg.save(SAVE_PATH)
+	cfg.save(save_path())
 
 
 static func load_run() -> Dictionary:
 	# 读档（无档/坏段 → 空 Dictionary；键值原样透传，消费侧 GameLoop 逐键防御取默认）
 	var cfg := ConfigFile.new()
-	if cfg.load(SAVE_PATH) != OK:
+	if cfg.load(save_path()) != OK:
 		return {}
 	if not cfg.has_section("run"):
 		return {}

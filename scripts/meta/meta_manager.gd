@@ -14,7 +14,11 @@ signal codex_changed()                        # 图鉴解锁（大厅面板刷�
 signal achievements_changed(ach_id: StringName)   # 成就解锁提示（大厅面板刷新用）
 signal settings_changed(p_key: String)        # 设置变更（P3：SfxBank 音量实时应用等）
 
-const SAVE_PATH := "user://meta_save.cfg"
+static func save_path() -> String:
+	# 存档路径（headless = 自动化测试 → 独立测试档）：杜绝测试套件把通关/购买位/
+	# 成就写进真实存档（2026-09-13 用户实测「角色基本都解锁了」根因即此）
+	return "user://meta_save_test.cfg" if DisplayServer.get_name() == "headless" \
+		else "user://meta_save.cfg"
 
 # 成就定义表（id → {name, desc, type, target}；type: total_kills/run_wave/run_level/
 # run_weapons_drawn/run_traits_drawn/boss_slain/total_runs）
@@ -490,12 +494,12 @@ func _save() -> void:
 	cfg.set_value("meta", "character", String(character_id))
 	cfg.set_value("characters", "unlocked", unlocked_characters.keys())
 	cfg.set_value("settings", "values", _settings)
-	cfg.save(SAVE_PATH)
+	cfg.save(save_path())
 
 
 func _load() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(SAVE_PATH) != OK:
+	if cfg.load(save_path()) != OK:
 		return                                  # 首启无档（默认值起步）
 	var kills: Variant = cfg.get_value("codex", "kills", {})
 	if kills is Dictionary:
