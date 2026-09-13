@@ -27,8 +27,8 @@ base_atk = 11.0
 rof = 1.6
 cd = 0.0
 pierce = 1
-pellets = 8
-note = "A3 §3.3 L3：每丸 11 × 8 丸；贴脸面板 DPS 140.8"
+pellets = 9
+note = "R10 质变模板 L3（小质变）：每丸 8→9；贴脸面板 DPS 158.4"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 1.6
 cd = 0.0
 pierce = 1
 pellets = 9
-note = "A3 §3.3 L5：每丸 14 × 9 丸；锥角 26°→20°；贴脸面板 DPS 201.6"
+note = "R10 质变模板 L5（大质变）：锥角 26°→20° + 每丸 14（击退特化）；贴脸面板 DPS 201.6"
 
 [resource]
 script = ExtResource("1_wd")

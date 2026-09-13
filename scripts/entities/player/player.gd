@@ -184,6 +184,7 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 		if _poison_cloud_tick_left <= 0.0:
 			_poison_cloud_tick_left += POISON_CLOUD_TICK
 			_poison_cloud_pulse()
+			EventBus.emit_poison_cloud_tick(global_position, POISON_CLOUD_RADIUS)   # R10 毒圈持续表现
 	# 僚机到期还原（诺亚：orbs_bonus 撤销 + 力场重铺）
 	if _summon_left > 0.0:
 		_summon_left = maxf(_summon_left - p_game_delta, 0.0)
@@ -485,6 +486,7 @@ func _skill_poison_cloud() -> void:
 	# 管线 resolve（AOE_SECONDARY 幂等键——同构 mank 毒沼绽放先例），不挂 ElementalState
 	# 附着（不动元素管线）；减速走 Enemy.ext_slow 外部乘区（与元素冰缓正交、到期自动还原）。
 	_poison_cloud_left = POISON_CLOUD_DURATION
+	EventBus.emit_poison_cloud_cast(global_position, POISON_CLOUD_RADIUS)   # R10 毒云特效
 	_poison_cloud_tick_left = 0.0               # 首跳即刻生效（挂场即有反馈）
 	_poison_cloud_pulse()
 

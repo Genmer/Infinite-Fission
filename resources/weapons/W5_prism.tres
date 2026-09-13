@@ -5,39 +5,39 @@
 
 [sub_resource type="Resource" id="WeaponLevelStats_l1"]
 script = ExtResource("2_wls")
-base_atk = 10.0
+base_atk = 7.0
 rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L1：tick_atk 10 × 5 跳/s；单体 DPS 50；三目标群 DPS 146"
+note = "A3 §3.5 L1：tick_atk 7 × 5 跳/s；单体 DPS 35；三目标群 DPS 102（R10 前期降温：L5 后期强度保留）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
-base_atk = 12.0
+base_atk = 9.0
 rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L2：tick_atk 12 × 5 跳/s；单体 DPS 60；三目标群 DPS 175"
+note = "A3 §3.5 L2：tick_atk 9 × 5 跳/s；单体 DPS 45；三目标群 DPS 131（R10 前期降温）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
-base_atk = 12.0
+base_atk = 11.0
 rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L3：tick_atk 12 × 5 跳/s；折射束 2→3；三目标群 DPS 216"
+note = "A3 §3.5 L3：tick_atk 11 × 5 跳/s；折射束 2→3；三目标群 DPS 198（R10 前期降温）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
-base_atk = 15.0
+base_atk = 14.0
 rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L4：tick_atk 15 × 5 跳/s；单体 DPS 75；三目标群 DPS 270"
+note = "A3 §3.5 L4：tick_atk 14 × 5 跳/s；单体 DPS 70；三目标群 DPS 252（R10 前期降温）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")

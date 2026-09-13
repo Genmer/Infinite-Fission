@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"AFF_SKILL_HASTE"
 display_name = "技能急速"
-description = "角色技能冷却 -12%，可叠 2 层（2026-09-13 由「迅捷移动」重做——拖动 1:1 操控下移速词条无实际消费点，重做为真实生效的技能急速）"
+description = "角色技能冷却 -12%，可叠 2 层"
 pool = 0
 pool_id = &"add_skillcdr"
 effect_id = &"EF_STAT"

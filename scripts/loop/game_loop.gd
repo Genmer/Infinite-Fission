@@ -245,6 +245,20 @@ func _on_wave_cleared_collect() -> void:
 			shard.force_magnet()
 
 
+func _on_wave_cleared_victory(p_wave: int) -> void:
+	# 通关即结算（R10 用户反馈「波次结束不结束当前关卡吗，波次怎么还在叠加」）：
+	# 清完 final 波（Boss 波）→ 胜利结算屏；下一关由选关解锁链承接。局内存档清除
+	#（通关 = 局终；与死亡清档同口径）
+	if state != GameConst.GameStatus.PLAYING or current_map_id == StringName(""):
+		return
+	var final_wave := int(MapTable.get_map(current_map_id).get("final_wave", 1 << 30))
+	if p_wave < final_wave:
+		return
+	RunSave.clear()
+	if change_state(GameConst.GameStatus.GAME_OVER):
+		game_over_screen.show_victory()
+
+
 func _on_relic_shop_wave(p_wave: int) -> void:
 	# REL_BLACK_MARKET 追加商店波（w35 起每 10 波，排程真源 relic_handler）：波清空后
 	# 消费一次排程开黑市——同波表 SHOP 事件口径（PLAYING 守卫在 _on_shop_requested）
@@ -704,8 +718,11 @@ func _boot_build_presentation() -> void:
 	add_child(shop_ui)
 	shop_ui.closed.connect(request_resume)       # 出击 → LEVEL_UP → PLAYING（含宽限）
 	wave_director.shop_requested.connect(_on_shop_requested)
-	# REL_BLACK_MARKET 追加商店波消费（2026-09-13 死数据接线：排程计数 → 真实开店；
-	# 连接序在 relic_handler.bind_events 之后——同帧先排程后消费）
+	# R10 通关即结算：清完 final Boss 波 → 胜利结算（波次不再无限叠加；先于黑市消费连接
+	# ——final 波清空优先结算，此时黑市店因 state 非 PLAYING 自动跳过）
+	EventBus.wave_cleared.connect(_on_wave_cleared_victory)
+	# REL_BLACK_MARKET 追加商店波消费（R10 重调 w8 起每 5 波——原 w35 起每 10 波在
+	# 新阶梯下永不触发；兼做「Boss 前商店」§5.12 待办。连接序在 relic_handler 之后）
 	EventBus.wave_cleared.connect(_on_relic_shop_wave)
 	# R7：波次清空 → 全屏经验碎片强制磁吸（Boss 大珠残留兜底）
 	EventBus.wave_cleared.connect(_on_wave_cleared_collect)

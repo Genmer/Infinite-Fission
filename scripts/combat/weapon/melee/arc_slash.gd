@@ -54,7 +54,9 @@ func tick(p_game_delta: float, p_center: Vector2) -> void:
 			visible = false
 			queue_redraw()
 		return
-	position = p_center
+	# R10 根因修复：本节点是武器（玩家子节点）的子节点——position 为局部坐标，
+	# 此前直接塞 muzzle_position() 全局值 → 视觉画到屏幕外（判定用全局所以只有「虚空伤害」）
+	position = weapon.to_local(p_center) if weapon != null and is_instance_valid(weapon) 		else p_center
 	window_left = maxf(window_left - p_game_delta, 0.0)
 	_judge_arc(p_center)
 	if nullify:

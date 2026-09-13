@@ -1990,9 +1990,11 @@ func _test_round7_audit() -> void:
 	if _gl.state != GameConst.GameStatus.MENU:
 		_gl.quit_to_menu()
 	_gl.start_run()
+	_gl.current_map_id = &"world_swamp"        # R10：黑市重调 w8 起每 5 波；沼泽 final 30 避开胜利结算
+	Meta.set_run_map(&"world_swamp")
 	_gl.relic_handler.activate(&"REL_BLACK_MARKET")
-	EventBus.emit_wave_cleared(35)
-	_check("黑市遗物：w35 清空 → 排程消费并开店（LEVEL_UP + 可见）",
+	EventBus.emit_wave_cleared(8)
+	_check("黑市遗物：w8 清空 → 排程消费并开店（LEVEL_UP + 可见）",
 		_gl.relic_handler.pending_shop_waves == 0
 		and _gl.state == GameConst.GameStatus.LEVEL_UP
 		and _gl.shop_ui.is_shop_visible())

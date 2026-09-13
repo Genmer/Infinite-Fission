@@ -6,6 +6,7 @@
 class_name GameOverScreen
 extends CanvasLayer
 
+var _title_label: Label = null
 signal restart_requested()                    # → GameLoop 重开申请（迁移矩阵仲裁）
 
 var stats_source: Node = null                 # 注入（HUD：kills/wave/total_damage）
@@ -27,8 +28,12 @@ func setup(p_stats_source: Node) -> void:
 	stats_source = p_stats_source
 
 
+var _victory: bool = false                     # 胜利模式（R10：通关即结算——标题/引言换胜利口径）
+
 func show_summary() -> void:
 	# 显示结算（击杀/波次/总伤害；AC-16.1）+ 随机引言 + 果冻出场
+	_victory = false
+	_refresh_title()
 	if stats_source != null and is_instance_valid(stats_source):
 		var kills: int = stats_source.get("kills")
 		var wave: int = stats_source.get("wave")
@@ -39,6 +44,26 @@ func show_summary() -> void:
 	_quote_label.text = Lore.game_over_quote()
 	_root.visible = true
 	StickerTheme.squash_pop(_card)
+
+
+func show_victory() -> void:
+	# 通关结算（R10：清完 final Boss 波 → 关卡胜利——波次不再无限叠加）
+	_victory = true
+	_refresh_title()
+	_quote_label.text = Lore.game_over_quote()
+	_root.visible = true
+	StickerTheme.squash_pop(_card)
+
+
+func _refresh_title() -> void:
+	if _title_label == null:
+		return
+	if _victory:
+		_title_label.text = "★ 关卡通关！"
+		_title_label.add_theme_color_override("font_color", PopPalette.SUCCESS)
+	else:
+		_title_label.text = Lore.GAME_OVER_TITLE
+		_title_label.add_theme_color_override("font_color", PopPalette.INK)
 
 
 func hide_screen() -> void:
@@ -96,13 +121,13 @@ func _build_ui() -> void:
 	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card.add_child(face)
 
-	var title := Label.new()
-	StickerTheme.label_sticker(title, 32, PopPalette.INK, 0, Color.WHITE, true)
-	title.text = Lore.GAME_OVER_TITLE
-	title.position = Vector2(0.0, 64.0)
-	title.size = Vector2(580.0, 36.0)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_card.add_child(title)
+	_title_label = Label.new()
+	StickerTheme.label_sticker(_title_label, 32, PopPalette.INK, 0, Color.WHITE, true)
+	_title_label.text = Lore.GAME_OVER_TITLE
+	_title_label.position = Vector2(0.0, 64.0)
+	_title_label.size = Vector2(580.0, 36.0)
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_card.add_child(_title_label)
 
 	_summary_label = Label.new()
 	StickerTheme.label_sticker(_summary_label, 20, PopPalette.INK, 0, Color.WHITE, true)

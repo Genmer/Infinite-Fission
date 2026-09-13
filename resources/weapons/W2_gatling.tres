@@ -28,7 +28,7 @@ rof = 12.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "A3 §3.2 L3：冷 rof 12 / 满 15；面板 DPS（热）135"
+note = "R10 质变模板 L3（小质变）：预热 1.6→1.0s（快速进入过热态）；面板 DPS（热）135"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 13.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "A3 §3.2 L5：冷 rof 13 / 满 17.5；面板 DPS（热）227.5"
+note = "R10 质变模板 L5（大质变）：超频枪管——预热 0.7s / 满热射速 19.5；面板 DPS（热）≈254"
 
 [resource]
 script = ExtResource("1_wd")
@@ -73,7 +73,7 @@ threshold_traits = [{
 ballistic = {
 "proj_speed": 700.0, "range": 620.0, "spread_deg": 6.0,
 "pierce": 1, "pellets": 1, "spin_up_time": 2.0, "rof_hot": 14.0,
-"spin_up_time_levels": [2.0, 1.8, 1.6, 1.4, 1.2],
-"rof_hot_levels": [14.0, 14.0, 15.0, 16.0, 17.5]
+"spin_up_time_levels": [2.0, 1.8, 1.0, 1.0, 0.7],
+"rof_hot_levels": [14.0, 14.0, 15.0, 16.0, 19.5]
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

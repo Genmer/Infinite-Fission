@@ -60,6 +60,8 @@ var _devour_cd: float = 0.0                   # 吞噬特效全局节流计时
 var _ktexts: Array[Dictionary] = []           # [{label, vel_y, left}]（击退小字池）
 var _ktext_idx: int = 0
 var _ktext_cd: float = 0.0                    # 击退小字节流
+var _poison := {"active": false, "center": Vector2.ZERO, "radius": 300.0,
+	"left": 0.0, "dur": 6.0, "anim": 0.0}     # 毒云领域持续表现（R10）
 
 
 func _ready() -> void:
@@ -76,6 +78,8 @@ func _ready() -> void:
 	_build_knocktexts()
 	EventBus.chain_lightning.connect(_on_chain_lightning)
 	EventBus.knockback_hit.connect(_on_knockback_hit)
+	EventBus.poison_cloud_cast.connect(_on_poison_cloud_cast)
+	EventBus.poison_cloud_tick.connect(_on_poison_cloud_tick)
 	EventBus.elemental_dot_fired.connect(_on_dot_fired)
 	EventBus.reaction_triggered.connect(_on_reaction_triggered)
 	EventBus.shield_blocked.connect(_on_shield_blocked)
@@ -94,6 +98,7 @@ func tick(p_raw_delta: float) -> void:
 	_tick_impacts(p_raw_delta)
 	_tick_devours(p_raw_delta)
 	_tick_knocktexts(p_raw_delta)
+	_tick_poison(p_raw_delta)
 
 
 # ── 感电连锁主锯齿闪电（签名特效） ────────────────────────────────
@@ -632,3 +637,58 @@ func _tick_knocktexts(p_raw_delta: float) -> void:
 			continue
 		lb.position.y -= 46.0 * p_raw_delta          # 上飘
 		lb.modulate.a = clampf(left / KNOCKTEXT_LIFE * 1.5, 0.0, 1.0)
+
+
+# ── 毒云领域持续表现（薇拉技能——R10 用户反馈「只有白色掉血没特效」） ────
+func _on_poison_cloud_cast(p_pos: Vector2, p_radius: float) -> void:
+	_poison["active"] = true
+	_poison["center"] = p_pos
+	_poison["radius"] = p_radius
+	_poison["left"] = 6.0
+	_poison["dur"] = 6.0
+	_poison["anim"] = 0.0
+	queue_redraw()
+
+
+func _on_poison_cloud_tick(p_pos: Vector2, p_radius: float) -> void:
+	# 每跳刷新中心（跟随玩家）+ 归位时长
+	_poison["active"] = true
+	_poison["center"] = p_pos
+	_poison["radius"] = p_radius
+	_poison["left"] = 6.0
+	queue_redraw()
+
+
+func _tick_poison(p_raw_delta: float) -> void:
+	if not bool(_poison["active"]):
+		return
+	_poison["left"] = maxf(float(_poison["left"]) - p_raw_delta, 0.0)
+	_poison["anim"] = float(_poison["anim"]) + p_raw_delta
+	if float(_poison["left"]) <= 0.0:
+		_poison["active"] = false
+	queue_redraw()
+
+
+func _draw() -> void:
+	# 毒圈：半透绿盘 + 双层呼吸描边 + 8 颗毒泡（相位漂移）；末 1.5s 渐隐
+	if not bool(_poison["active"]):
+		return
+	var center: Vector2 = _poison["center"]
+	var radius: float = float(_poison["radius"])
+	var left: float = float(_poison["left"])
+	var dur: float = float(_poison["dur"])
+	var anim: float = float(_poison["anim"])
+	var fade := clampf(left / minf(1.5, dur), 0.0, 1.0)
+	var pulse := 1.0 + 0.03 * sin(anim * 5.2)
+	# 毒盘
+	draw_circle(center, radius * pulse, Color(0.36, 0.85, 0.35, 0.14 * fade))
+	draw_circle(center, radius * 0.82 * pulse, Color(0.30, 0.78, 0.30, 0.10 * fade))
+	# 双层呼吸描边
+	draw_arc(center, radius * pulse, 0, TAU, 64, Color(0.45, 0.95, 0.4, 0.75 * fade), 3.5)
+	draw_arc(center, radius * 0.82 * pulse, 0, TAU, 48, Color(0.55, 1.0, 0.45, 0.4 * fade), 2.0)
+	# 毒泡（8 颗，相位漂移 + 呼吸）
+	for i in range(8):
+		var ang := TAU * float(i) / 8.0 + anim * (0.35 + 0.05 * float(i % 3))
+		var rr := radius * (0.45 + 0.4 * (0.5 + 0.5 * sin(anim * 1.7 + float(i) * 1.3)))
+		var pos := center + Vector2(cos(ang), sin(ang)) * rr
+		draw_circle(pos, 7.0 + 3.0 * sin(anim * 4.0 + float(i)), Color(0.5, 1.0, 0.42, 0.5 * fade))

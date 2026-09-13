@@ -415,7 +415,10 @@ func _make_trait_card(p_tid: StringName, p_wave: int, p_target: WeaponBase = nul
 				if td != null and StringName(str(td.get("id"))) == p_tid:
 					cur = int(tb.get("layers"))
 		milestone = cur + 1 >= t.stack_max
-	var prefix := ("【%s】" % _weapon_short_name(p_target)) if p_target != null else ""
+	# 前缀体系（R10 整理）：玩家侧池（生命/经验/磁吸/技能急速）=【通用】——效果全局生效，
+	# 不再误导性地挂武器名；武器侧词条 =【武器名】（绑定目标武器）
+	const PLAYER_SIDE_POOLS: Array[StringName] = [&"add_hp", &"add_xp", &"add_pickup", &"add_skillcdr"]
+	var prefix := "【通用】" if t != null and (t.pool_id in PLAYER_SIDE_POOLS) 		else (("【%s】" % _weapon_short_name(p_target)) if p_target != null else "")
 	if milestone:
 		prefix = "◆质变◆" + prefix
 	var card := {

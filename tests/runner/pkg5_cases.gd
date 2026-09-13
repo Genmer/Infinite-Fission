@@ -532,17 +532,21 @@ func _test_relic_handler() -> void:
 		h.activate(&"REL_BLACK_MARKET") or h.has_relic(&"REL_BLACK_MARKET"))
 	# 2026-09-13 死数据接线：波清空 → 排程消费 → 真实开店（_on_relic_shop_wave）；
 	# w35/w45 开店、w36 不排程
-	EventBus.emit_wave_cleared(35)
-	_check("REL_BLACK_MARKET：w35 清空 → 排程消费并开店（LEVEL_UP + 可见）",
+	# R10：黑市重调 w8 起每 5 波 + 通关即结算（final 波清空 → 胜利）——换沼泽图（final 30）
+	# 使节拍波 8/13 低于 final，避开胜利结算
+	_gl.current_map_id = &"world_swamp"
+	Meta.set_run_map(&"world_swamp")
+	EventBus.emit_wave_cleared(8)
+	_check("REL_BLACK_MARKET：w8 清空 → 排程消费并开店（LEVEL_UP + 可见）",
 		h.pending_shop_waves == 0 and _gl.state == GameConst.GameStatus.LEVEL_UP
 		and _gl.shop_ui.is_shop_visible())
 	_gl.shop_ui.close()                        # 出击 → PLAYING（含宽限）
-	EventBus.emit_wave_cleared(45)
-	_check("REL_BLACK_MARKET：w45 再次排程开店", _gl.state == GameConst.GameStatus.LEVEL_UP
+	EventBus.emit_wave_cleared(13)
+	_check("REL_BLACK_MARKET：w13 再次排程开店", _gl.state == GameConst.GameStatus.LEVEL_UP
 		and _gl.shop_ui.is_shop_visible())
 	_gl.shop_ui.close()
-	EventBus.emit_wave_cleared(36)
-	_check("REL_BLACK_MARKET：w36 不排程（保持 PLAYING）",
+	EventBus.emit_wave_cleared(9)
+	_check("REL_BLACK_MARKET：w9 不排程（保持 PLAYING）",
 		_gl.state == GameConst.GameStatus.PLAYING and not _gl.shop_ui.is_shop_visible())
 	# R7 波末磁吸联动清尾：波清空会强磁吸全屏碎片 → 4.5s 内陆续吸收入账——
 	# 压平经验防 LEVEL_UP 劫持后续死亡仲裁用例，并驱动至碎片清空

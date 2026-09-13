@@ -323,6 +323,19 @@ func _on_damage_resolved(p_result: DamageResult) -> void:
 	total_damage += p_result.final_value
 
 
+func _next_level_note(p_w: Node, p_lv: int) -> String:
+	# 下一级质变说明（数据源 = 等级表 note 字段；满级返回空）
+	if p_lv >= 5:
+		return ""
+	var wdata: Variant = p_w.get("data")
+	if wdata == null:
+		return ""
+	var table: Array = wdata.get("upgrade_table")
+	if table == null or p_lv >= (table as Array).size():
+		return ""
+	return String((table as Array)[p_lv].get("note"))
+
+
 func _build_summary() -> String:
 	# 词条栏：武器数 + 武器词条数（构筑统计；正式构筑面板后续迭代）
 	if player == null or not is_instance_valid(player):
@@ -393,6 +406,18 @@ func _refresh_build() -> void:
 			var wdata: Variant = w.get("data")
 			icon.texture = TextureFactory.weapon_icon(
 				StringName(str(wdata.get("id"))) if wdata != null else &"W_MISSING")
+			# 悬停说明（R10「每个标识鼠标移上去应有解释」）：名称/等级 + 下一级质变预览
+			var wlv: int = int(w.get("level"))
+			var tip := "%s Lv%d" % [String(wdata.get("display_name")) if wdata != null else "?", wlv]
+			var next_note := _next_level_note(w, wlv)
+			if next_note != "":
+				tip += "
+下一级：%s" % next_note
+			else:
+				tip += "
+已满级 · 终极形态"
+			icon.tooltip_text = tip
+			icon.mouse_filter = Control.MOUSE_FILTER_STOP
 			content.add_child(icon)
 			var lv := StickerTheme.label_sticker(Label.new(), 11, PopPalette.INK, 0, Color.WHITE, true)
 			lv.text = "Lv%d" % int(w.get("level"))
@@ -450,7 +475,8 @@ func _build_ui() -> void:
 	add_child(root)
 
 	# HP 白胶囊（圆角 + 藏青描边；填充 = 纯渐变，克制无表情）
-	var hp_panel := _sticker_panel(root, Vector2(24.0, 24.0), HP_BAR_SIZE, 15.0)
+	var hp_panel := _sticker_panel(root, Vector2(24.0, 24.0), HP_BAR_SIZE, 15.0,
+		"生命：被碰到掉血，短暂无敌帧；升级即回满血（「生存本能」词条提升上限）")
 	_hp_fill = Panel.new()
 	_hp_fill.name = "HpFill"
 	_hp_fill_style = StyleBoxFlat.new()
@@ -475,7 +501,8 @@ func _build_ui() -> void:
 	star_icon.position = Vector2(26.0, 60.0)
 	star_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(star_icon)
-	var xp_panel := _sticker_panel(root, Vector2(54.0, 63.0), XP_BAR_SIZE, 7.0)
+	var xp_panel := _sticker_panel(root, Vector2(54.0, 63.0), XP_BAR_SIZE, 7.0,
+		"经验：吸收经验碎片升级，每级弹一次强化卡")
 	_xp_fill = Panel.new()
 	_xp_fill.name = "XpFill"
 	var xp_style := StyleBoxFlat.new()
@@ -493,7 +520,8 @@ func _build_ui() -> void:
 	root.add_child(_level_label)
 
 	# 波次圆形徽章（右上）
-	var badge := _sticker_panel(root, Vector2(598.0, 16.0), Vector2(106.0, 106.0), 53.0)
+	var badge := _sticker_panel(root, Vector2(598.0, 16.0), Vector2(106.0, 106.0), 53.0,
+		"当前波次：清完本关最终波（Boss 波）即通关结算")
 	var badge_cap := StickerTheme.label_sticker(Label.new(), 13, PopPalette.INK_SOFT)
 	badge_cap.text = "WAVE"
 	badge_cap.size = Vector2(106.0, 16.0)
@@ -509,7 +537,8 @@ func _build_ui() -> void:
 	badge.add_child(_wave_label)
 
 	# 击杀气泡 + 计时气泡
-	var kill_pill := _sticker_panel(root, Vector2(24.0, 92.0), Vector2(150.0, 36.0), 18.0)
+	var kill_pill := _sticker_panel(root, Vector2(24.0, 92.0), Vector2(150.0, 36.0), 18.0,
+		"本局击杀数（图鉴/成就统计源）")
 	_kill_label = StickerTheme.label_sticker(Label.new(), 18, PopPalette.INK, 0, Color.WHITE, true)
 	_kill_label.name = "KillText"
 	_kill_label.text = "击杀 0"
@@ -517,7 +546,8 @@ func _build_ui() -> void:
 	_kill_label.position = Vector2(0.0, 6.0)
 	_kill_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	kill_pill.add_child(_kill_label)
-	var time_pill := _sticker_panel(root, Vector2(184.0, 92.0), Vector2(112.0, 36.0), 18.0)
+	var time_pill := _sticker_panel(root, Vector2(184.0, 92.0), Vector2(112.0, 36.0), 18.0,
+		"本局时长")
 	_time_label = StickerTheme.label_sticker(Label.new(), 18, PopPalette.INK_SOFT)
 	_time_label.name = "TimeText"
 	_time_label.text = "0:00"
@@ -567,7 +597,8 @@ func _build_ui() -> void:
 	skill_btn.add_child(_skill_cd_label)
 	# 金币 pill（击杀/计时/护盾同行末段——2026-08-31 P0 反馈「金币压血条」修复落位；
 	# 原 (24,44) 与血条 24~54/经验条 63~77 双重叠，现移至护盾条右侧 464~596）
-	var gold_pill := _sticker_panel(root, Vector2(464.0, 92.0), Vector2(132.0, 36.0), 18.0)
+	var gold_pill := _sticker_panel(root, Vector2(464.0, 92.0), Vector2(132.0, 36.0), 18.0,
+		"战地金币：击杀掉落，黑市购物专用货币")
 	gold_pill.name = "GoldPill"
 	gold_pill.modulate.a = 0.94
 	_gold_label = StickerTheme.label_sticker(Label.new(), 17, PopPalette.XP, 0, Color.WHITE, true)
@@ -609,7 +640,8 @@ func _build_ui() -> void:
 	build_bg.add_child(_build_label)
 
 	# 护盾条（时间气泡右侧；MEC_SHIELD 持有才显示——用户反馈「单独的护盾条」）
-	_shield_panel = _sticker_panel(root, Vector2(306.0, 92.0), Vector2(148.0, 36.0), 18.0)
+	_shield_panel = _sticker_panel(root, Vector2(306.0, 92.0), Vector2(148.0, 36.0), 18.0,
+		"临时护盾（持有「能量护盾」词条显示）：就绪时挡下一次接触伤害，挡后进入充能")
 	_shield_panel.name = "ShieldBar"
 	_shield_panel.modulate.a = 0.94
 	_shield_panel.visible = false
@@ -681,13 +713,18 @@ func _build_ui() -> void:
 	refresh_stats()
 
 
-func _sticker_panel(p_parent: Control, p_pos: Vector2, p_size: Vector2, p_radius: float) -> Panel:
-	# 贴纸面板工厂（白底 + 藏青描边 + 底部厚投影；HUD 专用轻量版，无投影避免顶部杂乱）
+func _sticker_panel(p_parent: Control, p_pos: Vector2, p_size: Vector2, p_radius: float,
+		p_tip: String = "") -> Panel:
+	# 贴纸面板工厂（白底 + 藏青描边 + 底部厚投影；HUD 专用轻量版，无投影避免顶部杂乱）。
+	# R10：p_tip 非空 → 悬停说明（桌面鼠标悬停即出，移动端无碍）
 	var panel := Panel.new()
 	var sb := StickerTheme.panel_style(p_radius, 3, false)
 	panel.add_theme_stylebox_override("panel", sb)
 	panel.position = p_pos
 	panel.size = p_size
+	if p_tip != "":
+		panel.tooltip_text = p_tip
+		panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p_parent.add_child(panel)
 	return panel

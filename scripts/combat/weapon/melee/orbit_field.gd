@@ -87,7 +87,8 @@ func _sync_orb_visibility() -> void:
 
 func tick(p_game_delta: float, p_center: Vector2) -> void:
 	# 公转推进 + 球位更新 + 判定调度（每目标独立 hit_cd）+ 击退 + 表现推进
-	position = p_center
+	# R10 根因修复：同弧斩——局部/全局坐标空间错配（环绕力场此前同样整场不可见）
+	position = weapon.to_local(p_center) if weapon != null and is_instance_valid(weapon) 		else p_center
 	angle = wrapf(angle + deg_to_rad(angular_speed) * p_game_delta, 0.0, TAU)
 	for key in target_hit_cd:
 		target_hit_cd[key] = maxf(float(target_hit_cd[key]) - p_game_delta, 0.0)
