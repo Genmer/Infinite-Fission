@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"MEC_BOUNCE"
 display_name = "边界反弹"
-description = "子弹反弹次数 +2，且持有反弹预算期间【射程无限】——打空的子弹必达屏幕边缘镜面弹回（反弹后命中可吃「反弹谱变」×1.4）；累计反弹 ≥5 次该弹近乎永存"
+description = "子弹反弹次数 +2：打空的子弹不因射程消失，必达屏幕边缘镜面弹回继续索敌（反弹后命中可吃「反弹谱变」×1.4）；累计反弹 ≥5 次该弹近乎永存"
 pool = 3
 pool_id = &""
 effect_id = &"EF_BOUNCE"

@@ -915,6 +915,35 @@ static func flame_bit() -> ImageTexture:
 		])))
 
 
+static func missile_tex() -> ImageTexture:
+	# 微型导弹/集束火箭弹体（R13 用户反馈「给个导弹建模」）：灰蓝弹体 + 橙色弹头 +
+	# 尾鳍 + 底部尾焰（画布 22×30，朝上——弹体飞行时按速度方向旋转）
+	var key := "missile_tex"
+	return _cached(key, func() -> ImageTexture:
+		var body_col := Color(0.78, 0.84, 0.95)
+		var nose_col := Color(1.0, 0.6, 0.25)
+		var fin_col := Color(0.5, 0.58, 0.75)
+		var body := PackedVector2Array([
+			Vector2(-4.5, -6.0), Vector2(4.5, -6.0), Vector2(4.5, 8.0), Vector2(-4.5, 8.0),
+		])
+		var nose := PackedVector2Array([
+			Vector2(0.0, -13.0), Vector2(4.5, -6.0), Vector2(-4.5, -6.0),
+		])
+		var fin_l := PackedVector2Array([
+			Vector2(-4.5, 3.0), Vector2(-9.0, 10.0), Vector2(-4.5, 9.0),
+		])
+		var fin_r := PackedVector2Array([
+			Vector2(4.5, 3.0), Vector2(9.0, 10.0), Vector2(4.5, 9.0),
+		])
+		return _render(22, 30, _shade([
+			{"sd": _poly_sd(fin_l), "fill": fin_col, "ow": 1.6},
+			{"sd": _poly_sd(fin_r), "fill": fin_col, "ow": 1.6},
+			{"sd": _poly_sd(body), "fill": body_col, "ow": 2.2},
+			{"sd": _poly_sd(nose), "fill": nose_col, "ow": 2.0},
+			{"sd": _circle_at(Vector2(0.0, 12.5), 3.2), "fill": PopPalette.XP, "ow": 0.0},
+		])))
+
+
 static func ice_shard() -> ImageTexture:
 	# 结霜小晶体（菱形冰渣）：淡冰蓝菱形 + 白高光 + 藏青描边（贴纸风统一）
 	var key := "ice_shard"

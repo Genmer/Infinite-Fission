@@ -272,7 +272,13 @@ func _on_build_details() -> void:
 	# 并进详情卡；已暂停 → 暂停卡/详情卡切换；LEVEL_UP/GAME_OVER 等态不响应
 	if state == GameConst.GameStatus.PLAYING:
 		if request_pause():
-			pause_overlay.open_details(player)
+			var relic_infos: Array = []
+			for rid in card_generator.owned_relics:
+				var rdata := registry.get_relic(rid)
+				if rdata != null:
+					relic_infos.append({"name": String(rdata.display_name),
+						"desc": String(rdata.description)})
+			pause_overlay.open_details(player, relic_infos)
 	elif state == GameConst.GameStatus.PAUSED:
 		pause_overlay.toggle_details()
 
@@ -749,6 +755,7 @@ func _boot_build_presentation() -> void:
 	add_child(game_over_screen)
 	game_over_screen.setup(hud)
 	game_over_screen.restart_requested.connect(restart_run)
+	game_over_screen.menu_requested.connect(quit_to_menu)   # R13 结算屏回主菜单
 	card_generator = CardGenerator.new()
 	card_generator.setup(registry)
 	shop_ui.card_generator = card_generator      # 黑市货架走同一条卡链（注入须在创建后）

@@ -34,4 +34,5 @@ func _maybe_kill_blast(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 		radius = float(p_trait.data.params.get("radius_lv2", radius))
 	var atk := float(p_ctx.projectile.panel_snapshot.get("base_atk", 0.0)) * ratio
 	p_ctx.weapon.settle_aoe(p_ctx.projectile.last_hit_pos, radius, atk, true)
+	EventBus.emit_kill_blast(p_ctx.projectile.last_hit_pos, radius)   # R13 爆炸环特效
 	DebugStats.count(&"kill_blast_triggered")

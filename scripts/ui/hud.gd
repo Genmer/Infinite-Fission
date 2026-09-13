@@ -37,6 +37,11 @@ var _shield_fill_style: StyleBoxFlat = null
 var _state_label: Label = null                # 状态提示（LEVEL_UP/PAUSED/GAME_OVER——测试锁定节点名）
 var _toast_label: Label = null                # 波次 toast（果冻 pop + lore 文案）
 var _toast_left: float = 0.0                  # toast 剩余展示时长（raw 通道）
+# R13 自绘悬停说明（引擎默认 tooltip 在弹幕游戏里延迟大/样式弱——自绘卡即时跟随）
+var _hover_zones: Array[Dictionary] = []      # [{rect: Rect2, text: String}]
+var _hover_card: PanelContainer = null
+var _hover_label: Label = null
+var _hud_root: Control = null                 # HUD 根容器（悬停检测用——R13）
 var _pause_btn: Button = null                 # 暂停按钮（▶⏸ 图形化贴纸；仅 PLAYING 态显示）
 
 var kills: int = 0
@@ -142,6 +147,32 @@ func tick(p_raw_delta: float) -> void:
 			_toast_label.visible = false
 		elif _toast_left < TOAST_FADE:
 			_toast_label.modulate.a = _toast_left / TOAST_FADE
+	_tick_hover()
+
+
+# ── R13 自绘悬停说明 ──────────────────────────────────────────────
+func _add_hover(p_ctrl: Control, p_text: String) -> void:
+	# 注册悬停区域（控制节点位置为显式布局值，构建期即可定矩形）
+	_hover_zones.append({"rect": Rect2(p_ctrl.position, p_ctrl.size), "text": p_text,
+		"ctrl": p_ctrl})
+
+
+func _tick_hover() -> void:
+	# 光标命中任一指标区 → 样式化说明卡跟随（屏幕坐标钳制；无命中即隐藏）
+	if _hover_card == null:
+		return
+	var mouse := _hud_root.get_global_mouse_position()
+	for zone: Dictionary in _hover_zones:
+		var zc: Control = zone["ctrl"]
+		if not is_instance_valid(zc) or not zc.is_visible_in_tree():
+			continue
+		if (zone["rect"] as Rect2).has_point(mouse):
+			_hover_label.text = zone["text"]
+			_hover_card.visible = true
+			_hover_card.position = (mouse + Vector2(18.0, 18.0)).clamp(
+				Vector2(8.0, 8.0), Vector2(720.0, 1280.0) - Vector2(340.0, 130.0))
+			return
+	_hover_card.visible = false
 
 
 # ── 测试观测口（displayed 值，headless 断言用——文本口径锁定，勿改） ──
@@ -468,6 +499,7 @@ func _refresh_build() -> void:
 # ── 程序化 UI 组装（方向 C 贴纸风） ────────────────────────────────
 func _build_ui() -> void:
 	var root := Control.new()
+	_hud_root = root
 	root.name = "Root"
 	root.theme = StickerTheme.theme()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -475,8 +507,10 @@ func _build_ui() -> void:
 	add_child(root)
 
 	# HP 白胶囊（圆角 + 藏青描边；填充 = 纯渐变，克制无表情）
-	var hp_panel := _sticker_panel(root, Vector2(24.0, 24.0), HP_BAR_SIZE, 15.0,
-		"生命：被碰到掉血，短暂无敌帧；升级即回满血（「生存本能」词条提升上限）")
+	var hp_panel := _sticker_panel(root, Vector2(24.0, 24.0), HP_BAR_SIZE, 15.0)
+	_add_hover(hp_panel, "生命
+被碰到掉血，短暂无敌帧；升级即回满血。
+「生存本能」词条提升生命上限")
 	_hp_fill = Panel.new()
 	_hp_fill.name = "HpFill"
 	_hp_fill_style = StyleBoxFlat.new()
@@ -501,8 +535,10 @@ func _build_ui() -> void:
 	star_icon.position = Vector2(26.0, 60.0)
 	star_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(star_icon)
-	var xp_panel := _sticker_panel(root, Vector2(54.0, 63.0), XP_BAR_SIZE, 7.0,
-		"经验：吸收经验碎片升级，每级弹一次强化卡")
+	var xp_panel := _sticker_panel(root, Vector2(54.0, 63.0), XP_BAR_SIZE, 7.0)
+	_add_hover(xp_panel, "经验
+吸收经验碎片升级，每级弹一次强化卡
+（「经验萃取」词条提升获取量）")
 	_xp_fill = Panel.new()
 	_xp_fill.name = "XpFill"
 	var xp_style := StyleBoxFlat.new()
@@ -520,8 +556,9 @@ func _build_ui() -> void:
 	root.add_child(_level_label)
 
 	# 波次圆形徽章（右上）
-	var badge := _sticker_panel(root, Vector2(598.0, 16.0), Vector2(106.0, 106.0), 53.0,
-		"当前波次：清完本关最终波（Boss 波）即通关结算")
+	var badge := _sticker_panel(root, Vector2(598.0, 16.0), Vector2(106.0, 106.0), 53.0)
+	_add_hover(badge, "波次
+当前波次；清完最终 Boss 波即通关结算")
 	var badge_cap := StickerTheme.label_sticker(Label.new(), 13, PopPalette.INK_SOFT)
 	badge_cap.text = "WAVE"
 	badge_cap.size = Vector2(106.0, 16.0)
@@ -537,8 +574,9 @@ func _build_ui() -> void:
 	badge.add_child(_wave_label)
 
 	# 击杀气泡 + 计时气泡
-	var kill_pill := _sticker_panel(root, Vector2(24.0, 92.0), Vector2(150.0, 36.0), 18.0,
-		"本局击杀数（图鉴/成就统计源）")
+	var kill_pill := _sticker_panel(root, Vector2(24.0, 92.0), Vector2(150.0, 36.0), 18.0)
+	_add_hover(kill_pill, "击杀
+本局击杀数（图鉴/成就统计源）")
 	_kill_label = StickerTheme.label_sticker(Label.new(), 18, PopPalette.INK, 0, Color.WHITE, true)
 	_kill_label.name = "KillText"
 	_kill_label.text = "击杀 0"
@@ -546,8 +584,9 @@ func _build_ui() -> void:
 	_kill_label.position = Vector2(0.0, 6.0)
 	_kill_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	kill_pill.add_child(_kill_label)
-	var time_pill := _sticker_panel(root, Vector2(184.0, 92.0), Vector2(112.0, 36.0), 18.0,
-		"本局时长")
+	var time_pill := _sticker_panel(root, Vector2(184.0, 92.0), Vector2(112.0, 36.0), 18.0)
+	_add_hover(time_pill, "时长
+本局已经过时间")
 	_time_label = StickerTheme.label_sticker(Label.new(), 18, PopPalette.INK_SOFT)
 	_time_label.name = "TimeText"
 	_time_label.text = "0:00"
@@ -597,8 +636,10 @@ func _build_ui() -> void:
 	skill_btn.add_child(_skill_cd_label)
 	# 金币 pill（击杀/计时/护盾同行末段——2026-08-31 P0 反馈「金币压血条」修复落位；
 	# 原 (24,44) 与血条 24~54/经验条 63~77 双重叠，现移至护盾条右侧 464~596）
-	var gold_pill := _sticker_panel(root, Vector2(464.0, 92.0), Vector2(132.0, 36.0), 18.0,
-		"战地金币：击杀掉落，黑市购物专用货币")
+	var gold_pill := _sticker_panel(root, Vector2(464.0, 92.0), Vector2(132.0, 36.0), 18.0)
+	_add_hover(gold_pill, "战地金币
+击杀掉落，黑市购物专用货币
+（「丰饶/富矿」祝福提升获取）")
 	gold_pill.name = "GoldPill"
 	gold_pill.modulate.a = 0.94
 	_gold_label = StickerTheme.label_sticker(Label.new(), 17, PopPalette.XP, 0, Color.WHITE, true)
@@ -639,9 +680,30 @@ func _build_ui() -> void:
 	_build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	build_bg.add_child(_build_label)
 
+	# 自绘悬停说明卡（最上层；R13）
+	_hover_card = PanelContainer.new()
+	_hover_card.name = "HoverCard"
+	var hsb := StyleBoxFlat.new()
+	hsb.bg_color = Color(0.08, 0.11, 0.2, 0.94)
+	hsb.set_corner_radius_all(10)
+	hsb.border_width_bottom = 2
+	hsb.border_color = PopPalette.PLAYER
+	_hover_card.add_theme_stylebox_override("panel", hsb)
+	_hover_card.visible = false
+	_hover_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hover_card.z_index = 50
+	_hover_label = Label.new()
+	StickerTheme.label_sticker(_hover_label, 14, Color.WHITE, 0, Color.TRANSPARENT)
+	_hover_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hover_label.custom_minimum_size = Vector2(300.0, 0.0)
+	_hover_card.add_child(_hover_label)
+	root.add_child(_hover_card)
+
 	# 护盾条（时间气泡右侧；MEC_SHIELD 持有才显示——用户反馈「单独的护盾条」）
-	_shield_panel = _sticker_panel(root, Vector2(306.0, 92.0), Vector2(148.0, 36.0), 18.0,
-		"临时护盾（持有「能量护盾」词条显示）：就绪时挡下一次接触伤害，挡后进入充能")
+	_shield_panel = _sticker_panel(root, Vector2(306.0, 92.0), Vector2(148.0, 36.0), 18.0)
+	_add_hover(_shield_panel, "临时护盾
+持有「能量护盾」词条时出现
+就绪=挡下一次接触伤害；挡后进入充能")
 	_shield_panel.name = "ShieldBar"
 	_shield_panel.modulate.a = 0.94
 	_shield_panel.visible = false

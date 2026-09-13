@@ -8,6 +8,7 @@ extends CanvasLayer
 
 var _title_label: Label = null
 signal restart_requested()                    # → GameLoop 重开申请（迁移矩阵仲裁）
+signal menu_requested()                       # → GameLoop.quit_to_menu（R13 结算屏回主菜单）
 
 var stats_source: Node = null                 # 注入（HUD：kills/wave/total_damage）
 
@@ -159,9 +160,21 @@ func _build_ui() -> void:
 	btn.text = Lore.GAME_OVER_BUTTON
 	btn.add_theme_font_size_override("font_size", 22)
 	btn.add_theme_font_override("font", StickerTheme.font_bold())
-	btn.position = Vector2(190.0, 330.0)
-	btn.size = Vector2(200.0, 72.0)
-	btn.pivot_offset = Vector2(100.0, 36.0)
+	btn.position = Vector2(150.0, 322.0)
+	btn.size = Vector2(280.0, 64.0)
+	btn.pivot_offset = btn.size * 0.5
 	btn.pressed.connect(request_restart)
 	btn.button_down.connect(func() -> void: StickerTheme.press_punch(btn))
 	_card.add_child(btn)
+	# 回主菜单（R13：通关/死亡结算第二出口——回大厅解锁链/换构筑）
+	var menu_btn := Button.new()
+	menu_btn.name = "MenuButton"
+	menu_btn.text = "回主菜单"
+	menu_btn.add_theme_font_size_override("font_size", 18)
+	menu_btn.add_theme_font_override("font", StickerTheme.font_bold())
+	menu_btn.position = Vector2(150.0, 400.0)
+	menu_btn.size = Vector2(280.0, 56.0)
+	menu_btn.pivot_offset = menu_btn.size * 0.5
+	menu_btn.pressed.connect(func() -> void: menu_requested.emit())
+	menu_btn.button_down.connect(func() -> void: StickerTheme.press_punch(menu_btn))
+	_card.add_child(menu_btn)

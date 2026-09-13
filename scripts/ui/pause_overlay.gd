@@ -21,6 +21,7 @@ var _details_mode: bool = false
 var _details_card: Panel = null
 var _details_list: Control = null
 var _player_ref: Node = null
+var _relics_ref: Array = []                    # 已获遗物 [{name, desc}]（R13 遗物区块）
 
 
 func _ready() -> void:
@@ -41,9 +42,10 @@ func is_details_visible() -> bool:
 	return _details_card != null and _details_card.visible
 
 
-func open_details(p_player: Node) -> void:
-	# 构筑详情模式开启（GameLoop 暂停仲裁通过后调用；注入 player 供内容刷新）
+func open_details(p_player: Node, p_relics: Array = []) -> void:
+	# 构筑详情模式开启（GameLoop 暂停仲裁通过后调用；注入 player + 遗物清单供内容刷新）
 	_player_ref = p_player
+	_relics_ref = p_relics
 	_details_mode = true
 	_refresh_cards()
 
@@ -235,6 +237,31 @@ func _rebuild_details() -> void:
 		(c as Node).queue_free()
 	if _player_ref == null or not is_instance_valid(_player_ref):
 		return
+	# 遗物区块（R13 用户反馈「收割协议没展示在构筑详情」——遗物是构筑的一部分）
+	if not _relics_ref.is_empty():
+		var relic_sec := Panel.new()
+		relic_sec.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 3, false))
+		relic_sec.custom_minimum_size = Vector2(576.0, 34.0 + 22.0 * _relics_ref.size())
+		relic_sec.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		relic_sec.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var rtitle := Label.new()
+		StickerTheme.label_sticker(rtitle, 15, PopPalette.GOLD, 0, Color.WHITE, true)
+		rtitle.text = "◈ 遗物 ×%d" % _relics_ref.size()
+		rtitle.position = Vector2(12.0, 6.0)
+		rtitle.size = Vector2(552.0, 20.0)
+		rtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		relic_sec.add_child(rtitle)
+		for ri: int in range(_relics_ref.size()):
+			var rd: Dictionary = _relics_ref[ri]
+			var rline := Label.new()
+			StickerTheme.label_sticker(rline, 13, PopPalette.INK_SOFT)
+			rline.text = "　◆ %s：%s" % [String(rd.get("name", "?")),
+				String(rd.get("desc", ""))]
+			rline.position = Vector2(12.0, 30.0 + 22.0 * ri)
+			rline.size = Vector2(552.0, 20.0)
+			rline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			relic_sec.add_child(rline)
+		_details_list.add_child(relic_sec)
 	# 玩家侧属性行（R7 遗漏补齐——用户点名的「生存本能（=最大生命词条）」等玩家属性：
 	# 生命上限 / 磁吸半径 / 技能冷却基线；武器侧攻击/暴击/间隔见各区块头）
 	var pstats := Panel.new()
@@ -307,6 +334,40 @@ func _make_weapon_section(p_w: Node) -> Control:
 	wstats.size = Vector2(508.0, 20.0)
 	wstats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(wstats)
+
+	# L3/L5 质变词条行（R13 用户反馈「武器 3/5 级有什么作用显示一下，3 级紫 5 级金」）
+	var wlv: int = int(p_w.get("level"))
+	var wtable: Array = wdata.get("upgrade_table") if wdata != null else []
+	for tier: Array in [[3, Color(0.72, 0.5, 1.0)], [5, PopPalette.GOLD]]:
+		var tlv: int = int(tier[0])
+		if wtable == null or wtable.size() < tlv:
+			continue
+		var note_v: Variant = (wtable as Array)[tlv - 1].get("note")
+		var note := String(note_v) if note_v != null else ""
+		if note.is_empty():
+			continue
+		var unlocked := wlv >= tlv
+		var mrow := HBoxContainer.new()
+		mrow.add_theme_constant_override("separation", 8)
+		mrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var mgem := TextureRect.new()
+		mgem.texture = TextureFactory.type_icon(1, 3)
+		mgem.custom_minimum_size = Vector2(26.0, 26.0)
+		mgem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		mgem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		mgem.modulate = tier[1] if unlocked else Color(tier[1].r, tier[1].g, tier[1].b, 0.28)
+		mgem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mrow.add_child(mgem)
+		var mlabel := Label.new()
+		StickerTheme.label_sticker(mlabel, 13, tier[1] if unlocked else PopPalette.INK_SOFT)
+		mlabel.text = "【%d 级质变】%s%s" % [tlv, note,
+			"" if unlocked else "（Lv%d 解锁）" % tlv]
+		mlabel.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		mlabel.custom_minimum_size = Vector2(500.0, 0.0)
+		mlabel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mlabel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mrow.add_child(mlabel)
+		section.add_child(mrow)
 
 	var stack: Variant = p_w.get("trait_stack")
 	var traits: Array = (stack.get("traits") as Array) if stack != null \

@@ -24,6 +24,8 @@ func run(p_tree: SceneTree) -> void:
 	tree = p_tree
 	seed(42)
 	_boot_game_loop()
+	# R13：套件启动即清购买位（防历史崩溃运行残留在测试档中被往返携带）
+	Meta.unlocked_characters = {}
 	_test_level_up_full_heal()
 	_test_weapon_card_equip_chain()
 	_test_weapon_card_slot_guard()

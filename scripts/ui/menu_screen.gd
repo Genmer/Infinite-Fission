@@ -23,6 +23,7 @@ var _start_btn: Button = null
 var _continue_btn: Button = null              # 继续上次进度（有局内存档时可见，2026-08-31）
 var _pulse_tween: Tween = null                # 出发按钮果冻脉动（隐藏时暂停）
 var _mascot: TextureRect = null
+var name_tag: Label = null                    # 吉祥物名签（R13：随当前角色刷新）
 var _bob_tween: Tween = null                  # 吉祥物漂浮 idle
 var _lobby_btns: Dictionary = {}              # 入口按钮（kind → Button，刷新计数角标）
 # 详情面板运行期
@@ -132,9 +133,9 @@ func _build_ui() -> void:
 	_mascot.pivot_offset = Vector2(50.0, 50.0)
 	_mascot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_mascot)
-	var name_tag := Label.new()
+	name_tag = Label.new()
 	StickerTheme.label_sticker(name_tag, 15, PopPalette.PLAYER, 0, Color.WHITE, true)
-	name_tag.text = "防御机器人 · 哨兵-9"
+	_refresh_mascot()
 	name_tag.position = Vector2(0.0, 566.0)
 	name_tag.size = Vector2(720.0, 20.0)
 	name_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -188,6 +189,19 @@ func _build_ui() -> void:
 	footer.size = Vector2(720.0, 20.0)
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_root.add_child(footer)
+
+
+func _refresh_mascot() -> void:
+	# 大厅吉祥物 = 当前选中角色（R13 用户反馈「大厅应显示当前选中的角色」）
+	var def := CharacterTable.get_character(Meta.character_id)
+	var tints := {
+		&"sentinel": Color(1.0, 1.0, 1.0), &"veles": Color(1.0, 0.72, 0.72),
+		&"bulwark": Color(0.72, 0.84, 1.0), &"ranger": Color(0.66, 1.0, 0.92),
+		&"zero": Color(0.85, 0.72, 1.0), &"mank": Color(0.66, 1.0, 0.55),
+		&"vera": Color(0.72, 1.0, 0.72), &"noah": Color(1.0, 0.93, 0.62),
+	}
+	_mascot.modulate = tints.get(Meta.character_id, Color.WHITE)
+	name_tag.text = String(def.get("name", "哨兵-9"))
 
 
 func _on_start_pressed() -> void:
@@ -729,6 +743,7 @@ func _on_char_pick(p_id: StringName) -> void:
 	Meta.set_character_id(p_id)
 	_rebuild_char_select()
 	_refresh_lobby_counts()
+	_refresh_mascot()
 
 
 func _on_char_buy(p_id: StringName) -> void:

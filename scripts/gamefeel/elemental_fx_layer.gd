@@ -62,6 +62,8 @@ var _ktext_idx: int = 0
 var _ktext_cd: float = 0.0                    # 击退小字节流
 var _poison := {"active": false, "center": Vector2.ZERO, "radius": 300.0,
 	"left": 0.0, "dur": 6.0, "anim": 0.0}     # 毒云领域持续表现（R10）
+var _blasts: Array[Dictionary] = []           # [{sprite, left}]（死亡新星爆炸环池，R13）
+var _blast_idx: int = 0
 
 
 func _ready() -> void:
@@ -80,6 +82,7 @@ func _ready() -> void:
 	EventBus.knockback_hit.connect(_on_knockback_hit)
 	EventBus.poison_cloud_cast.connect(_on_poison_cloud_cast)
 	EventBus.poison_cloud_tick.connect(_on_poison_cloud_tick)
+	EventBus.kill_blast.connect(_on_kill_blast)
 	EventBus.elemental_dot_fired.connect(_on_dot_fired)
 	EventBus.reaction_triggered.connect(_on_reaction_triggered)
 	EventBus.shield_blocked.connect(_on_shield_blocked)
@@ -99,6 +102,7 @@ func tick(p_raw_delta: float) -> void:
 	_tick_devours(p_raw_delta)
 	_tick_knocktexts(p_raw_delta)
 	_tick_poison(p_raw_delta)
+	_tick_blasts(p_raw_delta)
 
 
 # ── 感电连锁主锯齿闪电（签名特效） ────────────────────────────────
@@ -692,3 +696,40 @@ func _draw() -> void:
 		var rr := radius * (0.45 + 0.4 * (0.5 + 0.5 * sin(anim * 1.7 + float(i) * 1.3)))
 		var pos := center + Vector2(cos(ang), sin(ang)) * rr
 		draw_circle(pos, 7.0 + 3.0 * sin(anim * 4.0 + float(i)), Color(0.5, 1.0, 0.42, 0.5 * fade))
+
+
+# ── 死亡新星爆炸环（击杀爆炸结算瞬间——R13 用户反馈「加个特效」） ──────
+func _on_kill_blast(p_pos: Vector2, p_radius: float) -> void:
+	if _blasts.is_empty():
+		for i in range(6):
+			var sp := Sprite2D.new()
+			sp.name = "KillBlast%d" % i
+			sp.texture = TextureFactory.ring_tex(Color(1.0, 0.55, 0.2, 1.0), 48, 5.0)
+			sp.visible = false
+			add_child(sp)
+			_blasts.append({"sprite": sp, "left": 0.0, "r1": 70.0})
+	var slot: Dictionary = _blasts[_blast_idx % _blasts.size()]
+	_blast_idx += 1
+	var sp: Sprite2D = slot["sprite"]
+	sp.position = p_pos
+	sp.visible = true
+	slot["left"] = 0.32
+	slot["r1"] = maxf(p_radius, 40.0) * 1.25
+	sp.scale = Vector2.ONE * 0.3
+	sp.modulate.a = 1.0
+
+
+func _tick_blasts(p_raw_delta: float) -> void:
+	for slot: Dictionary in _blasts:
+		var left := float(slot["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		slot["left"] = left
+		var sp: Sprite2D = slot["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		var t := 1.0 - left / 0.32
+		sp.scale = Vector2.ONE * lerpf(0.3, float(slot["r1"]) / 19.0, t)
+		sp.modulate.a = 1.0 - t

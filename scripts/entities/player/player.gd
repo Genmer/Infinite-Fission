@@ -343,6 +343,7 @@ func set_character(p_id: StringName) -> void:
 	reroll_charges = 2 + Meta.reroll_bonus()     # 刷新次数（基础 2 + 养成·预案推演，选卡刷新机制）
 	revives_left = Meta.revive_charges()         # 应急协议（每局重置）
 	character_atk_pct = float(def.get("atk_pct", 0.0))
+	apply_character_visual()
 	refresh_skill_cd()
 	skill_cd_left = 0.0
 	rof_mult = 1.0
@@ -353,6 +354,22 @@ func set_character(p_id: StringName) -> void:
 		if is_instance_valid(w) and w is WeaponBase:   # freed 实例上评估 is 会报脚本错——判序 valid 在前
 			(w as WeaponBase).meta_atk_pct = Meta.atk_pct() + character_atk_pct
 			(w as WeaponBase).call(&"_invalidate_panel")
+
+
+func apply_character_visual() -> void:
+	# 舰体随角色着色（R13 用户反馈「选了新角色战斗中还是默认飞船」）——
+	# 贴图共享、modulate 区分（低成本角色辨识）；受击闪白走 _apply_flash 临时覆盖不冲突
+	var tints := {
+		&"sentinel": Color(1.0, 1.0, 1.0), &"veles": Color(1.0, 0.72, 0.72),
+		&"bulwark": Color(0.72, 0.84, 1.0), &"ranger": Color(0.66, 1.0, 0.92),
+		&"zero": Color(0.85, 0.72, 1.0), &"mank": Color(0.66, 1.0, 0.55),
+		&"vera": Color(0.72, 1.0, 0.72), &"noah": Color(1.0, 0.93, 0.62),
+	}
+	var tint: Color = tints.get(character_id, Color.WHITE)
+	if _sprite != null:
+		_sprite.modulate = tint
+	if _flash != null and float(_flash.modulate.a) <= 0.0:
+		_flash.modulate = tint
 
 
 func _weapon_pool_sum(p_pool: StringName) -> float:

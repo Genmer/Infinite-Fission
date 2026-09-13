@@ -589,7 +589,17 @@ func _sync_visual() -> void:
 	var fill := PopPalette.PLAYER
 	if team == 1:
 		fill = PopPalette.ENEMY
+		_sprite.rotation = 0.0
 	else:
+		# 导弹建模（R13 用户反馈「微型导弹给个导弹建模」）：W6/W7 弹体换导弹贴图并按
+		# 速度方向旋转（贴图朝上 = angle + PI/2）；贴图指向右，故 +PI/2 后机头对齐航向
+		var wid := &""
+		if weapon_ref != null and is_instance_valid(weapon_ref) 				and weapon_ref.data != null:
+			wid = weapon_ref.data.id
+		if wid == &"W6_micro_missile" or wid == &"W7_cluster_rocket":
+			_sprite.texture = TextureFactory.missile_tex()
+			_sprite.rotation = velocity.angle() + PI * 0.5 if velocity.length() > 1.0 				else _sprite.rotation
+			return
 		match element:
 			GameConst.Element.FIR:
 				fill = PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)      # 派生橙（点燃火苗同源）
@@ -602,6 +612,7 @@ func _sync_visual() -> void:
 					PopPalette.SHOCK.lerp(Color.WHITE, 0.25))
 				return
 	_sprite.texture = TextureFactory.bead(fill, TEX_SIZE)
+	_sprite.rotation = 0.0
 
 
 func _find_player() -> Node2D:
