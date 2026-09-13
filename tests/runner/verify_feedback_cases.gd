@@ -2029,8 +2029,8 @@ func _test_round7_audit() -> void:
 	var bounce_proj: ProjectileBase = (_gl.pools[&"projectile"] as ProjectilePool).acquire()
 	if bounce_proj != null:
 		_bounce_probe(bounce_proj, bounce_t, bproj_params)
-	_check("反弹动作：带预算子弹寿命延长（1.6s → ≥2.2s，至少穿屏撞边）",
-		bounce_proj == null or float(bounce_proj.lifetime_left) >= 2.2,
+	_check("反弹动作：带预算子弹【射程无限】（寿命抬到 20s 上限，打空必达边界）",
+		bounce_proj == null or float(bounce_proj.lifetime_left) >= 20.0,
 		"life=%s" % str(bounce_proj.lifetime_left) if bounce_proj != null else "no-proj")
 	if bounce_proj != null:
 		(bounce_proj as ProjectileBase).nullify()
