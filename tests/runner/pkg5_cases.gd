@@ -124,9 +124,10 @@ func _test_full_chain_smoke() -> void:
 	var shards_before: int = _gl.active_shards.size()
 	victim.apply_damage(999999.0)
 	_check("击杀：enemy_killed 广播 + HUD 计数", _gl.hud.kills == kills0 + 1)
-	_check("掉落：经验碎片入场上（面值 = exp_value × 点金手倍率 1.0）",
+	_check("掉落：经验碎片入场上（面值 = exp_value × 点金手 × 早期经验倍率）",
 		_gl.active_shards.size() == shards_before + 1
-		and is_equal_approx(_gl.active_shards[_gl.active_shards.size() - 1].value, exp_value))
+		and is_equal_approx(_gl.active_shards[_gl.active_shards.size() - 1].value,
+			exp_value * _gl.relic_handler.xp_mult() * _gl._early_xp_mult()))
 	# 磁吸拾取 → 经验入账（AC-16.1 磁吸段；520px/s 飞行 60px ≈ 12 帧）
 	var shard: XpShard = _gl.active_shards[_gl.active_shards.size() - 1]
 	var xp0: float = _gl.player.xp
@@ -359,13 +360,14 @@ func _test_xp_chain() -> void:
 	_check("xp 池挂载：容量 160 + 全量预热（AC-14.2）",
 		(_gl.pools[&"xp"] as XPPool).stats()["capacity"] == 160
 		and int((_gl.pools[&"xp"] as XPPool).stats()["free"]) == 160)
-	# 掉落值（exp_value × 点金手倍率）与磁吸边界
+	# 掉落值（exp_value × 点金手倍率 × 早期经验倍率）与磁吸边界
 	var enemy: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
 	enemy.spawn(_make_enemy_data(&"E_XP", 1.0), 1, 0)
 	var shards0: int = _gl.active_shards.size()
 	_gl._on_enemy_killed_drop_xp(enemy)
+	var want_value := 7.0 * _gl.relic_handler.xp_mult() * _gl._early_xp_mult()
 	_check("掉落：碎片面值 = exp_value(7) × 倍率", _gl.active_shards.size() == shards0 + 1
-		and is_equal_approx(_gl.active_shards[_gl.active_shards.size() - 1].value, 7.0))
+		and is_equal_approx(_gl.active_shards[_gl.active_shards.size() - 1].value, want_value))
 	# 磁吸半径外不吸附、半径内吸附
 	var shard: XpShard = _gl.active_shards[_gl.active_shards.size() - 1]
 	var far_pos: Vector2 = _gl.player.global_position + Vector2(_gl.player.pickup_radius + 80.0, 0.0)

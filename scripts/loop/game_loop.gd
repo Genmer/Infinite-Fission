@@ -975,9 +975,11 @@ func _unhandled_input(p_event: InputEvent) -> void:
 # ── 经验链路（集成包 B.1：击杀掉落 → 磁吸 → 经验 → 升级仲裁 E-16） ──
 func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 	# 掉落值真源：Enemy.exp_value（波次通胀已缩放）× 遗物点金手倍率（REL_MIDAS +20%，A3 §5）
+	# × 早期经验加速（early_xp_boost：第 1 波起 ×1.25，until_wave 波起回落——掉落侧折算，
+	# 同点金手口径；gain_xp/xp 曲线测试口径保持纯净）
 	if not (p_enemy is Enemy):
 		return                                  # 裸实体探针/非敌事件防御
-	var value := (p_enemy as Enemy).exp_value * relic_handler.xp_mult()
+	var value := (p_enemy as Enemy).exp_value * relic_handler.xp_mult() * _early_xp_mult()
 	_spawn_xp_shard(p_enemy.global_position, value)
 	# 金币掉账（M7 战地黑市货币：gold_drop = {chance, min, max}，首次接线——此前为死数据；
 	# 词缀二期：祝福·丰饶/富矿金币倍率在掉账额入账（player.map_gold_mult，真源 map_table.gd））
@@ -987,6 +989,19 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 		if randf() < float(gd.get("chance", 0.0)):
 			player.gold += int(round(randf_range(float(gd.get("min", 1)), float(gd.get("max", 1)))
 				* player.map_gold_mult))
+
+
+func _early_xp_mult() -> float:
+	# 早期经验加速倍率（2026-09-13 用户反馈「早期叠不起来，要让用户始终保持期待」）：
+	# current_wave ∈ [1, until_wave) → ×mult（默认 ×1.25 至第 5 波）；数值真源
+	# BalanceTables.early_xp_boost。波次源 wave_director（无尽/续局波数自然越界回落 1.0）
+	var mult := 1.25
+	var until_wave := 6
+	if GameConfig.balance != null:
+		mult = float(GameConfig.balance.early_xp_boost.get("mult", 1.25))
+		until_wave = maxi(int(GameConfig.balance.early_xp_boost.get("until_wave", 6)), 1)
+	var wave := wave_director.current_wave if wave_director != null else 0
+	return mult if wave >= 1 and wave < until_wave else 1.0
 
 
 func _spawn_xp_shard(p_pos: Vector2, p_value: float) -> void:

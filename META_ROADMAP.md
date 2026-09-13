@@ -142,6 +142,12 @@
 | P0 烈焰吞噬无特效 | 根因 = SYN_BURN_DEVOUR 是条件乘区（burn_dmg 池），命中生效时零表现。落地：DamagePipeline._broadcast 检测 result.pool_breakdown 含 burn_dmg → EventBus.burn_devour_proc → ElementalFxLayer 新增内聚池（橙色星闪放大 + 4 火苗外圈向命中点旋入即缩，全局节流 0.09s）——「吞噬 = 火被吸进去」与点燃火星（外喷）方向相反 |
 | P1 机制解锁节奏 | 新真源 scripts/meta/mechanic_gate.gd（MechanicGate）——门只设在「来源侧」（卡池上架 + 质变挂载），不动 ElementalSystem 结算核：① 第 1 关草原 = 纯基础构筑（ADD/MULT/MECH/精通/新武器/换一批），无元素无遗物；② 第 2 关冰原 = 火/冰元素卡 + 遗物类目（碎裂反应由双元素自然初见）；③ 第 3 关魔域 = 感电卡（过载/超导随三元素齐而可发生）；④ 第 4 关树海 = 满层质变 ×1.6；⑤ 第 5 关沼泽 = 赌徒诅咒卡（REL_GAMBLER 终关上架）。展示面：选关面板每图「✦ 新解锁」金行（MechanicGate.intro_for_map）+ 开局 HUD 横幅（EventBus.mechanics_intro，3.4s 长 toast，仅 _on_menu_start 新开局宣一次）。查询口径：无局态（菜单/测试，run_map_id 空）门控全开——293+731 验收基线不受影响 |
 
+## 5.14 五轮反馈批次（2026-09-13 二批，已落地）
+
+| 优先级 | 项 | 落地 |
+|---|---|---|
+| P1 | 早期叠不起来，「下个 buff 一定要起飞」——早期默认经验倍率 +25% | BalanceTables.early_xp_boost = {mult: 1.25, until_wave: 6}（validator 规则 mult≥1/until_wave≥1）：第 1~5 波经验球面值 ×1.25，第 6 波起回落 1.0。实现走**掉落侧折算**（GameLoop._early_xp_mult，同 REL_MIDAS 口径）——gain_xp/xp 曲线口径保持纯净（pkg2 曲线断言不动）；无尽/续局波数自然越界回落。早期 ~+25% 升级速度 ≈ 前 5 波多 1~2 次选卡，构筑成型提前（verify 新增 7 项用例；pkg5 两处掉落面值断言随新口径更新） |
+
 ## 6. 落地顺序建议
 
 ```

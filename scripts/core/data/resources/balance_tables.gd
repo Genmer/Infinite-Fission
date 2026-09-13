@@ -36,6 +36,10 @@ extends Resource
 @export var spd_growth_per_wave: float = 0.008
 @export var exp_inflation_per_wave: float = 1.085
 @export var xp_curve: Dictionary = {"base": 14.0, "power": 1.4}   # 值 >0
+# 早期经验加速（2026-09-13 用户反馈「早期叠不起来…下个buff我一定要起飞」）：第 1 波至
+# until_wave-1 波经验球面值 ×mult（掉落侧折算，同 REL_MIDAS 口径；gain_xp 曲线不受影响），
+# until_wave 波起回落 1.0——构筑起步提速 +25%，中期回归标准通胀
+@export var early_xp_boost: Dictionary = {"mult": 1.25, "until_wave": 6}   # mult ≥1 / until_wave ≥1
 @export var rarity_weights: Dictionary = {"WHITE": 58, "BLUE": 30, "PURPLE": 10, "GOLD": 2}  # 权重和 >0
 @export var category_weights: Dictionary = {"MASTERY": 12, "ADD": 40, "MULT": 18, "MECH": 14, "ELEM": 10, "RELIC": 6}
 @export var cd_rxn: float = 2.0                              # 反应 CD（F-34）

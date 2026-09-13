@@ -319,6 +319,8 @@ func validate_balance(bt: BalanceTables) -> Array:
 	_nf(out, "spd_growth_per_wave", bt.spd_growth_per_wave < 0.0, "spd_growth_per_wave ≥ 0")
 	_nf(out, "exp_inflation_per_wave", bt.exp_inflation_per_wave <= 0.0, "exp_inflation_per_wave > 0")
 	_nf(out, "xp_curve", float(bt.xp_curve.get("base", 0.0)) <= 0.0 or float(bt.xp_curve.get("power", 0.0)) <= 0.0, "xp_curve 值 > 0")
+	_nf(out, "early_xp_boost", float(bt.early_xp_boost.get("mult", 0.0)) < 1.0
+		or int(bt.early_xp_boost.get("until_wave", 0)) < 1, "early_xp_boost：mult ≥1 且 until_wave ≥1")
 	var weight_sum := 0
 	for k in bt.rarity_weights:
 		weight_sum += int(bt.rarity_weights[k])

@@ -269,7 +269,7 @@ func _test_hud_binding() -> void:
 	# 断言字面量 55/60（用户实测反馈 2026-08-29：初始 HP 100→60，现 cfg player_base_hp=60
 	# 唯一真源——张力调校值已回注 cfg、代码侧双轨常量已删；显示串口径不变）。
 	# 动因/证据见交付报告「HP 相关测试断言的处理」。
-	_check("HUD HP 刷新（55/60）", hud.displayed_hp_text() == "HP 55/60")
+	_check("HUD HP 刷新（55/60）", hud.displayed_hp_text() == "HP 55/60", "text=%s max=%s lv=%s" % [hud.displayed_hp_text(), str(player.max_hp), str(player.level)])
 	EventBus.emit_wave_started(7)
 	_check("HUD 波次绑定（wave_started）", hud.displayed_wave() == 7)
 	var k0: int = hud.displayed_kills()

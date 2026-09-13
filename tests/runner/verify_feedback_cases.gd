@@ -53,6 +53,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_p2_characters()
 	_test_settings()
 	_test_round2_feedback()
+	_test_round5_early_xp()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -1821,3 +1822,46 @@ func _test_r2_run_save() -> void:
 	_gl.request_pause()
 	_gl.quit_to_menu()
 	RunSave.clear()
+
+
+# ── 2026-09-13 五轮反馈（早期经验加速 ×1.25：掉落侧折算） ──
+func _test_round5_early_xp() -> void:
+	print("── 五轮反馈（早期经验加速） ──")
+	# 数值真源默认值（BalanceTables.early_xp_boost；validator 规则 mult≥1/until_wave≥1）
+	var boost: Dictionary = GameConfig.balance.early_xp_boost
+	_check("早期经验：balance 真源默认 {mult:1.25, until_wave:6}",
+		absf(float(boost.get("mult", 0.0)) - 1.25) <= 0.001
+		and int(boost.get("until_wave", 0)) == 6)
+	# 倍率区间（掉落侧 _early_xp_mult；收尾还原波次）
+	var saved_wave: int = _gl.wave_director.current_wave
+	_gl.wave_director.current_wave = 1
+	_check("早期经验：第 1 波 ×1.25", absf(_gl._early_xp_mult() - 1.25) <= 0.001,
+		"mult=%f" % _gl._early_xp_mult())
+	_gl.wave_director.current_wave = 5
+	_check("早期经验：第 5 波仍 ×1.25", absf(_gl._early_xp_mult() - 1.25) <= 0.001)
+	_gl.wave_director.current_wave = 6
+	_check("早期经验：第 6 波起回落 1.0", absf(_gl._early_xp_mult() - 1.0) <= 0.001)
+	_gl.wave_director.current_wave = 0
+	_check("早期经验：非局波次（0）不加速", absf(_gl._early_xp_mult() - 1.0) <= 0.001)
+	# 掉落端到端：wave 1 击杀 exp_value=10 → 经验球面值 = 10 × 遗物倍率 × 1.25
+	_gl.wave_director.current_wave = 1
+	var e := Enemy.new()
+	_gl.add_child(e)
+	e.spawn(_gl.registry.get_enemy(&"E1_grunt"), 1, 0)
+	e.exp_value = 10.0
+	var expected := 10.0 * _gl.relic_handler.xp_mult() * 1.25
+	var shards0: int = _gl.active_shards.size()
+	_gl._on_enemy_killed_drop_xp(e)
+	var shards1: int = _gl.active_shards.size()
+	_check("早期经验：击杀掉落经验球 +1", shards1 == shards0 + 1,
+		"%d→%d" % [shards0, shards1])
+	if shards1 > shards0 and not _gl.active_shards.is_empty():
+		var shard: Node = _gl.active_shards.back()
+		_check("早期经验：球面值 = 基值 × 1.25（掉落侧折算）",
+			absf(float(shard.get("value")) - expected) <= 0.01,
+			"got=%f want=%f" % [float(shard.get("value")), expected])
+	if not _gl.active_shards.is_empty():
+		_gl.active_shards.back().queue_free()
+		_gl.active_shards.pop_back()
+	e.queue_free()
+	_gl.wave_director.current_wave = saved_wave
