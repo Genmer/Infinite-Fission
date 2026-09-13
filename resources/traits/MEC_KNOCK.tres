@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"MEC_KNOCK"
+display_name = "动能冲击"
+description = "子弹击退力 +60（把怪物推得更远；Boss 免疫、精英减半），可叠 2 层"
+pool = 3
+pool_id = &"add_knock"
+effect_id = &"EF_STAT"
+value = 60.0
+value2 = 0.0
+params = {
+	"stat": "knockback",
+	"required_forms": [0, 2]
+}
+event_hooks = []
+stack_max = 2
+decay_delta = 0.85
+cap_pool_p = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+condition = {}

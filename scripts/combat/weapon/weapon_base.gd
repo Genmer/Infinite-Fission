@@ -286,7 +286,10 @@ func knockback_force() -> float:
 	# 质量分级/冲量衰减/击退小字均在 Enemy.knockback 内统一处理）
 	if data == null:
 		return 0.0
-	return float(data.ballistic.get("knockback", 0.0))
+	var kb := float(data.ballistic.get("knockback", 0.0))
+	if trait_stack != null:
+		kb += float(trait_stack.aggregate_panel().get("add_knock", 0.0))   # 动能冲击词条（R12）
+	return kb
 
 
 func _proj_spd_mult() -> float:

@@ -30,6 +30,10 @@ func attach(p_data: TraitData) -> bool:
 			if mounted.layers >= p_data.stack_max:
 				DebugStats.count(&"trait_attach_rejected_stack")
 				return false
+			# R12 同 ID 品级取优：后拿的同名卡若数值更高（如金 > 蓝），覆盖定义——
+			# 否则高品级副本被静默丢弃（用户实测「蓝金点燃看不到差别」根因）
+			if float(p_data.value) > float(mounted.data.value):
+				mounted.data = p_data
 			mounted.layers += 1
 			return true
 	if traits.size() >= MAX_TRAITS:

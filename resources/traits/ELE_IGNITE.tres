@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"ELE_IGNITE"
 display_name = "点燃"
-description = "火附着 22/跳；满槽点燃：3s 内每 0.5s 一跳 DOT = 15% 攻击者 ATK（每层保底 ≥1）；2 层质变：DOT→22% 且燃烧者死亡向 150px 内传火（燎原）"
+description = "火附着 +22/跳；满槽点燃：3s 内每 0.5s 一跳 DOT = 15% 攻击者 ATK（每层保底 ≥1）；2 层质变：DOT→22% 且燃烧者死亡向 150px 内传火（燎原）"
 pool = 4
 pool_id = &""
 effect_id = &"EF_ELEMENTAL"

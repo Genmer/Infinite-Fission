@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"ELE_FREEZE"
 display_name = "冰冻"
-description = "冰附着 22/跳；满槽寒滞 2.5s（移速 −40% + 所受伤害 ×1.25）；二次满槽完全冻结 1.2s；2 层附着→30/跳（A3 §4.5）"
+description = "冰附着 +22/跳；满槽寒滞 2.5s（移速 −40% + 所受伤害 ×1.25）；二次满槽完全冻结 1.2s；2 层附着→30/跳（A3 §4.5）"
 pool = 4
 pool_id = &""
 effect_id = &"EF_ELEMENTAL"

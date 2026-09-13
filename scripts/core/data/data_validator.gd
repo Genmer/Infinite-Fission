@@ -15,7 +15,7 @@ const SEV_WARNING := "warning"
 # 加算池 id 全集（A3 §4.2 十二条；BalanceTables.add_pool_caps 覆盖前五项的池钳）
 const ADD_POOL_IDS: Array[StringName] = [
 	&"add_atk", &"add_rof", &"add_cdr", &"add_crit", &"add_critdmg",
-	&"add_spd", &"add_hp", &"add_skillcdr", &"add_pickup", &"add_size", &"add_pierce", &"add_pellets", &"add_xp",
+	&"add_spd", &"add_hp", &"add_skillcdr", &"add_pickup", &"add_size", &"add_pierce", &"add_pellets", &"add_xp", &"add_knock",
 ]
 # 独立乘区池 id 全集（§三.5 + A3 §4.3；vuln 为目标侧易伤区，A2 §1.8）
 const MULT_POOL_IDS: Array[StringName] = [

@@ -337,16 +337,23 @@ func _make_weapon_section(p_w: Node) -> Control:
 		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		col.add_theme_constant_override("separation", 0)
 		col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var tname := Label.new()
-		StickerTheme.label_sticker(tname, 16, PopPalette.INK, 0, Color.WHITE, true)
 		var layers := int(t.get("layers"))
-		tname.text = String(td.get("display_name")) + ("　×%d" % layers if layers > 1 else "")
+		var sm_v: Variant = td.get("stack_max")
+		var stack_max := int(sm_v) if sm_v != null else 1
+		var tname := Label.new()
+		var rarity_col: Color = [PopPalette.INK, Color("4a9eff"), PopPalette.SHOCK,
+			PopPalette.GOLD][clampi(int(td.get("rarity")), 0, 3)]
+		StickerTheme.label_sticker(tname, 16, rarity_col, 0, Color.WHITE, true)
+		# R11 叠层可视化：可叠词条显示「当前/上限 层」（如 2/3）
+		tname.text = String(td.get("display_name")) + ("　%d/%d 层" % [layers, stack_max] 			if stack_max > 1 else ("　×%d" % layers if layers > 1 else ""))
 		tname.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		col.add_child(tname)
-		var tdesc := Label.new()
-		StickerTheme.label_sticker(tdesc, 13, PopPalette.INK_SOFT)
-		tdesc.text = "　└ " + String(td.get("description"))
-		tdesc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var tdesc := RichTextLabel.new()
+		tdesc.bbcode_enabled = true
+		tdesc.fit_content = true
+		tdesc.add_theme_font_size_override("normal_font_size", 13)
+		tdesc.add_theme_color_override("default_color", PopPalette.INK_SOFT)
+		tdesc.text = "　└ " + _trait_desc_bbcode(t)
 		tdesc.custom_minimum_size = Vector2(500.0, 0.0)
 		tdesc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tdesc.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -354,6 +361,33 @@ func _make_weapon_section(p_w: Node) -> Control:
 		row.add_child(col)
 		section.add_child(row)
 	return section
+
+
+func _trait_desc_bbcode(p_tb: TraitBase) -> String:
+	# 叠层当前值可视化（R11 用户反馈「叠层 buff 显示 2/3 + 当前数值换色」）：
+	# ADD 池（可叠数值型）→ 描述首个「+N%」改写为当前生效总值（F3 衰减真值，含质变乘区），
+	# ≥2 层金色高亮；1 层保持默认文案。MULT/ELEM 等机制型不改写（合并规则逐卡特化）。
+	var td: TraitData = p_tb.data
+	var desc := String(td.description)
+	if td == null or td.pool != GameConst.PoolClass.ADD:
+		return desc
+	var eff := TraitStack.decay_sum(td.value * p_tb.value_mult, p_tb.layers, td.decay_delta)
+	if eff <= 0.0:
+		return desc
+	var re_num := RegEx.create_from_string("\\+\\d(\\.\\d)?%?")
+	var m := re_num.search(desc)
+	if m == null:
+		return desc
+	var raw := m.get_string()
+	var is_pct := raw.ends_with("%")
+	# 描述用百分比口径（+8%）而 decay_sum 是小数（0.148）——% 型需 ×100 显示
+	var shown := eff * 100.0 if is_pct else eff
+	var body := ("+%.1f" % shown) if (absf(shown - roundf(shown)) > 0.001) 		else ("+%d" % int(roundf(shown)))
+	if is_pct:
+		body += "%"
+	if p_tb.layers >= 2:
+		return desc.substr(0, m.get_start()) + "[color=#ffd54a][b]" + body + "[/b][/color]" 			+ desc.substr(m.get_end())
+	return desc
 
 
 func _weapon_stat_line(p_w: Node) -> String:

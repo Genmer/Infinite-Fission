@@ -303,6 +303,35 @@ func _test_build_details_panel() -> void:
 	var ptext: String = (kid0.get_child(0) as Label).text if kid0.get_child_count() > 0 else ""
 	_check("玩家属性行：含 生命上限/磁吸/技能冷却",
 		"生命上限" in ptext and "磁吸" in ptext and "技能冷却" in ptext, ptext)
+	# R11 叠层可视化：挂 2 层暴击率 → 行内「2/3 层」+ 首个数值改写为衰减真值（金色）
+	var crit_t: TraitData = _gl.registry.get_trait(&"AFF_CRIT_RATE")
+	var crit_w: WeaponBase = _gl.player.weapon_slots[0]
+	crit_w.attach_trait(crit_t)
+	crit_w.attach_trait(crit_t)
+	_gl.pause_overlay.toggle_details()
+	_gl.pause_overlay.toggle_details()
+	var found_stack := false
+	var found_gold := false
+	var rtl_texts: Array[String] = []
+	_collect_rtl(_gl.pause_overlay._details_list, rtl_texts)
+	var all_texts := rtl_texts
+	for txt: String in all_texts:
+		if "2/3 层" in txt:
+			found_stack = true
+		if "ffd54a" in txt:
+			found_gold = true
+	_check("叠层可视化：词条行显示「2/3 层」", found_stack, str(rtl_texts))
+	_check("叠层可视化：≥2 层首个数值改写为当前生效值（金色高亮）", found_gold)
+
+
+func _collect_rtl(p_node: Node, p_out: Array[String]) -> void:
+	# 递归收集子树全部 RichTextLabel/Label 文本（详情卡层级：list→section→row→col→label）
+	for c in p_node.get_children():
+		if c is RichTextLabel:
+			p_out.append((c as RichTextLabel).text)
+		elif c is Label:
+			p_out.append((c as Label).text)
+		_collect_rtl(c, p_out)
 	_check("暂停卡隐藏（双卡互斥）", not _gl.pause_overlay.is_pause_visible()
 		or _gl.pause_overlay._card.visible == false)
 	_gl.pause_overlay.toggle_details()
@@ -2034,6 +2063,42 @@ func _test_round7_audit() -> void:
 		"life=%s" % str(bounce_proj.lifetime_left) if bounce_proj != null else "no-proj")
 	if bounce_proj != null:
 		(bounce_proj as ProjectileBase).nullify()
+	# ⑩ 元素弹色串扰回归（R12：用户实测「霰弹枪点火，手枪弹丸变红」）
+	var fire_t: TraitData = _gl.registry.get_trait(&"ELE_IGNITE")
+	var w_pistol: WeaponBase = _gl.player.weapon_slots[0]
+	_gl.player.set("unlocked_slots", 5)        # 装配需空槽（R12 回归用例解锁全槽）
+	var w_shot: WeaponBase = _gl.player.call(&"add_weapon", _gl.registry.get_weapon(&"W3_shotgun"))
+	_check("夹具：霰弹枪装配成功", w_shot != null and w_shot.data.id == &"W3_shotgun")
+	w_shot.attach_trait(fire_t)
+	w_pistol.try_fire()
+	w_shot.try_fire()
+	var pistol_elems: Array[int] = []
+	var shot_elems: Array[int] = []
+	for c in (_gl.pools[&"projectile"] as Node).get_children():
+		var pr: Variant = c
+		if pr == null or not is_instance_valid(pr) or not bool(pr.get("_live")):
+			continue
+		var el: int = int(pr.get("element"))
+		if int(pr.get("weapon_uid")) == w_pistol.uid:
+			pistol_elems.append(el)
+		elif int(pr.get("weapon_uid")) == w_shot.uid:
+			shot_elems.append(el)
+	var pistol_clean := true
+	for el: int in pistol_elems:
+		if el != GameConst.Element.KIN:
+			pistol_clean = false
+	var shot_fired := shot_elems.size() > 0
+	var shot_fire := shot_fired
+	for el: int in shot_elems:
+		if el != GameConst.Element.FIR:
+			shot_fire = false
+	_check("元素弹色：手枪弹全部 KIN（无跨武器串扰）", pistol_clean,
+		"pistol_elems=%s" % str(pistol_elems))
+	_check("元素弹色：霰弹弹全部 FIR（火附魔生效）", shot_fire,
+		"shot_elems=%s" % str(shot_elems))
+	for c in (_gl.pools[&"projectile"] as Node).get_children():
+		if c is ProjectileBase and bool(c.get("_live")):
+			(c as ProjectileBase).nullify()
 	print("── 七轮反馈完 ──")
 
 

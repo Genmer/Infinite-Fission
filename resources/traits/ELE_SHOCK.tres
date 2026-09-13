@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"ELE_SHOCK"
 display_name = "感电"
-description = "雷附着 22/跳；满槽向半径 160 内至多 3 目标传导（每跳 35% 本次伤害，深度 2 衰减 60%）；2 层质变：传导→4 目标且衰减 60%→75%（连锁跳得更远更痛）"
+description = "雷附着 +22/跳；满槽向半径 160 内至多 3 目标传导（每跳 35% 本次伤害，深度 2 衰减 60%）；2 层质变：传导→4 目标且衰减 60%→75%（连锁跳得更远更痛）"
 pool = 4
 pool_id = &""
 effect_id = &"EF_ELEMENTAL"
