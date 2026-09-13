@@ -154,9 +154,9 @@ tp_override = 55.1
 window = 25.6
 events = []
 
-[sub_resource type="Resource" id="WaveEntryData_w20"]
+[sub_resource type="Resource" id="WaveEntryData_w25boss"]
 script = ExtResource("2_wed")
-index = 20
+index = 25
 composition = [{"enemy_id": &"E19_grove_warden", "count": 1, "tags": 6}]
 tp_override = 1.0
 window = 26.0
@@ -164,7 +164,7 @@ events = [&"BOSS"]
 
 [sub_resource type="Resource" id="WaveEntryData_e21"]
 script = ExtResource("2_wed")
-index = 21
+index = 20
 composition = [{"enemy_id": &"E1_grunt", "count": 30}, {"enemy_id": &"E10_woodbird", "count": 7}, {"enemy_id": &"E2_runner", "count": 8}, {"enemy_id": &"E3_bastion", "count": 2}]
 tp_override = 58.8
 window = 26.2
@@ -172,7 +172,7 @@ events = []
 
 [sub_resource type="Resource" id="WaveEntryData_e22"]
 script = ExtResource("2_wed")
-index = 22
+index = 21
 composition = [{"enemy_id": &"E1_grunt", "count": 30}, {"enemy_id": &"E10_woodbird", "count": 7}, {"enemy_id": &"E2_runner", "count": 8}, {"enemy_id": &"E3_bastion", "count": 2}, {"enemy_id": &"E10_woodbird", "count": 1, "tags": 1}]
 tp_override = 60.4
 window = 26.4
@@ -180,7 +180,7 @@ events = []
 
 [sub_resource type="Resource" id="WaveEntryData_e23"]
 script = ExtResource("2_wed")
-index = 23
+index = 22
 composition = [{"enemy_id": &"E1_grunt", "count": 31}, {"enemy_id": &"E10_woodbird", "count": 8}, {"enemy_id": &"E2_runner", "count": 9}, {"enemy_id": &"E3_bastion", "count": 2}, {"enemy_id": &"E10_woodbird", "count": 2, "tags": 1}]
 tp_override = 65.8
 window = 26.6
@@ -188,7 +188,7 @@ events = []
 
 [sub_resource type="Resource" id="WaveEntryData_e24"]
 script = ExtResource("2_wed")
-index = 24
+index = 23
 composition = [{"enemy_id": &"E1_grunt", "count": 32}, {"enemy_id": &"E10_woodbird", "count": 8}, {"enemy_id": &"E2_runner", "count": 9}, {"enemy_id": &"E3_bastion", "count": 3}, {"enemy_id": &"E7_spitter", "count": 3}, {"enemy_id": &"E10_woodbird", "count": 2, "tags": 1}]
 tp_override = 75.9
 window = 26.8
@@ -196,7 +196,7 @@ events = []
 
 [sub_resource type="Resource" id="WaveEntryData_e25"]
 script = ExtResource("2_wed")
-index = 25
+index = 24
 composition = [{"enemy_id": &"E6_boss1", "count": 1}]
 tp_override = 1.0
 window = 28.0
@@ -246,5 +246,5 @@ events = [&"BOSS"]
 [resource]
 script = ExtResource("1_wtd")
 id = &"grove"
-endless_entries = [SubResource("WaveEntryData_e21"), SubResource("WaveEntryData_e22"), SubResource("WaveEntryData_e23"), SubResource("WaveEntryData_e24"), SubResource("WaveEntryData_e25"), SubResource("WaveEntryData_e26"), SubResource("WaveEntryData_e27"), SubResource("WaveEntryData_e28"), SubResource("WaveEntryData_e29"), SubResource("WaveEntryData_e30")]
-entries = [SubResource("WaveEntryData_w1"), SubResource("WaveEntryData_w2"), SubResource("WaveEntryData_w3"), SubResource("WaveEntryData_w4"), SubResource("WaveEntryData_w5"), SubResource("WaveEntryData_w6"), SubResource("WaveEntryData_w7"), SubResource("WaveEntryData_w8"), SubResource("WaveEntryData_w9"), SubResource("WaveEntryData_w10"), SubResource("WaveEntryData_w11"), SubResource("WaveEntryData_w12"), SubResource("WaveEntryData_w13"), SubResource("WaveEntryData_w14"), SubResource("WaveEntryData_w15"), SubResource("WaveEntryData_w16"), SubResource("WaveEntryData_w17"), SubResource("WaveEntryData_w18"), SubResource("WaveEntryData_w19"), SubResource("WaveEntryData_w20")]
+endless_entries = [SubResource("WaveEntryData_e26"), SubResource("WaveEntryData_e27"), SubResource("WaveEntryData_e28"), SubResource("WaveEntryData_e29"), SubResource("WaveEntryData_e30")]
+entries = [SubResource("WaveEntryData_w1"), SubResource("WaveEntryData_w2"), SubResource("WaveEntryData_w3"), SubResource("WaveEntryData_w4"), SubResource("WaveEntryData_w5"), SubResource("WaveEntryData_w6"), SubResource("WaveEntryData_w7"), SubResource("WaveEntryData_w8"), SubResource("WaveEntryData_w9"), SubResource("WaveEntryData_w10"), SubResource("WaveEntryData_w11"), SubResource("WaveEntryData_w12"), SubResource("WaveEntryData_w13"), SubResource("WaveEntryData_w14"), SubResource("WaveEntryData_w15"), SubResource("WaveEntryData_w16"), SubResource("WaveEntryData_w17"), SubResource("WaveEntryData_w18"), SubResource("WaveEntryData_w19"), SubResource("WaveEntryData_e21"), SubResource("WaveEntryData_e22"), SubResource("WaveEntryData_e23"), SubResource("WaveEntryData_e24"), SubResource("WaveEntryData_e25"), SubResource("WaveEntryData_w25boss")]

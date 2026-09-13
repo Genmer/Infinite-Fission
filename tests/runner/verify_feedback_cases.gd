@@ -528,8 +528,8 @@ func _test_swamp_eco() -> void:
 	_check("MapTable：5 张地图（沼泽殿后）", MapTable.count() == 5
 		and MapTable.MAPS[4].id == &"world_swamp")
 	var swamp_table := MapTable.load_table(&"world_swamp", _gl.registry)
-	_check("沼泽波表（20 波 + id=swamp）", swamp_table != null
-		and swamp_table.entries.size() == 20)
+	_check("沼泽波表（30 波 + id=swamp——R9 阶梯 10/15/20/25/30）", swamp_table != null
+		and swamp_table.entries.size() == 30)
 	for pair: Array in [[&"E12_bogslime", GameConst.EnemyBehavior.CHASE],
 			[&"E14_boguard", GameConst.EnemyBehavior.CHASE],
 			[&"E16_marshmaw", GameConst.EnemyBehavior.CHASE],
@@ -978,32 +978,36 @@ func _test_map_bosses() -> void:
 		[&"world_grove", &"E19_grove_warden"],
 		[&"world_swamp", &"E20_swamp_hydra"],
 	]
+	# R9 阶梯 10/15/20/25/30：主题 Boss 波 = 各图 final_wave（草原 w10 boss1 不在本表）
+	var final_boss_wave := {&"world_frost": 15, &"world_demon": 20,
+		&"world_grove": 25, &"world_swamp": 30}
 	var wave_ok := true
 	var pick_ok := true
 	var saved_table: WaveTableData = _gl.wave_director.wave_table
 	for pr: Array in pairs:
 		var tbl: WaveTableData = MapTable.load_table(pr[0], _gl.registry)
-		if tbl == null or tbl.entries.size() != 20:
+		var boss_w: int = int(final_boss_wave[pr[0]])
+		if tbl == null or tbl.entries.size() < boss_w:
 			wave_ok = false
 			continue
-		var w20: WaveEntryData = null
+		var w_final: WaveEntryData = null
 		for e in tbl.entries:
-			if e.index == 20:
-				w20 = e
+			if e.index == boss_w:
+				w_final = e
 		var found := false
-		if w20 != null:
-			for comp in w20.composition:
+		if w_final != null:
+			for comp in w_final.composition:
 				if StringName(String(comp.get("enemy_id", ""))) == StringName(String(pr[1])):
 					found = true
 		if not found:
 			wave_ok = false
 		_gl.wave_director.wave_table = tbl
-		var pick: EnemyData = _gl.wave_director.call(&"_find_boss_data", 20)
+		var pick: EnemyData = _gl.wave_director.call(&"_find_boss_data", boss_w)
 		if pick == null or pick.id != StringName(String(pr[1])):
 			pick_ok = false
 	_gl.wave_director.wave_table = saved_table
-	_check("波表接入：4 图 w20 composition 编入本图专属 Boss（键序不变）", wave_ok)
-	_check("引擎选取：_find_boss_data 表内 Boss 优先（每图 w20 选对）", pick_ok)
+	_check("波表接入：4 图 final 波 composition 编入本图专属 Boss（R9 阶梯 15/20/25/30）", wave_ok)
+	_check("引擎选取：_find_boss_data 表内 Boss 优先（每图 final 波选对）", pick_ok)
 	# ⑥ 主表轮换不回归（rotation 池扩到 7 只后，主表三 Boss 波选取不变）
 	_gl.wave_director.wave_table = _gl.registry.get_wave_table()
 	var main_ok := true
@@ -1166,21 +1170,22 @@ func _test_map_affixes2() -> void:
 # ── 分图无尽延伸（表内无尽段 + per-map Boss 轮换 + Meta 深度） ─────
 func _test_endless_maps() -> void:
 	print("── 分图无尽延伸 ──")
-	# ① 5 表无尽条目存在且 ≥10 条 + index 自 final_wave+1 连续
+	# ① 5 表无尽条目存在且 ≥5 条 + index 自主体段末（entries.size()+1）连续
+	#（R9 阶梯 10/15/20/25/30：草原主体 30 段直接覆盖剧情外波；grove/swamp 主体段扩至 25/30）
 	var cnt_ok := true
 	var idx_ok := true
 	for m in MapTable.MAPS:
 		var t := MapTable.load_table(m.id, _gl.registry)
-		if t == null or t.endless_entries.size() < 10:
+		if t == null or t.endless_entries.size() < 5:
 			cnt_ok = false
 			continue
-		var expect := int(m.final_wave) + 1
+		var expect := t.entries.size() + 1
 		for e in t.endless_entries:
 			if e.index != expect:
 				idx_ok = false
 			expect += 1
-	_check("无尽表：5 表 endless_entries ≥10 条", cnt_ok)
-	_check("无尽表：index 自 final_wave+1 连续", idx_ok)
+	_check("无尽表：5 表 endless_entries ≥5 条", cnt_ok)
+	_check("无尽表：index 自主体段末连续（entries.size()+1）", idx_ok)
 	# ② 驱动器消费表内无尽条目（冰原 w21：构成/TP/窗口取表值）
 	var wd := _gl.wave_director
 	var saved_tbl: WaveTableData = wd.wave_table
@@ -1251,7 +1256,8 @@ func _test_endless_maps() -> void:
 	Meta.set_run_map(&"world_frost")
 	Meta._on_wave_started(27)                                    # 冰原 final 20 → 深度 7
 	Meta._on_state_changed(GameConst.GameStatus.GAME_OVER)
-	_check("Meta 无尽深度：frost 27 波 → 深度 7", Meta.endless_depth(&"world_frost") == 7,
+	_check("Meta 无尽深度：frost 27 波 → 深度 12（R9 阶梯 final 15）",
+		Meta.endless_depth(&"world_frost") == 12,
 		"got=%d" % Meta.endless_depth(&"world_frost"))
 	_check("Meta 无尽深度：未记录图默认 0",
 		Meta.endless_depth(&"world_swamp") == 0 and Meta.endless_depth(&"world_demon") == 0)
@@ -1987,5 +1993,19 @@ func _test_round7_audit() -> void:
 		and _gl.state == GameConst.GameStatus.LEVEL_UP
 		and _gl.shop_ui.is_shop_visible())
 	_gl.shop_ui.close()
+	_gl.quit_to_menu()
+	# ⑧ AFF_XP_GAIN（R9 经验倍率卡）：挂卡 → gain_xp 放大（压平经验防升级仲裁）
+	_gl.start_run()
+	var xp_t: TraitData = _gl.registry.get_trait(&"AFF_XP_GAIN")
+	_check("夹具：AFF_XP_GAIN 就位（add_xp 池）",
+		xp_t != null and String(xp_t.pool_id) == "add_xp")
+	var w9: WeaponBase = _gl.player.weapon_slots[0]
+	_gl.player.xp_need = 999999.0
+	var xp_snap: float = float(_gl.player.xp)
+	w9.attach_trait(xp_t)
+	_gl.player.gain_xp(10.0)
+	var xp_gain: float = float(_gl.player.xp) - xp_snap
+	_check("经验倍率卡：挂卡后 10 经验入账 > 10（×1.15）", xp_gain > 10.0,
+		"gain=%s" % str(xp_gain))
 	_gl.quit_to_menu()
 	print("── 七轮反馈完 ──")

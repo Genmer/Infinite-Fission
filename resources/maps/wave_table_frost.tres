@@ -117,11 +117,13 @@ events = []
 [sub_resource type="Resource" id="WaveEntryData_w15"]
 script = ExtResource("2_wed")
 index = 15
-composition = [{"enemy_id": &"E1_grunt", "count": 29}, {"enemy_id": &"E9_frostling", "count": 4}, {"enemy_id": &"E11_aquasquirt", "count": 4}, {"enemy_id": &"E4_volatile", "count": 3}]
-tp_override = 49.5
-window = 24.0
-events = []
+composition = [{"enemy_id": &"E17_frost_sovereign", "count": 1, "tags": 6}]
+tp_override = 1.0
+window = 26.0
+events = [&"BOSS"]
 
+; ── 无尽段 w21~w30（分图无尽 P1：构成 = 冰原特色怪 G/F/A/V + 精英比例递增（tags=1）+
+; Boss 逢 5 轮换本图池 [E6_boss1, E17]；窗口 26.2→27.6 +0.2/波，Boss 波放宽）──
 [sub_resource type="Resource" id="WaveEntryData_w16"]
 script = ExtResource("2_wed")
 index = 16
@@ -157,13 +159,11 @@ events = []
 [sub_resource type="Resource" id="WaveEntryData_w20"]
 script = ExtResource("2_wed")
 index = 20
-composition = [{"enemy_id": &"E17_frost_sovereign", "count": 1, "tags": 6}]
-tp_override = 1.0
-window = 26.0
-events = [&"BOSS"]
+composition = [{"enemy_id": &"E1_grunt", "count": 29}, {"enemy_id": &"E9_frostling", "count": 4}, {"enemy_id": &"E11_aquasquirt", "count": 4}, {"enemy_id": &"E4_volatile", "count": 3}]
+tp_override = 49.5
+window = 24.0
+events = []
 
-; ── 无尽段 w21~w30（分图无尽 P1：构成 = 冰原特色怪 G/F/A/V + 精英比例递增（tags=1）+
-; Boss 逢 5 轮换本图池 [E6_boss1, E17]；窗口 26.2→27.6 +0.2/波，Boss 波放宽）──
 [sub_resource type="Resource" id="WaveEntryData_e21"]
 script = ExtResource("2_wed")
 index = 21

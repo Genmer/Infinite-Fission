@@ -22,8 +22,8 @@ extends RefCounted
 const MAPS: Array[Dictionary] = [
 	{
 		"id": &"world_grass", "name": "晴空草原", "desc": "初启之地 · 杂兵与精英的新兵场",
-		"table_path": "",                                   # 空 = 注册表主表（30 波）
-		"tint": Color(1.0, 1.0, 1.0, 1.0), "final_wave": 30,
+		"table_path": "",                                   # 空 = 注册表主表（30 波表；剧情收于 w10 Boss1）
+		"tint": Color(1.0, 1.0, 1.0, 1.0), "final_wave": 10,
 		"mod_name": "", "mod_id": &"",
 		"bless_id": &"bless_harvest", "bless_name": "丰饶：金币获取 +10%",
 		"curse_id": &"curse_swarm", "curse_name": "虫群：小怪生命 +8%（Boss 免除）",
@@ -31,7 +31,7 @@ const MAPS: Array[Dictionary] = [
 	{
 		"id": &"world_frost", "name": "寒霜冰原", "desc": "冰霜仔与水泡怪出没 · 冰抗敌人需火炻或迸裂破阵",
 		"table_path": "res://resources/maps/wave_table_frost.tres",
-		"tint": Color(0.72, 0.88, 1.0, 1.0), "final_wave": 20,
+		"tint": Color(0.72, 0.88, 1.0, 1.0), "final_wave": 15,   # R9 阶梯：剧情收于 w15 Boss(E17)
 		"mod_name": "霜冻之地：敌人冰抗 +20%", "mod_id": &"ice_resist",
 		"bless_id": &"bless_frost_crystal", "bless_name": "寒晶：经验获取 +10%",
 		"curse_id": &"curse_frost_armor", "curse_name": "霜甲：敌人冰抗 +20%",
@@ -39,7 +39,7 @@ const MAPS: Array[Dictionary] = [
 	{
 		"id": &"world_demon", "name": "紫晶魔域", "desc": "恶魔小鬼成群 · 高速贴脸考验爆发",
 		"table_path": "res://resources/maps/wave_table_demon.tres",
-		"tint": Color(0.82, 0.72, 1.0, 1.0), "final_wave": 20,
+		"tint": Color(0.82, 0.72, 1.0, 1.0), "final_wave": 20,   # R9 阶梯：剧情收于 w20 Boss(E18)
 		"mod_name": "魔血狂暴：敌人移速 +10%", "mod_id": &"spd_mult",
 		"bless_id": &"bless_fervor", "bless_name": "狂热：武器射速 +6%",
 		"curse_id": &"curse_swift_demon", "curse_name": "疾魔：敌人移速 +10%",
@@ -47,7 +47,7 @@ const MAPS: Array[Dictionary] = [
 	{
 		"id": &"world_grove", "name": "翡翠树海", "desc": "林间飞雀与疾行者 · 速攻流走位试炼",
 		"table_path": "res://resources/maps/wave_table_grove.tres",
-		"tint": Color(0.74, 1.0, 0.82, 1.0), "final_wave": 20,
+		"tint": Color(0.74, 1.0, 0.82, 1.0), "final_wave": 25,   # R9 阶梯：剧情收于 w25 Boss(E19)
 		"mod_name": "迅捷之风：经验获取 +10%", "mod_id": &"xp_mult",
 		"bless_id": &"bless_nurture", "bless_name": "滋养：每波回复 2% 生命",
 		"curse_id": &"curse_toxic_skin", "curse_name": "毒肤：敌人接触伤害 +8%",
@@ -55,7 +55,7 @@ const MAPS: Array[Dictionary] = [
 	{
 		"id": &"world_swamp", "name": "翠毒沼泽", "desc": "毒泡史莱姆与沼泽巨口 · 毒爆/装甲/触手生态",
 		"table_path": "res://resources/maps/wave_table_swamp.tres",
-		"tint": Color(0.6, 0.9, 0.58, 1.0), "final_wave": 20,
+		"tint": Color(0.6, 0.9, 0.58, 1.0), "final_wave": 30,    # R9 阶梯：剧情收于 w30 Boss(E20)
 		"mod_name": "毒性弥漫：敌人生命 +8%", "mod_id": &"hp_mult",
 		"bless_id": &"bless_rich_vein", "bless_name": "富矿：经验 +8% 且金币 +8%",
 		"curse_id": &"curse_mire", "curse_name": "泥沼：敌人生命 +10%",

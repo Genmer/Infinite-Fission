@@ -580,7 +580,8 @@ func _skill_stomp() -> void:
 func gain_xp(p_amount: float) -> void:
 	# 经验/等级：xp_gained → 升级（多级连升逐次广播，弹卡排队由 GameLoop 仲裁 E-16）
 	# 升级回满血（用户反馈 2026-08-29「升级还是回满血吧」：升级即奖励，血条拉满解压）
-	var amount := maxf(p_amount, 0.0) * (1.0 + Meta.xp_pct()) * map_xp_mult   # 养成萃取 + 地图词缀
+	# 经验倍率合成：养成萃取 × 地图祝福 × AFF_XP_GAIN 词条池（R9：跨武器聚合，掉落吸收时实时求值）
+	var amount := maxf(p_amount, 0.0) * (1.0 + Meta.xp_pct()) * map_xp_mult 		* (1.0 + clampf(_weapon_pool_sum(&"add_xp"), 0.0, 2.0))
 	xp += amount
 	EventBus.emit_xp_gained(amount)
 	while xp >= xp_need:

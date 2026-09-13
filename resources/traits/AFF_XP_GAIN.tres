@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"AFF_XP_GAIN"
+display_name = "经验萃取"
+description = "经验获取 +15%，可叠 2 层（与早期加速/地图祝福/点金手叠乘；A3 §4.2 家族）"
+pool = 0
+pool_id = &"add_xp"
+effect_id = &"EF_STAT"
+value = 0.15
+value2 = 0.0
+params = {
+	"stat": "xp_pct"
+}
+event_hooks = []
+stack_max = 2
+decay_delta = 0.85
+cap_pool_p = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+condition = {}
