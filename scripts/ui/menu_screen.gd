@@ -116,7 +116,7 @@ func _build_ui() -> void:
 		var line := Label.new()
 		StickerTheme.label_sticker(line, 16, PopPalette.INK_SOFT)
 		line.text = Lore.MENU_LINES[i]
-		line.position = Vector2(0.0, 660.0 + 26.0 * float(i))
+		line.position = Vector2(0.0, 636.0 + 26.0 * float(i))   # R10：上移给「继续上次进度」让位（原 660 与按钮重叠）
 		line.size = Vector2(720.0, 22.0)
 		line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_root.add_child(line)
@@ -159,10 +159,10 @@ func _build_ui() -> void:
 	_continue_btn = Button.new()
 	_continue_btn.name = "ContinueButton"
 	_continue_btn.text = "继续上次进度"
-	_continue_btn.add_theme_font_size_override("font_size", 21)
+	_continue_btn.add_theme_font_size_override("font_size", 17)
 	_continue_btn.add_theme_font_override("font", StickerTheme.font_bold())
-	_continue_btn.position = Vector2(210.0, 700.0)
-	_continue_btn.size = Vector2(300.0, 62.0)
+	_continue_btn.position = Vector2(190.0, 722.0)   # R10：文案（至 ~712）与出发（790）之间，不再压字
+	_continue_btn.size = Vector2(340.0, 48.0)
 	_continue_btn.pivot_offset = _continue_btn.size * 0.5
 	_continue_btn.pressed.connect(_on_continue_pressed)
 	_continue_btn.button_down.connect(func() -> void: StickerTheme.press_punch(_continue_btn))
