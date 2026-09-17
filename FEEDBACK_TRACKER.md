@@ -157,6 +157,14 @@
 
 ---
 
+## 二k、R21 本轮登记（2026-09-18）
+
+| # | 原话摘要 | 定性 | 状态 | 落点 |
+|---|---|---|---|---|
+| 1 | buff 整体合理性、整体池全部评估，无效 buff 修复掉 | 审计 | ✅ R21 | 36 张词条卡全量盘点（15 ADD + 6 MULT/SYN + 9 MECH + 4 ELEM + 谐振形态 2 独立计）。新增 test_buff_audit.gd 行为审计 18 项：补齐 4 张零覆盖卡的行为断言（背水协议 PLAYER_HP_BELOW ×1.6 / 贯穿协鸣 pierce ramp ×1.4@3层 / 死亡新星 ON_EXPIRE→kill_blast 广播 / 几何分裂 ON_EXPIRE→子代 split）+ 14 张 ADD 数值表锁定（防口径漂移）+ 卡面完整性。审查结论：①无新增死 buff（上轮 MEC_KNOCK/挂载门两处已修）②SYN_FROST_EXEC「寒滞/冻结」卡面与 is_state_active(ICE)=chill∨freeze∨vuln 实现一致 ③elite_dmg 无卡属设计口径（REL_BOSS_TROPHY 遗物供给）④vuln 为目标侧易伤区（寒滞施加）——均非死池。全量 19 套件 1507 断言全绿 |
+
+---
+
 ## 三、历史轮摘要（已完结，详情见 META_ROADMAP.md §5.9~§5.15）
 
 - **R1~R4（2026-08-29~31）**：命中反馈/护盾条/波次 toast/多地图/图鉴/养成/每日挑战/角色技能/BGM 重制/换一批/满层质变/局内存档 等（全绿基线 293+731）
