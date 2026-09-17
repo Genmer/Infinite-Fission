@@ -52,7 +52,25 @@ const VOLATILE_TRIGGER_SLACK := 4.0      # 接触触发余量 px（命中盒和 
 
 var _fuse_armed: bool = false                 # 自爆引导激活（接触后置位）
 var _fuse_left: float = 0.0                   # 引爆倒计时（game_delta 通道——顿帧自然冻结）
-var _fuse_ring: FuseRing = null               # 警示圈（程序化绘制）
+var _fuse_ring: Telegraph.TelegraphCircle = null   # 警示圈（FuseRing 泛化件，ENEMY_BOSS_TELEGRAPH §1.4）
+
+# ── Boss 弹幕施法状态机（ENEMY_BOSS_TELEGRAPH.md §1.4/§9 P1：ring/aimed_spread/spiral 三型） ──
+# cast 三状态位：casting 由 _cast_idx >= 0 表达（cast_id/cast_left 口径）；前摇/冷却/跟射/螺旋
+# 全走 game_delta 通道 + sf 门槛（冻结 sf=0：前摇停摆、冷却不走、不发弹）。追击中齐射——
+# 不改 behavior、与 fire_range 语义解耦（roadmap 原案）。
+var _barrage: Array = []                      # boss.barrage 快照（spawn 期折算存量 bullet_patterns）
+var _barrage_cd: Array[float] = []            # 各技能冷却剩余（下标对齐 _barrage；开场错相）
+var _cast_idx: int = -1                       # 施法中技能索引（-1 = 空闲）
+var _cast_dir: Vector2 = Vector2.ZERO         # aimed_spread 起手锁定方向（前摇内不追踪）
+var _cast_left: float = 0.0                   # 前摇剩余 s
+var _cast_total: float = 0.4                  # 前摇总长（膨胀/闪红插值基准；三档 0.4/0.7/1.0）
+var _pending_waves: Array[Dictionary] = []    # aimed_spread 多波跟射 {def, dir, left, timer}
+var _emit_left: float = 0.0                   # spiral 持续喷剩余 s
+var _emit_tick: float = 0.0                   # spiral 发射节拍器
+var _emit_angle: float = 0.0                  # spiral 当前步进角（弧度）
+var _emit_def: Dictionary = {}                # spiral 配置快照
+var _cast_glow: float = 0.0                   # TelegraphSwell 强度 0~1（_tick_visual 消费）
+var _cast_fan: Telegraph.TelegraphFan = null  # aimed_spread 扇形警示（紫，§1.2）
 
 # ── 内部运行时 ─────────────────────────────────────────────────
 var _hit_area: Area2D = null                  # 接触伤害判定（低频通道）
@@ -130,6 +148,11 @@ const SHOCK_BOLT_PERIOD := 0.9                # 落雷基础周期 s（±0.2 随
 const GAUGE_DISCHARGE_FULL := 95.0            # 死亡释放满档判定（≥95% 槽 → 双残弧）
 const BOG_SPLASH_RADIUS := 110.0              # 毒泡史莱姆死亡毒爆半径 px（E12 专属）
 const BOG_SPLASH_RATIO := 0.6                 # 毒爆伤害 = contact_dmg × 0.6            # 死亡释放满档判定（≥95% 槽 → 双残弧）
+
+# ── Boss 弹幕常量（ENEMY_BOSS_TELEGRAPH.md §1.4/附速查卡） ──────────
+const SPIRAL_EMIT_TICK := 0.09                # spiral 每臂发弹间隔 s（B3）
+const BOSS_BULLET_LIFETIME := 5.0             # 敌弹寿命 s（弹幕 hitbox 5px 同口径）
+const BOSS_SWELL_MAX := 0.35                  # TelegraphSwell 膨胀上限（×1.35，二次缓动）
 static var _flash_shader: Shader = null
 
 
@@ -149,9 +172,10 @@ func _ready() -> void:
 	_hit_shape.name = "HitShape"
 	_hit_area.add_child(_hit_shape)
 	add_child(_hit_area)
-	_fuse_ring = FuseRing.new()
+	_fuse_ring = Telegraph.TelegraphCircle.new()
 	_fuse_ring.name = "FuseRing"
 	_fuse_ring.radius = VOLATILE_BLAST_RADIUS
+	_fuse_ring.color = Color(1.0, 0.36, 0.36)    # 红 = 爆炸（§1.2 色彩语义；FuseRing 原配色）
 	_fuse_ring.visible = false
 	add_child(_fuse_ring)
 	visible = false                            # 池内不可见（取出 spawn 后激活）
@@ -197,6 +221,12 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	spread_deg = float(data.ranged.get("spread", 0.0))
 	fire_range = float(data.ranged.get("fire_range", 340.0))
 	fire_cd_left = fire_cd * 0.5              # 开场半冷却（避免同帧齐射）
+	# Boss 弹幕快照 + 冷却开场错相（±50% 随机相位，防多 Boss/多技能同帧齐射）
+	_barrage = _resolve_barrage(data)
+	_barrage_cd.clear()
+	for b_def: Dictionary in _barrage:
+		_barrage_cd.append(maxf(float(b_def.get("cd", 5.0)), 0.5) * randf_range(0.5, 1.0))
+	_reset_cast_state()
 	_flash_left = 0.0
 	_fade_left = FADE_IN_TIME
 	_wobble_left = 0.0
@@ -261,6 +291,8 @@ func tick(p_game_delta: float) -> void:
 						spd = VOLATILE_CHARGE_SPEED    # 警报后冲刺（A3 §2.2 E4 行；自爆冲刺不受寒滞减速修正口径）
 					global_position += dir * spd * p_game_delta
 				_tick_volatile_fuse(p_game_delta, player)
+			if is_boss():
+				_tick_boss_barrage(p_game_delta, player, sf)
 		GameConst.EnemyBehavior.RANGED:
 			_tick_ranged(p_game_delta, player, sf)
 		_:
@@ -521,16 +553,228 @@ func _fire_at(p_player: Node2D) -> void:
 
 
 func _check_boss_phase() -> void:
-	# Boss 阶段检查（HP<50% → 阶段2 全抗 +phase2_resist；阶段3 预留）
+	# Boss 阶段检查（HP < phase2_hp（缺省 0.6，ENEMY_BOSS_TELEGRAPH §4；E6 系列填 0.5 兼容现状）
+	# → 阶段2 全抗 +phase2_resist；三阶段/狂暴属 P3 批次）
 	if not is_boss() or boss_phase != 1:
 		return
-	if hp >= max_hp * 0.5:
+	var p2_hp := float(data.boss.get("phase2_hp", 0.6)) if data != null else 0.5
+	if hp >= max_hp * p2_hp:
 		return
 	boss_phase = 2
 	var p2 := float(data.boss.get("phase2_resist", 0.0))
 	if p2 > 0.0:
 		for i in range(resist.size()):
 			resist[i] = minf(resist[i] + p2, 0.8)
+
+
+# ── Boss 弹幕技能机（ENEMY_BOSS_TELEGRAPH.md §1.4/§2/§9 P1） ─────────
+func _resolve_barrage(p_data: EnemyData) -> Array:
+	# boss.barrage 直取；存量 bullet_patterns 读入时折算（§4 迁移规则：pattern
+	# fan→aimed_spread / ring→ring / spiral→spiral，interval_s→cd，telegraph 默认 swell 0.4）
+	var barr: Array = []
+	var raw: Variant = p_data.boss.get("barrage", null)
+	if raw is Array:
+		for entry: Variant in raw:
+			if entry is Dictionary and not entry.is_empty():
+				barr.append(entry)
+		return barr
+	var legacy: Variant = p_data.boss.get("bullet_patterns", null)
+	if legacy is Dictionary and not legacy.is_empty():
+		var pattern := String(legacy.get("pattern", "ring"))
+		barr.append({
+			"type": "aimed_spread" if pattern == "fan" else pattern,
+			"phase": 1,
+			"cd": maxf(float(legacy.get("interval_s", 4.5)), 0.5),
+			"telegraph": "swell", "telegraph_s": 0.4,
+			"count": int(legacy.get("count", 12)),
+			"speed": 200.0,
+			"speed_mult_phase2": float(legacy.get("speed_mult_phase2", 1.0)),
+			"dmg": float(legacy.get("dmg", 7.0)),
+		})
+	return barr
+
+
+func _tick_boss_barrage(p_dt: float, p_player: Node2D, p_sf: float) -> void:
+	# Boss 弹幕技能机：追击中齐射。冻结（sf=0）全停摆——前摇不推进/冷却不走/跟射与螺旋暂停；
+	# 顿帧走 game_delta 通道天然同口径（§1.3）。
+	if _barrage.is_empty() or projectile_pool == null or p_player == null:
+		return
+	if p_sf <= 0.0:
+		return
+	# 跟射波（aimed_spread waves>1：方向已锁定，波间隔 wave_gap_s）
+	var wi := 0
+	while wi < _pending_waves.size():
+		var wave: Dictionary = _pending_waves[wi]
+		wave["timer"] = float(wave["timer"]) - p_dt
+		if float(wave["timer"]) <= 0.0:
+			_fire_spread(wave["def"], wave["dir"])
+			wave["left"] = int(wave["left"]) - 1
+			wave["timer"] = float(wave["def"].get("wave_gap_s", 0.25))
+			if int(wave["left"]) <= 0:
+				_pending_waves.remove_at(wi)
+				continue
+		wi += 1
+	# spiral 持续喷发（前摇结束后的发射期，Boss 仍追击——「追击中齐射」）
+	if _emit_left > 0.0:
+		_tick_spiral_emit(p_dt)
+		return
+	# 施法前摇：推进 → 归零结算（结算必须由预警完成触发——§1.1 铁律）
+	if _cast_idx >= 0:
+		_cast_left -= p_dt
+		_cast_glow = clampf(1.0 - _cast_left / maxf(_cast_total, 0.01), 0.0, 1.0)
+		if _cast_fan != null and _cast_fan.visible:
+			_cast_fan.progress = _cast_glow
+			_cast_fan.queue_redraw()
+		if _cast_left <= 0.0:
+			_release_cast(p_player)
+		return
+	_cast_glow = maxf(_cast_glow - p_dt * 4.0, 0.0)   # 释放后闪红余晖快速消退
+	# 冷却推进 + 技能挑选（就绪取配置序首个——cd 定值不随机化，Archero 固定循环 §8.4）
+	for j in range(_barrage_cd.size()):
+		_barrage_cd[j] -= p_dt
+	for j in range(_barrage.size()):
+		if int(_barrage[j].get("phase", 1)) > boss_phase:
+			continue
+		if _barrage_cd[j] > 0.0:
+			continue
+		_begin_cast(j, p_player)
+		return
+
+
+func _begin_cast(p_idx: int, p_player: Node2D) -> void:
+	_cast_idx = p_idx
+	_cast_total = maxf(float(_barrage[p_idx].get("telegraph_s", 0.4)), 0.1)
+	_cast_left = _cast_total
+	_cast_glow = 0.0
+	# aimed_spread：扇形警示起手即锁定玩家当前位置（§1.2 同形同色：警示即弹道，
+	# 前摇内不追踪——玩家读扇走位即为解；B2「前摇内不追踪」口径）
+	if String(_barrage[p_idx].get("type", "ring")) == "aimed_spread":
+		_cast_dir = (p_player.global_position - global_position).normalized()
+		if _cast_dir == Vector2.ZERO:
+			_cast_dir = Vector2.RIGHT
+		if _cast_fan == null:
+			_cast_fan = Telegraph.TelegraphFan.new()
+			_cast_fan.name = "CastFan"
+			add_child(_cast_fan)
+		_cast_fan.setup_dir(_cast_dir)
+		_cast_fan.radius = maxf(150.0, float(_barrage[p_idx].get("speed", 300.0)) * _cast_total * 1.15)
+		_cast_fan.arc_deg = float(_barrage[p_idx].get("arc_deg", 44.0))
+		_cast_fan.progress = 0.0
+		_cast_fan.visible = true
+
+
+func _release_cast(p_player: Node2D) -> void:
+	# 前摇完成结算（Telegraph.finished 口径）：按型分发 → 重置该技能 cd → 收警示件
+	var def: Dictionary = _barrage[_cast_idx]
+	var type := String(def.get("type", "ring"))
+	match type:
+		"ring":
+			_fire_ring(def)
+		"aimed_spread":
+			_fire_spread(def, _cast_dir)
+			var waves := int(def.get("waves", 1))
+			if waves > 1:
+				_pending_waves.append({"def": def, "dir": _cast_dir,
+					"left": waves - 1, "timer": float(def.get("wave_gap_s", 0.25))})
+		"spiral":
+			_emit_def = def
+			_emit_left = float(def.get("emit_s", 2.4))
+			_emit_tick = 0.0
+			_emit_angle = (p_player.global_position - global_position).angle()
+		_:
+			pass                                    # mine/laser_sweep 属 P2：数据合法但消费端未上
+	_barrage_cd[_cast_idx] = maxf(float(def.get("cd", 5.0)), 0.5)
+	_cast_idx = -1
+	_cast_left = 0.0
+	if _cast_fan != null:
+		_cast_fan.visible = false
+
+
+func _fire_ring(def: Dictionary) -> void:
+	# B1 聚能环爆：360° 均匀环，相位随机防齐刷（ENEMY_PATTERNS_BASIC §3.2 ring 口径）
+	var count := _phase_count(def)
+	var speed := _phase_speed(def)
+	var dmg := float(def.get("dmg", 7.0))
+	var phase0 := randf() * TAU
+	for k in range(count):
+		_spawn_boss_bullet(Vector2.from_angle(phase0 + TAU * float(k) / float(count)), speed, dmg)
+
+
+func _fire_spread(def: Dictionary, p_dir: Vector2) -> void:
+	# B2 锁定扇射：扇心=锁定方向（起手快照），等角展开
+	var count := int(def.get("count", 5))
+	var arc := deg_to_rad(float(def.get("arc_deg", 44.0)))
+	var speed := _phase_speed(def)
+	var dmg := float(def.get("dmg", 13.0))
+	for k in range(count):
+		var t := 0.0 if count <= 1 else float(k) / float(count - 1) - 0.5
+		_spawn_boss_bullet(p_dir.rotated(t * arc), speed, dmg)
+
+
+func _tick_spiral_emit(p_dt: float) -> void:
+	# B3 旋转火舌：双臂（数据可配）每 SPIRAL_EMIT_TICK 每臂 1 发，步进 step_deg
+	_emit_left -= p_dt
+	_emit_tick -= p_dt
+	var arms := maxi(int(_emit_def.get("arms", 2)), 1)
+	var speed := _phase_speed(_emit_def)
+	var dmg := float(_emit_def.get("dmg", 6.0))
+	var step := deg_to_rad(float(_emit_def.get("step_deg", 17.0)))
+	while _emit_tick <= 0.0 and _emit_left > 0.0:
+		_emit_tick += SPIRAL_EMIT_TICK
+		for a in range(arms):
+			_spawn_boss_bullet(Vector2.from_angle(_emit_angle + TAU * float(a) / float(arms)), speed, dmg)
+		_emit_angle += step
+	if _emit_left <= 0.0:
+		_emit_left = 0.0
+
+
+func _phase_count(def: Dictionary) -> int:
+	# 弹数（count_phase2 二阶段增密覆写——B1「P3 才经历密度放大」前置口径）
+	if boss_phase >= 2 and def.has("count_phase2"):
+		return int(def["count_phase2"])
+	return int(def.get("count", 12))
+
+
+func _phase_speed(def: Dictionary) -> float:
+	# 弹速（speed_mult_phase2 存量口径延续）
+	var spd := float(def.get("speed", 200.0))
+	if boss_phase >= 2:
+		spd *= float(def.get("speed_mult_phase2", 1.0))
+	return spd
+
+
+func _spawn_boss_bullet(p_dir: Vector2, p_speed: float, p_dmg: float) -> void:
+	# 敌弹统一通道（§1.4）：池化 acquire + team=1；出弹位=身缘（视觉放大 3.8× 不穿模）
+	var bullet := projectile_pool.acquire() as BallisticProjectile
+	if bullet == null:
+		return
+	bullet.pool = projectile_pool
+	bullet.position = global_position + p_dir * (hitbox_r * 2.6 + 6.0)
+	bullet.spawn({
+		"velocity": p_dir * p_speed,
+		"lifetime": BOSS_BULLET_LIFETIME,
+		"pierce": 1,
+		"bounces": 0,
+		"hitbox_radius": 5.0,
+		"team": 1,
+		"panel_snapshot": {"base_atk": p_dmg},
+	})
+
+
+func _reset_cast_state() -> void:
+	# 池归还/spawn 双路复位（E-04/E-05 清零契约：施法位/计时/跟射/螺旋/表现件全清）
+	_cast_idx = -1
+	_cast_dir = Vector2.ZERO
+	_cast_left = 0.0
+	_cast_total = 0.4
+	_pending_waves.clear()
+	_emit_left = 0.0
+	_emit_tick = 0.0
+	_emit_angle = 0.0
+	_emit_def = {}
+	_cast_glow = 0.0
+	if _cast_fan != null:
+		_cast_fan.visible = false
 
 
 func _reset_state() -> void:
@@ -568,6 +812,9 @@ func _reset_state() -> void:
 	if _fuse_ring != null:
 		_fuse_ring.visible = false
 		_fuse_ring.progress = 0.0
+	_reset_cast_state()                             # Boss 弹幕施法态清零（E-04/E-05 契约）
+	_barrage = []
+	_barrage_cd.clear()
 	_flash_left = 0.0
 	_fade_left = 0.0
 	_wobble_left = 0.0
@@ -854,6 +1101,11 @@ func _tick_visual(p_game_delta: float) -> void:
 		&"boss1", &"boss2", &"boss3", &"boss4", &"boss5", &"boss6", &"boss7":
 			off.y = sin(_anim_t * 1.6) * 4.0 * _base_scale
 			_tick_boss(p_game_delta)
+			if _cast_glow > 0.0:
+				# TelegraphSwell（§1.2）：本体膨胀 + 闪红（二次缓动语言，×1.35 上限）
+				var swell := 1.0 + BOSS_SWELL_MAX * _cast_glow * _cast_glow
+				sx *= swell
+				sy *= swell
 		_:
 			# grunt（E1）：idle 摇摆 + 呼吸（果冻感基调）
 			rot = 0.06 * sin(_anim_t * 3.1 + float(uid % 32))
@@ -880,6 +1132,9 @@ func _tick_visual(p_game_delta: float) -> void:
 	_sprite.rotation = rot
 	_sprite.position = off
 	_tick_status_fx(p_game_delta)
+	# TelegraphSwell 闪红层（叠加在状态染色之上——闪红=即将齐射，§1.2 语义）
+	if _cast_glow > 0.0 and _sprite != null:
+		_sprite.self_modulate = _sprite.self_modulate.lerp(Color(1.0, 0.36, 0.36), _cast_glow * 0.85)
 
 
 func _dart_rotation() -> float:

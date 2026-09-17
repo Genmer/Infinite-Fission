@@ -21,7 +21,10 @@ extends Resource
 @export var ranged: Dictionary = {}
 # 精英模板 {hp:4.2, spd:0.92, dmg:1.5, exp:8.0}；仅 elite_template.tres 使用
 @export var elite_mult: Dictionary = {}
-# tags 含 BOSS 必填 {phases, bullet_patterns, summons, phase2_resist:0.2}
+# tags 含 BOSS 必填 {phases, summons, phase2_resist} + 弹幕段（barrage 新真源：
+# {type: ring|aimed_spread|spiral|mine|laser_sweep, phase, cd, telegraph: swell|circle|line|fan,
+#  telegraph_s: 0.4|0.7|1.0, count, speed, dmg(60HP 基准平值), arc_deg, waves, ...}——
+# ENEMY_BOSS_TELEGRAPH.md §4；存量 bullet_patterns 读入时 Enemy._resolve_barrage 折算）
 @export var boss: Dictionary = {}
 # {chance, min, max}（M3 商店）
 @export var gold_drop: Dictionary = {}

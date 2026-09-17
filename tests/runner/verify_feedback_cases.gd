@@ -407,8 +407,14 @@ func _test_data_tuning() -> void:
 	_check("冰原 w12 编入冰霜仔精英（tags=1）", '"tags": 1' in frost_txt)
 	_check("冰原 w20 最终 Boss 标签（tags=6）", '"tags": 6' in frost_txt)
 	var boss1: EnemyData = _gl.registry.get_enemy(&"E6_boss1")
-	_check("Boss1 弹幕密度（count 14 / 4.6s）",
-		int(boss1.boss.get("bullet_patterns", {}).get("count", 0)) == 14)
+	# R16 弹幕专项：boss.barrage 新真源（bullet_patterns 已替换）——P1 环爆 count 14 / cd 6.0
+	var boss1_ring: Dictionary = {}
+	for b_entry: Dictionary in boss1.boss.get("barrage", []):
+		if String(b_entry.get("type", "")) == "ring":
+			boss1_ring = b_entry
+	_check("Boss1 弹幕密度（ring count 14 / cd 6.0）",
+		int(boss1_ring.get("count", 0)) == 14
+		and absf(float(boss1_ring.get("cd", 0.0)) - 6.0) <= 0.001)
 	_check("E7 经验梯度（exp_base 10）", absf(_gl.registry.get_enemy(&"E7_spitter").exp_base - 10.0) <= 0.001)
 	_check("Boss1 经验（600）", absf(boss1.exp_base - 600.0) <= 0.001)
 	var f := FileAccess.open("res://resources/waves/wave_table_main.tres", FileAccess.READ)
@@ -943,7 +949,8 @@ func _test_map_bosses() -> void:
 	var boss_ids: Array[StringName] = [&"E17_frost_sovereign", &"E18_demon_lord",
 		&"E19_grove_warden", &"E20_swamp_hydra"]
 	var kinds: Array[StringName] = [&"boss4", &"boss5", &"boss6", &"boss7"]
-	# ① 数据加载 + schema（TAG_BOSS + boss 段四键 + hp 量级）
+	# ① 数据加载 + schema（TAG_BOSS + boss 段键齐 + hp 量级；弹幕段 barrage 新真源 /
+	#    存量 bullet_patterns 过渡均收——E17/E18 已迁移，E19/E20 待 P2）
 	var loaded := true
 	var schema_ok := true
 	var hp_ok := true
@@ -955,9 +962,11 @@ func _test_map_bosses() -> void:
 		if int(bd.tags & GameConst.TAG_BOSS) == 0 or bd.boss.is_empty():
 			schema_ok = false
 		else:
-			for key in ["phases", "bullet_patterns", "summons", "phase2_resist"]:
+			for key in ["phases", "summons", "phase2_resist"]:
 				if not bd.boss.has(key):
 					schema_ok = false
+			if not bd.boss.has("barrage") and not bd.boss.has("bullet_patterns"):
+				schema_ok = false
 		if absf(bd.hp_base - 16000.0) > 1600.0:
 			hp_ok = false
 	_check("数据加载：E17~E20 四专属 Boss 入注册表", loaded)

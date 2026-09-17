@@ -10,10 +10,11 @@
 ## 一、活跃池（未完成，按优先级）
 
 ### 🎨 玩法专项（策划先行）
-- 🎨 **[R7-4 P0] 怪物攻击方式多样化**——用户：怪物只有近战触碰"太匮乏了"，点名"闪现到当前位置爆炸"等，要求参考市面游戏（吸血鬼幸存者/土豆兄弟/弓箭传说等）、**多开策划智能体认真规划、别急着写**
+- 🔧 **[R7-4 P0] 怪物攻击方式多样化**——用户：怪物只有近战触碰"太匮乏了"，点名"闪现到当前位置爆炸"等，要求参考市面游戏（吸血鬼幸存者/土豆兄弟/弓箭传说等）、**多开策划智能体认真规划、别急着写**
   → 策划案：`docs/design/ENEMY_PATTERNS_BASIC.md`（行为族/词缀/大关解锁节奏）＋ `docs/design/ENEMY_BOSS_TELEGRAPH.md`（Boss 弹幕技能库/预警体系/阶段狂暴/实装排期）
-  → 状态：✅ 两份策划案已产出（A 行为族 445 行 / B Boss 预警 363 行）；合成评审后按 P1（弹幕三件套+预警圈复用）→ P2（扫场/地雷/主题皮）→ P3（狂暴/韧性/词缀）排期实施
-  → A 案要点：九大行为族（含用户点名的 BLINK 闪现爆炸：玩家位置快照落点+双重预警+30% 爆炸、三路可破）；远程弹幕 4 形状数据驱动；精英词缀 6+5 双轨；五图解锁节奏表（每大关一个新体验锚点 w3/w6/w9/w12）
+  → 状态：**P1 批次已落地（R16）**：`_tick_boss_barrage()` 三型（ring/aimed_spread/spiral）+ TelegraphCircle（FuseRing 泛化）/TelegraphFan 组件 + Boss 施法状态机（swell 膨胀闪红/扇形警示前摇、冻结 sf=0 全停摆）+ aimed 起手锁定不追踪 + 跟射波 + phase 门控 + DataValidator barrage 必填/三档/pct∈[8,50] 校验 + §5.1~5.3 五 Boss .tres 迁移（E6_boss3 顺带清掉无消费者 charge/phase3 死键）+ 存量 bullet_patterns 读入折算（E19/E20 过渡，boot 告警提示）；新增 tests/runner/test_barrage.gd 43 项全绿，全套件 1311 断言回归通过
+  → 待做：P0-2 行为族 BLINK 闪现爆炸（E24 裂隙爆魔，用户点名）→ P2（TelegraphLine/laser_sweep/mine/B5 三连冲锋/主题皮/SfxBank 新音色/E19-E20 .tres）→ P3（三阶段阈值+B8 狂暴+韧性条+词缀五件套）
+  → ⚠ 移交 P2：boss.summons（B4 裂变召唤）数据全 Boss 在册但**零消费者**（排查确认），随 P2 一并接线
 - ⬜ **[R5.12-P1] Boss 弹幕攻击**——已并入上面的怪物攻击专项，不单独做
 - ⬜ **[R5.12-P1] 每图最终 Boss 前固定商店（"战前补给"）**——修法已记录：GameLoop 订阅 wave_cleared，wave+1==final_wave 时主动开店；shop_ui 加 is_pre_boss 标题
 - ⬜ **[R5.12-P1] 金币相关词条（AFF_GOLD 点金 / 贪婪）**——修法已记录：金币掉率/掉量两处乘区 + Player.gold_find_pct() 聚合

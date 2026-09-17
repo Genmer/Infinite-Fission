@@ -139,8 +139,48 @@ func validate_enemy(e: EnemyData) -> Array:
 			_err(out, &"ranged.fire_cd", float(e.ranged["fire_cd"]) <= 0.0, "fire_cd > 0")
 	if e.tags & GameConst.TAG_BOSS:
 		_err(out, &"boss", e.boss.is_empty(), "tags 含 BOSS 必填 boss 段")
-		for key in ["phases", "bullet_patterns", "summons", "phase2_resist"]:
+		for key in ["phases", "summons", "phase2_resist"]:
 			_err(out, StringName("boss." + key), not e.boss.has(key), "boss 缺键 %s" % key)
+		# 弹幕段（ENEMY_BOSS_TELEGRAPH.md §4）：barrage 为新真源；存量 bullet_patterns 读入时
+		# 由 Enemy._resolve_barrage 折算（暂收 + 告警提示迁移，P2 清零双轨）
+		_err(out, &"boss.barrage", not e.boss.has("barrage") and not e.boss.has("bullet_patterns"),
+			"boss 缺弹幕段（barrage；存量 bullet_patterns 暂收）")
+		_warn(out, &"boss.bullet_patterns", e.boss.has("bullet_patterns"),
+			"存量 bullet_patterns 折算运行（ENEMY_BOSS_TELEGRAPH.md §4 迁移口径）")
+		if e.boss.has("barrage"):
+			var barr: Variant = e.boss["barrage"]
+			_err(out, &"boss.barrage", not barr is Array, "barrage 须为 Array")
+			if barr is Array:
+				_warn(out, &"boss.barrage", (barr as Array).is_empty(), "barrage 为空数组（Boss 无弹幕技）")
+				for i in range(barr.size()):
+					var bf := "boss.barrage[%d]." % i
+					var bad_entry: bool = not (barr[i] is Dictionary) or (barr[i] as Dictionary).is_empty()
+					_err(out, StringName(bf + "entry"), bad_entry, "条目须为非空 Dictionary")
+					if bad_entry:
+						continue
+					var b: Dictionary = barr[i]
+					for key in ["type", "cd", "telegraph", "telegraph_s", "dmg"]:
+						_err(out, StringName(bf + key), not b.has(key), "缺键 %s" % key)
+					if b.has("type"):
+						_err(out, StringName(bf + "type"),
+							not ["ring", "aimed_spread", "spiral", "mine", "laser_sweep"].has(String(b["type"])),
+							"type ∈ 弹幕技能库型（B1~B7：ring/aimed_spread/spiral/mine/laser_sweep）")
+					if b.has("telegraph"):
+						_err(out, StringName(bf + "telegraph"),
+							not ["swell", "circle", "line", "fan"].has(String(b["telegraph"])),
+							"telegraph ∈ 四类警示件（swell/circle/line/fan）")
+					if b.has("telegraph_s"):
+						_err(out, StringName(bf + "telegraph_s"),
+							not [0.4, 0.7, 1.0].has(float(b["telegraph_s"])),
+							"telegraph_s ∈ 三档 {0.4, 0.7, 1.0}（§1.3）")
+					if b.has("dmg"):
+						var dmg_pct := float(b["dmg"]) / 60.0 * 100.0
+						_err(out, StringName(bf + "dmg"), dmg_pct < 8.0 or dmg_pct > 50.0,
+							"dmg 平值对应 pct ∈ [8, 50]（60HP 基准，当前 %.1f%%）" % dmg_pct)
+					if b.has("phase"):
+						_err(out, StringName(bf + "phase"), int(b["phase"]) < 1, "phase ≥ 1")
+					if b.has("cd"):
+						_err(out, StringName(bf + "cd"), float(b["cd"]) <= 0.0, "cd > 0")
 	return out
 
 
