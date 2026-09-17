@@ -605,6 +605,14 @@ func _sync_visual() -> void:
 			_sprite.texture = TextureFactory.missile_tex()
 			_sprite.rotation = velocity.angle() + PI * 0.5 if velocity.length() > 1.0 				else _sprite.rotation
 			return
+		if wid == &"W2_gatling":
+			# 加特林曳光弹（R19 用户反馈「手枪和加特林表现没啥不一样」）：圆珠换
+			# 横向曳光条——高射速下一条条线束扫射，读感与手枪彻底区分
+			_sprite.texture = TextureFactory.tracer_tex()
+			if velocity.length() > 1.0:
+				_sprite.rotation = velocity.angle()
+			_sprite.scale = Vector2(scale_f * 7.0, scale_f * 2.2)
+			return
 		match element:
 			GameConst.Element.FIR:
 				fill = PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)      # 派生橙（点燃火苗同源）

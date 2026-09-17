@@ -39,6 +39,33 @@ func try_fire() -> bool:
 	return false                              # 力场已常驻：无重复调度
 
 
+func level_up() -> void:
+	# 升级后重铺力场（R19：angular_speed/orbit_radius/orb_r 逐级成长即时生效）
+	super.level_up()
+	refresh_orbit_field()
+
+
+func attach_trait(p_trait: TraitData) -> bool:
+	# 词条挂载（R19 环绕形态卡：orbit_style 形态卡挂上即重铺外观+乘区）
+	var ok := super.attach_trait(p_trait)
+	if ok and p_trait != null and p_trait.params.has("orbit_style"):
+		refresh_orbit_field()
+	return ok
+
+
+func _orbit_style() -> StringName:
+	# 环绕形态（R19 用户点名「剑/斧/闪电可换，选中一个后续其他不再出现」）：
+	# 读挂载表中带 orbit_style 参数的形态卡；未选 = orb（默认浮游球）
+	if trait_stack == null:
+		return &""
+	var style := &""
+	for tb in trait_stack.traits:
+		var td: Variant = tb.get("data")
+		if td != null and (td as TraitData).params.has("orbit_style"):
+			style = StringName(String((td as TraitData).params["orbit_style"]))   # 后挂覆盖
+	return style
+
+
 func _on_tick_post(p_game_delta: float) -> void:
 	# 常驻实体推进（力场公转/挥斩窗口判定；宿主位置驱动）
 	if orbit_field != null and is_instance_valid(orbit_field):
@@ -67,14 +94,35 @@ func _ensure_orbit_field() -> void:
 
 
 func _orbit_params() -> Dictionary:
-	# 力场参数集（orbs 含 orbs_bonus 加成——诺亚僚机召唤通道，P2）
+	# 力场参数集（orbs 含 orbs_bonus 加成——诺亚僚机召唤通道，P2）。
+	# R19 形态乘区——sword 再命中节奏 +25% / axe 范围+25% 击退+60% 转速-15% /
+	# bolt 转速+50% 体积-10%（用户点名「剑/斧/闪电自己扩展」）
+	var style := _orbit_style()
+	var orbit_radius := _leveled_param("orbit_radius", float(data.melee.get("orbit_radius", 90.0)))
+	var angular := _leveled_param("angular_speed", float(data.melee.get("angular_speed", 240.0)))
+	var orb_r := _leveled_param("orb_r", float(data.melee.get("orb_r", data.melee.get("orb_radius", 16.0))))
+	var hit_cd := float(data.melee.get("hit_cd", 0.5))
+	var knockback := float(data.melee.get("knockback", 40.0))
+	match style:
+		&"sword":
+			hit_cd *= 0.75
+		&"axe":
+			orbit_radius *= 1.25
+			orb_r *= 1.15
+			knockback *= 1.6
+			angular *= 0.85
+		&"bolt":
+			orb_r *= 0.9
+			angular *= 1.5
+			hit_cd *= 1.15
 	return {
 		"orbs": _leveled_param("orbs", float(data.melee.get("orbs", 2))) + orbs_bonus,
-		"orbit_radius": _leveled_param("orbit_radius", float(data.melee.get("orbit_radius", 90.0))),
-		"angular_speed": float(data.melee.get("angular_speed", 240.0)),
-		"orb_radius": float(data.melee.get("orb_radius", 16.0)),
-		"hit_cd": float(data.melee.get("hit_cd", 0.5)),
-		"knockback": float(data.melee.get("knockback", 40.0)),
+		"orbit_radius": orbit_radius,
+		"angular_speed": angular,
+		"orb_radius": orb_r,
+		"hit_cd": hit_cd,
+		"knockback": knockback,
+		"style": String(style) if style != &"" else "orb",
 	}
 
 

@@ -339,6 +339,16 @@ func _form_allows(p_t: TraitData, p_target: WeaponBase) -> bool:
 		return false
 	if forms is Array and not (forms as Array).is_empty() and not (forms as Array).has(form):
 		return false
+	# R19 互斥组（exclusive_group）：目标武器已挂同组词条 → 本卡永不再上架
+	#（环绕形态卡口径——用户点名「选中一个后续其他就不会出现」）
+	var excl: Variant = p_t.params.get("exclusive_group", null)
+	if excl != null and p_target != null and is_instance_valid(p_target):
+		var tstack: Variant = p_target.get("trait_stack")
+		if tstack != null and tstack.get("traits") != null:
+			for tb: Variant in (tstack.get("traits") as Array):
+				var td: Variant = tb.get("data")
+				if td != null and String(td.params.get("exclusive_group", "")) == String(excl):
+					return false
 	return true
 
 

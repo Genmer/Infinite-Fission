@@ -74,7 +74,9 @@ melee = {
 "orbit_radius": 90.0, "angular_speed": 240.0, "orbs": 2, "hit_cd": 0.5,
 "knockback": 40.0, "slash_radius": 150.0, "arc_deg": 120.0,
 "max_targets": 8, "nullify": false, "orb_r": 16.0,
-"orbit_radius_levels": [90.0, 90.0, 90.0, 90.0, 110.0],
-"orbs_levels": [2.0, 2.0, 3.0, 3.0, 4.0]
+"orbit_radius_levels": [90.0, 90.0, 100.0, 108.0, 120.0],
+"orbs_levels": [2.0, 2.0, 3.0, 3.0, 4.0],
+"angular_speed_levels": [240.0, 240.0, 270.0, 300.0, 335.0],
+"orb_r_levels": [16.0, 16.0, 17.0, 18.0, 20.0]
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

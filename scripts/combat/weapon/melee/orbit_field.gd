@@ -13,6 +13,7 @@ const HIT_FLASH_COUNT := 8                    # 命中冲击小环并发池（�
 const HIT_FLASH_LIFE := 0.22                  # 命中小环时长 s
 const PATH_DASHES := 26                       # 轨道虚线段数（奇数段绘制 = 虚线观感）
 
+var style: String = "orb"                      # 环绕形态（orb 球 / sword 剑 / axe 斧 / bolt 闪电，R19）
 var orbs: int = 2                              # 浮游球数
 var orbit_radius: float = 90.0
 var angular_speed: float = 240.0               # °/s
@@ -29,6 +30,7 @@ var _orb_cores: Array[Sprite2D] = []           # 球体珠核（bead 描边贴�
 var _orb_punch: Array[float] = []              # 命中膨胀脉冲（每球独立 0→1→0）
 var _hit_flashes: Array[Dictionary] = []       # [{sprite, left}]（命中冲击小环池）
 var _flash_idx: int = 0
+var _anim_t: float = 0.0                       # 表现时钟（bolt 颤动相位，R19）
 
 
 func spawn(p_params: Dictionary) -> void:
@@ -39,6 +41,7 @@ func spawn(p_params: Dictionary) -> void:
 	orb_radius = maxf(float(p_params.get("orb_radius", 16.0)), 1.0)
 	knockback = float(p_params.get("knockback", 40.0))
 	hit_cd = maxf(float(p_params.get("hit_cd", 0.5)), 0.01)
+	style = String(p_params.get("style", "orb"))
 	angle = 0.0
 	target_hit_cd.clear()
 	visible = true
@@ -78,17 +81,20 @@ func _build_visuals() -> void:
 
 
 func _sync_orb_visibility() -> void:
-	# 球数收缩（还原通道）：超额球体隐藏（数组保留——再次召唤复用，不反复增删子节点）
+	# 球数收缩（还原通道）：超额球体隐藏（数组保留——再次召唤复用，不反复增删子节点）。
+	# 形态化（sword/axe/bolt）：珠核隐藏（_draw 多边形绘制），辉光保留
+	var styled := style != "orb"
 	for i in range(_orb_cores.size()):
-		var on := i < orbs
+		var on := i < orbs and not styled
 		_orb_cores[i].visible = on
-		_orb_glows[i].visible = on
+		_orb_glows[i].visible = i < orbs
 
 
 func tick(p_game_delta: float, p_center: Vector2) -> void:
 	# 公转推进 + 球位更新 + 判定调度（每目标独立 hit_cd）+ 击退 + 表现推进
 	# R10 根因修复：同弧斩——局部/全局坐标空间错配（环绕力场此前同样整场不可见）
 	position = weapon.to_local(p_center) if weapon != null and is_instance_valid(weapon) 		else p_center
+	_anim_t += p_game_delta
 	angle = wrapf(angle + deg_to_rad(angular_speed) * p_game_delta, 0.0, TAU)
 	for key in target_hit_cd:
 		target_hit_cd[key] = maxf(float(target_hit_cd[key]) - p_game_delta, 0.0)
@@ -211,6 +217,57 @@ func _fire_hit_fx(p_orb_index: int, p_orb_pos: Vector2) -> void:
 	flash["left"] = HIT_FLASH_LIFE
 
 
+func _draw_styled_orbs() -> void:
+	# R19 形态环绕体（用户点名「剑/斧头/闪电自己扩展」）：
+	# sword 裂空剑 = 径向外指的渐尖刃（蓝白）/ axe 裂空斧 = 柄+楔形斧头（金橙，厚重）/
+	# bolt 雷霆 = 切向锯齿闪电（葡萄紫，高频颤动）。朝向/相位随公转角推进。
+	for i in range(orbs):
+		var pos := _orb_position(i, Vector2.ZERO)
+		var phase := angle + TAU * float(i) / float(orbs)
+		var dir := Vector2.from_angle(phase)              # 径向外指
+		var tan := Vector2(-dir.y, dir.x)                 # 切向（运动方向）
+		match style:
+			&"sword":
+				var tip := pos + dir * orb_radius * 1.35
+				var base_c := pos - dir * orb_radius * 0.55
+				var perp := tan * orb_radius * 0.30
+				draw_colored_polygon(PackedVector2Array([
+					tip, base_c + perp, base_c - perp]),
+					Color(PopPalette.PLAYER.r, PopPalette.PLAYER.g, PopPalette.PLAYER.b, 0.95))
+				draw_line(base_c - perp * 1.5, base_c + perp * 1.5,
+					PopPalette.XP, 2.6, true)             # 护手
+				draw_line(pos - dir * orb_radius * 0.5, pos - dir * orb_radius * 1.05,
+					PopPalette.OUTLINE, 3.2, true)        # 剑柄
+			&"axe":
+				var handle_a := pos - dir * orb_radius * 0.9
+				var handle_b := pos + dir * orb_radius * 0.6
+				draw_line(handle_a, handle_b, PopPalette.OUTLINE, 4.0, true)   # 斧柄
+				var head_c := pos + dir * orb_radius * 0.35
+				var wedge := PackedVector2Array([
+					head_c + tan * orb_radius * 0.85 + dir * orb_radius * 0.25,
+					head_c + tan * orb_radius * 0.55 - dir * orb_radius * 0.30,
+					head_c - tan * orb_radius * 0.10 - dir * orb_radius * 0.18,
+				])
+				draw_colored_polygon(wedge, PopPalette.XP)                     # 斧刃（外弧楔）
+				draw_arc(head_c + dir * orb_radius * 0.1, orb_radius * 0.72,
+					phase - PI * 0.5, phase + PI * 0.28, 10,
+					Color(PopPalette.ENEMY.r, PopPalette.ENEMY.g, PopPalette.ENEMY.b, 0.9),
+					3.4, true)
+			&"bolt":
+				var flicker := 0.7 + 0.3 * sin(_anim_t * 26.0 + float(i) * 2.3)
+				var col := Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g,
+					PopPalette.SHOCK.b, clampf(flicker, 0.0, 1.0))
+				var zig := PackedVector2Array()
+				var origin := pos - dir * orb_radius * 0.9
+				for seg in range(5):
+					var seg_dir := tan.rotated(0.9 if seg % 2 == 0 else -0.9)
+					zig.append(origin + seg_dir * orb_radius * (0.55 + 0.3 * float(seg)))
+				draw_polyline(zig, col, 3.2, true)
+				draw_circle(pos, 3.2, col)
+			_:
+				pass                                  # orb 默认：珠核贴图（_update_orb_sprites）
+
+
 func _reset_state() -> void:
 	# 清零契约（武器回收期）
 	angle = 0.0
@@ -238,6 +295,9 @@ func _draw() -> void:
 	var trail_a := angle - deg_to_rad(42.0)
 	draw_arc(Vector2.ZERO, orbit_radius, trail_a, angle, 12,
 		Color(mint.r, mint.g, mint.b, 0.18), orb_radius * 1.5, true)
+	# R19 形态绘制（sword 剑 / axe 斧 / bolt 闪电——程序化多边形，贴图零实例化）
+	if style != "orb":
+		_draw_styled_orbs()
 	# 数值标注（力场下缘：环绕 ×N · 单击伤害；半透明贴纸风小字）
 	var atk := 0.0
 	if weapon != null and is_instance_valid(weapon):

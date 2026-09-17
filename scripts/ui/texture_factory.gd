@@ -943,6 +943,26 @@ static func flame_bit() -> ImageTexture:
 		])))
 
 
+static func tracer_tex() -> ImageTexture:
+	# 加特林曳光弹条（R19 用户反馈「手枪和加特林表现没啥不一样」）：横向亮芯曳光——
+	# 头部白热 + 渐隐尾焰（画布 56×10，朝右——弹体按速度方向旋转，高射速下成线束）
+	var key := "tracer_tex"
+	return _cached(key, func() -> ImageTexture:
+		var w := 56
+		var h := 10
+		var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+		var mid := float(h - 1) * 0.5
+		for x in range(w):
+			var t := float(x) / float(w - 1)                 # 0 头（白热）→ 1 尾（渐隐）
+			for y in range(h):
+				var core := 1.0 - absf(float(y) - mid) / mid   # 1 中轴 → 0 边缘
+				var a := pow(1.0 - t, 0.55) * (0.28 + 0.72 * core)
+				var col := Color.WHITE.lerp(PopPalette.PLAYER, (1.0 - core) * 0.6)
+				col = col.lerp(PopPalette.XP, t * 0.5)
+				img.set_pixel(x, y, Color(col.r, col.g, col.b, clampf(a, 0.0, 1.0)))
+		return ImageTexture.create_from_image(img))
+
+
 static func missile_tex() -> ImageTexture:
 	# 微型导弹/集束火箭弹体（R13 用户反馈「给个导弹建模」）：灰蓝弹体 + 橙色弹头 +
 	# 尾鳍 + 底部尾焰（画布 22×30，朝上——弹体飞行时按速度方向旋转）

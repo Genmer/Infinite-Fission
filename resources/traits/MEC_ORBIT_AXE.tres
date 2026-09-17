@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"MEC_ORBIT_AXE"
+display_name = "环绕·裂空斧"
+description = "环绕体化为裂空斧：范围 +25%、体积 +15%、击退 +60%，转速 -15%"
+pool = 3
+pool_id = &""
+effect_id = &"EF_MECH"
+value = 0.0
+value2 = 0.0
+params = {
+	"required_weapon": &"W8_orbit_field",
+	"orbit_style": "axe",
+	"exclusive_group": "orbit_style"
+}
+event_hooks = []
+stack_max = 1
+decay_delta = 0.0
+cap_pool_p = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 2
+tags = 0
+condition = {}
