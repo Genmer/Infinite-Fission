@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/enemy_data.gd" id="1_ed"]
+
+[resource]
+script = ExtResource("1_ed")
+id = &"E24_rift_demon"
+display_name = "裂隙爆魔"
+behavior = 5
+hp_base = 47.0
+spd_base = 82.0
+dmg_base = 18.0
+exp_base = 11.0
+tp_cost = 2.0
+resist = [0.0, 0.0, 0.0, 0.0]
+immune_mask = 0
+tags = 0
+hitbox_r = 14.0
+ranged = {}
+special = {"blink_cd": 3.2, "blink_prep": 0.35, "fuse": 0.8, "blast_r": 110.0, "blink_range": 340.0}
+elite_mult = {}
+boss = {}
+gold_drop = {"chance": 0.12, "min": 10, "max": 14}

@@ -5,8 +5,8 @@ extends Resource
 
 @export var id: StringName = &""                    # 非空唯一
 @export var display_name: String = ""
-# GameConst.EnemyBehavior；M1 仅支持 CHASE/RANGED（其余告警降级为 CHASE）
-@export_enum("CHASE", "RANGED", "DASHER", "ORBIT", "SENTRY") var behavior: int = 0
+# GameConst.EnemyBehavior；M1 仅支持 CHASE/RANGED（其余告警降级为 CHASE）；BLINK R16 起支持
+@export_enum("CHASE", "RANGED", "DASHER", "ORBIT", "SENTRY", "BLINK") var behavior: int = 0
 @export var hp_base: float = 72.0                   # >0
 @export_range(0.0, 600.0) var spd_base: float = 75.0
 @export_range(0.0, 200.0) var dmg_base: float = 8.0  # 接触伤害
@@ -19,6 +19,9 @@ extends Resource
 @export_range(0.1, 64.0) var hitbox_r: float = 14.0 # (0, 64]
 # behavior=RANGED 必填 {bullet_speed, fire_cd, bullet_atk_ratio, spread}；fire_cd>0
 @export var ranged: Dictionary = {}
+# 行为专属参数包（ENEMY_PATTERNS_BASIC §6.1；各族只读自己那组——
+# BLINK: {blink_cd, blink_prep, fuse, blast_r, blink_range}；其余族随行为族实装增补）
+@export var special: Dictionary = {}
 # 精英模板 {hp:4.2, spd:0.92, dmg:1.5, exp:8.0}；仅 elite_template.tres 使用
 @export var elite_mult: Dictionary = {}
 # tags 含 BOSS 必填 {phases, summons, phase2_resist} + 弹幕段（barrage 新真源：

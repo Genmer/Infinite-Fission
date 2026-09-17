@@ -21,8 +21,8 @@ events = []
 [sub_resource type="Resource" id="WaveEntryData_w3"]
 script = ExtResource("2_wed")
 index = 3
-composition = [{"enemy_id": &"E1_grunt", "count": 15}, {"enemy_id": &"E8_imp", "count": 2}, {"enemy_id": &"E7_spitter", "count": 1}]
-tp_override = 19.6
+composition = [{"enemy_id": &"E1_grunt", "count": 15}, {"enemy_id": &"E8_imp", "count": 2}, {"enemy_id": &"E7_spitter", "count": 1}, {"enemy_id": &"E24_rift_demon", "count": 2}]
+tp_override = 23.6
 window = 19.2
 events = [&"UNLOCK_SLOT_2"]
 

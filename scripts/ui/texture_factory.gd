@@ -518,6 +518,34 @@ static func _enemy_layers(p_kind: StringName, p_angry: bool) -> Array:
 					Vector2(2.5, 10.5), Vector2(5.5, 10.5), Vector2(4.0, 13.5),
 				])), "fill": Color.WHITE, "ow": 0.0},
 			]
+		&"rift":
+			# E24 裂隙爆魔（魔域）：暗紫圆身 + 贯体亮裂隙折线 + 独眼 + 环绕碎裂浮块
+			#（「裂隙=要闪现了」的剪影语言；读条期引擎侧闪紫收缩）
+			var rift_dark := PopPalette.SHOCK.lerp(PopPalette.OUTLINE, 0.52)
+			var rift_hot := PopPalette.SHOCK.lerp(Color.WHITE, 0.6)
+			var shard_l := PackedVector2Array([
+				Vector2(-24.0, -6.0), Vector2(-33.0, -12.0), Vector2(-28.0, 2.0),
+			])
+			var shard_r := PackedVector2Array([
+				Vector2(24.0, 6.0), Vector2(33.0, 2.0), Vector2(27.0, 14.0),
+			])
+			return [
+				{"sd": _poly_sd(shard_l), "fill": rift_dark.lerp(PopPalette.OUTLINE, 0.35), "ow": 2.6},
+				{"sd": _poly_sd(shard_r), "fill": rift_dark.lerp(PopPalette.OUTLINE, 0.35), "ow": 2.6},
+				{"sd": _circle_at(Vector2(0.0, 2.0), 25.0), "fill": rift_dark, "ow": 6.5},
+				{"sd": _box_rot_at(Vector2(-1.0, -13.0), Vector2(9.0, 2.6), 1.0, 0.5),
+					"fill": rift_hot, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(1.0, -4.0), Vector2(9.0, 2.6), 1.0, -0.5),
+					"fill": rift_hot, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(-1.0, 5.0), Vector2(9.0, 2.4), 1.0, 0.55),
+					"fill": rift_hot, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(0.0, 14.0), Vector2(7.5, 2.2), 1.0, -0.4),
+					"fill": rift_hot, "ow": 0.0},
+				{"sd": _circle_at(Vector2(0.0, -7.0), 7.0), "fill": Color.WHITE, "ow": 2.6},
+				{"sd": _circle_at(Vector2(0.0, -6.0), 3.2), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-1.4, -8.0), 1.2), "fill": Color.WHITE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(15.0, -10.0), 3.0), "fill": blush, "ow": 0.0},
+			]
 		&"frostling":
 			# E9 冰霜仔（寒霜冰原）：冰蓝圆身 + 顶部三根冰晶柱 + 眉霜 + 冻僵小嘴
 			var spike_l := PackedVector2Array([

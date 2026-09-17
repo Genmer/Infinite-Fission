@@ -115,10 +115,10 @@ func validate_enemy(e: EnemyData) -> Array:
 	# 单类校验（规则见 §三.2）
 	var out: Array = []
 	_err(out, &"id", e.id == &"", "id 非空")
-	_err(out, &"behavior", e.behavior < 0 or e.behavior > 4, "behavior ∈ EnemyBehavior 枚举")
-	if e.behavior > GameConst.EnemyBehavior.RANGED:
-		# M1 只支持 CHASE/RANGED：其余告警降级为 CHASE（§三.2 校验列）
-		_warn(out, &"behavior", true, "M1 仅支持 CHASE/RANGED，降级为 CHASE")
+	_err(out, &"behavior", e.behavior < 0 or e.behavior > GameConst.EnemyBehavior.BLINK, "behavior ∈ EnemyBehavior 枚举")
+	if e.behavior > GameConst.EnemyBehavior.RANGED and e.behavior != GameConst.EnemyBehavior.BLINK:
+		# M1 只支持 CHASE/RANGED（BLINK R16 起支持）：其余告警降级为 CHASE（§三.2 校验列）
+		_warn(out, &"behavior", true, "仅支持 CHASE/RANGED/BLINK，降级为 CHASE")
 		e.behavior = GameConst.EnemyBehavior.CHASE
 	_err(out, &"hp_base", e.hp_base <= 0.0, "hp_base > 0")
 	_err(out, &"spd_base", e.spd_base < 0.0 or e.spd_base > 600.0, "spd_base ∈ [0, 600]")
@@ -137,6 +137,10 @@ func validate_enemy(e: EnemyData) -> Array:
 			_err(out, StringName("ranged." + key), not e.ranged.has(key), "ranged 缺键 %s" % key)
 		if e.ranged.has("fire_cd"):
 			_err(out, &"ranged.fire_cd", float(e.ranged["fire_cd"]) <= 0.0, "fire_cd > 0")
+	if e.behavior == GameConst.EnemyBehavior.BLINK:
+		# 行为族逐族必填断言（ENEMY_PATTERNS_BASIC §6.4）：闪现引信/爆半径缺一不可结算
+		for key in ["fuse", "blast_r"]:
+			_err(out, StringName("special." + key), not e.special.has(key), "BLINK 必填 special.%s" % key)
 	if e.tags & GameConst.TAG_BOSS:
 		_err(out, &"boss", e.boss.is_empty(), "tags 含 BOSS 必填 boss 段")
 		for key in ["phases", "summons", "phase2_resist"]:

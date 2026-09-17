@@ -8,7 +8,7 @@ enum Element { KIN, FIR, ICE, LTG }                       # 伤害/附着元素
 enum PoolClass { ADD, MULT, LOCAL, MECH, ELEM }           # 词条池归类（B_spec §2.5）
 enum TraitEvent { ON_SPAWN, ON_TICK, ON_HIT, ON_PIERCE, ON_BOUNCE, ON_EXPIRE }  # 六大生命周期
 enum WeaponForm { BALLISTIC, LASER, HOMING, MELEE }       # 武器四形态
-enum EnemyBehavior { CHASE, RANGED, DASHER, ORBIT, SENTRY }  # M1 只实现 CHASE/RANGED
+enum EnemyBehavior { CHASE, RANGED, DASHER, ORBIT, SENTRY, BLINK }  # M1：CHASE/RANGED；BLINK R16 起支持（ENEMY_PATTERNS_BASIC §3.3）
 enum GameStatus { BOOT, MENU, PLAYING, PAUSED, LEVEL_UP, GAME_OVER }
 enum RecycleReason { EXPIRED, PIERCE_DEPLETED, BOUNCE_DEPLETED, NULLIFIED, FORCED }  # 回收五路径
 enum PopupStyle { NORMAL, CRIT, REACTION, DOT, HEAL, XP }

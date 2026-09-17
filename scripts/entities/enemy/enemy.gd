@@ -72,6 +72,21 @@ var _emit_def: Dictionary = {}                # spiral 配置快照
 var _cast_glow: float = 0.0                   # TelegraphSwell 强度 0~1（_tick_visual 消费）
 var _cast_fan: Telegraph.TelegraphFan = null  # aimed_spread 扇形警示（紫，§1.2）
 
+# ── BLINK 闪现爆炸族（ENEMY_PATTERNS_BASIC §3.3，用户点名；R16 实装） ──
+# 三态：0 巡航（0.85× 速追击）/ 1 施法读条（0.35s 闪紫收缩）/ 2 落地引信（0.8s 红圈进度环）。
+# 落点 = 施法瞬间玩家位置快照（惩罚站桩；走位出圈即为解）。打断双路：冻结断读条、
+# 击退断引信（爆虫口径）；计时全走 game_delta + sf 通道（顿帧/冻结自然停摆）。
+var _blink_state: int = 0
+var _blink_cd: float = 0.0                    # 闪现冷却剩余
+var _blink_left: float = 0.0                  # 读条/引信共用倒计时
+var _blink_target: Vector2 = Vector2.ZERO     # 施法瞬间玩家位置快照（落点真源）
+var _blink_ring: Telegraph.TelegraphCircle = null   # 落点红圈（挂世界层——闪现后怪已位移）
+var _blink_cd_max: float = 3.2                # ── special 参数快照（缺省 = §3.3 数值） ──
+var _blink_prep: float = 0.35
+var _blink_fuse: float = 0.8
+var _blink_blast_r: float = 110.0
+var _blink_range: float = 340.0
+
 # ── 内部运行时 ─────────────────────────────────────────────────
 var _hit_area: Area2D = null                  # 接触伤害判定（低频通道）
 var _hit_shape: CollisionShape2D = null
@@ -153,6 +168,11 @@ const BOG_SPLASH_RATIO := 0.6                 # 毒爆伤害 = contact_dmg × 0.
 const SPIRAL_EMIT_TICK := 0.09                # spiral 每臂发弹间隔 s（B3）
 const BOSS_BULLET_LIFETIME := 5.0             # 敌弹寿命 s（弹幕 hitbox 5px 同口径）
 const BOSS_SWELL_MAX := 0.35                  # TelegraphSwell 膨胀上限（×1.35，二次缓动）
+
+# ── BLINK 族常量（ENEMY_PATTERNS_BASIC §3.3；参数真源 = E24 special，缺省兜底） ──
+const BLINK_OFFSET := 24.0                    # 落点随机偏移上限 px（防贴脸重合）
+const BLINK_CRUISE_MULT := 0.85               # 巡航追速倍率（「追不太上」的错觉）
+const BLINK_FREEZE_CD := 2.0                  # 读条被冻结打断后的施法冷却 s（§3.3 反制）
 static var _flash_shader: Shader = null
 
 
@@ -207,8 +227,9 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	contact_dmg = data.dmg_base * pow(dmg_growth, w - 1.0) * e_dmg
 	exp_value = data.exp_base * pow(exp_growth, w - 1.0) * e_exp
 	behavior = data.behavior
-	if behavior != GameConst.EnemyBehavior.CHASE and behavior != GameConst.EnemyBehavior.RANGED:
-		behavior = GameConst.EnemyBehavior.CHASE    # M1 范围外行为降级（DataValidator 已告警）
+	if behavior != GameConst.EnemyBehavior.CHASE and behavior != GameConst.EnemyBehavior.RANGED \
+			and behavior != GameConst.EnemyBehavior.BLINK:
+		behavior = GameConst.EnemyBehavior.CHASE    # M1 范围外行为降级（DataValidator 已告警；BLINK R16 起支持）
 	hitbox_r = maxf(data.hitbox_r, 1.0)
 	resist = data.resist.duplicate()
 	immune_mask = data.immune_mask
@@ -227,6 +248,16 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	for b_def: Dictionary in _barrage:
 		_barrage_cd.append(maxf(float(b_def.get("cd", 5.0)), 0.5) * randf_range(0.5, 1.0))
 	_reset_cast_state()
+	# BLINK 参数快照 + 开场错相（防同帧齐闪）
+	if behavior == GameConst.EnemyBehavior.BLINK:
+		_blink_cd_max = maxf(float(data.special.get("blink_cd", 3.2)), 0.5)
+		_blink_prep = maxf(float(data.special.get("blink_prep", 0.35)), 0.1)
+		_blink_fuse = maxf(float(data.special.get("fuse", 0.8)), 0.1)
+		_blink_blast_r = maxf(float(data.special.get("blast_r", 110.0)), 10.0)
+		_blink_range = maxf(float(data.special.get("blink_range", 340.0)), 10.0)
+		_blink_cd = _blink_cd_max * randf_range(0.5, 1.0)
+		_blink_state = 0
+		_blink_target = global_position
 	_flash_left = 0.0
 	_fade_left = FADE_IN_TIME
 	_wobble_left = 0.0
@@ -295,6 +326,8 @@ func tick(p_game_delta: float) -> void:
 				_tick_boss_barrage(p_game_delta, player, sf)
 		GameConst.EnemyBehavior.RANGED:
 			_tick_ranged(p_game_delta, player, sf)
+		GameConst.EnemyBehavior.BLINK:
+			_tick_blink(p_game_delta, player, sf)
 		_:
 			pass
 	# 接触伤害（Area2D 低频通道——玩家侧无敌帧 contact_tick 节流）
@@ -355,6 +388,8 @@ func knockback(p_force: Vector2) -> void:
 	knock_vel += scaled * 9.0
 	if _fuse_armed:
 		_cancel_fuse()
+	if _blink_state == 2:
+		_cancel_blink()                          # BLINK 引信期被击退打断（§3.3 爆虫口径）
 	if scaled.length() >= 100.0:
 		EventBus.emit_knockback_hit(global_position)   # 击退小字（强击退才提示）
 
@@ -550,6 +585,98 @@ func _fire_at(p_player: Node2D) -> void:
 		"team": 1,
 		"panel_snapshot": {"base_atk": contact_dmg * bullet_atk_ratio},
 	})
+
+
+# ── BLINK 闪现爆炸族（ENEMY_PATTERNS_BASIC §3.3） ────────────────────
+func _tick_blink(p_dt: float, p_player: Node2D, p_sf: float) -> void:
+	# 惩罚站桩：闪现目标 = 施法瞬间玩家位置快照，落点红圈给足走位窗（走位永远有解）。
+	if p_player == null:
+		return
+	match _blink_state:
+		0:
+			# 巡航：0.85× 速追击（吃 sf 减速）+ 冷却推进
+			var dir := (p_player.global_position - global_position).normalized()
+			global_position += dir * speed * BLINK_CRUISE_MULT * p_sf * p_dt
+			_blink_cd -= p_dt
+			if _blink_cd <= 0.0 \
+					and global_position.distance_to(p_player.global_position) <= _blink_range:
+				_blink_target = p_player.global_position      # 快照！落点=玩家当前位置
+				_blink_state = 1
+				_blink_left = _blink_prep
+		1:
+			# 施法读条：闪紫收缩（表现层 &"rift" 分支）；冻结在 CHARGING 态 = 打断施法
+			if p_sf <= 0.0:
+				_cancel_blink(BLINK_FREEZE_CD)
+				return
+			_blink_left -= p_dt
+			if _blink_left <= 0.0:
+				_blink_teleport()
+		2:
+			# 落地引信：红圈进度环推进；冻结仅停摆（引信期唯一打断 = 击退，knockback 入口）
+			if p_sf <= 0.0:
+				return
+			_blink_left -= p_dt
+			if _blink_ring != null and is_instance_valid(_blink_ring):
+				_blink_ring.progress = 1.0 - clampf(_blink_left / _blink_fuse, 0.0, 1.0)
+				_blink_ring.queue_redraw()
+			if _blink_left <= 0.0:
+				_blink_explode(p_player)
+
+
+func _blink_teleport() -> void:
+	# 落点 = 快照 ±24px 随机偏移（防贴脸重合），钳屏内；红圈挂世界层钉死落点
+	var off := Vector2(randf_range(-BLINK_OFFSET, BLINK_OFFSET),
+		randf_range(-BLINK_OFFSET, BLINK_OFFSET))
+	var size := Vector2(720.0, 1280.0)
+	if GameConfig.balance != null:
+		size = Vector2(GameConfig.balance.res_logic)
+	global_position = (_blink_target + off).clamp(
+		Vector2.ONE * hitbox_r, size - Vector2.ONE * hitbox_r)
+	_blink_state = 2
+	_blink_left = _blink_fuse
+	_blink_ring = Telegraph.TelegraphCircle.new()
+	_blink_ring.name = "BlinkRing"
+	_blink_ring.radius = _blink_blast_r
+	_blink_ring.color = Color(1.0, 0.36, 0.36)    # 红 = 爆炸/定点 AOE（§1.2 语义）
+	_blink_ring.position = _blink_target
+	_blink_ring.progress = 0.0
+	get_parent().add_child(_blink_ring)
+
+
+func _blink_explode(p_player: Node2D) -> void:
+	# 引爆：半径内玩家吃 contact_dmg（30% 档 = dmg_base 波次成长值，E4 口径）；本体死亡
+	_clear_blink_ring()
+	# 爆炸环特效（复用 kill_blast 表现通道：橙红环+闪光，纯表现无结算）
+	EventBus.emit_kill_blast(global_position, _blink_blast_r)
+	if p_player != null and is_instance_valid(p_player) \
+			and global_position.distance_to(p_player.global_position) <= _blink_blast_r:
+		(p_player as Player).take_contact_damage(contact_dmg)
+	hp = 0.0
+	_on_died()
+
+
+func _cancel_blink(p_cd: float = -1.0) -> void:
+	# 打断统一入口：冻结断读条 / 击退断引信（§3.3 反制双路）→ 回巡航；p_cd ≥0 时重置施法冷却
+	_blink_state = 0
+	_blink_left = 0.0
+	if p_cd >= 0.0:
+		_blink_cd = p_cd
+	_clear_blink_ring()
+
+
+func _clear_blink_ring() -> void:
+	if _blink_ring != null and is_instance_valid(_blink_ring):
+		_blink_ring.queue_free()
+	_blink_ring = null
+
+
+func blink_state() -> int:
+	# 测试/遥测观测口（0 巡航 / 1 读条 / 2 引信）
+	return _blink_state
+
+
+func blink_target() -> Vector2:
+	return _blink_target
 
 
 func _check_boss_phase() -> void:
@@ -815,6 +942,11 @@ func _reset_state() -> void:
 	_reset_cast_state()                             # Boss 弹幕施法态清零（E-04/E-05 契约）
 	_barrage = []
 	_barrage_cd.clear()
+	_blink_state = 0                                # BLINK 三态清零 + 落点圈回收（池复用安全）
+	_blink_cd = 0.0
+	_blink_left = 0.0
+	_blink_target = Vector2.ZERO
+	_clear_blink_ring()
 	_flash_left = 0.0
 	_fade_left = 0.0
 	_wobble_left = 0.0
@@ -959,6 +1091,8 @@ func _visual_kind() -> StringName:
 		return &"bogleaper"
 	if sid.begins_with("E16"):
 		return &"marshmaw"
+	if sid.begins_with("E24"):
+		return &"rift"
 	return &"grunt"
 
 
@@ -1091,6 +1225,15 @@ func _tick_visual(p_game_delta: float) -> void:
 				_set_volatile_face(0)
 			sx = _base_scale * grow
 			sy = _base_scale * grow
+		&"rift":
+			# E24 裂隙爆魔：漂浮微旋 + 呼吸；读条期收缩（TelegraphSwell 变体，§3.3）
+			rot = 0.05 * sin(_anim_t * 3.4 + float(uid % 32))
+			var breathe_r := 1.0 + 0.03 * sin(_anim_t * 5.2 + float(uid % 32))
+			if _blink_state == 1:
+				var prog_r := 1.0 - clampf(_blink_left / maxf(_blink_prep, 0.01), 0.0, 1.0)
+				breathe_r *= 1.0 - 0.25 * prog_r      # 读条收缩
+			sx = _base_scale * breathe_r
+			sy = _base_scale * breathe_r
 		&"elite":
 			var hover := (1.0 - cos(_anim_t * 2.2)) * 0.5
 			off.y = -hover * HOVER_AMP
@@ -1135,6 +1278,10 @@ func _tick_visual(p_game_delta: float) -> void:
 	# TelegraphSwell 闪红层（叠加在状态染色之上——闪红=即将齐射，§1.2 语义）
 	if _cast_glow > 0.0 and _sprite != null:
 		_sprite.self_modulate = _sprite.self_modulate.lerp(Color(1.0, 0.36, 0.36), _cast_glow * 0.85)
+	# BLINK 读条闪紫层（§3.3 出手前摇：本体闪紫 + 收缩）
+	if _blink_state == 1 and _sprite != null:
+		var blink_glow := 1.0 - clampf(_blink_left / maxf(_blink_prep, 0.01), 0.0, 1.0)
+		_sprite.self_modulate = _sprite.self_modulate.lerp(Color(0.7, 0.5, 1.0), blink_glow * 0.8)
 
 
 func _dart_rotation() -> float:
