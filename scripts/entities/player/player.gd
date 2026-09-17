@@ -20,6 +20,8 @@ var _last_move_dir: Vector2 = Vector2.UP      # 最近移动方向（游侠闪�
 var revives_left: int = 0                     # 应急协议剩余复活（局外养成，每局重置）
 var map_xp_mult: float = 1.0                  # 地图词缀·经验倍率（GameLoop.start_run 注入）              # Q-13 磁吸半径（pickup_pct 词条加成属包 3 常驻词条）
 var map_gold_mult: float = 1.0                # 地图祝福·金币倍率（GameLoop 金币掉账消费；词缀二期）
+var hazard_slow_left: float = 0.0             # 冰锁圈外部减速剩余 s（R18 P2 frost flavor）
+var hazard_slow_mult: float = 1.0             # 拖动映射系数（0.65 = 减速 35%，到期还原 1.0）
 var map_rof_mult: float = 1.0                 # 地图祝福·射速倍率（WeaponBase._fire_interval 消费；词缀二期）
 var map_wave_heal_pct: float = 0.0            # 地图祝福·每波回血比 max_hp（GameLoop wave_cleared 消费；词缀二期）
 # 角色系统（用户反馈「不同的角色有不同的技能」）：选择经 Meta 持久化，开局 set_character 应用
@@ -201,6 +203,12 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 	_drag_accum = Vector2.ZERO
 	if total != Vector2.ZERO:
 		_last_move_dir = total.normalized()
+	# 冰锁圈外部减速（R18 P2 frost flavor：拖动映射 ×mult，到期还原——Boss 文档 §5.2）
+	if hazard_slow_left > 0.0:
+		hazard_slow_left = maxf(hazard_slow_left - p_game_delta, 0.0)
+		if hazard_slow_left <= 0.0:
+			hazard_slow_mult = 1.0
+		total *= hazard_slow_mult
 	global_position += total
 	_clamp_to_playfield()
 	# 武器自动开火调度（每帧 tick；集成包 B.8 第二批收紧：weapon_slots 已收窄 WeaponBase——直调）
@@ -615,6 +623,12 @@ func gold_find_pct() -> float:
 	# 金币寻获率（R5.12-P1 AFF_GOLD 点金：金币掉率与掉量 ×(1+Σ)，掉落侧两处乘区——
 	# GameLoop._on_enemy_killed_drop_xp 消费；同 map_gold_mult 叠乘口径）
 	return clampf(_weapon_pool_sum(&"add_gold"), 0.0, 3.0)
+
+
+func apply_hazard_slow(p_mult: float, p_duration: float) -> void:
+	# 冰锁圈减速应用（HazardPool frost 调用；刷新式——多圈叠加取最长持续时间）
+	hazard_slow_mult = clampf(p_mult, 0.2, 1.0)
+	hazard_slow_left = maxf(hazard_slow_left, p_duration)
 
 
 func respawn() -> void:

@@ -33,6 +33,31 @@ class TelegraphCircle:
 				-PI * 0.5 + TAU * progress, 48, PopPalette.XP, 5.0, true)
 
 
+class TelegraphLine:
+	extends Node2D
+
+	var length: float = 1400.0
+	var width: float = 26.0
+	var color: Color = Color(0.7, 0.5, 1.0)      # 紫 = 狙击线/激光（§1.2）
+	var progress: float = 0.0                    # 读条进度 0~1（宿主推进）
+
+	func setup_dir(p_dir: Vector2) -> void:
+		rotation = p_dir.angle()                 # 起角锁定（带内不追踪，§2 B7）
+
+	func _draw() -> void:
+		# 矩形长带（端点起自施法者）+ 边线 + 沿带充能亮斑（进度=充能流动）
+		var fill := Color(color.r, color.g, color.b, 0.08 + 0.12 * progress)
+		draw_rect(Rect2(0.0, -width * 0.5, length, width), fill, true)
+		var edge := Color(color.r, color.g, color.b, 0.4 + 0.45 * progress)
+		draw_line(Vector2(0.0, -width * 0.5), Vector2(length, -width * 0.5), edge, 2.5, true)
+		draw_line(Vector2(0.0, width * 0.5), Vector2(length, width * 0.5), edge, 2.5, true)
+		var head := length * progress
+		draw_circle(Vector2(head, 0.0), width * 0.5,
+			Color(color.r, color.g, color.b, 0.85))
+		draw_circle(Vector2(head, 0.0), width * 0.9,
+			Color(color.r, color.g, color.b, 0.35))
+
+
 class TelegraphFan:
 	extends Node2D
 
@@ -64,3 +89,4 @@ class TelegraphFan:
 		if progress > 0.02:
 			draw_line(Vector2.ZERO, Vector2(radius * progress, 0.0),
 				Color(color.r, color.g, color.b, 0.85), 4.0, true)
+

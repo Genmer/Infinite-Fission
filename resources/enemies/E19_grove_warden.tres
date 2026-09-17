@@ -18,5 +18,5 @@ tags = 2
 hitbox_r = 14.0
 ranged = {}
 elite_mult = {}
-boss = {"phases": 2, "phase2_resist": 0.2, "bullet_patterns": {"interval_s": 4.2, "pattern": "ring", "count": 24, "dmg": 16.0, "speed_mult_phase2": 1.35}, "summons": {"interval_s": 9.0, "mode": "split", "enemy_id": "E12_bogslime", "hp_ratio": 0.08, "count": 2, "count_phase2": 3}}
+boss = {"phases": 3, "phase2_hp": 0.6, "phase3_hp": 0.3, "phase2_resist": 0.2, "barrage": [{"type": "ring", "phase": 1, "cd": 5.5, "telegraph": "swell", "telegraph_s": 0.4, "count": 20, "speed": 165.0, "dmg": 7.0, "flavor": "thorn"}, {"type": "laser_sweep", "phase": 1, "cd": 11.0, "telegraph": "line", "telegraph_s": 1.0, "arc_deg": 100.0, "sweep_s": 1.6, "width_px": 26.0, "dmg": 30.0, "flavor": "vine"}, {"type": "mine", "phase": 2, "cd": 12.0, "telegraph": "circle", "telegraph_s": 0.7, "count": 6, "count_phase3": 8, "trigger_r": 42.0, "blast_r": 90.0, "arm_s": 0.8, "life_s": 8.0, "dmg": 21.0, "flavor": "thorn"}, {"type": "aimed_spread", "phase": 2, "cd": 5.0, "telegraph": "fan", "telegraph_s": 0.7, "count": 5, "speed": 330.0, "arc_deg": 38.0, "dmg": 13.0}], "summons": {"interval_s": 9.0, "mode": "split", "enemy_id": "E12_bogslime", "hp_ratio": 0.08, "count": 2, "count_phase2": 3}}
 gold_drop = {"chance": 1.0, "min": 120, "max": 160}

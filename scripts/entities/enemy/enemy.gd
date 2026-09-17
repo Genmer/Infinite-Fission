@@ -71,6 +71,7 @@ var _emit_angle: float = 0.0                  # spiral 当前步进角（弧度�
 var _emit_def: Dictionary = {}                # spiral 配置快照
 var _cast_glow: float = 0.0                   # TelegraphSwell 强度 0~1（_tick_visual 消费）
 var _cast_fan: Telegraph.TelegraphFan = null  # aimed_spread 扇形警示（紫，§1.2）
+var _cast_line: Telegraph.TelegraphLine = null     # laser_sweep 直线警示带（紫，§1.2 B7）
 
 # ── BLINK 闪现爆炸族（ENEMY_PATTERNS_BASIC §3.3，用户点名；R16 实装） ──
 # 三态：0 巡航（0.85× 速追击）/ 1 施法读条（0.35s 闪紫收缩）/ 2 落地引信（0.8s 红圈进度环）。
@@ -752,6 +753,9 @@ func _tick_boss_barrage(p_dt: float, p_player: Node2D, p_sf: float) -> void:
 		if _cast_fan != null and _cast_fan.visible:
 			_cast_fan.progress = _cast_glow
 			_cast_fan.queue_redraw()
+		if _cast_line != null and _cast_line.visible:
+			_cast_line.progress = _cast_glow
+			_cast_line.queue_redraw()
 		if _cast_left <= 0.0:
 			_release_cast(p_player)
 		return
@@ -788,6 +792,19 @@ func _begin_cast(p_idx: int, p_player: Node2D) -> void:
 		_cast_fan.arc_deg = float(_barrage[p_idx].get("arc_deg", 44.0))
 		_cast_fan.progress = 0.0
 		_cast_fan.visible = true
+	# laser_sweep：紫色直线警示带（B7 处决技——起角锁定，带内不追踪）
+	elif String(_barrage[p_idx].get("type", "ring")) == "laser_sweep":
+		_cast_dir = (p_player.global_position - global_position).normalized()
+		if _cast_dir == Vector2.ZERO:
+			_cast_dir = Vector2.RIGHT
+		if _cast_line == null:
+			_cast_line = Telegraph.TelegraphLine.new()
+			_cast_line.name = "CastLine"
+			add_child(_cast_line)
+		_cast_line.setup_dir(_cast_dir)
+		_cast_line.width = float(_barrage[p_idx].get("width_px", 26.0))
+		_cast_line.progress = 0.0
+		_cast_line.visible = true
 
 
 func _release_cast(p_player: Node2D) -> void:
@@ -808,13 +825,19 @@ func _release_cast(p_player: Node2D) -> void:
 			_emit_left = float(def.get("emit_s", 2.4))
 			_emit_tick = 0.0
 			_emit_angle = (p_player.global_position - global_position).angle()
+		"mine":
+			_spawn_mine_field(def, p_player)        # B6 荆棘雷区（R18 P2：flavor 皮）
+		"laser_sweep":
+			_spawn_laser_sweep(def)                 # B7 湮灭扫线（R18 P2：起角已锁定）
 		_:
-			pass                                    # mine/laser_sweep 属 P2：数据合法但消费端未上
+			pass
 	_barrage_cd[_cast_idx] = maxf(float(def.get("cd", 5.0)), 0.5)
 	_cast_idx = -1
 	_cast_left = 0.0
 	if _cast_fan != null:
 		_cast_fan.visible = false
+	if _cast_line != null:
+		_cast_line.visible = false
 
 
 func _fire_ring(def: Dictionary) -> void:
@@ -888,6 +911,65 @@ func _spawn_boss_bullet(p_dir: Vector2, p_speed: float, p_dmg: float) -> void:
 	})
 
 
+func _spawn_mine_field(def: Dictionary, p_player: Node2D) -> void:
+	# B6 荆棘雷区（R18 P2）：混合布点（Boss 环带 + 玩家预测位）——每颗落点先红圈缩圈
+	# telegraph_s → 落地 arm_s 激活 → 触发半径内/寿命到期爆炸；flavor 皮：
+	# frost=冰锁圈（拖动减速）/ venom=毒潭（站场 DoT）/ fire=火焰地（站场 DoT）
+	var count := _phase_count(def)
+	var telegraph_s := float(def.get("telegraph_s", 0.7))
+	var size := Vector2(720.0, 1280.0)
+	if GameConfig.balance != null:
+		size = Vector2(GameConfig.balance.res_logic)
+	for k in range(count):
+		var pos := Vector2.ZERO
+		if k % 2 == 0:
+			# 奇数位：玩家当前位置附近（预测位混合，±140px）
+			pos = p_player.global_position \
+				+ Vector2(randf_range(-140.0, 140.0), randf_range(-140.0, 140.0))
+		else:
+			# 偶数位：Boss 环带（半径 160~300 随机）
+			pos = global_position + Vector2.from_angle(randf() * TAU) \
+				* randf_range(160.0, 300.0)
+		pos = pos.clamp(Vector2.ONE * 40.0, size - Vector2.ONE * 40.0)
+		var mine := BossMine.new()
+		mine.name = "BossMine%d" % k
+		mine.position = pos
+		mine.trigger_r = float(def.get("trigger_r", 42.0))
+		mine.blast_r = float(def.get("blast_r", 90.0))
+		mine.dmg = float(def.get("dmg", 21.0))
+		mine.life_s = float(def.get("life_s", 8.0))
+		mine.telegraph_s = telegraph_s
+		mine.arm_s = float(def.get("arm_s", 0.8))
+		mine.flavor = String(def.get("flavor", "thorn"))
+		mine.host = self
+		if def.has("poison_pool"):
+			mine.pool_cfg = def["poison_pool"]
+			mine.pool_kind = "venom"
+		elif def.has("slow_pool"):
+			mine.pool_cfg = def["slow_pool"]
+			mine.pool_kind = "frost"
+		get_parent().add_child(mine)
+
+
+func _spawn_laser_sweep(def: Dictionary) -> void:
+	# B7 湮灭扫线（R18 P2）：起角已在前摇锁定（_cast_dir）；束锚定施法瞬间 Boss 位置，
+	# 扫 arc_deg / sweep_s，线宽 width_px，命中 0.6s 一次（处决级 50% 档，不可打断）
+	var sweep := BossSweep.new()
+	sweep.name = "BossSweep"
+	sweep.position = global_position
+	sweep.base_angle = _cast_dir.angle()
+	sweep.arc_deg = float(def.get("arc_deg", 100.0))
+	sweep.sweep_s = float(def.get("sweep_s", 1.6))
+	sweep.width_px = float(def.get("width_px", 26.0))
+	sweep.dmg = float(def.get("dmg", 30.0))
+	sweep.flavor = String(def.get("flavor", "vine"))
+	sweep.host = self
+	if def.has("poison_pool"):
+		sweep.pool_cfg = def["poison_pool"]
+		sweep.pool_kind = "venom"
+	get_parent().add_child(sweep)
+
+
 func _reset_cast_state() -> void:
 	# 池归还/spawn 双路复位（E-04/E-05 清零契约：施法位/计时/跟射/螺旋/表现件全清）
 	_cast_idx = -1
@@ -902,6 +984,8 @@ func _reset_cast_state() -> void:
 	_cast_glow = 0.0
 	if _cast_fan != null:
 		_cast_fan.visible = false
+	if _cast_line != null:
+		_cast_line.visible = false
 
 
 func _reset_state() -> void:
@@ -1692,24 +1776,240 @@ class PoisonSplash:
 			Color(poison.r, poison.g, poison.b, 0.7 * t), 4.0, true)
 
 
-# ── 爆虫警示圈（方向 C：虚线圈 + 进度环；半径 = VOLATILE_BLAST_RADIUS，A3 §2.2「警示圈」） ──
-class FuseRing:
+# ── Boss 地雷（B6 荆棘雷区，R18 P2；自驱节点——PROCESS_PAUSABLE 暂停/选卡自然冻结） ──
+# 生命周期：落点红圈缩圈（telegraph_s）→ 落地 arm_s 激活 → 触发半径内玩家/寿命到期
+# 爆炸（blast_r 结算 dmg）→ flavor 附加池（frost 冰锁减速圈 / venom 毒潭 DoT）。
+# 宿主 Boss 归还清零（data==null）即自毁——池复用/重开零残留。
+class BossMine:
 	extends Node2D
 
-	var radius: float = 110.0
-	var progress: float = 0.0                   # 引导进度 0~1（圈色渐亮渐红）
+	var trigger_r: float = 42.0
+	var blast_r: float = 90.0
+	var dmg: float = 21.0
+	var life_s: float = 8.0
+	var telegraph_s: float = 0.7
+	var arm_s: float = 0.8
+	var flavor: String = "thorn"
+	var pool_cfg: Dictionary = {}
+	var pool_kind: String = ""
+	var host: Node2D = null
+
+	var _t: float = 0.0
+	var _ring: Telegraph.TelegraphCircle = null
+	var _pulse_t: float = 0.0
+
+	func _ready() -> void:
+		_ring = Telegraph.TelegraphCircle.new()
+		_ring.radius = blast_r
+		_ring.color = Color(1.0, 0.36, 0.36)     # 红 = 爆炸/定点 AOE（§1.2 语义）
+		add_child(_ring)
+
+	func _process(p_delta: float) -> void:
+		if host != null and (not is_instance_valid(host) or host.get("data") == null):
+			queue_free()                          # 宿主已归还/重开——零残留
+			return
+		_t += p_delta
+		if _t < telegraph_s:
+			_ring.visible = true
+			_ring.progress = _t / maxf(telegraph_s, 0.01)
+			_ring.queue_redraw()
+			return
+		_ring.visible = false
+		if _t < telegraph_s + arm_s:
+			queue_redraw()                        # 落地展开（arm 期不触发）
+			return
+		var player := _get_player()
+		if player != null and is_instance_valid(player):
+			if global_position.distance_to(player.global_position) <= trigger_r:
+				_explode(player)
+				return
+		if _t >= telegraph_s + arm_s + life_s:
+			_explode(player)
+			return
+		_pulse_t += p_delta * (6.0 if _player_in_trigger() else 2.4)
+		queue_redraw()                           # 闪烁读感（玩家贴近加速脉冲）
+
+	func _player_in_trigger() -> bool:
+		var player := _get_player()
+		return player != null and is_instance_valid(player) \
+			and global_position.distance_to(player.global_position) <= trigger_r
+
+	func _explode(p_player: Node2D) -> void:
+		if p_player != null and is_instance_valid(p_player) \
+				and global_position.distance_to(p_player.global_position) <= blast_r:
+			(p_player as Player).take_contact_damage(dmg)
+		if not pool_cfg.is_empty():
+			var pool := HazardPool.new()
+			pool.name = "HazardPool"
+			pool.position = global_position
+			pool.radius = float(pool_cfg.get("radius", 80.0))
+			pool.life_s = float(pool_cfg.get("life_s", 3.0))
+			pool.host = host
+			match pool_kind:
+				"frost":
+					pool.slow_mult = float(pool_cfg.get("drag_mult", 0.65))
+					pool.color = PopPalette.PLAYER.lerp(Color.WHITE, 0.4)
+				"venom":
+					pool.dmg_per_tick = 60.0 * float(pool_cfg.get("dps_pct", 8.0)) / 100.0
+					pool.color = PopPalette.SUCCESS.lerp(PopPalette.XP, 0.3)
+				"fire":
+					pool.dmg_per_tick = 60.0 * float(pool_cfg.get("dps_pct", 8.0)) / 100.0
+					pool.color = PopPalette.ENEMY
+			get_parent().add_child(pool)
+		EventBus.emit_kill_blast(global_position, blast_r * 0.6)   # 爆炸环表现（复用通道）
+		queue_free()
 
 	func _draw() -> void:
-		# 虚线警戒圈（亮底风格：虚线圆 + 淡填充 + 进度弧，程序化绘制）
-		var fill := Color(1.0, 0.36, 0.36, 0.05 + 0.13 * progress)
-		draw_circle(Vector2.ZERO, radius, fill)
-		var segs := 28
-		var seg_arc := TAU / float(segs * 2)
-		var edge := Color(1.0, 0.36, 0.36, 0.4 + 0.5 * progress)
-		for i in range(segs):
-			var a0 := float(i) * seg_arc * 2.0
-			draw_arc(Vector2.ZERO, radius, a0, a0 + seg_arc, 8, edge, 3.5, true)
-		# 进度弧（柠檬金→珊瑚红，贴近倒计时紧迫感）
-		if progress > 0.01:
-			draw_arc(Vector2.ZERO, radius * 0.86, -PI * 0.5,
-				-PI * 0.5 + TAU * progress, 48, PopPalette.XP, 5.0, true)
+		if _t < telegraph_s:
+			return                                # 落点预警期只画红圈
+		var armed := _t >= telegraph_s + arm_s
+		var body := Color(0.22, 0.2, 0.26, 1.0) if armed else Color(0.3, 0.28, 0.34, 0.7)
+		draw_circle(Vector2.ZERO, 9.0, body)
+		var edge := _flavor_color()
+		if armed:
+			var pulse := 0.55 + 0.45 * sin(_pulse_t * TAU)
+			draw_arc(Vector2.ZERO, 13.0 + 2.0 * sin(_pulse_t * TAU), 0.0, TAU, 20,
+				Color(edge.r, edge.g, edge.b, 0.4 + 0.5 * pulse), 2.5, true)
+		else:
+			draw_arc(Vector2.ZERO, 12.0, 0.0, TAU, 16, Color(edge.r, edge.g, edge.b, 0.5), 2.0, true)
+		draw_circle(Vector2.ZERO, 3.5, edge)
+
+	func _flavor_color() -> Color:
+		match flavor:
+			"frost":
+				return PopPalette.PLAYER.lerp(Color.WHITE, 0.35)
+			"venom":
+				return PopPalette.SUCCESS.lerp(PopPalette.XP, 0.3)
+			"fire":
+				return PopPalette.ENEMY
+			_:
+				return PopPalette.XP              # thorn 荆棘金
+
+	func _get_player() -> Node2D:
+		var tree := get_tree()
+		return tree.get_first_node_in_group(&"player") as Node2D if tree != null else null
+
+
+# ── Boss 扫线（B7 湮灭扫线，R18 P2；起角锁定——带内不追踪，处决技不可打断） ──
+# 前摇（Boss 施法态 TelegraphLine 1.0s）完成后落场：锚定施法瞬间 Boss 位置，
+# 0° 起角扫 arc_deg / sweep_s；命中判定 = 玩家到当前射线垂距 ≤ 线宽一半，0.6s 一次。
+class BossSweep:
+	extends Node2D
+
+	var base_angle: float = 0.0
+	var arc_deg: float = 100.0
+	var sweep_s: float = 1.6
+	var width_px: float = 26.0
+	var dmg: float = 30.0
+	var flavor: String = "vine"
+	var pool_cfg: Dictionary = {}
+	var pool_kind: String = ""
+	var host: Node2D = null
+
+	const BEAM_LEN := 1500.0
+	const HIT_TICK := 0.6
+
+	var _t: float = 0.0
+	var _hit_tick: float = 0.0
+	var _ang := 0.0
+
+	func _process(p_delta: float) -> void:
+		if host != null and (not is_instance_valid(host) or host.get("data") == null):
+			queue_free()                          # 宿主已归还/重开——零残留
+			return
+		_t += p_delta
+		_ang = base_angle + deg_to_rad(arc_deg) * clampf(_t / maxf(sweep_s, 0.01), 0.0, 1.0)
+		_hit_tick -= p_delta
+		var player := _get_player()
+		if player != null and is_instance_valid(player) and _hit_tick <= 0.0:
+			var rel: Vector2 = player.global_position - global_position
+			var proj := rel.dot(Vector2.from_angle(_ang))
+			var perp := absf(rel.cross(Vector2.from_angle(_ang)))
+			if proj >= 0.0 and proj <= BEAM_LEN \
+					and perp <= width_px * 0.5 + 8.0:
+				(player as Player).take_contact_damage(dmg)
+				_hit_tick = HIT_TICK
+		queue_redraw()
+		if _t >= sweep_s:
+			# 扫线毒尾（venom 皮）：扫完终点落毒潭一次，随后自清
+			if not pool_cfg.is_empty() and not has_meta("_pool_dropped"):
+				set_meta(&"_pool_dropped", true)
+				var pool := HazardPool.new()
+				pool.name = "HazardPool"
+				pool.position = global_position + Vector2.from_angle(_ang) * 300.0
+				pool.radius = float(pool_cfg.get("radius", 40.0))
+				pool.life_s = float(pool_cfg.get("life_s", 3.0))
+				pool.dmg_per_tick = 60.0 * float(pool_cfg.get("dps_pct", 8.0)) / 100.0
+				pool.color = PopPalette.SUCCESS.lerp(PopPalette.XP, 0.3)
+				pool.host = host
+				get_parent().add_child(pool)
+			queue_free()
+
+	func _draw() -> void:
+		var c := _beam_color()
+		var dir := Vector2.from_angle(_ang)
+		var tail := dir * BEAM_LEN
+		# 主束（厚线）+ 外辉（淡宽线）——同形同色（前摇紫线 = 结算紫束）
+		draw_line(Vector2.ZERO, tail, Color(c.r, c.g, c.b, 0.9), width_px, true)
+		draw_line(Vector2.ZERO, tail, Color(c.r, c.g, c.b, 0.3), width_px * 1.9, true)
+		draw_circle(Vector2.ZERO, width_px * 0.7, Color(c.r, c.g, c.b, 0.9))
+
+	func _beam_color() -> Color:
+		match flavor:
+			"venom":
+				return PopPalette.SUCCESS.lerp(PopPalette.XP, 0.35)
+			"fire":
+				return PopPalette.ENEMY
+			_:
+				return Color(0.7, 0.5, 1.0)       # vine/默认 紫（§1.2 狙击线语义）
+
+	func _get_player() -> Node2D:
+		var tree := get_tree()
+		return tree.get_first_node_in_group(&"player") as Node2D if tree != null else null
+
+
+# ── Boss 附加池（frost 冰锁减速 / venom 毒潭 / fire 火焰地，R18 P2；自驱自清） ──
+class HazardPool:
+	extends Node2D
+
+	var radius: float = 80.0
+	var life_s: float = 3.0
+	var tick_s: float = 0.6
+	var dmg_per_tick: float = 0.0
+	var slow_mult: float = 1.0
+	var color: Color = PopPalette.SUCCESS
+	var host: Node2D = null
+
+	var _t: float = 0.0
+	var _tick: float = 0.0
+
+	func _process(p_delta: float) -> void:
+		if host != null and (not is_instance_valid(host) or host.get("data") == null):
+			queue_free()
+			return
+		_t += p_delta
+		if _t >= life_s:
+			queue_free()
+			return
+		_tick -= p_delta
+		if _tick <= 0.0:
+			_tick += tick_s
+			var player := _get_player()
+			if player != null and is_instance_valid(player) \
+					and global_position.distance_to(player.global_position) <= radius:
+				if dmg_per_tick > 0.0:
+					(player as Player).take_contact_damage(dmg_per_tick)
+				if slow_mult < 1.0:
+					(player as Player).apply_hazard_slow(slow_mult, tick_s * 1.6)
+		queue_redraw()
+
+	func _draw() -> void:
+		var fade := clampf((life_s - _t) / 1.0, 0.0, 1.0)   # 末 1s 淡出
+		var a := 0.85 * fade
+		draw_circle(Vector2.ZERO, radius, Color(color.r, color.g, color.b, 0.14 * a))
+		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 36, Color(color.r, color.g, color.b, 0.7 * a), 3.0, true)
+		draw_arc(Vector2.ZERO, radius * 0.7, 0.0, TAU, 28, Color(color.r, color.g, color.b, 0.25 * a), 2.0, true)
+
+	func _get_player() -> Node2D:
+		var tree := get_tree()
+		return tree.get_first_node_in_group(&"player") as Node2D if tree != null else null
