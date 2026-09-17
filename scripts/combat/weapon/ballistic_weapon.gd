@@ -21,6 +21,27 @@ func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
 	_since_fire = 999.0
 
 
+var _muzzle_flash: Sprite2D = null            # 枪口闪光（R19 打击质感：常驻件显隐零实例化）
+var _muzzle_timer: float = 0.0
+
+
+func _show_muzzle_flash() -> void:
+	# 枪口星闪 0.05s（特效质量低档关闭；常驻 Sprite 显隐——零逐发实例化）
+	if _muzzle_flash == null:
+		_muzzle_flash = Sprite2D.new()
+		_muzzle_flash.name = "MuzzleFlash"
+		_muzzle_flash.texture = TextureFactory.star(40, PopPalette.XP)
+		_muzzle_flash.visible = false
+		add_child(_muzzle_flash)
+	if clampi(int(Meta.settings("fx_quality")), 0, 2) <= 0:
+		return
+	_muzzle_flash.position = to_local(muzzle_position())
+	_muzzle_flash.rotation = randf() * TAU
+	_muzzle_flash.scale = Vector2.ONE * randf_range(0.45, 0.75)
+	_muzzle_flash.visible = true
+	_muzzle_timer = 0.05
+
+
 func try_fire() -> bool:
 	# N=pellets 发 × 散射锥均匀分布 → ProjectilePool.acquire（软上限池侧拒绝）
 	if data == null or projectile_pool == null:
@@ -58,6 +79,7 @@ func try_fire() -> bool:
 	if fired > 0:
 		_since_fire = 0.0
 		_advance_spin()
+		_show_muzzle_flash()
 	return fired > 0
 
 
@@ -74,6 +96,11 @@ func _on_tick_post(p_game_delta: float) -> void:
 	_since_fire += p_game_delta
 	if _spin_up_time() > 0.0 and _since_fire >= SPIN_COOLDOWN_RESET:
 		spin_up_left = _spin_up_time()
+	# 枪口闪光自熄（R19 打击质感）
+	if _muzzle_timer > 0.0:
+		_muzzle_timer = maxf(_muzzle_timer - p_game_delta, 0.0)
+		if _muzzle_timer <= 0.0 and _muzzle_flash != null:
+			_muzzle_flash.visible = false
 
 
 func _fire_interval() -> float:

@@ -32,6 +32,8 @@ var skill_cd_base: float = 30.0
 var skill_cd_left: float = 0.0
 var skill_active_left: float = 0.0            # 增益型技能剩余时长（过载）
 var _skill_shield_left: float = 0.0           # 紧急护盾剩余（表现走护盾泡）
+var _skill_fx_left: float = 0.0               # 技能演出剩余 s（R19：HUD 时长条 + 玩家光环）
+var _skill_fx_max: float = 0.0                # 演出总长（ratio 分母）
 # 毒云领域（毒系学者·薇拉，P2 数值真源）：以玩家为中心 300px、持续 6s；每 0.5s 对域内敌
 # 结算 8% 主武器 ATK 毒伤 + 减速 20%。直结算通道（不动管线/不挂元素状态——走 AOE_SECONDARY
 # 幂等键，同构 mank 毒沼绽放先例；减速走 Enemy.ext_slow 外部乘区，与元素冰缓正交）
@@ -175,6 +177,9 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 	# 角色技能节拍（冷却 + 增益型剩余）
 	if skill_cd_left > 0.0:
 		skill_cd_left = maxf(skill_cd_left - p_game_delta, 0.0)
+	if _skill_fx_left > 0.0:
+		_skill_fx_left = maxf(_skill_fx_left - p_game_delta, 0.0)
+		queue_redraw()                            # 光环呼吸/倒数弧重绘
 	if skill_active_left > 0.0:
 		skill_active_left = maxf(skill_active_left - p_game_delta, 0.0)
 		if skill_active_left <= 0.0:
@@ -226,6 +231,19 @@ func _unhandled_input(p_event: InputEvent) -> void:
 		var mm := p_event as InputEventMouseMotion
 		if (mm.button_mask & MOUSE_BUTTON_LEFT) != 0:
 			_drag_accum += mm.relative
+
+
+func _draw() -> void:
+	# R19 技能演出光环（效果持续可视化——「不知道效果何时结束」终解）：
+	# 金色呼吸外环 + 剩余时长倒数弧（12 点方向顺时针收拢，归零即效果结束）
+	if _skill_fx_left <= 0.0 or _skill_fx_max <= 0.0:
+		return
+	var ratio := clampf(_skill_fx_left / _skill_fx_max, 0.0, 1.0)
+	var pulse := 0.5 + 0.5 * sin(_skill_fx_left * 9.0)
+	draw_circle(Vector2.ZERO, 36.0, Color(1.0, 0.85, 0.3, 0.05 + 0.05 * pulse))
+	draw_arc(Vector2.ZERO, 36.0, 0.0, TAU, 44, Color(1.0, 0.85, 0.3, 0.28), 2.0, true)
+	draw_arc(Vector2.ZERO, 36.0, -PI * 0.5, -PI * 0.5 + TAU * ratio, 44,
+		Color(1.0, 0.9, 0.45, 0.95), 4.0, true)
 
 
 func take_contact_damage(p_dmg: float) -> void:
@@ -501,8 +519,34 @@ func activate_skill() -> bool:
 			_skill_poison_cloud()
 		&"noah":
 			_skill_summon_orbs()
+	var fx_dur := _skill_fx_duration()
+	_skill_fx_left = fx_dur
+	_skill_fx_max = fx_dur
+	EventBus.emit_skill_cast(global_position, String(character_id))   # 施放金环爆发（表现层）
 	DebugStats.count(&"skill_used")
 	return true
+
+
+func _skill_fx_duration() -> float:
+	# 技能演出时长（R19：增益型 = 效果持续时间，瞬发型 = 0.8s 施放闪光——
+	# 「效果何时结束」一眼可读：HUD 时长条 + 玩家光环同步倒数）
+	match character_id:
+		&"sentinel":
+			return 3.0
+		&"veles":
+			return 4.0
+		&"vera":
+			return POISON_CLOUD_DURATION
+		&"noah":
+			return SUMMON_DURATION
+	return 0.8
+
+
+func skill_active_ratio() -> float:
+	# 技能效果剩余比例 0~1（HUD 时长条消费；瞬发型 0.8s 施放闪光共用通道）
+	if _skill_fx_max <= 0.0:
+		return 0.0
+	return clampf(_skill_fx_left / _skill_fx_max, 0.0, 1.0)
 
 
 func _skill_poison_cloud() -> void:

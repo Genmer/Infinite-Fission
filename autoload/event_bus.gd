@@ -39,6 +39,7 @@ signal knockback_hit(pos: Vector2)                           # 强击退生效�
 signal poison_cloud_cast(pos: Vector2, radius: float)        # 毒云领域施放（表现层专用：绿环展开，R10）
 signal poison_cloud_tick(pos: Vector2, radius: float)        # 毒云每跳（表现层专用：毒圈持续/绿雾，R10）
 signal kill_blast(pos: Vector2, radius: float)               # 死亡新星击杀爆炸（表现层专用：橙红爆炸环，R13）
+signal skill_cast(pos: Vector2, character_id: String)        # 角色技能施放（表现层专用：金环爆发，R19）
 signal mechanics_intro(text: String)                        # 大关新机制解锁横幅（HUD 开局长 toast）
 signal chain_fused(depth: int, trait_id: StringName)       # 链式/分叉深度熔断遥测
 signal card_chosen(card_id: StringName, target_kind: int)  # 选卡应用完成（遗物回响等）
@@ -210,6 +211,10 @@ func emit_poison_cloud_cast(pos: Vector2, radius: float) -> void:
 func emit_poison_cloud_tick(pos: Vector2, radius: float) -> void:
 	_track_dispatch(&"poison_cloud_tick")
 	poison_cloud_tick.emit(pos, radius)
+
+
+func emit_skill_cast(pos: Vector2, character_id: String) -> void:
+	skill_cast.emit(pos, character_id)
 
 
 func emit_kill_blast(pos: Vector2, radius: float) -> void:

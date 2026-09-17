@@ -24,6 +24,7 @@ var _skill_btn: Button = null              # 角色技能键（右下角；冷�
 var _skill_icon: TextureRect = null        # 技能键底图（28% 印刷感）
 var _skill_icon_fg: TextureRect = null     # 技能键前景图标（就绪亮显 / 冷却压暗）
 var _skill_cd_label: Label = null          # 冷却数字覆盖层（仅冷却中非空）
+var _skill_active_bar: ColorRect = null    # 技能效果剩余时长条（R19：增益期金色倒计时）
 var _gold_label: Label = null                 # 金币（战地黑市货币，M7）
 var _boss_banner: Label = null                # Boss 出场横幅（表现层一期）
 var _kill_label: Label = null
@@ -130,6 +131,14 @@ func refresh_stats() -> void:
 		else:
 			_skill_cd_label.text = "%ds" % ceili(float(player.get("skill_cd_left")))
 			_skill_icon_fg.modulate = Color(0.72, 0.74, 0.82, 1.0)   # 冷却压灰（图标读感保留）
+		# R19 技能效果时长条（增益期金色倒数——「不知道效果何时结束」终解）
+		var fx_ratio: float = float(player.call(&"skill_active_ratio")) 			if player.has_method(&"skill_active_ratio") else 0.0
+		if _skill_active_bar != null:
+			_skill_active_bar.visible = fx_ratio > 0.0
+			if fx_ratio > 0.0:
+				_skill_active_bar.size.x = (_skill_btn.size.x - 8.0) * fx_ratio
+			if fx_ratio > 0.0:
+				_skill_icon_fg.modulate = Color(1.0, 0.85, 0.4, 1.0)   # 增益期金色高亮
 	_kill_label.text = "击杀 %d" % kills
 	_time_label.text = "%d:%02d" % [int(run_elapsed) / 60, int(run_elapsed) % 60]
 
@@ -626,6 +635,16 @@ func _build_ui() -> void:
 	skill_fg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	skill_btn.add_child(skill_fg)
 	_skill_icon_fg = skill_fg
+	# R19 技能效果剩余时长条（增益期金色倒数，贴按钮下缘）
+	var fx_bar := ColorRect.new()
+	fx_bar.name = "SkillActiveBar"
+	fx_bar.color = PopPalette.XP
+	fx_bar.position = Vector2(4.0, skill_btn.size.y - 8.0)
+	fx_bar.size = Vector2(0.0, 5.0)
+	fx_bar.visible = false
+	fx_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	skill_btn.add_child(fx_bar)
+	_skill_active_bar = fx_bar
 	_skill_cd_label = StickerTheme.label_sticker(Label.new(), 26, PopPalette.INK, 4, Color.WHITE, true)
 	_skill_cd_label.name = "SkillCd"
 	_skill_cd_label.set_anchors_preset(Control.PRESET_FULL_RECT)

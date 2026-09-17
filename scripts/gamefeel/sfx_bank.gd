@@ -89,7 +89,9 @@ func play(p_name: StringName) -> void:
 	if _last_ms.has(p_name) and now - int(_last_ms[p_name]) < THROTTLE_MS:
 		return
 	_last_ms[p_name] = now
-	(_players[p_name] as AudioStreamPlayer).play()
+	var player: AudioStreamPlayer = _players[p_name]
+	player.pitch_scale = randf_range(0.94, 1.06)   # R19 打击质感：微随机音调（去重复感）
+	player.play()
 
 
 func _build_all() -> void:

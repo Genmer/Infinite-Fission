@@ -64,6 +64,8 @@ var _poison := {"active": false, "center": Vector2.ZERO, "radius": 300.0,
 	"left": 0.0, "dur": 6.0, "anim": 0.0}     # 毒云领域持续表现（R10）
 var _blasts: Array[Dictionary] = []           # [{sprite, left}]（死亡新星爆炸环池，R13）
 var _blast_idx: int = 0
+var _skill_rings: Array[Dictionary] = []      # 技能施放金环槽池（R19）
+var _skill_ring_idx: int = 0
 
 
 func _ready() -> void:
@@ -83,6 +85,7 @@ func _ready() -> void:
 	EventBus.poison_cloud_cast.connect(_on_poison_cloud_cast)
 	EventBus.poison_cloud_tick.connect(_on_poison_cloud_tick)
 	EventBus.kill_blast.connect(_on_kill_blast)
+	EventBus.skill_cast.connect(_on_skill_cast)   # R19：角色技能施放金环
 	EventBus.elemental_dot_fired.connect(_on_dot_fired)
 	EventBus.reaction_triggered.connect(_on_reaction_triggered)
 	EventBus.shield_blocked.connect(_on_shield_blocked)
@@ -103,6 +106,7 @@ func tick(p_raw_delta: float) -> void:
 	_tick_knocktexts(p_raw_delta)
 	_tick_poison(p_raw_delta)
 	_tick_blasts(p_raw_delta)
+	_tick_skill_rings(p_raw_delta)
 
 
 # ── 感电连锁主锯齿闪电（签名特效） ────────────────────────────────
@@ -699,6 +703,26 @@ func _draw() -> void:
 
 
 # ── 死亡新星爆炸环（击杀爆炸结算瞬间——R13 用户反馈「加个特效」） ──────
+func _on_skill_cast(p_pos: Vector2, _p_character_id: String) -> void:
+	# R19 技能施放金环（金外圈+白内芯双层贴图同一槽推进，0.4s——「技能开了」一眼可读）
+	if _skill_rings.is_empty():
+		for i in range(4):
+			var sp := Sprite2D.new()
+			sp.name = "SkillRing%d" % i
+			sp.texture = TextureFactory.ring_tex(Color(1.0, 0.85, 0.3, 1.0), 48, 4.5)
+			sp.visible = false
+			add_child(sp)
+			_skill_rings.append({"sprite": sp, "left": 0.0})
+	var slot2: Dictionary = _skill_rings[_skill_ring_idx % _skill_rings.size()]
+	_skill_ring_idx += 1
+	var sp2: Sprite2D = slot2["sprite"]
+	sp2.position = p_pos
+	sp2.visible = true
+	sp2.scale = Vector2.ONE * 0.3
+	sp2.modulate.a = 1.0
+	slot2["left"] = 0.4
+
+
 func _on_kill_blast(p_pos: Vector2, p_radius: float) -> void:
 	if _blasts.is_empty():
 		for i in range(6):
@@ -717,6 +741,23 @@ func _on_kill_blast(p_pos: Vector2, p_radius: float) -> void:
 	slot["r1"] = maxf(p_radius, 40.0) * 1.25
 	sp.scale = Vector2.ONE * 0.3
 	sp.modulate.a = 1.0
+
+
+func _tick_skill_rings(p_raw_delta: float) -> void:
+	# 技能施放金环推进（扩散 + 淡出；槽池轮换）
+	for slot: Dictionary in _skill_rings:
+		var left := float(slot["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		slot["left"] = left
+		var sp: Sprite2D = slot["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		var t := 1.0 - left / 0.4
+		sp.scale = Vector2.ONE * lerpf(0.3, 2.6, t)
+		sp.modulate.a = 1.0 - t
 
 
 func _tick_blasts(p_raw_delta: float) -> void:

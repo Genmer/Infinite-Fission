@@ -92,6 +92,10 @@ func on_enemy_killed(p_enemy: Node2D) -> void:
 		request_hit_stop(_hit_stop_ms_for(GameConst.FeelLevel.BOSS_DEATH))
 		add_trauma_for_level(GameConst.FeelLevel.BOSS_DEATH)
 		_apply_chromatic(_ca_intensity_for(GameConst.FeelLevel.BOSS_DEATH))
+	elif (tags & GameConst.TAG_ELITE) != 0:
+		# R19 打击质感：精英击杀 → CRIT 档顿帧 + 震屏（大怪击杀更有分量）
+		request_hit_stop(_hit_stop_ms_for(GameConst.FeelLevel.CRIT))
+		add_trauma_for_level(GameConst.FeelLevel.CRIT)
 	if particles != null:
 		var pos := p_enemy.global_position if p_enemy != null else Vector2.ZERO
 		particles.burst(EMITTER_SCENE_ID, pos, ParticleDirector.PRIORITY_KILL)

@@ -116,6 +116,8 @@ var _armor_sprite: Sprite2D = null            # E3 外甲板（与内芯分层�
 var _armor_cracked: bool = false              # E3 外甲裂纹态（HP≤50% 换裂纹贴图）
 var _armor_jiggle_left: float = 0.0           # E3 受击甲板错位抖动剩余
 var _wobble_left: float = 0.0                 # 受击果冻抖动剩余
+var _hit_jolt_left: float = 0.0               # 受击位移颤动剩余（R19 打击质感，纯表现）
+var _hit_jolt_dir: Vector2 = Vector2.ZERO     # 颤动方向（远离命中点）
 var _face_state: int = 0                      # E4 脸状态（0 平静/1 惊恐/2 引爆）
 var _anim_t: float = 0.0                      # 表现时钟（卫星公转/抖动相位）
 var _boss_orbit: float = 0.0                  # 卫星公转角
@@ -354,6 +356,9 @@ func take_result(p_result: DamageResult) -> void:
 	if not dead:
 		_flash_left = FLASH_TIME
 		_wobble_left = WOBBLE_TIME           # 方向 C：果冻抖动（squash & stretch）
+		# R19 打击质感：受击位移颤动（纯表现层——远离命中点 6px 微退，不改判定）
+		_hit_jolt_left = 0.09
+		_hit_jolt_dir = (global_position - p_result.pos).normalized() 			if global_position.distance_to(p_result.pos) > 1.0 else Vector2.ZERO
 		if _kind == &"bastion":
 			_armor_jiggle_left = 0.18        # E3：甲板错位咔咔抖动
 		_apply_flash(1.0)
@@ -519,6 +524,12 @@ func is_elite() -> bool:
 func _on_died() -> void:
 	# 一次性死亡：置 dead → EventBus.emit_enemy_killed → 池归还（EnemySpawner 订阅承担）
 	dead = true
+	# R19 打击质感：死亡弹爆（白环扩散 + 四向碎屑，0.2s 自清——击杀瞬间重量感）
+	if get_parent() != null and clampi(int(Meta.settings("fx_quality")), 0, 2) > 0:
+		var pop := DeathPop.new()
+		pop.name = "DeathPop"
+		pop.position = global_position
+		get_parent().add_child(pop)
 	_death_poison_splash()
 	_death_element_discharge()
 	EventBus.emit_enemy_killed(self)
@@ -1083,6 +1094,8 @@ func _reset_state() -> void:
 	_flash_left = 0.0
 	_fade_left = 0.0
 	_wobble_left = 0.0
+	_hit_jolt_left = 0.0
+	_hit_jolt_dir = Vector2.ZERO
 	_face_state = 0
 	_anim_t = 0.0
 	_boss_orbit = 0.0
@@ -1388,6 +1401,10 @@ func _tick_visual(p_game_delta: float) -> void:
 			var breathe_g := 1.0 + 0.035 * sin(_anim_t * 5.0 + float(uid % 32))
 			sx = _base_scale * breathe_g
 			sy = _base_scale * (2.0 - breathe_g)
+	# R19 受击位移颤动（纯表现：命中方向反向微退）
+	if _hit_jolt_left > 0.0:
+		_hit_jolt_left = maxf(_hit_jolt_left - p_game_delta, 0.0)
+		off += _hit_jolt_dir * 6.0 * (_hit_jolt_left / 0.09)
 	# 受击果冻抖动（squash & stretch 弹性衰减）——覆盖分型形变
 	if _wobble_left > 0.0:
 		_wobble_left = maxf(_wobble_left - p_game_delta, 0.0)
@@ -2071,3 +2088,30 @@ class HazardPool:
 	func _get_player() -> Node2D:
 		var tree := get_tree()
 		return tree.get_first_node_in_group(&"player") as Node2D if tree != null else null
+
+
+# ── 死亡弹爆（R19 打击质感；一次性自清表现件——毒爆残效同款模式） ──
+# 白环收缩扩散 + 四向碎屑飞散 0.2s；宿主敌已归还，本件挂世界层自清。
+class DeathPop:
+	extends Node2D
+
+	const LIFE := 0.2
+
+	var _t: float = LIFE
+
+	func _process(p_delta: float) -> void:
+		_t -= p_delta
+		if _t <= 0.0:
+			queue_free()
+			return
+		queue_redraw()
+
+	func _draw() -> void:
+		var t := 1.0 - clampf(_t / LIFE, 0.0, 1.0)
+		var col := Color(1.0, 1.0, 1.0, (1.0 - t) * 0.9)
+		draw_arc(Vector2.ZERO, 8.0 + 22.0 * t, 0.0, TAU, 20, col, 3.0, true)
+		draw_circle(Vector2.ZERO, 7.0 * (1.0 - t), Color(1.0, 1.0, 1.0, (1.0 - t) * 0.5))
+		for i in range(4):
+			var a := TAU * float(i) / 4.0 + t * 1.2
+			var d := 10.0 + 16.0 * t
+			draw_circle(Vector2(cos(a), sin(a)) * d, 2.6 * (1.0 - t), col)
