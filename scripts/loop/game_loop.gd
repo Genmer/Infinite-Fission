@@ -83,6 +83,7 @@ var confetti: ConfettiBurst = null            # 方向 C：Boss 死亡彩纸屑�
 var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp}
 var resume_grace_left: float = 0.0
 var _victory_pending_left: float = 0.0        # 通关结算延迟窗（R15：给磁吸碎片收集时间）
+var _boss_summons: Dictionary = {}            # Boss 裂变召唤追踪（B4 R18 P3：uid → 调度态）
 
 var frame_order: Array[StringName] = []       # 帧序探针（每帧重建；测试断言固定帧序）
 var current_candidates: Array[Dictionary] = []   # 当前货架（测试观测）
@@ -172,6 +173,7 @@ func _physics_process(p_raw_delta: float) -> void:
 			# ⑥ 波次推进（生成节流 ≤8/帧 / 窗口计时 / Boss 伴随怪流水）
 			frame_order.append(&"wave")
 			wave_director.tick(gd)
+			_tick_boss_summons(gd)            # B4 裂变召唤（R18 P3 接线，原零消费者死数据）
 			if stage_probe_enabled:
 				stage_probe_us[&"wave"] = Time.get_ticks_usec() - _probe_t0
 				_probe_t0 = Time.get_ticks_usec()
@@ -282,6 +284,55 @@ func _tick_victory_pending(p_raw_delta: float) -> void:
 	RunSave.clear()
 	if change_state(GameConst.GameStatus.GAME_OVER):
 		game_over_screen.show_victory()
+
+
+func _on_boss_spawned_track_summons(p_boss: Node2D) -> void:
+	# B4 裂变召唤调度注册（summons 数据此前全 Boss 零消费者——R18 P3 死数据接线）
+	if p_boss == null or not is_instance_valid(p_boss):
+		return
+	var bdata: Variant = p_boss.get("data")
+	if bdata == null or (bdata as EnemyData).boss.get("summons", {}).is_empty():
+		return
+	var cfg: Dictionary = (bdata as EnemyData).boss["summons"]
+	if String(cfg.get("enemy_id", "")) == "":
+		return
+	_boss_summons[int(p_boss.get("uid"))] = {
+		"boss": p_boss, "left": float(cfg.get("interval_s", 10.0)), "cfg": cfg,
+	}
+
+
+func _tick_boss_summons(p_gd: float) -> void:
+	# 每 Boss 召唤节拍：phase 门控（summons.phase）→ 场上同种小怪 < cap 才补员
+	# → spawner.enqueue（Boss 环带落点 + hp_ratio 面值折算）
+	for key in _boss_summons.keys():
+		var st: Dictionary = _boss_summons[key]
+		var boss: Node2D = st["boss"]
+		if not is_instance_valid(boss) or bool(boss.get("dead")):
+			_boss_summons.erase(key)
+			continue
+		var cfg: Dictionary = st["cfg"]
+		if int(cfg.get("phase", 1)) > int(boss.get("boss_phase")):
+			continue
+		st["left"] = float(st["left"]) - p_gd
+		if float(st["left"]) > 0.0:
+			continue
+		st["left"] = float(cfg.get("interval_s", 10.0))
+		var eid := StringName(String(cfg.get("enemy_id", "")))
+		var cap := int(cfg.get("cap", 4))
+		var alive := 0
+		for e in spawner.active:
+			if is_instance_valid(e) and not bool(e.get("dead")) 					and (e as Enemy).data != null and (e as Enemy).data.id == eid 					and int(e.get_meta(&"_summoned_by", -1)) == key:
+				alive += 1
+		if alive >= cap:
+			continue
+		var count := int(cfg.get("count", 2))
+		if int(boss.get("boss_phase")) >= 2:
+			count = int(cfg.get("count_phase2", count))
+		for i in range(mini(count, cap - alive)):
+			var ring := Vector2.from_angle(randf() * TAU) * randf_range(64.0, 110.0)
+			spawner.enqueue({"data_id": eid, "wave": wave_director.current_wave,
+				"tags": 0, "pos": (boss as Node2D).global_position + ring,
+				"hp_ratio": float(cfg.get("hp_ratio", 0.5)), "summon_uid": key})
 
 
 func _on_relic_shop_wave(p_wave: int) -> void:
@@ -785,6 +836,7 @@ func _boot_build_presentation() -> void:
 			player.refresh_skill_cd())
 	EventBus.shield_blocked.connect(func(_p: Vector2) -> void: sfx.play(&"shield"))
 	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
+	EventBus.boss_spawned.connect(_on_boss_spawned_track_summons)   # B4 召唤调度注册
 	EventBus.wave_cleared.connect(_on_wave_cleared_bless_heal)   # 祝福·滋养（词缀二期）
 	boss_bar = BossBar.new()
 	boss_bar.name = "BossBar"

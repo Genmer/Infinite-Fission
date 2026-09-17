@@ -57,6 +57,14 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 			break                             # 池满：留在队首等待下帧（不丢弃）
 		spawn_queue.pop_front()
 		enemy.spawn(data, int(entry.get("wave", 1)), int(entry.get("tags", 0)))
+		# 召唤物面值折算（B4 裂变召唤 hp_ratio 0.08/0.5——ENEMY_BOSS_TELEGRAPH §2）
+		var hp_ratio: Variant = entry.get("hp_ratio", null)
+		if hp_ratio != null:
+			enemy.max_hp = enemy.max_hp * float(hp_ratio)
+			enemy.hp = enemy.max_hp
+		# 召唤来源标记（B4 cap 判据：仅统计 Boss 召唤的同种，不误伤自然波次刷出）
+		var sum_uid: Variant = entry.get("summon_uid", null)
+		enemy.set_meta(&"_summoned_by", int(sum_uid) if sum_uid != null else -1)
 		_apply_map_mods(enemy)
 		enemy.projectile_pool = projectile_pool
 		enemy.enemy_grid = enemy_grid

@@ -88,6 +88,14 @@ var _blink_fuse: float = 0.8
 var _blink_blast_r: float = 110.0
 var _blink_range: float = 340.0
 
+# ── Boss 三阶段 + B8 狂暴化（R18 P3；乘区缺省 1.0 = 未狂暴） ──
+var _enrage_done: bool = false
+var _enrage_cd_mult: float = 1.0              # 技能 cd ×0.8
+var _enrage_rate_mult: float = 1.0            # spiral 喷发频率 ×1.3
+var _enrage_speed_mult: float = 1.0           # 追击/弹速 ×1.2
+var _enrage_tele_mult: float = 1.0            # 前摇 ×0.85（下限 0.34s）
+var _red_tint_left: float = 0.0               # 全身红染剩余 s
+
 # ── 内部运行时 ─────────────────────────────────────────────────
 var _hit_area: Area2D = null                  # 接触伤害判定（低频通道）
 var _hit_shape: CollisionShape2D = null
@@ -318,7 +326,7 @@ func tick(p_game_delta: float) -> void:
 					_tick_dart_chase(p_game_delta, player, sf)
 				else:
 					var dir := (player.global_position - global_position).normalized()
-					var spd := speed * sf
+					var spd := speed * sf * _enrage_speed_mult   # R18 P3：狂暴追击提速
 					if _fuse_armed:
 						spd = VOLATILE_CHARGE_SPEED    # 警报后冲刺（A3 §2.2 E4 行；自爆冲刺不受寒滞减速修正口径）
 					global_position += dir * spd * p_game_delta
@@ -681,18 +689,52 @@ func blink_target() -> Vector2:
 
 
 func _check_boss_phase() -> void:
-	# Boss 阶段检查（HP < phase2_hp（缺省 0.6，ENEMY_BOSS_TELEGRAPH §4；E6 系列填 0.5 兼容现状）
-	# → 阶段2 全抗 +phase2_resist；三阶段/狂暴属 P3 批次）
-	if not is_boss() or boss_phase != 1:
+	# Boss 阶段机（ENEMY_BOSS_TELEGRAPH §3/§4，R18 P3 三段化）：
+	# phase2 = HP ≤ phase2_hp（缺省 0.6，E6 兼容 0.5）/ phase3 = HP ≤ phase3_hp（0.3）。
+	# 切段：全抗 +phase2_resist、清当前施法、技能 cd 全部重置 max(cd×0.5, 1.5)（防无缝连放）。
+	# phase3 入段 = B8 狂暴化（数据 enrage 在册时，一次性锁存）。
+	if not is_boss() or data == null or boss_phase >= int(data.boss.get("phases", 2)):
 		return
-	var p2_hp := float(data.boss.get("phase2_hp", 0.6)) if data != null else 0.5
-	if hp >= max_hp * p2_hp:
-		return
-	boss_phase = 2
-	var p2 := float(data.boss.get("phase2_resist", 0.0))
-	if p2 > 0.0:
-		for i in range(resist.size()):
-			resist[i] = minf(resist[i] + p2, 0.8)
+	var ratio := hp / maxf(max_hp, 1.0)
+	var phases := int(data.boss.get("phases", 2))
+	if phases >= 3 and boss_phase < 3 and ratio <= float(data.boss.get("phase3_hp", 0.3)):
+		_enter_boss_phase(3)
+	elif boss_phase < 2 and ratio <= float(data.boss.get("phase2_hp", 0.6)):
+		_enter_boss_phase(2)
+
+
+func _enter_boss_phase(p_phase: int) -> void:
+	boss_phase = p_phase
+	if p_phase == 2:
+		# 全抗 +phase2_resist 仅 P2 一次（§3 阶段表：P3 狂暴期不再加抗）
+		var p2 := float(data.boss.get("phase2_resist", 0.0))
+		if p2 > 0.0:
+			for i in range(resist.size()):
+				resist[i] = minf(resist[i] + p2, 0.8)
+	# 阶段切换节奏（§3）：清当前 cast + 全技能 cd 重置 max(cd×0.5, 1.5)，防切段无缝连放
+	_cast_idx = -1
+	_cast_left = 0.0
+	if _cast_fan != null:
+		_cast_fan.visible = false
+	if _cast_line != null:
+		_cast_line.visible = false
+	for j in range(_barrage_cd.size()):
+		_barrage_cd[j] = maxf(float(_barrage[j].get("cd", 5.0)) * 0.5, 1.5)
+	if p_phase >= 3 and not _enrage_done and data.boss.has("enrage"):
+		_enter_enrage()
+
+
+func _enter_enrage() -> void:
+	# B8 狂暴化（一次性锁存 _enrage_done——防回血词缀循环跨阈值重复触发）：
+	# 怒相变脸（_tick_boss 既有）+ 全身红染 2s + 横幅广播 + 全数值放大
+	var cfg: Dictionary = data.boss.get("enrage", {})
+	_enrage_done = true
+	_enrage_cd_mult = float(cfg.get("cd_mult", 0.8))
+	_enrage_rate_mult = float(cfg.get("rate_mult", 1.3))
+	_enrage_speed_mult = float(cfg.get("speed_mult", 1.2))
+	_enrage_tele_mult = maxf(float(cfg.get("tele_mult", 0.85)), 0.34)
+	_red_tint_left = 2.0
+	EventBus.emit_mechanics_intro("⚠ %s 狂暴化！" % String(data.display_name))
 
 
 # ── Boss 弹幕技能机（ENEMY_BOSS_TELEGRAPH.md §1.4/§2/§9 P1） ─────────
@@ -774,7 +816,8 @@ func _tick_boss_barrage(p_dt: float, p_player: Node2D, p_sf: float) -> void:
 
 func _begin_cast(p_idx: int, p_player: Node2D) -> void:
 	_cast_idx = p_idx
-	_cast_total = maxf(float(_barrage[p_idx].get("telegraph_s", 0.4)), 0.1)
+	_cast_total = maxf(float(_barrage[p_idx].get("telegraph_s", 0.4))
+		* _enrage_tele_mult, 0.34)              # 狂暴前摇 ×0.85（下限 0.34s §1.3）
 	_cast_left = _cast_total
 	_cast_glow = 0.0
 	# aimed_spread：扇形警示起手即锁定玩家当前位置（§1.2 同形同色：警示即弹道，
@@ -831,7 +874,7 @@ func _release_cast(p_player: Node2D) -> void:
 			_spawn_laser_sweep(def)                 # B7 湮灭扫线（R18 P2：起角已锁定）
 		_:
 			pass
-	_barrage_cd[_cast_idx] = maxf(float(def.get("cd", 5.0)), 0.5)
+	_barrage_cd[_cast_idx] = maxf(float(def.get("cd", 5.0)) * _enrage_cd_mult, 0.5)
 	_cast_idx = -1
 	_cast_left = 0.0
 	if _cast_fan != null:
@@ -870,7 +913,7 @@ func _tick_spiral_emit(p_dt: float) -> void:
 	var dmg := float(_emit_def.get("dmg", 6.0))
 	var step := deg_to_rad(float(_emit_def.get("step_deg", 17.0)))
 	while _emit_tick <= 0.0 and _emit_left > 0.0:
-		_emit_tick += SPIRAL_EMIT_TICK
+		_emit_tick += SPIRAL_EMIT_TICK / _enrage_rate_mult
 		for a in range(arms):
 			_spawn_boss_bullet(Vector2.from_angle(_emit_angle + TAU * float(a) / float(arms)), speed, dmg)
 		_emit_angle += step
@@ -890,7 +933,7 @@ func _phase_speed(def: Dictionary) -> float:
 	var spd := float(def.get("speed", 200.0))
 	if boss_phase >= 2:
 		spd *= float(def.get("speed_mult_phase2", 1.0))
-	return spd
+	return spd * _enrage_speed_mult
 
 
 func _spawn_boss_bullet(p_dir: Vector2, p_speed: float, p_dmg: float) -> void:
@@ -1031,6 +1074,12 @@ func _reset_state() -> void:
 	_blink_left = 0.0
 	_blink_target = Vector2.ZERO
 	_clear_blink_ring()
+	_enrage_done = false
+	_enrage_cd_mult = 1.0
+	_enrage_rate_mult = 1.0
+	_enrage_speed_mult = 1.0
+	_enrage_tele_mult = 1.0
+	_red_tint_left = 0.0
 	_flash_left = 0.0
 	_fade_left = 0.0
 	_wobble_left = 0.0
@@ -1366,6 +1415,11 @@ func _tick_visual(p_game_delta: float) -> void:
 	if _blink_state == 1 and _sprite != null:
 		var blink_glow := 1.0 - clampf(_blink_left / maxf(_blink_prep, 0.01), 0.0, 1.0)
 		_sprite.self_modulate = _sprite.self_modulate.lerp(Color(0.7, 0.5, 1.0), blink_glow * 0.8)
+	# B8 狂暴红染（入场 2s 强红染衰减至常驻微红——一眼狂暴）
+	if _enrage_done and _sprite != null:
+		_red_tint_left = maxf(_red_tint_left - p_game_delta, 0.0)
+		var rage_a := 0.45 if _red_tint_left > 0.0 else 0.18
+		_sprite.self_modulate = _sprite.self_modulate.lerp(Color(1.0, 0.25, 0.25), rage_a)
 
 
 func _dart_rotation() -> float:

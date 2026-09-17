@@ -14,8 +14,8 @@
   → 策划案：`docs/design/ENEMY_PATTERNS_BASIC.md`（行为族/词缀/大关解锁节奏）＋ `docs/design/ENEMY_BOSS_TELEGRAPH.md`（Boss 弹幕技能库/预警体系/阶段狂暴/实装排期）
   → 状态：**P1 批次已落地（R16）**：`_tick_boss_barrage()` 三型（ring/aimed_spread/spiral）+ TelegraphCircle（FuseRing 泛化）/TelegraphFan 组件 + Boss 施法状态机（swell 膨胀闪红/扇形警示前摇、冻结 sf=0 全停摆）+ aimed 起手锁定不追踪 + 跟射波 + phase 门控 + DataValidator barrage 必填/三档/pct∈[8,50] 校验 + §5.1~5.3 五 Boss .tres 迁移（E6_boss3 顺带清掉无消费者 charge/phase3 死键）+ 存量 bullet_patterns 读入折算（E19/E20 过渡，boot 告警提示）；新增 tests/runner/test_barrage.gd 43 项全绿，全套件 1311 断言回归通过
   → 状态：**BLINK 闪现爆炸族已落地（R16b，用户点名）**：EnemyBehavior.BLINK 枚举 + EnemyData.special 参数包 + 三态行为机（巡航 0.85× / 读条 0.35s 闪紫收缩 / 落地引信 0.8s 红圈）+ 落点=施法帧玩家位置快照 ±24px + 红圈挂世界层钉死落点（TelegraphCircle 复用）+ 打断双路（冻结断读条进 2s cd / 击退断引信）+ 引爆 30% 档 r110（复用 kill_blast 爆炸环表现）+ E24 裂隙爆魔 .tres（暗紫裂隙剪影）+ 魔域 w3 织入 ×2 + validator BLINK 必填 special.fuse/blast_r；test_blink.gd 25 项全绿，全量回归 1336 断言通过
-  → 待做：P2（TelegraphLine/laser_sweep/mine/B5 三连冲锋/主题皮/SfxBank 新音色/E19-E20 .tres）→ P3（三阶段阈值+B8 狂暴+韧性条+词缀五件套；感电断施法待 P3 韧性/硬直机制一并落）
-  → ⚠ 移交 P2：boss.summons（B4 裂变召唤）数据全 Boss 在册但**零消费者**（排查确认），随 P2 一并接线
+  → 状态：**P3 批次已落地（R18c）**：三阶段阈值（phase2 60%/phase3 30%，切段清 cast+cd 重置 max(cd×0.5,1.5)，全抗仅 P2 一次）+ B8 狂暴化（30% 一次性锁存：cd ×0.8/弹速 ×1.2/喷发 ×1.3/前摇 ×0.85、红染+横幅+怒相）+ B4 裂变召唤接线（summons 死数据激活：phase 门控/场上 cap 4 按召唤来源统计/落地 hp_ratio 面值折算，E6_boss3 summons.phase=2 尊重）+ BossBar 相位点（三阶段自动点亮）；test_p3.gd 18 项
+  → 待做：韧性条（Poise 打断）+ 精英技能词缀五件套 + B5 三连冲锋（E18 charge 扩展）+ 感电断施法 + SfxBank 施法/预警音色 + flavor 弹色
 - ⬜ **[R5.12-P1] Boss 弹幕攻击**——已并入上面的怪物攻击专项，不单独做
 - ✅ **[R5.12-P1] 每图最终 Boss 前固定商店（"战前补给"）**——✅ R17 落地：GameLoop 订阅 wave_cleared，p_wave+1==final_wave 时开店（不占波表 SHOP 位/黑市排程，final 波清空走胜利结算互斥）；shop_ui.open 加 is_pre_boss 标题「战前补给」；test_p1_polish 锁定
 - ✅ **[R5.12-P1] 金币相关词条（AFF_GOLD 点金 / 贪婪）**——✅ R17 落地（点金先行，贪婪待评测再议）：新 ADD 池 add_gold + AFF_GOLD【通用】点金（+20%/层×2）+ Player.gold_find_pct() 聚合 + GameLoop 掉账两处乘区（掉率钳 ≤1 / 掉量，同 map_gold_mult 叠乘）；test_p1_polish 锁定
