@@ -200,10 +200,12 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 		CardKind.TRAIT, CardKind.FALLBACK:
 			var data: TraitData = p_card.get("data")
 			if data != null:
-				# 词条挂目标武器（用户反馈「全是手枪强化」——卡面标注的武器即实际挂载对象）
+				# 词条挂目标武器（用户反馈「全是手枪强化」——卡面标注的武器即实际挂载对象）。
+				# R18 挂载侧适配门（用户点名「别加了个寂寞」）：黑市等无 target_weapon 的
+				# 购买路径必须按形态/武器适配门选宿主——冷却卡不再可能挂上弹道手枪变废卡
 				var target: Object = p_card.get("target_weapon")
 				var weapon := target if target is WeaponBase and is_instance_valid(target) \
-					else _primary_weapon(p_player)
+					else _pick_attach_target(data, p_player)
 				if weapon != null:
 					weapon.attach_trait(data)
 		CardKind.RELIC:
@@ -590,6 +592,18 @@ func _used_trait_layers(p_player: Node) -> Dictionary:
 			var tid: StringName = tb.get("data").id
 			used[tid] = int(used.get(tid, 0)) + int(tb.get("layers"))
 	return used
+
+
+func _pick_attach_target(p_t: TraitData, p_player: Node) -> WeaponBase:
+	# 挂载侧形态/武器适配门（R18）：在已装备武器中过滤「该词条有消费点」的宿主，
+	# 随机取一；全不适配退主武器（现状口径——通用词条不受影响）
+	var valid: Array[WeaponBase] = []
+	for w in p_player.get("weapon_slots"):
+		if w is WeaponBase and is_instance_valid(w) and _form_allows(p_t, w):
+			valid.append(w)
+	if valid.is_empty():
+		return _primary_weapon(p_player)
+	return valid[rng.randi_range(0, valid.size() - 1)]
 
 
 func _random_owned_weapon(p_player: Node) -> WeaponBase:

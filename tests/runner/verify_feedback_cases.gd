@@ -304,9 +304,13 @@ func _test_build_details_panel() -> void:
 	_check("构筑详情卡内容 ≥2（玩家属性行 + ≥1 武器区块）",
 		(_gl.pause_overlay._details_list as Node).get_child_count() >= 2)
 	var kid0: Control = (_gl.pause_overlay._details_list as Node).get_child(0)
-	var ptext: String = (kid0.get_child(0) as Label).text if kid0.get_child_count() > 0 else ""
-	_check("玩家属性行：含 生命上限/磁吸/技能冷却",
-		"生命上限" in ptext and "磁吸" in ptext and "技能冷却" in ptext, ptext)
+	var ptext: String = ""
+	for sub in kid0.get_children():
+		if sub is Label:
+			ptext += (sub as Label).text + " "
+	_check("玩家属性行：含 个人属性/生命上限/磁吸/技能冷却/经验/金币（R18 全属性）",
+		"个人属性" in ptext and "生命上限" in ptext and "磁吸" in ptext
+		and "技能冷却" in ptext and "经验获取" in ptext and "金币获取" in ptext, ptext)
 	# R11 叠层可视化：挂 2 层暴击率 → 行内「2/3 层」+ 首个数值改写为衰减真值（金色）
 	var crit_t: TraitData = _gl.registry.get_trait(&"AFF_CRIT_RATE")
 	var crit_w: WeaponBase = _gl.player.weapon_slots[0]

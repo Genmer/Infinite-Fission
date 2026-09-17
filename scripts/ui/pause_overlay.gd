@@ -262,23 +262,50 @@ func _rebuild_details() -> void:
 			rline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			relic_sec.add_child(rline)
 		_details_list.add_child(relic_sec)
-	# 玩家侧属性行（R7 遗漏补齐——用户点名的「生存本能（=最大生命词条）」等玩家属性：
-	# 生命上限 / 磁吸半径 / 技能冷却基线；武器侧攻击/暴击/间隔见各区块头）
+	# 玩家侧属性行（R7 遗漏补齐 + R18 全属性展示——用户点名「暴击/爆伤/经验/穿透等
+	# 个人所有属性」）：全局三行 + 武器侧（暴击率/暴伤/穿透/间隔）见各武器区块头行
 	var pstats := Panel.new()
 	pstats.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 3, false))
-	pstats.custom_minimum_size = Vector2(576.0, 44.0)
+	pstats.custom_minimum_size = Vector2(576.0, 88.0)
 	pstats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pstats.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var pinfo := Label.new()
-	StickerTheme.label_sticker(pinfo, 15, PopPalette.INK, 0, Color.WHITE, true)
-	pinfo.text = "生命上限 %d　磁吸 %dpx　技能冷却 %.0fs" % [
+	var ptitle := Label.new()
+	StickerTheme.label_sticker(ptitle, 15, PopPalette.GOLD, 0, Color.WHITE, true)
+	ptitle.text = "◈ 个人属性"
+	ptitle.position = Vector2(12.0, 6.0)
+	ptitle.size = Vector2(552.0, 20.0)
+	ptitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pstats.add_child(ptitle)
+	var prow := Label.new()
+	StickerTheme.label_sticker(prow, 13, PopPalette.INK, 0, Color.WHITE, true)
+	prow.text = "生命上限 %d　磁吸 %dpx　技能冷却 %.0fs　换一批 ×%d" % [
 		int(float(_player_ref.get("max_hp"))),
 		int(float(_player_ref.get("pickup_radius"))),
-		float(_player_ref.get("skill_cd_base"))]
-	pinfo.position = Vector2(12.0, 12.0)
-	pinfo.size = Vector2(552.0, 20.0)
-	pinfo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pstats.add_child(pinfo)
+		float(_player_ref.get("skill_cd_base")),
+		int(float(_player_ref.get("reroll_charges")))]
+	prow.position = Vector2(12.0, 30.0)
+	prow.size = Vector2(552.0, 18.0)
+	prow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pstats.add_child(prow)
+	var prow2 := Label.new()
+	StickerTheme.label_sticker(prow2, 13, PopPalette.INK, 0, Color.WHITE, true)
+	var xp_pct := float(_player_ref.call("xp_gain_pct")) \
+		if _player_ref.has_method("xp_gain_pct") else 0.0
+	var gold_pct := float(_player_ref.call("gold_gain_pct")) \
+		if _player_ref.has_method("gold_gain_pct") else 0.0
+	prow2.text = "经验获取 +%d%%　金币获取 +%d%%" % [roundi(xp_pct * 100.0),
+		roundi(gold_pct * 100.0)]
+	prow2.position = Vector2(12.0, 50.0)
+	prow2.size = Vector2(552.0, 18.0)
+	prow2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pstats.add_child(prow2)
+	var pnote := Label.new()
+	StickerTheme.label_sticker(pnote, 12, PopPalette.INK_SOFT)
+	pnote.text = "暴击率 / 爆伤 / 穿透（贯穿敌人数）/ 出招间隔 随每把武器独立生效——见下方各武器区块"
+	pnote.position = Vector2(12.0, 70.0)
+	pnote.size = Vector2(552.0, 16.0)
+	pnote.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pstats.add_child(pnote)
 	_details_list.add_child(pstats)
 	var slots: Array = _player_ref.get("weapon_slots")
 	var any := false
@@ -454,6 +481,7 @@ func _trait_desc_bbcode(p_tb: TraitBase) -> String:
 
 func _weapon_stat_line(p_w: Node) -> String:
 	# 单武器核心属性行（面板快照实际生效值；防御式取值——桩/缺字段回退 0）
+	# R18：追加穿透列（用户点名「穿透这属性干嘛的要写出来」——贯穿敌人数，见数值）
 	var snap: Dictionary = p_w.call("build_panel_snapshot") if p_w.has_method("build_panel_snapshot") \
 		else {}
 	var atk := float(snap.get("base_atk", 0.0))
@@ -462,8 +490,9 @@ func _weapon_stat_line(p_w: Node) -> String:
 	var interval := 1.0
 	if p_w.has_method("_fire_interval"):
 		interval = maxf(float(p_w.call("_fire_interval")), 0.01)
-	return "攻击 %.1f　暴击 %.0f%% ×%.1f　间隔 %.2fs（%.1f 发/s）" % [atk,
-		crit_rate * 100.0, crit_mult, interval, 1.0 / interval]
+	var pierce := int(p_w.call("_pierce_count")) if p_w.has_method("_pierce_count") else 0
+	return "攻击 %.1f　暴击 %.0f%% ×%.1f　间隔 %.2fs（%.1f 发/s）　穿透 %d 名" % [atk,
+		crit_rate * 100.0, crit_mult, interval, 1.0 / interval, maxi(pierce, 0)]
 
 
 func _on_restart_pressed() -> void:

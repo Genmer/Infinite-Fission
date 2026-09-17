@@ -1038,6 +1038,7 @@ func _test_aff_hp_up_wiring() -> void:
 		"data": t,
 		"display_name": String(t.display_name),
 		"description": String(t.description),
+		"target_weapon": _gl.player.weapon_slots[0],   # R18 挂载侧适配门：显式锁定宿主（双层断言口径）
 	}
 	# 基线层数（槽内可能已有先前用例挂载的同 ID 词条——卡池随机序列敏感，R9b 改增量口径）
 	var base_layers := 0

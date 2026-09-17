@@ -625,6 +625,18 @@ func gold_find_pct() -> float:
 	return clampf(_weapon_pool_sum(&"add_gold"), 0.0, 3.0)
 
 
+func xp_gain_pct() -> float:
+	# 经验加成总增量（R18 构筑详情展示口；与 gain_xp 合成式同源）：
+	# 养成萃取 × 地图祝福经验 × 词条池（AFF_XP_GAIN 经验萃取）合成增量
+	return (1.0 + Meta.xp_pct()) * map_xp_mult \
+		* (1.0 + clampf(_weapon_pool_sum(&"add_xp"), 0.0, 2.0)) - 1.0
+
+
+func gold_gain_pct() -> float:
+	# 金币加成总增量（R18 构筑详情展示口）：点金词条池 × 地图祝福金币
+	return (1.0 + gold_find_pct()) * map_gold_mult - 1.0
+
+
 func apply_hazard_slow(p_mult: float, p_duration: float) -> void:
 	# 冰锁圈减速应用（HazardPool frost 调用；刷新式——多圈叠加取最长持续时间）
 	hazard_slow_mult = clampf(p_mult, 0.2, 1.0)
