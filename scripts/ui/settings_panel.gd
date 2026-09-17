@@ -16,6 +16,7 @@ var _sfx_value: Label = null
 var _bgm_value: Label = null
 var _shake_btn: Button = null
 var _dmg_btn: Button = null
+var _fx_btn: Button = null                    # 特效质量三档循环（R19：高/中/低）
 var _syncing: bool = false                    # 回填守卫（open 回填不触发写口）
 
 
@@ -100,14 +101,16 @@ func _build_ui() -> void:
 	_bgm_slider.value_changed.connect(_on_bgm_volume_changed)
 	_card.add_child(_bgm_slider)
 
+	# ── 特效质量（R19：高/中/低三档循环——buff 叠多层卡顿救） ──
+	_fx_btn = _add_toggle_row("FxQualityButton", "特效质量", 312.0, _on_fx_quality_cycle)
 	# ── 开关行：震屏 / 伤害数字（✓ 开 薄荷绿 / ✗ 关 灰） ──
-	_shake_btn = _add_toggle_row("ShakeToggleButton", "震屏", 312.0, _on_shake_toggle)
-	_dmg_btn = _add_toggle_row("DamageNumbersToggleButton", "伤害数字", 402.0, _on_dmg_toggle)
+	_shake_btn = _add_toggle_row("ShakeToggleButton", "震屏", 390.0, _on_shake_toggle)
+	_dmg_btn = _add_toggle_row("DamageNumbersToggleButton", "伤害数字", 468.0, _on_dmg_toggle)
 
 	var hint := Label.new()
 	StickerTheme.label_sticker(hint, 13, PopPalette.INK_SOFT)
-	hint.text = "设置即存 · 立即生效（关震屏不影响顿帧打击感）"
-	hint.position = Vector2(0.0, 492.0)
+	hint.text = "设置即存 · 立即生效（特效质量=跳字/粒子/元素特效总量）"
+	hint.position = Vector2(0.0, 540.0)
 	hint.size = Vector2(620.0, 20.0)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_card.add_child(hint)
@@ -117,7 +120,7 @@ func _build_ui() -> void:
 	close_btn.text = "返 回"
 	close_btn.add_theme_font_size_override("font_size", 22)
 	close_btn.add_theme_font_override("font", StickerTheme.font_bold())
-	close_btn.position = Vector2(190.0, 552.0)
+	close_btn.position = Vector2(190.0, 596.0)
 	close_btn.size = Vector2(240.0, 68.0)
 	close_btn.pivot_offset = close_btn.size * 0.5
 	close_btn.pressed.connect(close)
@@ -230,6 +233,13 @@ func _on_dmg_toggle() -> void:
 	_refresh_toggles()
 
 
+func _on_fx_quality_cycle() -> void:
+	# 三档循环：高(2) → 中(1) → 低(0) → 高……写即存，消费端下一帧生效
+	var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
+	Meta.set_setting("fx_quality", (q + 2) % 3)
+	_refresh_toggles()
+
+
 # ── 回填/刷新 ─────────────────────────────────────────────────────
 func _sync_from_meta() -> void:
 	# 打开时回填当前值（守卫位防回填触发 value_changed 二次写盘）
@@ -252,3 +262,9 @@ func _refresh_toggles() -> void:
 	_dmg_btn.text = "✓ 开" if dmg_on else "✗ 关"
 	_dmg_btn.add_theme_color_override("font_color",
 		PopPalette.SUCCESS if dmg_on else PopPalette.INK_SOFT)
+	# 特效质量三档文案（高=全量 / 中=减半 / 低=精简——卡顿救）
+	var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
+	var fx_texts: Array[String] = ["✗ 低", "◐ 中", "✓ 高"]
+	var fx_colors: Array[Color] = [PopPalette.INK_SOFT, PopPalette.XP, PopPalette.SUCCESS]
+	_fx_btn.text = fx_texts[q]
+	_fx_btn.add_theme_color_override("font_color", fx_colors[q])

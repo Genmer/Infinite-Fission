@@ -84,6 +84,8 @@ const SETTINGS_DEFAULTS: Dictionary = {
 	"bgm_volume": 0.6,                        # 音乐音量（线性 0~1）
 	"shake_on": true,                         # 震屏开关（只关震动，顿帧打击感保留）
 	"damage_numbers_on": true,                # 伤害数字开关（低端机福音；结算不受影响）
+	"fx_quality": 2,                          # 特效质量（R19：2 高 / 1 中 / 0 低——跳字上限/
+	                                          # 合并窗/粒子爆发/元素特效全档位化，buff 叠多层卡顿救）
 }
 var _settings: Dictionary = {}                # key(String) → 值（缺键 = 默认表回退）
 
@@ -112,6 +114,8 @@ func _normalized_setting(p_key: String, p_value: Variant) -> Variant:
 			return clampf(float(p_value), 0.0, 1.0)
 		"shake_on", "damage_numbers_on":
 			return bool(p_value)
+		"fx_quality":
+			return clampi(int(p_value), 0, 2)
 	return null
 
 

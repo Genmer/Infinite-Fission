@@ -126,12 +126,17 @@ func _test_state_change_magnet() -> void:
 	_gl.change_state(GameConst.GameStatus.PAUSED)
 	_check("R18：进 PAUSED → 碎片转磁吸姿态", bool(shard2.get("_magnet")))
 	_gl.change_state(GameConst.GameStatus.PLAYING)
+	# 吸收观测：两碎片曾在同一帧双双离开活跃表即通过（归还池后节点可能被自然
+	# 掉落复用、重新入表——终态断言对复用竞态不鲁棒，故改观测窗口内曾达成）
+	var cleared := false
 	for i in range(240):
 		if _gl.state == GameConst.GameStatus.LEVEL_UP:
 			_gl.change_state(GameConst.GameStatus.PLAYING)   # 吸收触发升级 → 选卡复位（模拟玩家）
 		_gl._physics_process(DT)
-	_check("R18：恢复后测试碎片均被吸收归还（不在活跃表）",
-		not _gl.active_shards.has(shard) and not _gl.active_shards.has(shard2))
+		if not _gl.active_shards.has(shard) and not _gl.active_shards.has(shard2):
+			cleared = true
+			break
+	_check("R18：恢复后测试碎片均被吸收归还（曾在活跃表外）", cleared)
 
 
 func _test_confetti_realtime_cleanup() -> void:

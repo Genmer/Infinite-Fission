@@ -10,11 +10,25 @@ class_name PopupManager
 extends Node
 
 var popup_pool: PopupPool = null              # 注入（Boot 期 GameLoop 组装）
-var merge_window: float = 0.12                # 同目标短窗合并（E-17）
+var merge_window: float = 0.12                # 同目标短窗合并（E-17；档位化后为「高」档基准）
 var active_popups: int = 0                    # 当前活跃跳字数（遥测/测试观测）
 var baseline_provider: Callable = Callable()  # 单发基准伤害供给（GameLoop 注入；空 = 分级关闭）
 var tier_shake_hook: Callable = Callable()    # 金档轻震动钩子（GameLoop 注入 add_trauma 档位）
-const MAX_ACTIVE: int = 80                    # 同屏上限（超限合并/丢弃，E-09）
+const MAX_ACTIVE: int = 80                    # 「高」档同屏上限（中/低档按 fx_quality 缩减）
+
+# R19 特效质量档位（Meta.settings fx_quality：2 高 / 1 中 / 0 低）：
+# 同屏跳字上限 80/40/20 + 合并窗 0.12/0.2/0.3s——buff 叠多层 DPS 爆炸时跳字是
+# 第一帧耗大头（Label 池逐帧动画），降档 = 上限减半 + 窗口加宽（更积极合并）
+static func max_active_for(p_quality: int) -> int:
+	return [20, 40, MAX_ACTIVE][clampi(p_quality, 0, 2)]
+
+
+static func merge_window_for(p_quality: int) -> float:
+	return [0.3, 0.2, 0.12][clampi(p_quality, 0, 2)]
+
+
+func _quality() -> int:
+	return clampi(int(Meta.settings("fx_quality")), 0, 2)
 
 # 量级分档阈值（P2 数值真源：相对单发基准伤害的倍率——白 <1.5× / 蓝 ≥1.5× / 紫 ≥3× / 金 ≥6×）
 const TIER_BLUE_X := 1.5
@@ -49,8 +63,8 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 			popup.merge(p_result.final_value)
 			return
 		_merge_registry.erase(uid)
-	# 新跳字：同屏上限（E-09）→ 满时丢弃 + 计数（合并降级目标不存在则直接丢）
-	if _active_list.size() >= MAX_ACTIVE:
+	# 新跳字：同屏上限（E-09 + R19 档位化）→ 满时丢弃 + 计数（合并降级目标不存在则直接丢）
+	if _active_list.size() >= max_active_for(_quality()):
 		_dropped_count += 1
 		return
 	var node := popup_pool.acquire()
@@ -61,7 +75,7 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 	var popup := node as DamagePopup
 	popup.show_popup(p_result.pos, p_result.final_value, p_result.popup_style, uid, tier)
 	_active_list.append(popup)
-	_merge_registry[uid] = {"popup": popup, "window_left": merge_window}
+	_merge_registry[uid] = {"popup": popup, "window_left": merge_window_for(_quality())}
 	active_popups = _active_list.size()
 	# 量级档音效/震动联动（紫微音 / 金重音+轻震动；节流由 SfxBank 70ms 承担；
 	# 合并窗内不重复触发——仅新起跳字时判档）

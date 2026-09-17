@@ -1608,7 +1608,9 @@ func _tick_shock_fx(p_game_delta: float, p_shocked: bool) -> void:
 			and _shock_arc_left < SHOCK_ARC_TIME * 0.5:
 		_shock_arcs[1].visible = true
 	# 垂直落雷：顶部天降锯齿劈到本体 + 四角星爆闪（周期 ~0.9s，存活 0.12s）
-	_tick_shock_bolt(p_game_delta)
+	# R19 特效质量：低档关闭落雷（电弧已足够表意——群体感电期减负）
+	if clampi(int(Meta.settings("fx_quality")), 0, 2) > 0:
+		_tick_shock_bolt(p_game_delta)
 
 
 func _tick_shock_bolt(p_game_delta: float) -> void:
@@ -1703,16 +1705,18 @@ func _tick_burn_flames(p_game_delta: float, p_burning: bool) -> void:
 		_burn_ember.scale = Vector2.ONE * hitbox_r * 0.24 \
 			* (1.0 + 0.1 * sin(_anim_t * 8.4))
 		_burn_ember.modulate.a = 0.3 + 0.1 * sin(_anim_t * 7.2)
+	# R19 特效质量：火苗数预算 高4/中2/低0（低档仅余烬光晕——成群点燃敌不再拖帧）
+	var flame_budget: int = [0, 2, BURN_FLAME_COUNT][clampi(int(Meta.settings("fx_quality")), 0, 2)]
 	if _burn_flames.is_empty():
-		if not p_burning:
+		if not p_burning or flame_budget <= 0:
 			return
-		for i in range(BURN_FLAME_COUNT):
+		for i in range(flame_budget):
 			var f := Sprite2D.new()
 			f.name = "BurnFlame%d" % i
 			f.texture = TextureFactory.flame_bit()
 			add_child(f)
 			_burn_flames.append(f)
-	if not p_burning:
+	if not p_burning or flame_budget <= 0:
 		for f in _burn_flames:
 			f.visible = false
 		return

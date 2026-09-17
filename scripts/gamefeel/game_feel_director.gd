@@ -59,8 +59,12 @@ func setup(p_deps: Dictionary) -> void:
 	EventBus.player_hit.connect(on_player_hit)
 
 
+var _thin_burst_tick: int = 0                 # 中档隔次粒子计数器（R19）
+
+
 func on_damage_resolved(p_result: DamageResult) -> void:
-	# feel_level 分级入口（0/30/50ms 顿帧 + trauma + 色差；粒子按 CRIT/HIT 优先级）
+	# feel_level 分级入口（0/30/50ms 顿帧 + trauma + 色差；粒子按 CRIT/HIT 优先级）。
+	# R19 特效质量档位：低=仅暴击粒子 / 中=隔次粒子（高频命中减负——buff 叠多层卡顿主源之一）
 	var level := p_result.feel_level
 	var stop_ms := _hit_stop_ms_for(level)
 	if stop_ms > 0.0:
@@ -68,6 +72,13 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 	add_trauma_for_level(level)
 	_apply_chromatic(_ca_intensity_for(level))
 	if particles != null:
+		var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
+		if q == 0 and not p_result.is_crit:
+			return                              # 低档：普命中不出粒子
+		if q == 1:
+			_thin_burst_tick += 1
+			if _thin_burst_tick % 2 == 1:
+				return                          # 中档：隔次削减
 		var pri := ParticleDirector.PRIORITY_HIT
 		if p_result.is_crit:
 			pri = ParticleDirector.PRIORITY_CRIT
