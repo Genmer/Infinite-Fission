@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"AFF_GOLD"
+display_name = "【通用】点金"
+description = "金币掉率与掉量 +20%，可叠 2 层（与地图祝福·丰饶叠乘）"
+pool = 0
+pool_id = &"add_gold"
+effect_id = &"EF_STAT"
+value = 0.2
+value2 = 0.0
+params = {
+	"stat": "gold_pct"
+}
+event_hooks = []
+stack_max = 2
+decay_delta = 0.85
+cap_pool_p = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+condition = {}

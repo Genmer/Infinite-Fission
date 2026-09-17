@@ -17,9 +17,9 @@
   → 待做：P2（TelegraphLine/laser_sweep/mine/B5 三连冲锋/主题皮/SfxBank 新音色/E19-E20 .tres）→ P3（三阶段阈值+B8 狂暴+韧性条+词缀五件套；感电断施法待 P3 韧性/硬直机制一并落）
   → ⚠ 移交 P2：boss.summons（B4 裂变召唤）数据全 Boss 在册但**零消费者**（排查确认），随 P2 一并接线
 - ⬜ **[R5.12-P1] Boss 弹幕攻击**——已并入上面的怪物攻击专项，不单独做
-- ⬜ **[R5.12-P1] 每图最终 Boss 前固定商店（"战前补给"）**——修法已记录：GameLoop 订阅 wave_cleared，wave+1==final_wave 时主动开店；shop_ui 加 is_pre_boss 标题
-- ⬜ **[R5.12-P1] 金币相关词条（AFF_GOLD 点金 / 贪婪）**——修法已记录：金币掉率/掉量两处乘区 + Player.gold_find_pct() 聚合
-- ⬜ **[R5.12-P1] 前期构筑提速三件套**——①武器卡权重+首次升级保底武器卡 ②槽2解锁 w3→w2 ③手枪 L1-2 基伤 12→14/16（早期经验 ×1.25 已落地，R5）
+- ✅ **[R5.12-P1] 每图最终 Boss 前固定商店（"战前补给"）**——✅ R17 落地：GameLoop 订阅 wave_cleared，p_wave+1==final_wave 时开店（不占波表 SHOP 位/黑市排程，final 波清空走胜利结算互斥）；shop_ui.open 加 is_pre_boss 标题「战前补给」；test_p1_polish 锁定
+- ✅ **[R5.12-P1] 金币相关词条（AFF_GOLD 点金 / 贪婪）**——✅ R17 落地（点金先行，贪婪待评测再议）：新 ADD 池 add_gold + AFF_GOLD【通用】点金（+20%/层×2）+ Player.gold_find_pct() 聚合 + GameLoop 掉账两处乘区（掉率钳 ≤1 / 掉量，同 map_gold_mult 叠乘）；test_p1_polish 锁定
+- ✅ **[R5.12-P1] 前期构筑提速三件套**——✅ R17 落地：①WEAPON 类别权重 10→14 + 前期（w<5 或 lv≤3）货架保底 ≥1 张武器卡（WORDS_TIDE 定序重随时豁免，护遗物契约）②槽2 解锁 w3→w2（WaveDirector.SLOT2_UNLOCK_WAVE）③手枪 L1/L2 基伤 12→14/16（早期经验 ×1.25 已落地，R5）；pkg0 ADD 池计数 13→14 随动；test_p1_polish 锁定
 - ✅ **[R7-2] 「生存本能」与移速等属性显示**——已定位：「生存本能」= AFF_HP_UP（最大生命词条）的显示名，用户本意是属性展示要包含玩家侧属性。R9b 补齐：构筑详情卡顶部新增玩家属性行（生命上限/磁吸半径/技能冷却）；移速卡已因 1:1 拖动无生效点重做为技能急速（技能冷却已在行内）
 - ⬜ **[R5.12-P1] 形态专属词条误刷**——✅ 已于 R7 提前根修（required_forms/required_weapon 适配门），此处留档
 

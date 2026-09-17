@@ -611,6 +611,12 @@ func gain_xp(p_amount: float) -> void:
 		EventBus.emit_level_up(level)
 
 
+func gold_find_pct() -> float:
+	# 金币寻获率（R5.12-P1 AFF_GOLD 点金：金币掉率与掉量 ×(1+Σ)，掉落侧两处乘区——
+	# GameLoop._on_enemy_killed_drop_xp 消费；同 map_gold_mult 叠乘口径）
+	return clampf(_weapon_pool_sum(&"add_gold"), 0.0, 3.0)
+
+
 func respawn() -> void:
 	# 重开复活（GameLoop.restart_run → _reset_run_state 调用；集成包修复：死亡短路
 	# _dead 属一次性 E-16 仲裁标志，必须随局重置——否则重开后 take_contact_damage 永久无效）

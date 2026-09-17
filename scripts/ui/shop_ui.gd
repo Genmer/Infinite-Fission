@@ -12,6 +12,8 @@ signal closed()                                # → GameLoop.request_resume（L
 var card_generator: CardGenerator = null       # 注入（词条/遗物走 apply_choice 同链路）
 var _player: Node = null
 var _wave: int = 0
+var _pre_boss: bool = false                    # 战前补给态（R5.12-P1：标题换「战前补给」）
+var _title: Label = null
 var _root: Control = null
 var _list: VBoxContainer = null
 var _gold_label: Label = null
@@ -31,9 +33,12 @@ func is_shop_visible() -> bool:
 
 var _refresh_count: int = 0                    # 本次开店已刷新次数（R7：价格倍数递增）
 
-func open(p_player: Node, p_wave: int) -> void:
+func open(p_player: Node, p_wave: int, p_pre_boss: bool = false) -> void:
 	_player = p_player
 	_wave = p_wave
+	_pre_boss = p_pre_boss
+	if _title != null:
+		_title.text = "战前补给" if p_pre_boss else "战地黑市"
 	_refresh_count = 0
 	_reroll_wares(false)
 	_root.visible = true
@@ -168,6 +173,7 @@ func _build_ui() -> void:
 	title.size = Vector2(632.0, 40.0)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card.add_child(title)
+	_title = title
 	_gold_label = Label.new()
 	StickerTheme.label_sticker(_gold_label, 19, PopPalette.XP, 0, Color.WHITE, true)
 	_gold_label.text = "金币 0"

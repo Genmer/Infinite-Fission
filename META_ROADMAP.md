@@ -201,6 +201,17 @@
 | R15 | 边界反弹不弹（双根因） | ①弹道“距离≥射程”先于反弹回收 → 有反弹预算=射程无限 ②自导 tick 无边界反弹 → 提升至基类 tick 全形态可弹 ③边界处同帧双弹 → 速度朝向守卫幂等化 |
 | R15 | 冰原通关解锁 | headless 用例锁定（w15 清空 → 通关标记 + 魔域解锁）；用户复现时需确认版本 |
 
+## 5.20 十六~十七轮清账批次（2026-09-17，P0 怪物攻击专项 P1 批次 + BLINK + R5.12 三条 P1 清账，已落地）
+
+| 轮 | 项 | 落地 |
+|---|---|---|
+| R16 | Boss 弹幕 P1 批次（ENEMY_BOSS_TELEGRAPH §9） | `_tick_boss_barrage` 三型（ring/aimed_spread/spiral）+ TelegraphCircle（FuseRing 泛化）/TelegraphFan 组件 + 施法状态机（swell 膨胀闪红、冻结停摆、aimed 起手锁定不追踪、跟射波、phase 门控）+ DataValidator barrage 校验（必填/三档/pct∈[8,50]）+ §5.1~5.3 五 Boss .tres 迁移（E6_boss3 顺带清 charge/phase3 死键）+ 存量 bullet_patterns 读入折算（E19/E20 过渡告警）；test_barrage 43 项（commit 6023c70） |
+| R16b | BLINK 闪现爆炸族（ENEMY_PATTERNS_BASIC §3.3，用户点名） | EnemyBehavior.BLINK + EnemyData.special 参数包 + 三态机（巡航 0.85×/读条 0.35s 闪紫收缩/引信 0.8s 红圈）+ 落点=施法帧玩家快照 ±24 + 世界层红圈钉死落点 + 打断双路（冻结断读条 2s cd/击退断引信）+ 引爆 30% 档 r110（复用 kill_blast 表现）+ E24 裂隙爆魔 + 魔域 w3 ×2；test_blink 25 项（commit 0901b35） |
+| R17 | 战前补给（R5.12-P1） | wave_cleared(p_wave+1==final_wave) → 固定商店（不占波表 SHOP 位/黑市排程，final 波走胜利互斥）+ shop_ui is_pre_boss 标题 |
+| R17 | 金币词条 AFF_GOLD（R5.12-P1） | 新 ADD 池 add_gold + 【通用】点金 +20%/层×2 + Player.gold_find_pct() 聚合 + 掉账掉率（钳≤1）/掉量两处乘区 |
+| R17 | 前期构筑提速三件套（R5.12-P1） | ①WEAPON 权重 10→14 + 前期货架保底武器卡（WORDS_TIDE 定序豁免）②槽2 解锁 w3→w2 ③手枪 L1/L2 基伤 12→14/16；pkg0 ADD 池计数 13→14 随动 |
+| R17 | 测试 | 新增 test_p1_polish 16 项；全量 11 套件 1350 断言全绿 |
+
 ## 6. 落地顺序建议
 
 ```

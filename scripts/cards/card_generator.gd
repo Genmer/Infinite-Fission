@@ -32,11 +32,14 @@ func _init() -> void:
 
 # 类别权重静态表（A3 §6.3 原值；BalanceTables.category_weights 为同源镜像）。
 # WEAPON（用户反馈 2026-08-29「怎么只有手枪」：原版无任何新武器获取途径——equip_weapon
-# 全工程零调用点；新武器卡补全构筑获取链）。
+# 全工程零调用点；新武器卡补全构筑获取链；R5.12-P1 构筑提速 10→14）。
 const CATEGORY_WEIGHTS := {
 	"MASTERY": 12.0, "ADD": 36.0, "MULT": 18.0, "MECH": 14.0, "ELEM": 10.0, "RELIC": 6.0,
-	"WEAPON": 10.0,
+	"WEAPON": 14.0,
 }
+# R5.12-P1 构筑提速①：前期货架保底 ≥1 张武器卡（w < 5 或玩家等级 ≤ 3 时生效）
+const EARLY_WEAPON_UNTIL_WAVE := 5
+const EARLY_WEAPON_UNTIL_LEVEL := 3
 const CANDIDATE_COUNT := 3                    # 三选一
 const MAX_WEAPON_TRAITS := 12                 # 单武器词条上限（WeaponBase.attach_trait 拒绝线）
 const FALLBACK_ATK_PCT := 0.05                # fallback 属性卡：攻击 +5%（AC-16.4 原文）
@@ -85,6 +88,21 @@ func generate_candidates(p_context: Dictionary) -> Array[Dictionary]:
 	# 不足 3 → fallback 补（类目全空 / 全部被过滤时兜底）
 	while out.size() < CANDIDATE_COUNT:
 		out.append(_fallback_stat_card())
+	# R5.12-P1 构筑提速①：前期货架保底 ≥1 张武器卡（w < 5 或 level ≤ 3）——本批无武器卡
+	# 时末位替换为一张（武器池空时自然跳过；构筑成型提速，用户反馈「前期构筑太慢」）。
+	# WORDS_TIDE 定序重随（fixed_rarities 非空）时豁免——替换会破坏遗物保序契约
+	var saw_weapon := false
+	for c in out:
+		if int(c.get("kind", CardKind.FALLBACK)) == CardKind.WEAPON:
+			saw_weapon = true
+			break
+	if not saw_weapon and player != null and fixed_rarities.is_empty() \
+			and wave < EARLY_WEAPON_UNTIL_WAVE \
+			and int(player.get("level")) <= EARLY_WEAPON_UNTIL_LEVEL:
+		var weapon_pool := _weapon_candidates(player)
+		if not weapon_pool.is_empty():
+			var wdata: WeaponData = weapon_pool[rng.randi_range(0, weapon_pool.size() - 1)]
+			out[out.size() - 1] = _make_weapon_card(wdata)
 	# REL_OVERCLOCK：稀有度保底应用于首张（A3 §5「本波下一张卡稀有度保底紫+」）
 	if floor_rarity >= 0 and not out.is_empty():
 		out[0]["rarity"] = maxi(int(out[0].get("rarity", 0)), floor_rarity)

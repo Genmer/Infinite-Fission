@@ -24,6 +24,8 @@ var wave_first_kill_done: bool = false        # SYN_FIRST_STRIKE 重置位
 
 enum WavePhase { IDLE, SPAWNING, CLEARING, BUFFER }
 
+const SLOT2_UNLOCK_WAVE := 2                  # 槽2 解锁波（R5.12-P1 构筑提速②：原 w3 提前至 w2）
+
 var _phase: int = WavePhase.IDLE
 var _wave_elapsed: float = 0.0
 var _hard_cap_left: float = 0.0
@@ -139,8 +141,8 @@ func tick(p_game_delta: float) -> void:
 				var shop_entry := _table_entry(current_wave)
 				if shop_entry != null and shop_entry.events.has(&"SHOP"):
 					shop_requested.emit(current_wave)
-				# F-19：w3 波后解锁槽2 / w7 波后解锁槽3
-				if current_wave == 3:
+				# F-19：槽2 解锁提前至 w2（R5.12-P1 构筑提速②，原 w3）/ w7 波后解锁槽3
+				if current_wave == SLOT2_UNLOCK_WAVE:
 					EventBus.emit_slot_unlocked(2)
 				elif current_wave == 7:
 					EventBus.emit_slot_unlocked(3)

@@ -5,16 +5,16 @@
 
 [sub_resource type="Resource" id="WeaponLevelStats_l1"]
 script = ExtResource("2_wls")
-base_atk = 12.0
+base_atk = 14.0
 rof = 5.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "A3 §3.1 L1：面板 DPS 60"
+note = "A3 §3.1 L1：面板 DPS 60；R5.12-P1 构筑提速 12→14（弱加强，观感为主）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
-base_atk = 14.0
+base_atk = 16.0
 rof = 5.0
 cd = 0.0
 pierce = 1

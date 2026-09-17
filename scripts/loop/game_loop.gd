@@ -277,11 +277,23 @@ func _tick_victory_pending(p_raw_delta: float) -> void:
 
 
 func _on_relic_shop_wave(p_wave: int) -> void:
-	# REL_BLACK_MARKET 追加商店波（w35 起每 10 波，排程真源 relic_handler）：波清空后
+	# REL_BLACK_MARKET 追加商店波（w8 起每 5 波，排程真源 relic_handler）：波清空后
 	# 消费一次排程开黑市——同波表 SHOP 事件口径（PLAYING 守卫在 _on_shop_requested）
 	if relic_handler != null and relic_handler.pending_shop_waves > 0:
 		relic_handler.pending_shop_waves -= 1
 		_on_shop_requested(p_wave)
+
+
+func _on_wave_cleared_pre_boss_shop(p_wave: int) -> void:
+	# 战前补给（R5.12-P1）：每图 final Boss 波的前一波清空 → 固定商店（不算波表 SHOP
+	# 事件位、不占黑市排程；标题走 shop_ui 战前补给态）。final 波清空走胜利结算，互斥。
+	if state != GameConst.GameStatus.PLAYING or current_map_id == StringName(""):
+		return
+	var final_wave := int(MapTable.get_map(current_map_id).get("final_wave", 1 << 30))
+	if p_wave + 1 != final_wave:
+		return
+	if change_state(GameConst.GameStatus.LEVEL_UP):
+		shop_ui.open(player, p_wave, true)
 
 
 func _on_build_details() -> void:
@@ -747,6 +759,8 @@ func _boot_build_presentation() -> void:
 	# REL_BLACK_MARKET 追加商店波消费（R10 重调 w8 起每 5 波——原 w35 起每 10 波在
 	# 新阶梯下永不触发；兼做「Boss 前商店」§5.12 待办。连接序在 relic_handler 之后）
 	EventBus.wave_cleared.connect(_on_relic_shop_wave)
+	# 战前补给（R5.12-P1）：final Boss 波前一波清空 → 固定商店（不占波表 SHOP 位/黑市排程）
+	EventBus.wave_cleared.connect(_on_wave_cleared_pre_boss_shop)
 	# R7：波次清空 → 全屏经验碎片强制磁吸（Boss 大珠残留兜底）
 	EventBus.wave_cleared.connect(_on_wave_cleared_collect)
 	sfx = SfxBank.new()
@@ -1048,13 +1062,15 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 	var value := (p_enemy as Enemy).exp_value * relic_handler.xp_mult() * _early_xp_mult()
 	_spawn_xp_shard(p_enemy.global_position, value)
 	# 金币掉账（M7 战地黑市货币：gold_drop = {chance, min, max}，首次接线——此前为死数据；
-	# 词缀二期：祝福·丰饶/富矿金币倍率在掉账额入账（player.map_gold_mult，真源 map_table.gd））
+	# 词缀二期：祝福·丰饶/富矿金币倍率在掉账额入账（player.map_gold_mult，真源 map_table.gd）；
+	# R5.12-P1 AFF_GOLD 点金：掉率（钳 ≤1）与掉量两处 ×(1+gold_find_pct)）
 	var gdrop: Variant = (p_enemy as Enemy).data.gold_drop
 	if gdrop is Dictionary and not (gdrop as Dictionary).is_empty():
 		var gd := gdrop as Dictionary
-		if randf() < float(gd.get("chance", 0.0)):
+		var gold_find := player.gold_find_pct()
+		if randf() < minf(float(gd.get("chance", 0.0)) * (1.0 + gold_find), 1.0):
 			player.gold += int(round(randf_range(float(gd.get("min", 1)), float(gd.get("max", 1)))
-				* player.map_gold_mult))
+				* player.map_gold_mult * (1.0 + gold_find)))
 
 
 func _early_xp_mult() -> float:
