@@ -215,6 +215,14 @@ func change_state(p_new: int) -> bool:
 	state = p_new
 	get_tree().paused = (p_new == GameConst.GameStatus.PAUSED
 		or p_new == GameConst.GameStatus.LEVEL_UP)
+	# R18 残留根修：进 LEVEL_UP/PAUSED/GAME_OVER → 全场碎片立即转磁吸飞行态——
+	# Boss 死爆出的大珠 + 升级选卡（tree.paused 冻结 shard tick）是「球不动不消失」
+	# 观感的根因；磁吸姿态冻结在覆盖层后 = 有意的收集演出，恢复后即刻吸完
+	if p_new == GameConst.GameStatus.PAUSED or p_new == GameConst.GameStatus.LEVEL_UP \
+			or p_new == GameConst.GameStatus.GAME_OVER:
+		for shard in active_shards:
+			if is_instance_valid(shard):
+				shard.force_magnet()
 	if p_new == GameConst.GameStatus.GAME_OVER:
 		time_scale = 1.0                          # 结算屏恢复常态缩放（下一局干净起步）
 	# BGM 环境音拨运输（P2）：战斗态播放 / 菜单暂停（简化口径——PAUSED/LEVEL_UP 沿用
@@ -1061,6 +1069,12 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 		return                                  # 裸实体探针/非敌事件防御
 	var value := (p_enemy as Enemy).exp_value * relic_handler.xp_mult() * _early_xp_mult()
 	_spawn_xp_shard(p_enemy.global_position, value)
+	# R18 残留根修：Boss/精英死亡 → 全场碎片（含刚爆出的大珠）立即磁吸——奖励即刻
+	# 飞向玩家，不再依赖 4.5s/2s 超时回归（「大怪碎片残留不消失」终解）
+	if (p_enemy as Enemy).is_boss() or (p_enemy as Enemy).is_elite():
+		for shard in active_shards:
+			if is_instance_valid(shard):
+				shard.force_magnet()
 	# 金币掉账（M7 战地黑市货币：gold_drop = {chance, min, max}，首次接线——此前为死数据；
 	# 词缀二期：祝福·丰饶/富矿金币倍率在掉账额入账（player.map_gold_mult，真源 map_table.gd）；
 	# R5.12-P1 AFF_GOLD 点金：掉率（钳 ≤1）与掉量两处 ×(1+gold_find_pct)）

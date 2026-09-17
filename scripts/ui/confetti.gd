@@ -21,6 +21,9 @@ var _alive: bool = false
 
 
 func _ready() -> void:
+	# R18 残留根修：PROCESS_MODE_ALWAYS——Boss 死亡若紧接升级选卡/暂停（tree.paused
+	# 冻结 PAUSABLE 节点），彩纸仍按真实时间下落淡出 1.5s 自清，不再「冻在半空的球」
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	z_index = 50                                 # 世界顶层（庆祝覆盖）
 	EventBus.enemy_killed.connect(_on_enemy_killed)
 
@@ -97,6 +100,7 @@ func _spawn_ding(p_pos: Vector2) -> void:
 	_ding.pivot_offset = _ding.size * 0.5
 	_ding.scale = Vector2(0.2, 0.2)
 	var tw := _ding.create_tween()
+	tw.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)  # R18：跳字真实时间演完自清（暂停不冻结）
 	tw.tween_property(_ding, "scale", Vector2(1.25, 0.9), 0.12) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(_ding, "scale", Vector2.ONE, 0.14)
