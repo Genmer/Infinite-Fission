@@ -18,6 +18,8 @@ var _phase_dots: Array[TextureRect] = []      # 相位点（Boss 阶段 1/2）
 var _banner: Label = null                     # 登场预警横幅
 var _banner_left: float = 0.0                 # 横幅剩余展示（raw 通道）
 var _last_phase: int = 0                      # 相位点脏检查（避免每帧换贴图）
+var _poise_fill: Panel = null                 # 韧性条（R23 P3：受击积累→硬直打断可视化）
+var _poise_style: StyleBoxFlat = null
 
 const BAR_SIZE := Vector2(560.0, 18.0)
 const BAR_POS := Vector2(80.0, 154.0)
@@ -41,7 +43,13 @@ func tick(p_raw_delta: float) -> void:
 	var hp: float = boss.get("hp")
 	var pct := 0.0 if max_hp <= 0.0 else clampf(hp / max_hp, 0.0, 1.0)
 	_fill.size = Vector2(BAR_SIZE.x * pct, BAR_SIZE.y)
-	_sync_phase(int(boss.get("boss_phase")))
+	# R23 韧性条同步（poise_max 0 = 未启用隐藏；比例 = 积累/上限）
+	var pmax: float = float(boss.get("poise_max")) if boss.get("poise_max") != null else 0.0
+	if _poise_fill != null:
+		_poise_fill.visible = pmax > 0.0
+		if pmax > 0.0:
+			var pratio := clampf(float(boss.get("poise")) / pmax, 0.0, 1.0)
+			_poise_fill.size = Vector2(BAR_SIZE.x * 0.6 * pratio, 5.0)
 	if _banner_left > 0.0:
 		_banner_left = maxf(_banner_left - p_raw_delta, 0.0)
 		if _banner_left <= 0.0:
@@ -139,6 +147,17 @@ func _build_ui() -> void:
 	_frame.size = BAR_SIZE
 	_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_frame)
+	# R23 韧性条（血条下方 60% 宽金条：受击积累满 → 硬直打断——压制窗口可视化）
+	_poise_fill = Panel.new()
+	_poise_fill.name = "PoiseFill"
+	_poise_style = StyleBoxFlat.new()
+	_poise_style.bg_color = PopPalette.XP
+	_poise_style.set_corner_radius_all(4)
+	_poise_fill.add_theme_stylebox_override("panel", _poise_style)
+	_poise_fill.position = BAR_POS + Vector2(0.0, BAR_SIZE.y + 7.0)
+	_poise_fill.size = Vector2(0.0, 5.0)
+	_poise_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_poise_fill)
 
 	# 相位点（阶段 1/2：空心 → 实心葡萄紫）
 	for i in range(2):

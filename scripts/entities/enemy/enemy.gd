@@ -89,6 +89,21 @@ var _blink_fuse: float = 0.8
 var _blink_blast_r: float = 110.0
 var _blink_range: float = 340.0
 
+# ── Boss 韧性条（Poise，R23 P3：ENEMY_BOSS_TELEGRAPH §2.1——受击积累→硬直打断） ──
+var poise_max: float = 0.0                    # 韧性上限（spawn 期 boss.poise_max，缺省 50；0 = 未启用）
+var poise: float = 0.0                        # 当前韧性积累
+var _poise_immune_left: float = 0.0           # 硬直后免疫窗剩余（6s）
+var _stagger_left: float = 0.0                # 硬直剩余 s（1.2s：停摆+打断——「压制窗口」）
+
+# ── B5 破裂冲锋（R23 P3：E18 charge 数据接线；三段冲刺+橙向条） ──
+var _chg_state: int = 0                       # 0 冷却巡航 / 1 前摇 / 2 冲刺 / 3 段间
+var _chg_left: float = 0.0
+var _chg_seg_left: int = 0
+var _chg_dir: Vector2 = Vector2.ZERO
+var _chg_cd: float = 4.0
+var _chg_cfg: Dictionary = {}
+var _chg_fan: Telegraph.TelegraphFan = null   # 冲锋橙向条（§1.2 橙=冲撞落点）
+
 # ── Boss 三阶段 + B8 狂暴化（R18 P3；乘区缺省 1.0 = 未狂暴） ──
 var _enrage_done: bool = false
 var _enrage_cd_mult: float = 1.0              # 技能 cd ×0.8
@@ -271,6 +286,11 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 		_blink_cd = _blink_cd_max * randf_range(0.5, 1.0)
 		_blink_state = 0
 		_blink_target = global_position
+	if is_boss():
+		poise_max = maxf(float(data.boss.get("poise_max", 50.0)), 0.0)
+		_chg_cfg = data.boss.get("charge", {})
+		if not _chg_cfg.is_empty():
+			_chg_cd = 4.0                            # 开场缓冲
 	_flash_left = 0.0
 	_fade_left = FADE_IN_TIME
 	_wobble_left = 0.0
@@ -330,13 +350,19 @@ func tick(p_game_delta: float) -> void:
 					_tick_dart_chase(p_game_delta, player, sf)
 				else:
 					var dir := (player.global_position - global_position).normalized()
-					var spd := speed * sf * _enrage_speed_mult   # R18 P3：狂暴追击提速
+					var spd := speed * sf * _enrage_speed_mult * (0.0 if _stagger_left > 0.0 else 1.0)   # R18 P3 狂暴提速；R23 硬直停摆
 					if _fuse_armed:
 						spd = VOLATILE_CHARGE_SPEED    # 警报后冲刺（A3 §2.2 E4 行；自爆冲刺不受寒滞减速修正口径）
 					global_position += dir * spd * p_game_delta
 				_tick_volatile_fuse(p_game_delta, player)
 			if is_boss():
-				_tick_boss_barrage(p_game_delta, player, sf)
+				# R23：硬直期停摆（不移动不放技能），韧性免疫窗照常衰减
+				if _stagger_left > 0.0:
+					_stagger_left = maxf(_stagger_left - p_game_delta, 0.0)
+					_poise_immune_left = maxf(_poise_immune_left - p_game_delta, 0.0)
+				else:
+					_tick_boss_barrage(p_game_delta, player, sf)
+					_tick_boss_charge(p_game_delta, player, sf)
 		GameConst.EnemyBehavior.RANGED:
 			_tick_ranged(p_game_delta, player, sf)
 		GameConst.EnemyBehavior.BLINK:
@@ -355,6 +381,8 @@ func take_result(p_result: DamageResult) -> void:
 	# 受击入口（pipeline 步骤 9 之后由投射物侧调用）：扣血 + 受击闪白/果冻抖动 + 死亡广播
 	# 易伤标记：包 3 ElementalSystem 合入后经 elemental 容器承担（get_vuln_factor 已就绪）
 	apply_damage(p_result.final_value)
+	if is_boss() and poise_max > 0.0 and p_result.final_value > 0.0:
+		_accumulate_poise(p_result.final_value)
 	if not dead:
 		_flash_left = FLASH_TIME
 		_wobble_left = WOBBLE_TIME           # 方向 C：果冻抖动（squash & stretch）
@@ -834,6 +862,8 @@ func _tick_boss_barrage(p_dt: float, p_player: Node2D, p_sf: float) -> void:
 
 func _begin_cast(p_idx: int, p_player: Node2D) -> void:
 	_cast_idx = p_idx
+	if SfxBank.I != null and clampi(int(Meta.settings("fx_quality")), 0, 2) > 0:
+		SfxBank.I.play(&"cast_warn")            # R23 前摇警示音
 	_cast_total = maxf(float(_barrage[p_idx].get("telegraph_s", 0.4))
 		* _enrage_tele_mult, 0.34)              # 狂暴前摇 ×0.85（下限 0.34s §1.3）
 	_cast_left = _cast_total
@@ -872,6 +902,8 @@ func _release_cast(p_player: Node2D) -> void:
 	# 前摇完成结算（Telegraph.finished 口径）：按型分发 → 重置该技能 cd → 收警示件
 	var def: Dictionary = _barrage[_cast_idx]
 	var type := String(def.get("type", "ring"))
+	if SfxBank.I != null and clampi(int(Meta.settings("fx_quality")), 0, 2) > 0:
+		SfxBank.I.play(&"cast_snap")            # R23 释放干脆音
 	match type:
 		"ring":
 			_fire_ring(def)
@@ -1031,6 +1063,112 @@ func _spawn_laser_sweep(def: Dictionary) -> void:
 	get_parent().add_child(sweep)
 
 
+# ── 韧性条（Poise，R23 P3） ──────────────────────────────────────────
+func _accumulate_poise(p_damage: float) -> void:
+	# 韧性伤害 = final × 0.01（DPS 500 基准 ≈10s 打满——「每 10 秒一次压制窗口」§2.1）
+	if _poise_immune_left > 0.0:
+		return
+	poise = minf(poise + p_damage * 0.01, poise_max)
+	if poise >= poise_max:
+		_stagger()
+
+
+func _stagger() -> void:
+	# 硬直 1.2s：当前前摇取消 + 全技能 cd 退 50% + 韧性清空 + 6s 免疫窗
+	#（B7 湮灭扫线施法免疫打断——cancel_cast 内口径）
+	poise = 0.0
+	_poise_immune_left = 6.0
+	_stagger_left = 1.2
+	cancel_cast()
+	for j in range(_barrage_cd.size()):
+		_barrage_cd[j] = maxf(float(_barrage_cd[j]) * 0.5, 0.0)
+
+
+func cancel_cast() -> void:
+	# 统一打断入口（§2.1）：清施法状态 + 警示件收起。
+	# laser_sweep 施法免疫打断（§2 B7「处决技韧性条无效」——给玩家保留必须走位的绝对命题）
+	if _cast_idx >= 0 and _cast_idx < _barrage.size() 			and String(_barrage[_cast_idx].get("type", "")) == "laser_sweep":
+		return
+	_cast_idx = -1
+	_cast_left = 0.0
+	if _cast_fan != null:
+		_cast_fan.visible = false
+	if _cast_line != null:
+		_cast_line.visible = false
+
+
+# ── B5 破裂冲锋（R23 P3：E18 charge 数据接线） ────────────────────────
+func _tick_boss_charge(p_dt: float, p_player: Node2D, p_sf: float) -> void:
+	# phase 门控三段冲锋：前摇橙条（方向锁定）→ 段冲刺 → 段间回气 → …… → 冷却。
+	# 冲刺接触伤害由 Area2D 触碰通道承担；冻结/硬直停摆（上层 sf/门槛）。
+	if _chg_cfg.is_empty() or p_player == null:
+		return
+	if int(_chg_cfg.get("phase", 2)) > boss_phase:
+		return
+	if p_sf <= 0.0:
+		return
+	match _chg_state:
+		0:
+			_chg_cd -= p_dt
+			if _chg_cd <= 0.0:
+				_chg_state = 1
+				_chg_left = float(_chg_cfg.get("telegraph_s", 0.4))
+				_chg_seg_left = int(_chg_cfg.get("segments", 3))   # 段数在周期起点一次性装载
+				_chg_dir = (p_player.global_position - global_position).normalized()
+				_ensure_chg_fan()
+				_chg_fan.setup_dir(_chg_dir)
+				_chg_fan.arc_deg = 24.0
+				_chg_fan.radius = float(_chg_cfg.get("spd", 560.0)) * float(_chg_cfg.get("seg_time", 0.45))
+				_chg_fan.progress = 0.0
+				_chg_fan.color = Color(1.0, 0.62, 0.2)   # 橙 = 冲撞落点（§1.2）
+				_chg_fan.visible = true
+		1:
+			_chg_left -= p_dt
+			if _chg_fan != null and _chg_fan.visible:
+				_chg_fan.progress = clampf(1.0 - _chg_left / maxf(float(_chg_cfg.get("telegraph_s", 0.4)), 0.01), 0.0, 1.0)
+				_chg_fan.queue_redraw()
+			if _chg_left <= 0.0:
+				if _chg_fan != null:
+					_chg_fan.visible = false
+				_chg_state = 2
+				_chg_left = float(_chg_cfg.get("seg_time", 0.45))
+		2:
+			global_position += _chg_dir * float(_chg_cfg.get("spd", 560.0)) * p_dt
+			_chg_left -= p_dt
+			var size := Vector2(720.0, 1280.0)
+			if GameConfig.balance != null:
+				size = Vector2(GameConfig.balance.res_logic)
+			var hit_wall := global_position.x <= hitbox_r or global_position.x >= size.x - hitbox_r 				or global_position.y <= hitbox_r or global_position.y >= size.y - hitbox_r
+			global_position = global_position.clamp(Vector2.ONE * hitbox_r, size - Vector2.ONE * hitbox_r)
+			var near := global_position.distance_to(p_player.global_position) <= hitbox_r + 24.0
+			if _chg_left <= 0.0 or hit_wall or near:
+				_chg_seg_left -= 1
+				if _chg_seg_left <= 0:
+					_chg_state = 0
+					_chg_cd = 9.0                       # B5 冷却（§2）
+				else:
+					_chg_state = 3
+					_chg_left = float(_chg_cfg.get("gap_s", 0.55))
+		3:
+			_chg_left -= p_dt
+			global_position -= _chg_dir * speed * 0.3 * p_dt   # 段间回气缓退
+			if _chg_left <= 0.0:
+				_chg_state = 1
+				_chg_left = float(_chg_cfg.get("telegraph_s", 0.4))
+				_chg_dir = (p_player.global_position - global_position).normalized()
+				if _chg_fan != null:
+					_chg_fan.setup_dir(_chg_dir)
+					_chg_fan.progress = 0.0
+					_chg_fan.visible = true
+
+
+func _ensure_chg_fan() -> void:
+	if _chg_fan == null:
+		_chg_fan = Telegraph.TelegraphFan.new()
+		_chg_fan.name = "ChargeFan"
+		add_child(_chg_fan)
+
+
 func _reset_cast_state() -> void:
 	# 池归还/spawn 双路复位（E-04/E-05 清零契约：施法位/计时/跟射/螺旋/表现件全清）
 	_cast_idx = -1
@@ -1038,6 +1176,8 @@ func _reset_cast_state() -> void:
 	_cast_left = 0.0
 	_cast_total = 0.4
 	_pending_waves.clear()
+	if _chg_fan != null:
+		_chg_fan.visible = false
 	_emit_left = 0.0
 	_emit_tick = 0.0
 	_emit_angle = 0.0
@@ -1095,6 +1235,18 @@ func _reset_state() -> void:
 	_clear_blink_ring()
 	_enrage_done = false
 	_enrage_cd_mult = 1.0
+	poise_max = 0.0
+	poise = 0.0
+	_poise_immune_left = 0.0
+	_stagger_left = 0.0
+	_chg_state = 0
+	_chg_left = 0.0
+	_chg_seg_left = 0
+	_chg_dir = Vector2.ZERO
+	_chg_cd = 0.0
+	_chg_cfg = {}
+	if _chg_fan != null:
+		_chg_fan.visible = false
 	_enrage_rate_mult = 1.0
 	_enrage_speed_mult = 1.0
 	_enrage_tele_mult = 1.0
