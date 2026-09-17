@@ -23,6 +23,7 @@ var behavior: int = GameConst.EnemyBehavior.CHASE
 var hitbox_r: float = 14.0                    # 碰撞半径快照（data.hitbox_r；投射物窄相判定读取）
 var resist: Array[float] = [0.0, 0.0, 0.0, 0.0]  # KIN/FIR/ICE/LTG 快照（超导 −30% 实时改写）
 var immune_mask: int = 0
+var elem_immune: int = 0                      # 元素伤害免疫位（R22 P1：bit = 1 << Element）
 var elemental: ElementalState = null          # 状态容器（M-11 注入；包 3 收紧：register_host 挂 ElementalState）
 var ext_slow_mult: float = 1.0                # 外部减速乘区（P2 毒云等直结算通道；与元素冰缓正交）
 var ext_slow_left: float = 0.0                # 外部减速剩余 s（到期自动还原 1.0——免逐敌摘除）
@@ -244,6 +245,7 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	hitbox_r = maxf(data.hitbox_r, 1.0)
 	resist = data.resist.duplicate()
 	immune_mask = data.immune_mask
+	elem_immune = data.elem_immune
 	dead = false
 	boss_phase = 1 if is_boss() else 0
 	elemental = null                          # 包 3 ElementalSystem.register_host 挂入
@@ -406,6 +408,11 @@ func knockback(p_force: Vector2) -> void:
 		_cancel_blink()                          # BLINK 引信期被击退打断（§3.3 爆虫口径）
 	if scaled.length() >= 100.0:
 		EventBus.emit_knockback_hit(global_position)   # 击退小字（强击退才提示）
+
+
+func is_elem_immune(p_element: int) -> bool:
+	# 元素伤害免疫查询（R22 P1）：免疫 = 伤害归零 + 元素附着拒绝
+	return (elem_immune & (1 << p_element)) != 0
 
 
 func is_volatile() -> bool:
@@ -1056,6 +1063,7 @@ func _reset_state() -> void:
 	hitbox_r = 14.0
 	resist = [0.0, 0.0, 0.0, 0.0]
 	immune_mask = 0
+	elem_immune = 0
 	elemental = null
 	ext_slow_mult = 1.0                       # 外部减速复位（P2：池归还清零契约同口径）
 	ext_slow_left = 0.0

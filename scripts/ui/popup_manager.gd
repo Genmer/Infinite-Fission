@@ -73,7 +73,8 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 		return
 	var tier := _tier_for(p_result.popup_style, p_result.final_value)
 	var popup := node as DamagePopup
-	popup.show_popup(p_result.pos, p_result.final_value, p_result.popup_style, uid, tier)
+	popup.show_popup(p_result.pos, p_result.final_value, p_result.popup_style, uid, tier,
+		p_result.element)
 	_active_list.append(popup)
 	_merge_registry[uid] = {"popup": popup, "window_left": merge_window_for(_quality())}
 	active_popups = _active_list.size()

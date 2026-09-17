@@ -14,6 +14,7 @@ exp_base = 8.0
 tp_cost = 1.4
 resist = [0.0, 0.0, 0.0, 0.0]
 immune_mask = 0
+elem_immune = 2
 tags = 0
 hitbox_r = 13.0
 ranged = {}

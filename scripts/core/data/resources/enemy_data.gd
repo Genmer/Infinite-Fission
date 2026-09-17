@@ -15,6 +15,8 @@ extends Resource
 # 每项 ∈ [-0.8, 0.8]（KIN/FIR/ICE/LTG，A3 §2.3）
 @export var resist: Array[float] = [0.0, 0.0, 0.0, 0.0]
 @export var immune_mask: int = 0                    # 已知位组合（Boss 置 IMMUNE_FREEZE，F-17）
+# 元素伤害免疫位（R22 P1：ELEM_IMMUNE_FIR/ICE/LTG 位或组合；免疫=伤害归零+附着拒绝）
+@export var elem_immune: int = 0
 @export var tags: int = 0                           # TAG_ELITE / TAG_BOSS 位
 @export_range(0.1, 64.0) var hitbox_r: float = 14.0 # (0, 64]
 # behavior=RANGED 必填 {bullet_speed, fire_cd, bullet_atk_ratio, spread}；fire_cd>0

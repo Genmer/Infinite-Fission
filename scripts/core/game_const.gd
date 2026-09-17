@@ -11,7 +11,7 @@ enum WeaponForm { BALLISTIC, LASER, HOMING, MELEE }       # 武器四形态
 enum EnemyBehavior { CHASE, RANGED, DASHER, ORBIT, SENTRY, BLINK }  # M1：CHASE/RANGED；BLINK R16 起支持（ENEMY_PATTERNS_BASIC §3.3）
 enum GameStatus { BOOT, MENU, PLAYING, PAUSED, LEVEL_UP, GAME_OVER }
 enum RecycleReason { EXPIRED, PIERCE_DEPLETED, BOUNCE_DEPLETED, NULLIFIED, FORCED }  # 回收五路径
-enum PopupStyle { NORMAL, CRIT, REACTION, DOT, HEAL, XP }
+enum PopupStyle { NORMAL, CRIT, REACTION, DOT, HEAL, XP, IMMUNE }   # IMMUNE：R22 元素免疫跳字
 enum FeelLevel { HIT, CRIT, CATALYST, BOSS_DEATH }        # GameFeel 分级（Q-12）
 enum ReactionType { RXN_FIR_ICE, RXN_FIR_LTG, RXN_ICE_LTG }  # 碎裂/过载/超导（中性 ID）
 enum TargetStrategy { NEAREST, FOREMOST, LOWEST_HP, LOCKED }  # 武器目标策略
@@ -34,6 +34,9 @@ const HIT_NO_CRIT := 24             # 掩码：HIT_IS_REACTION | HIT_IS_DOT
 const TAG_ELITE := 1
 const TAG_BOSS := 2
 const TAG_FINAL_BOSS := 4      # 最终 Boss（地图最终波巨 Boss——1/3 屏，用户反馈）
+const ELEM_IMMUNE_FIR := 2          # 元素伤害免疫位（R22 P1：bit = 1 << Element）
+const ELEM_IMMUNE_ICE := 4          #   FIR=2 / ICE=4 / LTG=8——KIN 无位 = 物理恒有效保底
+const ELEM_IMMUNE_LTG := 8
 const IMMUNE_FREEZE := 1            # 定身免疫（Boss 默认置位，F-17）
 const IMMUNE_CHILL := 2
 const IMMUNE_BURN := 4

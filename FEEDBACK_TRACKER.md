@@ -165,6 +165,17 @@
 
 ---
 
+## 二l、R22 本轮登记（2026-09-18，先规划再执行：docs/design/ELEMENT_DEEPEN.md）
+
+| # | 原话摘要 | 定性 | 状态 | 落点 |
+|---|---|---|---|---|
+| 1 | 确认元素反应怎么做的 | 调查 | ✅ | 三元素（火/冰/雷）附着槽 → 帧末两两反应：碎裂（火+冰 ×2 点燃DOT总额）/过载（火+雷 120%ATK 90px 爆炸）/超导（冰+雷 全抗-30% 6s），反应 cd 2s，ELE_REACTION_VOID 反应强化 ×1.8——机制结论已写入 docs/design/ELEMENT_DEEPEN.md §0 |
+| 2 | 反应触发有没有专门特效，新增一个 | 表现 | ✅ R22 | 此前仅碎裂有橙环。补全：过载=紫橙双环冲击、超导=冰紫雾环慢扩散（ElementalFxLayer _rxn_rings 槽池，白环贴图 modulate 上色零贴图重建）；test_elem_immune 锁定槽位/自清 |
+| 3 | 反馈数字改为对应元素颜色 | 表现 | ✅ R22 | 跳字颜色元素优先：KIN 白 / FIR 橙 / ICE 冰蓝 / LTG 葡萄紫；量级档保留字号+档音档震（颜色读元素、大小读量级）；DamageResult.element → PopupManager → popup 透传 |
+| 4 | 新机制：燃烧打火怪没用、冰冻无法冰冻冰怪，自己扩展 | 机制 | ✅ R22 | 元素伤害免疫：ELEM_IMMUNE_FIR/ICE/LTG 位（bit=1<<Element）+ EnemyData.elem_immune + 管线⑧免疫归零 + ElementalSystem.apply_attach 附着拒绝 + PopupStyle.IMMUNE「免疫」灰字。首发标注：E4 爆虫（FIR+不可点燃）/ E8 恶魔小鬼（FIR）/ E9 冰霜仔（ICE+不可冻结寒滞）。Boss 不设免疫（防构建硬反制）；物理恒有效保底 |
+
+---
+
 ## 三、历史轮摘要（已完结，详情见 META_ROADMAP.md §5.9~§5.15）
 
 - **R1~R4（2026-08-29~31）**：命中反馈/护盾条/波次 toast/多地图/图鉴/养成/每日挑战/角色技能/BGM 重制/换一批/满层质变/局内存档 等（全绿基线 293+731）

@@ -273,6 +273,15 @@ func _apply_target_side(p_ctx: DamageContext, p_stack: ModifierStack, p_result: 
 	# 8. 目标侧修正：V = (1 − resist[element]) × (1 + 状态易伤)（B_spec §2.1）。
 	#    易伤正式路径为 vuln 乘区在⑤入池（A2 §1.8）；此处为 Enemy 快照兜底口径，
 	#    鸭子类型缺省时取中性值 1.0（§2.11 收窄点注释，包 2 合入后收紧）。
+	# R22 P1 元素免疫：目标免疫该元素 → 伤害归零 +「免疫」反馈 + 无顿帧（打不动=无奖励反馈）
+	var target: Variant = p_ctx.target
+	if target != null and is_instance_valid(target as Object) 			and (target as Object).has_method(&"is_elem_immune") 			and bool((target as Object).call(&"is_elem_immune", p_ctx.element)):
+		p_result.immune = true
+		p_result.target_factor = 0.0
+		p_result.feel_level = GameConst.FeelLevel.HIT
+		p_result.popup_style = GameConst.PopupStyle.IMMUNE
+		p_result.is_crit = false
+		return
 	p_result.target_factor = (1.0 - _read_resist(p_ctx)) * (1.0 + _read_status_vuln(p_ctx))
 
 

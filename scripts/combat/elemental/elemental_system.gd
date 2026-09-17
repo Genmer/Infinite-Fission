@@ -68,7 +68,10 @@ func reaction_mult() -> float:
 
 func apply_attach(p_enemy: Node2D, p_element: int, p_value: float,
 		p_info: Dictionary = {}) -> void:
-	# 附着入口（§4.4 ⑤）：immune_mask 检查在状态触发位；满槽 → 状态/连锁调度
+	# 附着入口（§4.4 ⑤）：immune_mask 检查在状态触发位；满槽 → 状态/连锁调度。
+	# R22 P1：元素伤害免疫怪拒绝附着（点燃火怪不燃/冰弹不附冰怪）
+	if p_enemy != null and is_instance_valid(p_enemy) 			and p_enemy.has_method(&"is_elem_immune") 			and bool(p_enemy.call(&"is_elem_immune", p_element)):
+		return
 	var state: Variant = p_enemy.get("elemental") if p_enemy != null else null
 	if not (state is ElementalState):
 		return

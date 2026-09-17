@@ -129,6 +129,8 @@ func validate_enemy(e: EnemyData) -> Array:
 	for i in range(e.resist.size()):
 		_err(out, StringName("resist[%d]" % i), e.resist[i] < -0.8 or e.resist[i] > 0.8, "resist[%d] ∈ [-0.8, 0.8]" % i)
 	_err(out, &"immune_mask", e.immune_mask & ~(GameConst.IMMUNE_FREEZE | GameConst.IMMUNE_CHILL | GameConst.IMMUNE_BURN | GameConst.IMMUNE_SHOCK) != 0, "immune_mask 已知位组合（IMMUNE_* 位）")
+	_err(out, &"elem_immune", e.elem_immune & ~(GameConst.ELEM_IMMUNE_FIR | GameConst.ELEM_IMMUNE_ICE | GameConst.ELEM_IMMUNE_LTG) != 0,
+		"elem_immune 仅允许 ELEM_IMMUNE_FIR/ICE/LTG 位组合")
 	_err(out, &"tags", e.tags & ~(GameConst.TAG_ELITE | GameConst.TAG_BOSS) != 0, "tags 仅 TAG_ELITE/TAG_BOSS 位")
 	_err(out, &"hitbox_r", e.hitbox_r <= 0.0 or e.hitbox_r > 64.0, "hitbox_r ∈ (0, 64]")
 	if e.behavior == GameConst.EnemyBehavior.RANGED:

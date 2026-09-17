@@ -7,6 +7,7 @@ var final_value: float = 0.0
 var is_crit: bool = false
 var killed: bool = false
 var element: int = 0
+var immune: bool = false                      # 元素免疫命中（R22 P1：伤害归零 +「免疫」跳字）
 var source_uid: int = 0
 var target_uid: int = 0
 var frame_stamp: int = 0

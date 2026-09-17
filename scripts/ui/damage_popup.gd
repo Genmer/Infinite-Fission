@@ -37,6 +37,16 @@ const STYLE_COLORS := {
 	GameConst.PopupStyle.DOT: Color(1.0, 0.72, 0.45),
 	GameConst.PopupStyle.HEAL: PopPalette.SUCCESS,
 	GameConst.PopupStyle.XP: PopPalette.INK_SOFT,
+	GameConst.PopupStyle.IMMUNE: Color(0.62, 0.68, 0.8),   # R22 免疫：灰蓝（打不动读感）
+}
+
+# R22 元素配色（用户点名「反馈数字改为对应颜色」）：KIN 白 / FIR 橙 / ICE 冰蓝 / LTG 紫。
+# 元素色覆盖量级色；量级信息保留在字号乘区与档音/档震（颜色读元素、大小读量级）
+const ELEMENT_COLORS := {
+	GameConst.Element.KIN: Color(1.0, 1.0, 1.0),
+	GameConst.Element.FIR: Color(1.0, 0.6, 0.25),
+	GameConst.Element.ICE: Color(0.62, 0.85, 1.0),
+	GameConst.Element.LTG: PopPalette.SHOCK,
 }
 
 # 量级分档表现参数（P2 数值真源：档位阈值在 PopupManager；此处只落规格——
@@ -60,13 +70,16 @@ func _ready() -> void:
 	visible = false
 
 
+var element: int = GameConst.Element.KIN      # 命中元素（R22：跳字元素配色）
+
 func show_popup(p_pos: Vector2, p_value: float, p_style: int, p_target_uid: int = 0,
-		p_tier: int = 0) -> void:
+		p_tier: int = 0, p_element: int = GameConst.Element.KIN) -> void:
 	# 池取出后初始化 + 动画启动（p_tier：量级档，PopupManager 入口判定后传入）
 	position = p_pos
 	_rise_from = p_pos
 	merged_value = maxf(p_value, 0.0)
 	style = p_style
+	element = p_element
 	tier = clampi(p_tier, 0, TIER_SCALES.size() - 1)
 	target_uid = p_target_uid
 	_life_left = LIFE_TIME
@@ -133,12 +146,22 @@ func _refresh_label() -> void:
 	var base_size := FONT_SIZE_CRIT if crit else FONT_SIZE
 	# DOT 样式向上取整（2026-08-31「烧伤 0」观感修复：跳伤 0.5~0.9 显示为 1——燃烧中
 	# 永远读得见；直击/暴击维持 round 口径）
+	# R22 元素免疫：数值归零 →「免疫」灰蓝字（直读反馈：这个元素对它没用）
+	if style == GameConst.PopupStyle.IMMUNE:
+		_label.text = "免疫"
+		_label.self_modulate = STYLE_COLORS[GameConst.PopupStyle.IMMUNE]
+		_label.add_theme_font_size_override("font_size", base_size)
+		return
 	if style == GameConst.PopupStyle.DOT and merged_value > 0.0:
 		_label.text = str(ceili(merged_value))
 	else:
 		_label.text = str(int(round(merged_value)))
 	if direct:
-		_label.self_modulate = TIER_COLORS[clampi(tier, 0, TIER_COLORS.size() - 1)]
+		# R22 元素配色优先（颜色读元素），量级档保留字号（大小读暴击量级）
+		if ELEMENT_COLORS.has(element) and element != GameConst.Element.KIN:
+			_label.self_modulate = ELEMENT_COLORS[element]
+		else:
+			_label.self_modulate = TIER_COLORS[clampi(tier, 0, TIER_COLORS.size() - 1)]
 		_label.add_theme_font_size_override("font_size",
 			roundi(base_size * float(TIER_SCALES[clampi(tier, 0, TIER_SCALES.size() - 1)])))
 	else:

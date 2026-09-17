@@ -66,6 +66,8 @@ var _blasts: Array[Dictionary] = []           # [{sprite, left}]（死亡新星�
 var _blast_idx: int = 0
 var _skill_rings: Array[Dictionary] = []      # 技能施放金环槽池（R19）
 var _skill_ring_idx: int = 0
+var _rxn_rings: Array[Dictionary] = []        # 反应专属环槽池（R22：过载双环/超导雾环）
+var _rxn_ring_idx: int = 0
 
 
 func _ready() -> void:
@@ -107,6 +109,7 @@ func tick(p_raw_delta: float) -> void:
 	_tick_poison(p_raw_delta)
 	_tick_blasts(p_raw_delta)
 	_tick_skill_rings(p_raw_delta)
+	_tick_rxn_rings(p_raw_delta)
 
 
 # ── 感电连锁主锯齿闪电（签名特效） ────────────────────────────────
@@ -281,16 +284,64 @@ func _build_rings() -> void:
 
 
 func _on_reaction_triggered(p_rxn: int, p_pos: Vector2, _p_target_uid: int) -> void:
-	# 仅碎裂（融化）画橙色冲击环；过载/超导由 GameFeel CATALYST 档承担（职责不重叠）
-	if p_rxn != GameConst.ReactionType.RXN_FIR_ICE:
-		return
-	var ring: Dictionary = _rings[_ring_idx % RING_COUNT]
-	_ring_idx += 1
-	var sp: Sprite2D = ring["sprite"]
+	# R22 反应专属特效补全（此前仅碎裂有橙环）：
+	# · 碎裂 FIR+ICE：橙色冲击环（既有）
+	# · 过载 FIR+LTG：紫橙双环冲击（火橙外环 + 雷紫内环）
+	# · 超导 ICE+LTG：冰紫雾环慢扩散（全抗削减的减益光环读感）
+	match p_rxn:
+		GameConst.ReactionType.RXN_FIR_ICE:
+			var ring: Dictionary = _rings[_ring_idx % RING_COUNT]
+			_ring_idx += 1
+			var sp: Sprite2D = ring["sprite"]
+			sp.position = p_pos
+			sp.visible = true
+			ring["left"] = RING_LIFE
+			_layout_ring(ring, 0.0)
+		GameConst.ReactionType.RXN_FIR_LTG:
+			_spawn_reaction_ring(p_pos, Color(1.0, 0.55, 0.2, 1.0), 0.38, 2.6)
+			_spawn_reaction_ring(p_pos, PopPalette.SHOCK, 0.3, 1.6)
+		GameConst.ReactionType.RXN_ICE_LTG:
+			_spawn_reaction_ring(p_pos, PopPalette.PLAYER.lerp(Color.WHITE, 0.4), 0.55, 3.0)
+			_spawn_reaction_ring(p_pos, PopPalette.SHOCK, 0.45, 2.0)
+
+
+func _spawn_reaction_ring(p_pos: Vector2, p_color: Color, p_life: float, p_scale: float) -> void:
+	# 反应环槽池（白环贴图 + modulate 上色——零贴图重建）；扩散 + 淡出
+	if _rxn_rings.is_empty():
+		for i in range(6):
+			var sp := Sprite2D.new()
+			sp.name = "RxnRing%d" % i
+			sp.texture = TextureFactory.ring_tex(Color.WHITE, 48, 4.0)
+			sp.visible = false
+			add_child(sp)
+			_rxn_rings.append({"sprite": sp, "left": 0.0, "life": 0.3, "scale": 2.0})
+	var slot: Dictionary = _rxn_rings[_rxn_ring_idx % _rxn_rings.size()]
+	_rxn_ring_idx += 1
+	var sp: Sprite2D = slot["sprite"]
 	sp.position = p_pos
+	sp.modulate = p_color
 	sp.visible = true
-	ring["left"] = RING_LIFE
-	_layout_ring(ring, 0.0)
+	sp.scale = Vector2.ONE * 0.3
+	sp.modulate.a = 1.0
+	slot["left"] = p_life
+	slot["life"] = p_life
+	slot["scale"] = p_scale
+
+
+func _tick_rxn_rings(p_raw_delta: float) -> void:
+	for slot: Dictionary in _rxn_rings:
+		var left := float(slot["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		slot["left"] = left
+		var sp: Sprite2D = slot["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		var t := 1.0 - left / float(slot["life"])
+		sp.scale = Vector2.ONE * lerpf(0.3, float(slot["scale"]), t)
+		sp.modulate.a = 1.0 - t
 
 
 func _layout_ring(p_ring: Dictionary, p_progress: float) -> void:
