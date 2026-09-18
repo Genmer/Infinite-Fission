@@ -1045,6 +1045,8 @@ func _affix_cancel_cast() -> void:
 
 func _affix_begin(p_idx: int, p_player: Node2D) -> void:
 	_affix_casting = p_idx
+	if SfxBank.I != null and clampi(int(Meta.settings("fx_quality")), 0, 2) > 0:
+		SfxBank.I.play(&"cast_warn")        # 夜间R44：前摇警示音（与 Boss 技同政策）
 	var def: Dictionary = AFFIX_DEFS[elite_affixes[p_idx]]
 	_affix_cast_total = maxf(float(def["telegraph"]), 0.3)
 	_affix_cast_left = _affix_cast_total
@@ -1100,6 +1102,8 @@ func _affix_release(p_player: Node2D) -> void:
 	var i := _affix_casting
 	_affix_casting = -1
 	_affix_clear_telegraph()
+	if SfxBank.I != null and clampi(int(Meta.settings("fx_quality")), 0, 2) > 0:
+		SfxBank.I.play(&"cast_snap")        # 夜间R44：释放干脆音
 	if i < 0 or i >= elite_affixes.size():
 		return
 	var affix: StringName = elite_affixes[i]
