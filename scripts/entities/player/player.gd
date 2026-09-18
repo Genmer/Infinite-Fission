@@ -45,6 +45,7 @@ var _summon_left: float = 0.0                 # 僚机剩余（game_delta 通道
 var _summon_applied: Array[OrbitWeapon] = []  # 已加成的武器（到期逐一还原）
 var invuln_left: float = 0.0                  # 受击无敌帧（contact_tick=0.6s 口径）
 var weapon_slots: Array[WeaponBase] = []      # ≤5（集成包 B.8 第二批收紧：pkg2 用例已迁移 WeaponBase 真件）
+var orbit_avatars: WeaponOrbitAvatars = null  # 武器悬浮层（R25：发射口对齐化身）
 var unlocked_slots: int = 1                   # w3→2 / w7→3 / Boss1→4 / Boss2 或 w21→5（F-19）
 var level: int = 1
 var xp: float = 0.0
@@ -132,7 +133,7 @@ func _ready() -> void:
 	_flame_r.visible = false
 	add_child(_flame_r)
 	# R25 武器悬浮层（用户点名「所有武器悬浮在主角身边，多武器动态绕主角排列」）
-	var orbit_avatars := WeaponOrbitAvatars.new()
+	orbit_avatars = WeaponOrbitAvatars.new()
 	orbit_avatars.name = "WeaponOrbitAvatars"
 	add_child(orbit_avatars)
 	_sprite = Sprite2D.new()
@@ -476,6 +477,19 @@ func _skill_poison_nova() -> void:
 			settled += 1
 	if settled > 0:
 		DebugStats.count(&"poison_nova")
+
+
+func weapon_muzzle_global(p_weapon: WeaponBase) -> Vector2:
+	# R25 发射口对齐（用户点名「发射口和对应武器对不上」禁令）：子弹出膛点 =
+	# 该武器悬浮化身的当前位置；化身不可用 → 回退武器本体位（玩家中心）
+	if orbit_avatars != null and is_instance_valid(orbit_avatars):
+		var pos: Variant = orbit_avatars.avatar_global(p_weapon)
+		if pos != null:
+			var size := Vector2(720.0, 1280.0)
+			if GameConfig.balance != null:
+				size = Vector2(GameConfig.balance.res_logic)
+			return (pos as Vector2).clamp(Vector2.ONE * 12.0, size - Vector2.ONE * 12.0)
+	return p_weapon.global_position
 
 
 func _clamp_to_playfield_pos(p_pos: Vector2) -> Vector2:

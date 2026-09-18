@@ -60,6 +60,23 @@ func _process(p_delta: float) -> void:
 		avatar.rotation = ang + PI * 0.5         # 切向朝向（绕圈航向感）
 
 
+func avatar_global(p_weapon: WeaponBase) -> Variant:
+	# 发射口查询（R25）：返回该武器化身的全局位置；化身不可见/未建 → null（调用方回退）
+	var player := get_parent()
+	if player == null or not is_instance_valid(player):
+		return null
+	var slots: Variant = player.get("weapon_slots")
+	if slots == null:
+		return null
+	var idx: int = (slots as Array).find(p_weapon)
+	if idx < 0 or idx >= _avatars.size():
+		return null
+	var a := _avatars[idx]
+	if not a.visible:
+		return null
+	return a.global_position
+
+
 func _ensure_avatars(p_slots: int) -> void:
 	while _avatars.size() < p_slots:
 		var sp := Sprite2D.new()

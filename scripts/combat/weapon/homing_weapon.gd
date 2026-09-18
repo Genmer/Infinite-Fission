@@ -17,6 +17,11 @@ func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
 	sub_warheads_left = 0
 
 
+func muzzle_position() -> Vector2:
+	# R25 发射口对齐：子弹从对应悬浮化身位置出膛（视觉发射口=武器）
+	return _avatar_muzzle()
+
+
 func try_fire() -> bool:
 	# cd 制 → 索敌 → 发射 HomingProjectile（锁定 uid）
 	if data == null or homing_pool == null:

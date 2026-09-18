@@ -256,7 +256,15 @@ func aim_direction() -> Vector2:
 
 
 func muzzle_position() -> Vector2:
-	# 出射点（宿主位置；武器随宿主平移）
+	# 出射点（宿主位置；武器随宿主平移）。弹道/自导子类覆写为化身出膛口（R25）。
+	return global_position
+
+
+func _avatar_muzzle() -> Vector2:
+	# 悬浮化身出膛口（R25 发射口对齐）：子弹从对应武器化身位置出膛——
+	# 「发射口和武器对不上」禁令；化身不可用回退本体位
+	if player != null and is_instance_valid(player) 			and player.has_method(&"weapon_muzzle_global"):
+		return player.call(&"weapon_muzzle_global", self)
 	return global_position
 
 

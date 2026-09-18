@@ -42,6 +42,11 @@ func _show_muzzle_flash() -> void:
 	_muzzle_timer = 0.05
 
 
+func muzzle_position() -> Vector2:
+	# R25 发射口对齐：子弹从对应悬浮化身位置出膛（视觉发射口=武器）
+	return _avatar_muzzle()
+
+
 func try_fire() -> bool:
 	# N=pellets 发 × 散射锥均匀分布 → ProjectilePool.acquire（软上限池侧拒绝）
 	if data == null or projectile_pool == null:

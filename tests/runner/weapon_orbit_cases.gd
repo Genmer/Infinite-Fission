@@ -17,6 +17,7 @@ func run(p_tree: SceneTree) -> void:
 	seed(42)
 	_boot_game_loop()
 	_test_avatar_layer()
+	_test_muzzle_alignment()
 	_test_w9_random_facing()
 	_test_energy_orb_visuals()
 	_teardown_game_loop()
@@ -91,8 +92,7 @@ func _test_avatar_layer() -> void:
 	_check("悬浮层：化身数 = 在场武器数（%d）" % live_count, visible_avatars == live_count,
 		"visible=%d live=%d" % [visible_avatars, live_count])
 	# 均匀分布：可见化身两两角距 ≈ TAU/n（手动驱动 _process——无头模式自跑不生效）
-	for i in range(3):
-		layer.call("_process", DT)
+	layer_process()
 	var angles: Array[float] = []
 	for a in layer.get_children():
 		if a is Sprite2D and a.visible:
@@ -120,9 +120,56 @@ func _test_avatar_layer() -> void:
 		"visible=%d live=%d" % [visible_avatars, live_count])
 
 
+# ── R25 发射口对齐（用户点名禁令） ────────────────────────────────
+func _test_muzzle_alignment() -> void:
+	print("── 发射口对齐 ──")
+	for i in range(3):
+		layer_process()
+	var pistol: WeaponBase = _gl.player.weapon_slots[0]
+	var muzzle: Vector2 = pistol.call("muzzle_position")
+	var avatar_g: Vector2 = _gl.player.call("weapon_muzzle_global", pistol)
+	_check("发射口：弹道武器 muzzle = 化身位（≠玩家中心）",
+		muzzle.distance_to(avatar_g) < 0.5 and muzzle.distance_to(_gl.player.global_position) > 20.0,
+		"muzzle=%s avatar=%s player=%s" % [str(muzzle), str(avatar_g),
+			str(_gl.player.global_position)])
+	# 实弹出膛位 = 发射口
+	var b0: int = int((_gl.pools[&"projectile"] as ProjectilePool).stats()["live"])
+	pistol.call("try_fire")
+	var spawned_at_muzzle := false
+	for p in (_gl.pools[&"projectile"] as ProjectilePool).active_projectiles():
+		if p is ProjectileBase and (p as ProjectileBase).team == 0 				and p.get("weapon_ref") == pistol:
+			if (p as ProjectileBase).global_position.distance_to(muzzle) < 24.0:
+				spawned_at_muzzle = true
+			p.call("nullify")
+	_check("发射口：实弹从化身位出膛", spawned_at_muzzle)
+	# 近战保持角色中心（力场/挥砍圆心不变）
+	var w8: WeaponBase = _add(&"W8_orbit_field")
+	w8.call("try_fire")
+	var melee_muzzle: Vector2 = w8.call("muzzle_position")
+	_check("近战：力场圆心仍在角色中心（不受化身影响）",
+		melee_muzzle.distance_to(_gl.player.global_position) < 0.5,
+		"%.1f" % melee_muzzle.distance_to(_gl.player.global_position))
+	# 激光保持角色中心（持续束锚定）
+	var laser: WeaponBase = _add(&"W4_pulse_beam")
+	var laser_muzzle: Vector2 = laser.call("muzzle_position")
+	_check("激光：束锚定仍在角色中心", laser_muzzle.distance_to(
+		_gl.player.global_position) < 0.5)
+
+
+func layer_process() -> void:
+	var layer: Node = null
+	for c in _gl.player.get_children():
+		if c is WeaponOrbitAvatars:
+			layer = c
+	if layer != null:
+		for i in range(3):
+			layer.call("_process", DT)
+
+
 # ── W9 随机挥砍 ───────────────────────────────────────────────────
 func _test_w9_random_facing() -> void:
 	print("── W9 随机挥砍 ──")
+	_gl.player.set("unlocked_slots", 5)            # 前面用例已占 4 槽
 	var w9: WeaponBase = _add(&"W9_arc_slash")
 	_check("前置：W9 装配", w9 != null)
 	if w9 == null:
