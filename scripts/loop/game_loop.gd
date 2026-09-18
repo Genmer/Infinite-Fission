@@ -252,6 +252,8 @@ func request_pause() -> bool:
 
 func _play_boss_phase_sfx(p_phase: int, p_enraged: bool) -> void:
 	# 夜间R19：Boss 阶段切换/狂暴音（phase=0 表狂暴）
+	if not _fx_sfx_allowed():
+		return
 	if p_enraged:
 		sfx.play(&"boss_enrage")
 	else:
@@ -260,6 +262,8 @@ func _play_boss_phase_sfx(p_phase: int, p_enraged: bool) -> void:
 
 func _play_state_trigger_sfx(p_code: int, _p_pos: Vector2) -> void:
 	# 夜间R16：满槽状态触发音（点燃/寒滞+冻结共用冰音/感电）
+	if not _fx_sfx_allowed():
+		return
 	match p_code:
 		ElementalState.TRIGGER_BURN:
 			sfx.play(&"ele_ignite")
@@ -269,8 +273,16 @@ func _play_state_trigger_sfx(p_code: int, _p_pos: Vector2) -> void:
 			sfx.play(&"ele_zap")
 
 
+func _fx_sfx_allowed() -> bool:
+	# 夜间R37：低特效档（0）静音表现增强类音效——与 R23 施法音同政策
+	#（结算音 victory/defeat 为关键结果反馈，不受此门）
+	return clampi(int(Meta.settings("fx_quality")), 0, 2) > 0
+
+
 func _play_reaction_sfx(p_rxn: int, _p_pos: Vector2, _p_target_uid: int) -> void:
 	# 夜间R15：元素反应音（按反应类型分音色——碎裂/过载/超导）
+	if not _fx_sfx_allowed():
+		return
 	match p_rxn:
 		GameConst.ReactionType.RXN_FIR_ICE:
 			sfx.play(&"rxn_shatter")
