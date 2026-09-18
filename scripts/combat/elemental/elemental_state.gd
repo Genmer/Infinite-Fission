@@ -197,6 +197,10 @@ func _trigger(p_element: int, p_overrides: Dictionary) -> int:
 			burn_spread_radius = float(p_overrides.get("spread_radius", 0.0))
 			return TRIGGER_BURN
 		GameConst.Element.ICE:
+			# 夜间R5：冰状态免疫位（IMMUNE_CHILL 桥接自冰免疫怪）——整段不吃
+			# 寒滞/易伤/冻结（此前该位无消费者，冰免疫怪照样被控）
+			if (immune_mask & GameConst.IMMUNE_CHILL) != 0:
+				return TRIGGER_NONE
 			if chill_timer > 0.0 or _chill_from_full:
 				# 二次满槽 → 完全冻结（定身；Boss 免疫定身仅保留寒滞/易伤，F-17）
 				if (immune_mask & GameConst.IMMUNE_FREEZE) == 0:

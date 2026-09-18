@@ -261,6 +261,17 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	resist = data.resist.duplicate()
 	immune_mask = data.immune_mask
 	elem_immune = data.elem_immune
+	# 夜间R5 状态免疫桥接（实锤：elem_immune 只管伤害侧，immune_mask 状态侧从未
+	# 接线——火免疫怪照样被点燃/冰免疫怪照样被冻结，F-17 免疫矩阵缺半边）：
+	# 元素伤害免疫怪不吃对应元素状态；Boss 默认免定身（F-17：保留寒滞+易伤）
+	if (elem_immune & GameConst.ELEM_IMMUNE_FIR) != 0:
+		immune_mask |= GameConst.IMMUNE_BURN
+	if (elem_immune & GameConst.ELEM_IMMUNE_ICE) != 0:
+		immune_mask |= GameConst.IMMUNE_CHILL | GameConst.IMMUNE_FREEZE
+	if (elem_immune & GameConst.ELEM_IMMUNE_LTG) != 0:
+		immune_mask |= GameConst.IMMUNE_SHOCK
+	if is_boss():
+		immune_mask |= GameConst.IMMUNE_FREEZE
 	dead = false
 	boss_phase = 1 if is_boss() else 0
 	elemental = null                          # 包 3 ElementalSystem.register_host 挂入
