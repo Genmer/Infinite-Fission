@@ -1066,27 +1066,27 @@ static func weapon_icon(p_id: StringName) -> ImageTexture:
 					{"sd": _box_at(Vector2(13.0, 7.0), Vector2(9.0, 2.0), 1.0), "fill": blue, "ow": 2.4},
 					{"sd": _circle_at(Vector2(-6.0, -6.0), 2.4), "fill": white, "ow": 0.0},
 				]
-			"W6_micro_missile":               # 微导：小导弹圆头 + 尾翼
+			"W6_micro_missile", "W7_cluster_rocket":
+				# R35 火箭筒化身（用户点名「导弹的悬浮的是火箭筒」）：肩扛发射器——
+				# 粗发射管斜置 + 管口火箭弹头露出 + 握把/肩托 + 观瞄小窗；
+				# W7 管径/弹头更粗（集束重火力读感），W6 略细
+				var tube_w := 5.0 if String(p_id) == "W7_cluster_rocket" else 4.0
+				# _sd_box 口径 = 半宽；管身水平（+X = 化身朝向口径，旋转后枪口对弹道）
 				layers = [
+					# 发射管（管身蓝，水平指 +X）
+					{"sd": _box_at(Vector2(1.0, 0.0), Vector2(12.0, tube_w), 2.2), "fill": blue, "ow": 3.0},
+					# 管口（深色加粗箍）
+					{"sd": _box_at(Vector2(13.0, 0.0), Vector2(2.6, tube_w + 1.4), 1.4), "fill": deep, "ow": 2.4},
+					# 露出的火箭弹头（管口前方橙红锥）
 					{"sd": _poly_sd(PackedVector2Array([
-						Vector2(0.0, -16.0), Vector2(6.0, -6.0), Vector2(6.0, 10.0),
-						Vector2(0.0, 6.0), Vector2(-6.0, 10.0), Vector2(-6.0, -6.0),
-					])), "fill": blue, "ow": 3.0},
-					{"sd": _circle_at(Vector2(0.0, -9.0), 2.4), "fill": white, "ow": 0.0},
-				]
-			"W7_cluster_rocket":              # 集束火箭：粗火箭 + 双侧尾翼
-				layers = [
-					{"sd": _poly_sd(PackedVector2Array([
-						Vector2(0.0, -18.0), Vector2(8.0, -6.0), Vector2(8.0, 12.0), Vector2(-8.0, 12.0),
-						Vector2(-8.0, -6.0),
-					])), "fill": blue, "ow": 3.2},
-					{"sd": _poly_sd(PackedVector2Array([
-						Vector2(-8.0, 2.0), Vector2(-15.0, 12.0), Vector2(-8.0, 12.0),
-					])), "fill": deep, "ow": 2.8},
-					{"sd": _poly_sd(PackedVector2Array([
-						Vector2(8.0, 2.0), Vector2(15.0, 12.0), Vector2(8.0, 12.0),
-					])), "fill": deep, "ow": 2.8},
-					{"sd": _circle_at(Vector2(0.0, -10.0), 3.0), "fill": white, "ow": 0.0},
+						Vector2(15.5, -tube_w - 0.5), Vector2(22.5, 0.0), Vector2(15.5, tube_w + 0.5),
+					])), "fill": Color(1.0, 0.55, 0.25), "ow": 2.2},
+					# 握把（管下垂直）
+					{"sd": _box_at(Vector2(-1.0, 9.5), Vector2(2.2, 5.0), 1.6), "fill": deep, "ow": 2.4},
+					# 肩托（管尾）
+					{"sd": _box_at(Vector2(-13.0, 1.0), Vector2(3.0, 6.0), 1.8), "fill": deep, "ow": 2.4},
+					# 观瞄小窗（管身上方白点）
+					{"sd": _circle_at(Vector2(-3.0, -tube_w - 1.5), 2.0), "fill": white, "ow": 0.0},
 				]
 			"W8_orbit_field":                 # 环绕力场：力场环 + 双卫星珠
 				layers = [

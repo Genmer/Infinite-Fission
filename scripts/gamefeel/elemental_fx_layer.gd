@@ -62,7 +62,7 @@ var _ktext_idx: int = 0
 var _ktext_cd: float = 0.0                    # 击退小字节流
 var _poison := {"active": false, "center": Vector2.ZERO, "radius": 300.0,
 	"left": 0.0, "dur": 6.0, "anim": 0.0}     # 毒云领域持续表现（R10）
-var _blasts: Array[Dictionary] = []           # [{sprite, left}]（死亡新星爆炸环池，R13）
+var _blasts: Array[Dictionary] = []           # 爆炸层池（R35 火箭筒级：[{flash,fire,ring,smoke, left, r1}]）
 var _blast_idx: int = 0
 var _skill_rings: Array[Dictionary] = []      # 技能施放金环槽池（R19）
 var _skill_ring_idx: int = 0
@@ -775,23 +775,49 @@ func _on_skill_cast(p_pos: Vector2, _p_character_id: String) -> void:
 
 
 func _on_kill_blast(p_pos: Vector2, p_radius: float) -> void:
+	# R35 火箭筒级四层爆（用户反馈「没有那种用火箭筒的效果」）：白核闪光 + 橙红火球
+	# + 双重冲击波环 + 烟尘余辉；复用通道（死亡新星/Blink/击杀迸裂）同享升级
 	if _blasts.is_empty():
 		for i in range(6):
-			var sp := Sprite2D.new()
-			sp.name = "KillBlast%d" % i
-			sp.texture = TextureFactory.ring_tex(Color(1.0, 0.55, 0.2, 1.0), 48, 5.0)
-			sp.visible = false
-			add_child(sp)
-			_blasts.append({"sprite": sp, "left": 0.0, "r1": 70.0})
+			var flash := Sprite2D.new()
+			flash.name = "BlastFlash%d" % i
+			flash.texture = TextureFactory.soft_dot(64)
+			flash.visible = false
+			add_child(flash)
+			var fire := Sprite2D.new()
+			fire.name = "BlastFire%d" % i
+			fire.texture = TextureFactory.soft_dot(64)
+			fire.visible = false
+			add_child(fire)
+			var ring := Sprite2D.new()
+			ring.name = "BlastRing%d" % i
+			ring.texture = TextureFactory.ring_tex(Color(1.0, 0.62, 0.22, 1.0), 48, 5.0)
+			ring.visible = false
+			add_child(ring)
+			var smoke := Sprite2D.new()
+			smoke.name = "BlastSmoke%d" % i
+			smoke.texture = TextureFactory.soft_dot(64)
+			smoke.visible = false
+			add_child(smoke)
+			_blasts.append({"flash": flash, "fire": fire, "ring": ring, "smoke": smoke,
+				"left": 0.0, "r1": 70.0})
 	var slot: Dictionary = _blasts[_blast_idx % _blasts.size()]
 	_blast_idx += 1
-	var sp: Sprite2D = slot["sprite"]
-	sp.position = p_pos
-	sp.visible = true
-	slot["left"] = 0.32
-	slot["r1"] = maxf(p_radius, 40.0) * 1.25
-	sp.scale = Vector2.ONE * 0.3
-	sp.modulate.a = 1.0
+	var r1: float = maxf(p_radius, 40.0) * 1.25
+	slot["left"] = 0.5
+	slot["r1"] = r1
+	for key: String in ["flash", "fire", "ring", "smoke"]:
+		var sp: Sprite2D = slot[key]
+		sp.position = p_pos
+		sp.visible = true
+		sp.modulate.a = 1.0
+	(slot["flash"] as Sprite2D).scale = Vector2.ONE * (r1 * 0.35 / 32.0)
+	(slot["fire"] as Sprite2D).scale = Vector2.ONE * (r1 * 0.25 / 32.0)
+	(slot["ring"] as Sprite2D).scale = Vector2.ONE * 0.3
+	(slot["smoke"] as Sprite2D).scale = Vector2.ONE * (r1 * 0.5 / 32.0)
+	(slot["fire"] as Sprite2D).modulate = Color(1.0, 0.55, 0.18, 1.0)
+	(slot["flash"] as Sprite2D).modulate = Color(1.0, 0.97, 0.88, 1.0)
+	(slot["smoke"] as Sprite2D).modulate = Color(0.45, 0.38, 0.34, 0.55)
 
 
 func _tick_skill_rings(p_raw_delta: float) -> void:
@@ -812,16 +838,42 @@ func _tick_skill_rings(p_raw_delta: float) -> void:
 
 
 func _tick_blasts(p_raw_delta: float) -> void:
+	# R35 四层推进：闪光 0→0.15s 白核快闪即散 / 火球 0→0.5s 主导膨胀由橙转暗 /
+	# 冲击环 0.05s 起追到 1.1×r1 / 烟尘 0.1s 起慢散上浮（半透明灰橙）
 	for slot: Dictionary in _blasts:
 		var left := float(slot["left"])
 		if left <= 0.0:
 			continue
 		left = maxf(left - p_raw_delta, 0.0)
 		slot["left"] = left
-		var sp: Sprite2D = slot["sprite"]
 		if left <= 0.0:
-			sp.visible = false
+			for key: String in ["flash", "fire", "ring", "smoke"]:
+				(slot[key] as Sprite2D).visible = false
 			continue
-		var t := 1.0 - left / 0.32
-		sp.scale = Vector2.ONE * lerpf(0.3, float(slot["r1"]) / 19.0, t)
-		sp.modulate.a = 1.0 - t
+		var t := 1.0 - left / 0.5
+		var r1: float = float(slot["r1"])
+		var flash: Sprite2D = slot["flash"]
+		if t < 0.3:
+			flash.modulate.a = 1.0 - t / 0.3
+			flash.scale = Vector2.ONE * flash.scale.x * (1.0 + p_raw_delta * 6.0)
+		else:
+			flash.visible = false
+		var fire: Sprite2D = slot["fire"]
+		var ft := clampf(t / 0.75, 0.0, 1.0)
+		fire.scale = Vector2.ONE * lerpf(r1 * 0.25 / 32.0, r1 * 0.78 / 32.0, ft)
+		fire.modulate = Color(1.0, lerpf(0.55, 0.30, ft), lerpf(0.18, 0.10, ft), 1.0 - ft * 0.9)
+		var ring: Sprite2D = slot["ring"]
+		if t > 0.08:
+			var rt := clampf((t - 0.08) / 0.92, 0.0, 1.0)
+			ring.scale = Vector2.ONE * lerpf(0.3, r1 * 1.12 / 19.0, rt)
+			ring.modulate.a = 0.95 * (1.0 - rt)
+		else:
+			ring.modulate.a = 0.0
+		var smoke: Sprite2D = slot["smoke"]
+		if t > 0.18:
+			var st := clampf((t - 0.18) / 0.82, 0.0, 1.0)
+			smoke.position.y -= p_raw_delta * 26.0
+			smoke.scale = Vector2.ONE * lerpf(r1 * 0.5 / 32.0, r1 * 0.95 / 32.0, st)
+			smoke.modulate.a = 0.5 * (1.0 - st)
+		else:
+			smoke.modulate.a = 0.0
