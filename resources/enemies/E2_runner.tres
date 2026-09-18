@@ -6,6 +6,7 @@
 script = ExtResource("1_ed")
 id = &"E2_runner"
 display_name = "疾冲者"
+elem_immune = 8
 behavior = 0
 hp_base = 40.0
 spd_base = 190.0

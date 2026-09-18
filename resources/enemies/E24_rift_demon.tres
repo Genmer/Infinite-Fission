@@ -6,6 +6,7 @@
 script = ExtResource("1_ed")
 id = &"E24_rift_demon"
 display_name = "裂隙爆魔"
+elem_immune = 8
 behavior = 5
 hp_base = 47.0
 spd_base = 82.0

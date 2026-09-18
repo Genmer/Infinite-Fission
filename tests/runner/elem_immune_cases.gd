@@ -19,6 +19,7 @@ func run(p_tree: SceneTree) -> void:
 	_boot_game_loop()
 	_test_fire_immune_bug()
 	_test_ice_immune_frostling()
+	_test_immune_expansion()
 	_test_popup_element_colors()
 	_test_reaction_fx_slots()
 	_teardown_game_loop()
@@ -80,6 +81,26 @@ func _resolve_elem(p_target: Enemy, p_element: int) -> DamageResult:
 	ctx.element = p_element
 	var result = _gl.pipeline.call(&"resolve", ctx)
 	return result
+
+
+# ── 夜间R41 免疫投放扩展（E2/E24 雷 + E11 冰） ────────────────────
+func _test_immune_expansion() -> void:
+	print("── 免疫投放扩展（R41：主题匹配三只） ──")
+	# E2 疾冲者 / E24 裂隙爆魔 = 雷免疫（补齐 LTG=8 空缺）；E11 水泡怪 = 冰免疫
+	var e2 := _make_mob(&"E2_runner", Vector2(300.0, 500.0))
+	_check("E2：LTG 免疫标注", bool(e2.call("is_elem_immune", GameConst.Element.LTG)))
+	_check("E2：桥接 immune_mask IMMUNE_SHOCK", int(e2.get("immune_mask")) & GameConst.IMMUNE_SHOCK != 0)
+	_check("E2：FIR 不免疫（单元素位）", not bool(e2.call("is_elem_immune", GameConst.Element.FIR)))
+	e2.queue_free()
+	var e24 := _make_mob(&"E24_rift_demon", Vector2(300.0, 500.0))
+	_check("E24：LTG 免疫标注", bool(e24.call("is_elem_immune", GameConst.Element.LTG)))
+	e24.queue_free()
+	var e11 := _make_mob(&"E11_aquasquirt", Vector2(300.0, 500.0))
+	_check("E11：ICE 免疫标注", bool(e11.call("is_elem_immune", GameConst.Element.ICE)))
+	_check("E11：桥接 immune_mask IMMUNE_CHILL|FREEZE",
+		int(e11.get("immune_mask")) & GameConst.IMMUNE_CHILL != 0
+			and int(e11.get("immune_mask")) & GameConst.IMMUNE_FREEZE != 0)
+	e11.queue_free()
 
 
 # ── 火免疫（E4 爆虫） ─────────────────────────────────────────────

@@ -6,6 +6,7 @@
 script = ExtResource("1_ed")
 id = &"E11_aquasquirt"
 display_name = "水泡怪"
+elem_immune = 4
 behavior = 1
 hp_base = 75.0
 spd_base = 60.0
