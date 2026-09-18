@@ -81,6 +81,10 @@ func activate(p_value: float) -> void:
 	_sync_visual()
 
 
+func is_magnet() -> bool:
+	return _magnet
+
+
 func force_magnet() -> void:
 	# 波次清空全屏回收（R7）：任何阶段直接转磁吸飞行——碎片任何情况下波末必回收
 	_magnet = true

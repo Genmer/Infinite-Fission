@@ -178,6 +178,9 @@ func _physics_process(p_raw_delta: float) -> void:
 				stage_probe_us[&"wave"] = Time.get_ticks_usec() - _probe_t0
 				_probe_t0 = Time.get_ticks_usec()
 			# ⑦ GameFeel（raw 通道）→ 顿帧申请出口（time_scale 唯一变更点）
+			# R26：磁吸态碎片在选卡/暂停期继续飞向玩家（Boss 巨额经验连环选卡时
+			# 「球冻半空」终解——磁吸=收割演出，吸收走 pending 升级队列安全）
+			_tick_magnetized_shards(p_raw_delta)
 			frame_order.append(&"feel")
 			game_feel.tick(p_raw_delta)
 			set_time_scale(game_feel.desired_time_scale(), &"gamefeel")
@@ -194,6 +197,9 @@ func _physics_process(p_raw_delta: float) -> void:
 			# 用户反馈 2026-08-29：PAUSED 期 GameFeel 计时（顿帧/震屏衰减）一并冻结——
 			# ⑦ 标签保留（帧序契约），以零时长驱动；LEVEL_UP 沿用 raw 通道原口径
 			frame_order.clear()
+			# R26：磁吸态碎片在选卡/暂停期继续飞向玩家（Boss 巨额经验连环选卡时
+			# 「球冻半空」终解——磁吸=收割演出，吸收走 pending 升级队列安全）
+			_tick_magnetized_shards(p_raw_delta)
 			frame_order.append(&"feel")
 			game_feel.tick(0.0 if state == GameConst.GameStatus.PAUSED else p_raw_delta)
 			set_time_scale(game_feel.desired_time_scale(), &"gamefeel")
@@ -544,6 +550,18 @@ func _on_player_died() -> void:
 		return                                    # 未开局/已结算：忽略
 	RunSave.clear()                             # 局终清档（继续入口随死亡失效）
 	change_state(GameConst.GameStatus.GAME_OVER)
+
+
+func _tick_magnetized_shards(p_raw: float) -> void:
+	# 选卡/暂停期仅推进「已磁吸」碎片（未磁吸的自然静止在原地——不打架）
+	var idx := active_shards.size() - 1
+	while idx >= 0:
+		var shard := active_shards[idx]
+		if is_instance_valid(shard) and shard.is_magnet():
+			if shard.tick(p_raw):
+				active_shards.remove_at(idx)
+				(pools[&"xp"] as XPPool).release(shard)
+		idx -= 1
 
 
 func _on_level_up(p_new_level: int) -> void:

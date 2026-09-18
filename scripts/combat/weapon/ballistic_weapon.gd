@@ -71,7 +71,7 @@ func try_fire() -> bool:
 			"pierce": _pierce_count(),
 			"bounces": 0,
 			"hitbox_radius": data.hitbox_r * size_mult,
-			"element": GameConst.Element.KIN,
+			"element": _shot_element(),
 			"attach_value": 0.0,
 			"generation": 0,
 			"weapon_uid": uid,

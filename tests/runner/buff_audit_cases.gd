@@ -24,6 +24,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_kill_blast()
 	_test_fractal_split()
 	_test_add_value_table()
+	_test_element_enchant()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -211,6 +212,41 @@ func _test_fractal_split() -> void:
 		int((_gl.pools[&"projectile"] as ProjectilePool).stats()["live"]) == live0 - 1 + children)
 	for p in (_gl.pools[&"projectile"] as ProjectilePool).active_projectiles():
 		p.nullify()
+
+
+# ── R26 元素附魔（弹丸 element 跟随武器 ELE 卡，多元素随机） ──
+func _test_element_enchant() -> void:
+	print("── 元素附魔 ──")
+	# 无 ELE 卡：KIN（白）
+	_check("前置：无附魔 → KIN", _w1.call("_shot_element") == GameConst.Element.KIN)
+	# 挂点燃 → FIR
+	var ok1 := _attach(&"ELE_IGNITE")
+	_check("附魔：挂点燃卡成功", ok1)
+	_check("附魔：点燃 → 出膛元素 FIR（跳字橙）",
+		ok1 and _w1.call("_shot_element") == GameConst.Element.FIR)
+	# 再挂冰 → 双元素随机（多次采样应出现 FIR 与 ICE 两种）
+	var ok2 := _attach(&"ELE_FREEZE")
+	_check("附魔：挂冰卡成功", ok2)
+	var seen := {}
+	for i in range(60):
+		seen[_w1.call("_shot_element")] = true
+	_check("附魔：双元素随机（FIR/ICE 均出现——「一会红一会蓝」）",
+		seen.has(GameConst.Element.FIR) and seen.has(GameConst.Element.ICE),
+		str(seen.keys()))
+	# 出膛验证：实弹 element = 附魔元素（多发采样应 FIR/ICE 混发）
+	var got_fir := false
+	var got_ice := false
+	for i in range(12):
+		_w1.call("try_fire")
+		for p in (_gl.pools[&"projectile"] as ProjectilePool).active_projectiles():
+			if p is ProjectileBase and (p as ProjectileBase).team == 0 					and p.get("weapon_ref") == _w1:
+				if int(p.get("element")) == GameConst.Element.FIR:
+					got_fir = true
+				elif int(p.get("element")) == GameConst.Element.ICE:
+					got_ice = true
+				p.call("nullify")
+	_check("附魔：实弹 element ∈ 附魔集合（FIR/ICE，随机分布由 _shot_element 60 采样锁定）",
+		got_fir or got_ice, "fir=%s ice=%s" % [str(got_fir), str(got_ice)])
 
 
 # ── ADD 数值表锁定（防口径漂移） ──────────────────────────────────

@@ -277,13 +277,16 @@ func _draw_energy_orbs() -> void:
 		var phase := angle + TAU * float(i) / float(orbs)
 		var punch := float(_orb_punch[i]) if i < _orb_punch.size() else 0.0
 		var r := orb_radius * (0.62 + 0.10 * punch)
+			# R26 元素附魔染色：武器挂 ELE 卡 → 该球按元素着色（多元素按球错开随机）
+		var tint := _orb_tint(i)
+		var c1 := Color(tint.r, tint.g, tint.b, 0.55 + 0.25 * punch)
+		var c2 := Color(tint.r, tint.g, tint.b, 0.4)
 		# 内弧对 1：顺时针旋（phase 驱动）
-		draw_arc(pos, r, phase, phase + PI * 0.9, 14,
-			Color(mint.r, mint.g, mint.b, 0.55 + 0.25 * punch), 2.6, true)
+		draw_arc(pos, r, phase, phase + PI * 0.9, 14, c1, 2.6, true)
 		# 内弧对 2：逆时针旋（-phase × 1.6——反向电离层）
 		var a2 := -phase * 1.6 + float(i)
-		draw_arc(pos, r * 0.66, a2, a2 + PI * 0.7, 12,
-			Color(mint.r, mint.g, mint.b, 0.4), 2.0, true)
+		draw_arc(pos, r * 0.66, a2, a2 + PI * 0.7, 12, c2, 2.0, true)
+		draw_circle(pos, 2.2, tint)
 		# 周期电火花十字（每球错相；闪现帧率 ~8% 占空）
 		var spark_t := fmod(_anim_t * 2.0 + float(i) * 0.37, 1.0)
 		if spark_t < 0.08:
@@ -293,6 +296,29 @@ func _draw_energy_orbs() -> void:
 			draw_line(pos - Vector2(d, 0), pos + Vector2(d, 0), sc, 2.0, true)
 			draw_line(pos - Vector2(0, d), pos + Vector2(0, d), sc, 2.0, true)
 			draw_circle(pos, 2.5 * (1.0 - k), sc)
+
+
+func _orb_tint(p_index: int) -> Color:
+	# R26 元素附魔染色（无 ELE 卡 = 默认薄荷绿）。多元素共存按球错开——
+	# 「一会红一会蓝」的环绕版：每球取一个附魔元素色（index 稳定映射）
+	var elems: Array[int] = []
+	if weapon != null and is_instance_valid(weapon) and weapon.trait_stack != null:
+		for tb in weapon.trait_stack.traits:
+			var td: Variant = tb.get("data")
+			if td != null and int(td.pool) == GameConst.PoolClass.ELEM 					and (td as TraitData).params.has("element"):
+				elems.append(int((td as TraitData).params["element"]))
+	if elems.is_empty():
+		return PopPalette.SUCCESS               # 无附魔 = 默认薄荷绿
+	var e: int = elems[p_index % elems.size()]
+	match e:
+		GameConst.Element.FIR:
+			return Color(1.0, 0.55, 0.3)
+		GameConst.Element.ICE:
+			return Color(0.62, 0.85, 1.0)
+		GameConst.Element.LTG:
+			return PopPalette.SHOCK
+		_:
+			return PopPalette.SUCCESS
 
 
 func _reset_state() -> void:

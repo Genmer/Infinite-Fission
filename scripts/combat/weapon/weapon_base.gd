@@ -260,6 +260,22 @@ func muzzle_position() -> Vector2:
 	return global_position
 
 
+func _shot_element() -> int:
+	# R26 元素附魔（用户点名「每个武器选择元素附魔，攻击颜色变对应」）：
+	# 武器挂 ELE 卡 → 该武器攻击即该元素（弹体配色/伤害元素/附着统一）；
+	# 多元素共存 → 每发随机取一（点燃+冰 = 一会红一会蓝）
+	if trait_stack == null:
+		return GameConst.Element.KIN
+	var elems: Array[int] = []
+	for tb in trait_stack.traits:
+		var td: Variant = tb.get("data")
+		if td != null and int(td.pool) == GameConst.PoolClass.ELEM 				and (td as TraitData).params.has("element"):
+			elems.append(int((td as TraitData).params["element"]))
+	if elems.is_empty():
+		return GameConst.Element.KIN
+	return elems[randi() % elems.size()]
+
+
 func _avatar_muzzle() -> Vector2:
 	# 悬浮化身出膛口（R25 发射口对齐）：子弹从对应武器化身位置出膛——
 	# 「发射口和武器对不上」禁令；化身不可用回退本体位

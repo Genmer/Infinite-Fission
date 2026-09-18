@@ -9,7 +9,7 @@ extends Node2D
 
 const PIECE_COUNT := 64
 const RAIN_COUNT := 26                       # 顶部全宽落雨枚数（全屏覆盖）
-const LIFE_TIME := 1.5
+const LIFE_TIME := 1.1                       # R26：1.5→1.1s（用户点名「球还在」——庆典更干脆）
 const FADE_LAST := 0.35                       # 末段淡出
 const GRAVITY := 920.0
 const DRAG := 0.9                             # 空气阻尼（每秒保留比例）
@@ -50,7 +50,7 @@ func _celebrate(p_pos: Vector2) -> void:
 	rng.randomize()
 	var piece_count := PIECE_COUNT
 	for i in range(piece_count):
-		var sprite := _make_piece(rng)
+		var sprite := _make_piece(rng, true)
 		# 全扇面上抛（-180°~0°：左右铺开为主，少量近垂直——爆点上方也有效覆盖）
 		var ang := deg_to_rad(rng.randf_range(-180.0, 0.0))
 		var speed := rng.randf_range(320.0, 780.0)
@@ -62,7 +62,7 @@ func _celebrate(p_pos: Vector2) -> void:
 		})
 	# 顶部全宽落雨（跨屏铺开、初速向下小——保证「全屏」覆盖观感）
 	for i in range(RAIN_COUNT):
-		var sprite := _make_piece(rng)
+		var sprite := _make_piece(rng, true)
 		sprite.position = Vector2(rng.randf_range(0.0, 720.0), rng.randf_range(-80.0, -10.0))
 		_pieces.append({
 			"node": sprite,
@@ -74,10 +74,11 @@ func _celebrate(p_pos: Vector2) -> void:
 	_alive = true
 
 
-func _make_piece(p_rng: RandomNumberGenerator) -> Sprite2D:
+func _make_piece(p_rng: RandomNumberGenerator, p_rect_only: bool = false) -> Sprite2D:
 	# 单枚彩纸（共享贴图 + 多色 + 随机缩放/旋转；爆点 = Boss 位置）
+	# R26：只出小矩形（圆点被用户认成「球」——Boss 死亡爆出的圆形物一律去除）
 	var sprite := Sprite2D.new()
-	sprite.texture = TextureFactory.confetti_piece(p_rng.randi_range(0, 1))
+	sprite.texture = TextureFactory.confetti_piece(0 if p_rect_only else p_rng.randi_range(0, 1))
 	sprite.modulate = PopPalette.CONFETTI[p_rng.randi_range(0, PopPalette.CONFETTI.size() - 1)]
 	sprite.position = _origin + Vector2(p_rng.randf_range(-14.0, 14.0), p_rng.randf_range(-10.0, 10.0))
 	sprite.scale = Vector2.ONE * p_rng.randf_range(0.85, 1.5)
