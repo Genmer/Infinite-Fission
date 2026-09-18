@@ -60,6 +60,7 @@ func _ensure_autoloads() -> void:
 
 func _boot_game_loop() -> void:
 	# GameLoop 完整 Boot（架构 §六.2 序列）：fatal 检查 → registry → 池×5 → 子系统 → MENU
+	RunSave.clear()                           # 夜间R42：清继续档残留（防恢复链混入非 sentinel 角色血量——偶发「HP 55/95」根因）
 	_gl = GameLoop.new()
 	_gl.name = "GameLoopUnderTest"
 	tree.get_root().add_child(_gl)
@@ -384,6 +385,8 @@ func _test_card_flow() -> void:
 	_check("fallback 应用：主武器栈 +1", weapon.trait_stack.size() == stack_before + 1)
 	weapon.level = lv_keep                          # 恢复等级（后续 MASTERY 用例需要未满级）
 	# MASTERY 应用：武器等级 +1（≤MAX_LEVEL）
+	weapon.level = 1                          # 夜间R42：自足夹具（隔离前序用例的等级推进——偶发 lv0=5 封顶根因）
+	weapon.call(&"_invalidate_panel")
 	var lv0: int = weapon.level
 	var mastery := {
 		"kind": CardGenerator.CardKind.MASTERY, "id": weapon.data.id, "rarity": 0,
