@@ -1,5 +1,5 @@
 # tests/runner/test_weapon_orbit.gd
-# 武器悬浮层 + W9 随机挥砍 + 环绕能量球自测入口（godot --headless --path <工程>
+# 武器悬浮层 + W9 随机挥砍 + 环绕飞刀自测入口（godot --headless --path <工程>
 # -s tests/runner/test_weapon_orbit.gd）。真源：R25 用户反馈。
 extends SceneTree
 

@@ -1,11 +1,12 @@
 # scripts/combat/weapon/melee/orbit_field.gd
-# M-08 OrbitField（架构 §2.8.5）：环绕力场实体——浮游球绕本体公转 + 周期范围判定。
-# · 公转推进：angle += angular_speed °/s（240°/s，A3 §3.8）；球位均匀相位分布。
-# · 判定调度：每球对同一目标独立 hit_cd（"orb_idx:target_uid" 冷却表）；命中 →
+# M-08 OrbitField（架构 §2.8.5）：环绕力场实体——浮游刀绕本体公转 + 周期范围判定。
+# · 公转推进：angle += angular_speed °/s（240°/s，A3 §3.8）；刀位均匀相位分布。
+# · 判定调度：每刀对同一目标独立 hit_cd（"orb_idx:target_uid" 冷却表）；命中 →
 #   武器侧 ctx 结算（面板快照展开）+ 击退（可打断自爆引导，AC-06.1）。
 # · 生命周期：单武器常驻单例（OrbitWeapon 持有；tick 由武器驱动，随宿主平移）。
-# · 表现（用户反馈 2026-08-29「力场特效没看见」→ 占位圆废弃）：薄荷绿光球（辉光底 +
-#   珠核贴纸风）+ 虚线轨道环 + 公转扫掠残辉；命中 → 球体膨胀脉冲 + 命中点冲击小环。
+# · 表现（R32 用户反馈「球太怪了，换成飞刀」）：默认 = 环绕飞刀（刀尖沿运动方向
+#   回旋；钢白刀身 + 元素刀脊辉光 + 命中白闪）+ 虚线轨道环 + 公转扫掠残辉；
+#   形态卡（sword 剑 / axe 斧 / bolt 闪电，R19）覆盖默认绘制。
 class_name OrbitField
 extends Node2D
 
@@ -13,7 +14,7 @@ const HIT_FLASH_COUNT := 8                    # 命中冲击小环并发池（�
 const HIT_FLASH_LIFE := 0.22                  # 命中小环时长 s
 const PATH_DASHES := 26                       # 轨道虚线段数（奇数段绘制 = 虚线观感）
 
-var style: String = "orb"                      # 环绕形态（orb 球 / sword 剑 / axe 斧 / bolt 闪电，R19）
+var style: String = "orb"                      # 环绕形态（orb 飞刀默认 / sword 剑 / axe 斧 / bolt 闪电，R19/R32；键名 orb 为卡组契约保持）
 var orbs: int = 2                              # 浮游球数
 var orbit_radius: float = 90.0
 var angular_speed: float = 240.0               # °/s
@@ -82,11 +83,9 @@ func _build_visuals() -> void:
 
 func _sync_orb_visibility() -> void:
 	# 球数收缩（还原通道）：超额球体隐藏（数组保留——再次召唤复用，不反复增删子节点）。
-	# 形态化（sword/axe/bolt）：珠核隐藏（_draw 多边形绘制），辉光保留
-	var styled := style != "orb"
+	# R32：默认 = 飞刀程序化绘制——珠核贴图一律隐藏（辉光保留作刀身底光）
 	for i in range(_orb_cores.size()):
-		var on := i < orbs and not styled
-		_orb_cores[i].visible = on
+		_orb_cores[i].visible = false
 		_orb_glows[i].visible = i < orbs
 
 
@@ -185,7 +184,10 @@ func _update_orb_sprites(p_game_delta: float) -> void:
 		_orb_cores[i].rotation = angle * 3.0
 		_orb_cores[i].scale = Vector2.ONE * (orb_radius / 32.0) * (1.0 + 0.38 * punch)
 		_orb_glows[i].scale = Vector2.ONE * (orb_radius * 1.9 / 32.0) * (1.0 + 0.5 * punch)
-		_orb_glows[i].modulate.a = 0.4 + 0.3 * punch + 0.07 * sin(angle * 3.0 + float(i) * 2.1)
+		# R32：辉光按元素染色（_orb_tint）——附魔刀的底光跟随元素色
+		var tint := _orb_tint(i)
+		_orb_glows[i].modulate = Color(tint.r, tint.g, tint.b,
+			0.4 + 0.3 * punch + 0.07 * sin(angle * 3.0 + float(i) * 2.1))
 		_orb_punch[i] = maxf(punch - p_game_delta * 5.0, 0.0)
 	for flash: Dictionary in _hit_flashes:
 		var left := float(flash["left"])
@@ -265,37 +267,43 @@ func _draw_styled_orbs() -> void:
 				draw_polyline(zig, col, 3.2, true)
 				draw_circle(pos, 3.2, col)
 			_:
-				pass                                  # orb 默认：珠核贴图（_update_orb_sprites）
+				pass                                  # orb 默认：飞刀程序化绘制（_draw_flying_knives）
 
 
-func _draw_energy_orbs() -> void:
-	# R25 默认形态重设计（用户反馈「就是个球」）：
-	# 浮游球 = 等离子能量球——双层反向旋转内弧（电离层）+ 周期性电火花十字 + 命中脉冲增强
-	var mint := PopPalette.SUCCESS
+func _draw_flying_knives() -> void:
+	# R32 默认形态重做（用户反馈「环绕力场球太怪了，换成飞刀」）：
+	# 浮游体 = 环绕飞刀——刀尖沿运动方向（公转切向）回旋飞行；钢白刀身 +
+	# 元素附魔刀脊辉光（_orb_tint 染色）+ 深色刀柄；命中 → 刀刃白闪脉冲。
 	for i in range(orbs):
 		var pos := _orb_position(i, Vector2.ZERO)
 		var phase := angle + TAU * float(i) / float(orbs)
+		var dir := Vector2.from_angle(phase)              # 径向
+		var motion := Vector2(-dir.y, dir.x)              # 切向（运动方向 = 刀尖指向）
+		var side := Vector2(-motion.y, motion.x)
 		var punch := float(_orb_punch[i]) if i < _orb_punch.size() else 0.0
-		var r := orb_radius * (0.62 + 0.10 * punch)
-			# R26 元素附魔染色：武器挂 ELE 卡 → 该球按元素着色（多元素按球错开随机）
+		var blade := orb_radius * (1.05 + 0.22 * punch)   # 刀体全长
+		var w := orb_radius * 0.17                        # 半刀宽
+		var tip := pos + motion * blade * 0.55
+		var shoulder := pos + motion * blade * 0.08
+		var base := pos - motion * blade * 0.45
+		var steel := Color(0.93, 0.96, 1.0, 0.96)
+		draw_colored_polygon(PackedVector2Array([
+			tip, shoulder + side * w, base + side * w,
+			base - side * w, shoulder - side * w,
+		]), steel)
+		# 刀脊元素辉光（附魔色；未附魔 = 薄荷绿）+ 刀尾护线
 		var tint := _orb_tint(i)
-		var c1 := Color(tint.r, tint.g, tint.b, 0.55 + 0.25 * punch)
-		var c2 := Color(tint.r, tint.g, tint.b, 0.4)
-		# 内弧对 1：顺时针旋（phase 驱动）
-		draw_arc(pos, r, phase, phase + PI * 0.9, 14, c1, 2.6, true)
-		# 内弧对 2：逆时针旋（-phase × 1.6——反向电离层）
-		var a2 := -phase * 1.6 + float(i)
-		draw_arc(pos, r * 0.66, a2, a2 + PI * 0.7, 12, c2, 2.0, true)
-		draw_circle(pos, 2.2, tint)
-		# 周期电火花十字（每球错相；闪现帧率 ~8% 占空）
-		var spark_t := fmod(_anim_t * 2.0 + float(i) * 0.37, 1.0)
-		if spark_t < 0.08:
-			var k := spark_t / 0.08
-			var sc := Color(1.0, 1.0, 1.0, (1.0 - k))
-			var d := orb_radius * 0.5
-			draw_line(pos - Vector2(d, 0), pos + Vector2(d, 0), sc, 2.0, true)
-			draw_line(pos - Vector2(0, d), pos + Vector2(0, d), sc, 2.0, true)
-			draw_circle(pos, 2.5 * (1.0 - k), sc)
+		draw_line(shoulder + side * w * 0.9, tip, Color(tint.r, tint.g, tint.b, 0.9), 2.0, true)
+		draw_line(base + side * w * 0.9, base - side * w * 0.9,
+			Color(tint.r, tint.g, tint.b, 0.55), 2.0, true)
+		# 刀柄（刀体后方短柄）
+		draw_line(base, pos - motion * blade * 0.72, PopPalette.OUTLINE, 3.4, true)
+		# 命中白闪（双刃边线，脉冲驱动）
+		if punch > 0.01:
+			var flash := Color(1.0, 1.0, 1.0, punch)
+			var fl := 1.6 + 1.4 * punch
+			draw_line(tip, base + side * w * 1.3, flash, fl, true)
+			draw_line(tip, base - side * w * 1.3, flash, fl, true)
 
 
 func _orb_tint(p_index: int) -> Color:
@@ -349,10 +357,11 @@ func _draw() -> void:
 	draw_arc(Vector2.ZERO, orbit_radius, trail_a, angle, 12,
 		Color(mint.r, mint.g, mint.b, 0.18), orb_radius * 1.5, true)
 	# R19 形态绘制（sword 剑 / axe 斧 / bolt 闪电——程序化多边形，贴图零实例化）
+	# R32：默认 = 环绕飞刀（程序化绘制，不再是能量球）
 	if style != "orb":
 		_draw_styled_orbs()
 	else:
-		_draw_energy_orbs()                       # R25：默认球形态重设计（不再是素球）
+		_draw_flying_knives()
 	# 数值标注（力场下缘：环绕 ×N · 单击伤害；半透明贴纸风小字）
 	var atk := 0.0
 	if weapon != null and is_instance_valid(weapon):

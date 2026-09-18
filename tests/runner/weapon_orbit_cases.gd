@@ -1,5 +1,5 @@
 # tests/runner/weapon_orbit_cases.gd
-# 武器悬浮层 + W9 随机挥砍 + 环绕能量球用例体（由 test_weapon_orbit.gd 入口加载）。
+# 武器悬浮层 + W9 随机挥砍 + 环绕飞刀用例体（由 test_weapon_orbit.gd 入口加载）。
 extends RefCounted
 
 const DT := 1.0 / 120.0
@@ -248,9 +248,9 @@ func _test_w9_random_facing() -> void:
 		absf(float(w9.call("_leveled_param", "slash_radius",
 			float(w9.data.melee.get("slash_radius", 150.0)))) - 230.0) < 0.001)
 
-# ── 环绕能量球 ────────────────────────────────────────────────────
+# ── 环绕飞刀 ────────────────────────────────────────────────────
 func _test_energy_orb_visuals() -> void:
-	print("── 环绕能量球 ──")
+	print("── 环绕飞刀（R32 默认形态重做） ──")
 	# R30 修复：weapon_slots 数组上限 5 且前面用例已占满——此前 _add 返回 null 在
 	# 首个断言前崩掉整段（脚本错误不落 fail → 假绿漏测）。复用在场 W8，不再新占槽。
 	var w8: WeaponBase = null
@@ -266,6 +266,13 @@ func _test_energy_orb_visuals() -> void:
 	_check("前置：力场创建", field != null)
 	if field == null:
 		return
-	_check("默认形态：style = orb", String(field.get("style")) == "orb")
-	_check("能量球：命中脉冲池就位（电火花/内弧绘制通道）",
-		field.get("_orb_punch") != null)
+	_check("默认形态：style 键保持 orb（卡组/升级表契约不变）",
+		String(field.get("style")) == "orb")
+	_check("飞刀：命中脉冲池就位（刀刃白闪通道）", field.get("_orb_punch") != null)
+	# R32：珠核贴图隐藏（刀体程序化绘制，不再是球）；辉光保留并按元素染色
+	var cores: Array = field.get("_orb_cores")
+	var glows: Array = field.get("_orb_glows")
+	_check("飞刀：珠核贴图隐藏（默认不再是球）",
+		cores.size() > 0 and not bool((cores[0] as Sprite2D).visible))
+	_check("飞刀：辉光底光保留（元素染色通道就位）",
+		glows.size() > 0 and bool((glows[0] as Sprite2D).visible))
