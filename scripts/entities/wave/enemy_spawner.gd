@@ -57,6 +57,7 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 			break                             # 池满：留在队首等待下帧（不丢弃）
 		spawn_queue.pop_front()
 		enemy.spawn(data, int(entry.get("wave", 1)), int(entry.get("tags", 0)))
+		_elite_affix_roll(enemy, int(entry.get("wave", 1)))
 		# R28 基线强化（用户裁定「敌人攻击、生命值提升 20%」）：出生管线单次应用
 		enemy.max_hp = enemy.max_hp * 1.2
 		enemy.hp = enemy.max_hp
@@ -83,6 +84,32 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		if enemy.is_boss():
 			EventBus.emit_boss_spawned(enemy)   # Boss 登场事件（HUD 血条/GameFeel）
 		spawned += 1
+
+
+const ELITE_AFFIX_POOL: Array[StringName] = [
+	&"affix_ring", &"affix_sniper", &"affix_trapper",
+]   # 夜间R39 首批三词缀（charger/caller 二批接）；扫线/狂暴永不下发精英（§6）
+const ELITE_AFFIX_WAVE := 8                   # 词缀精英起始波（§6 投放节奏）
+
+
+func _elite_affix_roll(p_enemy: Enemy, p_wave: int) -> void:
+	# 夜间R39 投放门：wave 8+ 精英 1 词缀；wave 15+ 30% 双词缀（本批词缀池无互斥对；
+	# charger×trapper 互斥待二批接 charger 时落地）。词缀写实例侧 data 副本不动共享 tres。
+	if p_enemy == null or p_enemy.is_boss() or not p_enemy.is_elite() or p_wave < ELITE_AFFIX_WAVE:
+		return
+	var data := p_enemy.data
+	if data == null:
+		return
+	var affixes: Array[StringName] = [ELITE_AFFIX_POOL[randi() % ELITE_AFFIX_POOL.size()]]
+	if p_wave >= 15 and randf() < 0.3:
+		for extra in ELITE_AFFIX_POOL:
+			if not affixes.has(extra):
+				affixes.append(extra)
+				break
+	data = data.duplicate() as EnemyData
+	data.elite_affixes = affixes
+	p_enemy.data = data
+	p_enemy.set_elite_affixes(affixes)
 
 
 func _apply_map_mods(p_enemy: Enemy) -> void:

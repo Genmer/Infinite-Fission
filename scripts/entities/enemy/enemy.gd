@@ -139,6 +139,20 @@ var _anim_t: float = 0.0                      # 表现时钟（卫星公转/抖�
 var _boss_orbit: float = 0.0                  # 卫星公转角
 var _boss_angry: bool = false                 # Boss 二阶段变脸贴图标志
 var _spawn_left: float = 0.0                  # 出生弹入剩余（0→1 带 overshoot）
+# 夜间R39 精英词缀技（ENEMY_BOSS_TELEGRAPH §6：Boss 技弱化版，前摇 +150ms 已含表值）
+const AFFIX_DEFS: Dictionary = {
+	&"affix_ring": {"cd": 7.0, "telegraph": 0.55, "type": "ring"},
+	&"affix_sniper": {"cd": 6.0, "telegraph": 0.85, "type": "sniper"},
+	&"affix_trapper": {"cd": 9.0, "telegraph": 0.85, "type": "trapper"},
+}
+var elite_affixes: Array[StringName] = []     # 生效词缀（≤2；charger×trapper 互斥由投放侧规避）
+var _affix_cd: Array[float] = []              # 各词缀独立冷却（与 Boss 弹幕计时器隔离）
+var _affix_casting: int = -1                  # 前摇中词缀下标（-1 无）
+var _affix_cast_left: float = 0.0
+var _affix_cast_total: float = 0.0
+var _affix_dir: Vector2 = Vector2.RIGHT       # 狙击扇锁定方向（起手快照）
+var _affix_tel_circle: Telegraph.TelegraphCircle = null
+var _affix_tel_fan: Telegraph.TelegraphFan = null
 var _dash_state: int = 0                      # E2 冲刺状态机（0 巡航/1 蓄力/2 冲刺/3 回弹）
 var _dash_left: float = 0.0                   # E2 当前阶段剩余
 var _dash_dir: Vector2 = Vector2.ZERO         # E2 冲刺锁定方向（蓄力期末采样）
@@ -309,6 +323,14 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	_anim_t = 0.0
 	_boss_orbit = 0.0
 	_boss_angry = false
+	elite_affixes = []
+	_affix_cd = []
+	_affix_casting = -1
+	if not is_boss() and is_elite():
+		for a in data.elite_affixes:
+			if AFFIX_DEFS.has(a) and not elite_affixes.has(a):
+				elite_affixes.append(a)
+				_affix_cd.append(maxf(float(AFFIX_DEFS[a]["cd"]) * 0.5, 2.0))   # 开场半冷却错相
 	_spawn_left = SPAWN_TIME                  # 出生弹入（0→1 带 overshoot）
 	_dash_state = 0
 	_dash_left = 0.0
@@ -374,6 +396,12 @@ func tick(p_game_delta: float) -> void:
 				else:
 					_tick_boss_barrage(p_game_delta, player, sf)
 					_tick_boss_charge(p_game_delta, player, sf)
+			elif not elite_affixes.is_empty():
+				# 夜间R39：精英词缀技 tick（硬直同 Boss 口径停摆；冻结打断在 tick 内判定）
+				if _stagger_left > 0.0:
+					_stagger_left = maxf(_stagger_left - p_game_delta, 0.0)
+				else:
+					_tick_elite_affixes(p_game_delta, player, sf)
 		GameConst.EnemyBehavior.RANGED:
 			_tick_ranged(p_game_delta, player, sf)
 		GameConst.EnemyBehavior.BLINK:
@@ -945,6 +973,126 @@ func _release_cast(p_player: Node2D) -> void:
 		_cast_fan.visible = false
 	if _cast_line != null:
 		_cast_line.visible = false
+
+
+func set_elite_affixes(p_affixes: Array) -> void:
+	# 夜间R39 投放收口（spawner wave8+ 调用；data 引用由调用方替换为副本）。
+	# 参数 untyped：call 通道传入数组经 Variant 装箱后与 Array[StringName] 形参失配
+	elite_affixes = []
+	_affix_cd = []
+	_affix_casting = -1
+	for a in p_affixes:
+		var affix := StringName(String(a))
+		if AFFIX_DEFS.has(affix) and not elite_affixes.has(affix):
+			elite_affixes.append(affix)
+			_affix_cd.append(maxf(float(AFFIX_DEFS[affix]["cd"]) * 0.5, 2.0))   # 开场半冷却错相
+
+
+func _tick_elite_affixes(p_dt: float, p_player: Node2D, p_sf: float) -> void:
+	# 夜间R39 精英词缀技机（§6）：独立冷却计时器（与 Boss 系统隔离）；冻结/寒滞
+	# （p_sf==0 或 elemental freeze）打断前摇 + cd 退 50%——「冰系控制流对精英的差异化」
+	if projectile_pool == null or p_player == null:
+		return
+	if p_sf <= 0.0 or _elite_frozen():
+		if _affix_casting >= 0:               # 冻结打断：前摇取消 + cd 退 50%
+			_affix_cancel_cast()
+		return
+	if _affix_casting >= 0:
+		_affix_cast_left = maxf(_affix_cast_left - p_dt, 0.0)
+		_affix_push_telegraph()
+		if _affix_cast_left <= 0.0:
+			_affix_release(p_player)
+		return
+	for i in range(elite_affixes.size()):
+		_affix_cd[i] = maxf(float(_affix_cd[i]) - p_dt, 0.0)
+		if float(_affix_cd[i]) <= 0.0:
+			_affix_begin(i, p_player)
+			return
+
+
+func _elite_frozen() -> bool:
+	var el: Variant = get("elemental")
+	return el is ElementalState and float((el as ElementalState).freeze_timer) > 0.0
+
+
+func _affix_cancel_cast() -> void:
+	# 打断：cd 退 50%（保留一半进度感）+ 收警示件
+	var i := _affix_casting
+	_affix_casting = -1
+	if i >= 0 and i < _affix_cd.size():
+		_affix_cd[i] = maxf(float(AFFIX_DEFS[elite_affixes[i]]["cd"]) * 0.5, 1.0)
+	_affix_clear_telegraph()
+
+
+func _affix_begin(p_idx: int, p_player: Node2D) -> void:
+	_affix_casting = p_idx
+	var def: Dictionary = AFFIX_DEFS[elite_affixes[p_idx]]
+	_affix_cast_total = maxf(float(def["telegraph"]), 0.3)
+	_affix_cast_left = _affix_cast_total
+	if String(def["type"]) == "sniper":
+		_affix_dir = (p_player.global_position - global_position).normalized()
+		if _affix_dir == Vector2.ZERO:
+			_affix_dir = Vector2.RIGHT
+		if _affix_tel_fan == null:
+			_affix_tel_fan = Telegraph.TelegraphFan.new()
+			_affix_tel_fan.name = "AffixFan"
+			add_child(_affix_tel_fan)
+		_affix_tel_fan.setup_dir(_affix_dir)
+		_affix_tel_fan.arc_deg = 24.0
+		_affix_tel_fan.radius = 320.0
+	elif _affix_tel_circle == null:
+		_affix_tel_circle = Telegraph.TelegraphCircle.new()
+		_affix_tel_circle.name = "AffixCircle"
+		add_child(_affix_tel_circle)
+	if String(def["type"]) == "sniper":
+		if _affix_tel_circle != null:
+			_affix_tel_circle.visible = false
+		_affix_tel_fan.visible = true
+	else:
+		if _affix_tel_fan != null:
+			_affix_tel_fan.visible = false
+		_affix_tel_circle.visible = true
+		_affix_tel_circle.radius = 190.0 if String(def["type"]) != "trapper" else 110.0
+	_affix_push_telegraph()
+
+
+func _affix_push_telegraph() -> void:
+	var prog := 1.0 - _affix_cast_left / maxf(_affix_cast_total, 0.01)
+	if _affix_tel_circle != null and _affix_tel_circle.visible:
+		_affix_tel_circle.progress = prog
+		_affix_tel_circle.queue_redraw()
+	if _affix_tel_fan != null and _affix_tel_fan.visible:
+		_affix_tel_fan.progress = prog
+		_affix_tel_fan.queue_redraw()
+
+
+func _affix_clear_telegraph() -> void:
+	# 显隐翻转（Boss cast_fan 同口径）：progress 清零 + 隐藏，节点池化复用
+	if _affix_tel_circle != null:
+		_affix_tel_circle.progress = 0.0
+		_affix_tel_circle.visible = false
+	if _affix_tel_fan != null:
+		_affix_tel_fan.progress = 0.0
+		_affix_tel_fan.visible = false
+
+
+func _affix_release(p_player: Node2D) -> void:
+	# 前摇完成执行（弱化参数真源 = ENEMY_BOSS_TELEGRAPH §6 表；伤害沿用平值）
+	var i := _affix_casting
+	_affix_casting = -1
+	_affix_clear_telegraph()
+	if i < 0 or i >= elite_affixes.size():
+		return
+	var affix: StringName = elite_affixes[i]
+	_affix_cd[i] = maxf(float(AFFIX_DEFS[affix]["cd"]), 1.0)
+	match affix:
+		&"affix_ring":
+			_fire_ring({"count": 8, "speed": 170.0, "dmg": 7.0})
+		&"affix_sniper":
+			_fire_spread({"count": 3, "arc_deg": 24.0, "speed": 300.0, "dmg": 11.0}, _affix_dir)
+		&"affix_trapper":
+			_spawn_mine_field({"count": 2, "blast_r": 80.0, "dmg": 15.0,
+				"telegraph_s": 0.85}, p_player)
 
 
 func _fire_ring(def: Dictionary) -> void:

@@ -15,6 +15,7 @@ extends Resource
 # 每项 ∈ [-0.8, 0.8]（KIN/FIR/ICE/LTG，A3 §2.3）
 @export var resist: Array[float] = [0.0, 0.0, 0.0, 0.0]
 @export var immune_mask: int = 0                    # 已知位组合（Boss 置 IMMUNE_FREEZE，F-17）
+@export var elite_affixes: Array[StringName] = []      # 夜间R39 精英词缀（ENEMY_BOSS_TELEGRAPH §6；spawner wave8+ 注入，运行期实例侧字段不动共享 tres）
 # 元素伤害免疫位（R22 P1：ELEM_IMMUNE_FIR/ICE/LTG 位或组合；免疫=伤害归零+附着拒绝）
 @export var elem_immune: int = 0
 @export var tags: int = 0                           # TAG_ELITE / TAG_BOSS 位
