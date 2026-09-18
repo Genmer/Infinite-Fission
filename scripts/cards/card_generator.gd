@@ -133,13 +133,18 @@ func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
 				card["value_scale"] = scale
 				card["scaled"] = true
 				var data: TraitData = card.get("data")
-				if data == null or scale <= 1.0:
+				if data == null:
 					continue
-				var scaled := data.duplicate() as TraitData
-				scaled.value = data.value * scale
-				scaled.description = _scaled_description(data.description, scale, rarity)
-				card["data"] = scaled
-				card["description"] = scaled.description
+				# R38 品级字段一致化（用户反馈「白色 buff 金色字体」）：roll 品级必须落
+				# data.rarity——此前 scale≤1.0 直接跳过，源 .tres 金/紫 rarity 原样带入
+				# 白品卡（白数值金名字）；共享 .tres 不落改（E-08），故无论品级一律复制
+				var out := data.duplicate() as TraitData
+				out.rarity = rarity
+				if scale > 1.0:
+					out.value = data.value * scale
+					out.description = _scaled_description(data.description, scale, rarity)
+					card["description"] = out.description
+				card["data"] = out
 			CardKind.MASTERY:
 				var weapon: Object = card.get("weapon")
 				if weapon == null or not is_instance_valid(weapon):

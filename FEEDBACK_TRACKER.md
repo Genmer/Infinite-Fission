@@ -318,6 +318,14 @@
 
 ---
 
+## 二ab、R38 本轮登记（2026-09-18，用户反馈：白色 buff 偶现金色字体——实锤 bug）
+
+| # | 原话摘要 | 定性 | 状态 | 落点 |
+|---|---|---|---|---|
+| 1 | 偶尔还会出现白色 buff 金色字体 | BUG(P0 显示) | ✅ R38 | 实锤双源：①卡池 `_apply_rarity_values` 在 scale≤1.0（白/低品）时**跳过复制**——卡片 data 保留源 .tres 的 rarity 字段（部分词条源定义即紫/金，如环绕形态卡/弹射/多元），roll 出白品数值却带源金 rarity 挂载 → layer_rarities=[3] → 金名+◆金（「偶尔」= 恰好抽到源金词条的白品 roll）；②黑市路径同样不写 data.rarity。修复：卡池无论品级一律复制落 `data.rarity = roll 值`（E-08 纪律：共享 .tres 不落改）；黑市 duplicate 后同步写入。顺修反向洞：MULT/ELEM 词条 layer_rarities 恒空（金字通道永不亮）→ max_rarity 空层回退 data.rarity。verify_feedback 新增双断言（白 roll 源金卡 → max_rarity=0；金 MULT → max_rarity=3） |
+
+---
+
 ## 三、历史轮摘要（已完结，详情见 META_ROADMAP.md §5.9~§5.15）
 
 - **R1~R4（2026-08-29~31）**：命中反馈/护盾条/波次 toast/多地图/图鉴/养成/每日挑战/角色技能/BGM 重制/换一批/满层质变/局内存档 等（全绿基线 293+731）

@@ -168,6 +168,37 @@ func _test_rarity_value_scale() -> void:
 		_check("白卡不缩放（0.15 原值）",
 			absf(float((white_card.get("data") as TraitData).value) - 0.15) <= 0.001)
 	_check("注册表共享资源不落改（原值仍 0.15）", absf(base.value - 0.15) <= 0.0001)
+	# R38 品级字段一致化：白 roll 的源金卡（MEC_ORBIT_SWORD 源 rarity=3）→ data.rarity
+	# 必须落 0（此前 scale≤1.0 跳过复制，白数值带金字段 → 面板金名「白色 buff 金字」）
+	var src_gold: TraitData = _gl.registry.get_trait(&"MEC_ORBIT_SWORD")
+	_check("前置：源卡 MEC_ORBIT_SWORD 源 rarity=2（紫源——机制同金源）",
+		src_gold != null and int(src_gold.rarity) == 2,
+		"rarity=%s" % str(src_gold.rarity if src_gold != null else -1))
+	var wcard := {
+		"kind": CardGenerator.CardKind.TRAIT, "id": src_gold.id, "rarity": 0,
+		"data": src_gold, "value_scale": 1.0, "display_name": "t", "description": "t",
+	}
+	var wcands: Array[Dictionary] = [wcard]
+	gen._apply_rarity_values(wcands)
+	var wdata: TraitData = wcard.get("data")
+	_check("R38：白 roll 源紫卡 data.rarity 落 0（副本，不落改源）",
+		wdata != src_gold and int(wdata.rarity) == 0 and int(src_gold.rarity) == 2,
+		"out=%s src=%s" % [str(wdata.rarity), str(src_gold.rarity)])
+	gen.apply_choice(wcard, p)                    # 挂载（apply_choice 内部按形态门选宿主）
+	var matched := false
+	for w in p.get("weapon_slots"):
+		if w == null or not is_instance_valid(w):
+			continue
+		for tb in (w as WeaponBase).trait_stack.traits:
+			if tb.data.id == src_gold.id:
+				matched = matched or tb.max_rarity() == 0
+	_check("R38：挂载层 max_rarity=0（白色 buff 白色字体）", matched)
+	# R38 并集口径：MULT 池金覆盖 → data.rarity=3 → max_rarity=3（金 MULT 名字通道）
+	var mult_gold := src_gold.duplicate() as TraitData
+	mult_gold.rarity = 3
+	var fake := TraitBase.new()
+	fake.setup(mult_gold)
+	_check("R38：data.rarity=3 → max_rarity=3（MULT 金名通道）", fake.max_rarity() == 3)
 
 
 # ── ⑤ 紫精通连升 2 级 + Lv 区间文案 ──────────────────────────────

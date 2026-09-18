@@ -82,6 +82,7 @@ func _reroll_wares(p_paid: bool) -> void:
 		var rarity := card_generator._roll_rarity(_wave)
 		var scale := float(CardGenerator.RARITY_VALUE_SCALE[clampi(rarity, 0, 3)])
 		var data := t.duplicate() as TraitData
+		data.rarity = rarity                      # R38 品级字段一致化（白品不再带源金字段）
 		if scale > 1.0:
 			data.value = t.value * scale
 			data.description = card_generator._scaled_description(t.description, scale, rarity)

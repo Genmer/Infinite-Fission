@@ -53,10 +53,14 @@ func td_delta() -> float:
 
 
 func max_rarity() -> int:
-	# 当前生效定义的稀有度（取高层最高——显示着色用）
+	# 当前生效定义的稀有度（显示着色用）。R38 并集口径：layer_rarities（ADD 逐层
+	# 记账）∪ data.rarity——MULT/ELEM「取优覆盖」后 data 恒为当前生效定义
+	#（白首挂+金覆盖 → 金名；金首挂白覆盖 → 金名保留，与 ◆ 徽记语义一致）
 	var best := 0
 	for r in layer_rarities:
 		best = maxi(best, int(r))
+	if data != null:
+		best = maxi(best, int(data.rarity))
 	return best
 
 
