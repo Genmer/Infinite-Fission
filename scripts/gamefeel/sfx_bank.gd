@@ -119,6 +119,9 @@ func _build_all() -> void:
 	_make(&"ele_ignite", 0.22, 140.0, 420.0, "saw", 0.20)
 	_make(&"ele_frost", 0.14, 1800.0, 1100.0, "sine", 0.22)
 	_make(&"ele_zap", 0.08, 1200.0, 240.0, "square", 0.20)
+	# 夜间R19 Boss 阶段音：切换=号角上行 / 狂暴=低吼下行
+	_make(&"boss_phase", 0.35, 220.0, 660.0, "saw", 0.30)
+	_make(&"boss_enrage", 0.45, 160.0, 60.0, "saw", 0.36)
 
 
 func _make(p_name: StringName, p_dur: float, p_f0: float, p_f1: float,

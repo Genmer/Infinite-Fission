@@ -18,6 +18,7 @@ signal damage_resolved(result: DamageResult)               # 每次结算（跳�
 signal damage_alarm(result: DamageResult)                  # ×500 告警线触发（一局一次/构筑）
 signal enemy_killed(enemy: Node2D)                         # 死亡广播（含 tags/exp/位置）
 signal boss_spawned(enemy: Node2D)                         # Boss 登场（HUD 血条/GameFeel）
+signal boss_phase_changed(phase: int, enraged: bool)       # 夜间R19：Boss 阶段切换/狂暴（音效广播）
 signal player_hit(damage: float, source_uid: int)          # 简化路径受击（Q-16）
 signal player_died()                                       # 死亡优先级最高（E-16 仲裁输入）
 signal level_up(new_level: int)                            # 升级请求（GameLoop 仲裁）
@@ -102,6 +103,11 @@ func emit_enemy_killed(enemy: Node2D) -> void:
 func emit_boss_spawned(enemy: Node2D) -> void:
 	_track_dispatch(&"boss_spawned")
 	boss_spawned.emit(enemy)
+
+
+func emit_boss_phase_changed(p_phase: int, p_enraged: bool) -> void:
+	_track_dispatch(&"boss_phase_changed")
+	boss_phase_changed.emit(p_phase, p_enraged)
 
 
 func emit_player_hit(damage: float, source_uid: int) -> void:

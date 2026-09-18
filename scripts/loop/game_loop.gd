@@ -248,6 +248,14 @@ func request_pause() -> bool:
 	return change_state(GameConst.GameStatus.PAUSED)
 
 
+func _play_boss_phase_sfx(p_phase: int, p_enraged: bool) -> void:
+	# 夜间R19：Boss 阶段切换/狂暴音（phase=0 表狂暴）
+	if p_enraged:
+		sfx.play(&"boss_enrage")
+	else:
+		sfx.play(&"boss_phase")
+
+
 func _play_state_trigger_sfx(p_code: int, _p_pos: Vector2) -> void:
 	# 夜间R16：满槽状态触发音（点燃/寒滞+冻结共用冰音/感电）
 	match p_code:
@@ -880,6 +888,7 @@ func _boot_build_presentation() -> void:
 	# 夜间R15：元素反应音（按反应类型分音色——碎裂/过载/超导）
 	EventBus.reaction_triggered.connect(_play_reaction_sfx)
 	EventBus.state_triggered.connect(_play_state_trigger_sfx)
+	EventBus.boss_phase_changed.connect(_play_boss_phase_sfx)
 	EventBus.boss_spawned.connect(_on_boss_spawned_track_summons)   # B4 召唤调度注册
 	EventBus.wave_cleared.connect(_on_wave_cleared_bless_heal)   # 祝福·滋养（词缀二期）
 	boss_bar = BossBar.new()

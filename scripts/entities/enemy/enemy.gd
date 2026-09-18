@@ -756,8 +756,10 @@ func _check_boss_phase() -> void:
 	var phases := int(data.boss.get("phases", 2))
 	if phases >= 3 and boss_phase < 3 and ratio <= float(data.boss.get("phase3_hp", 0.3)):
 		_enter_boss_phase(3)
+		EventBus.emit_boss_phase_changed(3, false)
 	elif boss_phase < 2 and ratio <= float(data.boss.get("phase2_hp", 0.6)):
 		_enter_boss_phase(2)
+		EventBus.emit_boss_phase_changed(2, false)
 
 
 func _enter_boss_phase(p_phase: int) -> void:
@@ -779,6 +781,7 @@ func _enter_boss_phase(p_phase: int) -> void:
 		_barrage_cd[j] = maxf(float(_barrage[j].get("cd", 5.0)) * 0.5, 1.5)
 	if p_phase >= 3 and not _enrage_done and data.boss.has("enrage"):
 		_enter_enrage()
+		EventBus.emit_boss_phase_changed(0, true)   # phase=0 表狂暴（音效侧区分）
 
 
 func _enter_enrage() -> void:
