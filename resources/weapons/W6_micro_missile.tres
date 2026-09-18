@@ -72,8 +72,8 @@ threshold_traits = [{
 }]
 homing = {
 "proj_speed_init": 240.0, "proj_speed_max": 720.0, "accel": 900.0,
-"turn_rate": 480.0, "arm_delay": 0.15, "blast_r": 45.0, "blast_falloff": 0.6,
+"turn_rate": 480.0, "arm_delay": 0.15, "blast_r": 85.0, "blast_falloff": 0.6,
 "sub_count": 0, "sub_delay": 0.4,
-"blast_r_levels": [45.0, 45.0, 45.0, 45.0, 60.0]
+"blast_r_levels": [75.0, 80.0, 85.0, 90.0, 100.0]
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

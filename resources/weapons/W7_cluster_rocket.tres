@@ -72,7 +72,7 @@ threshold_traits = [{
 }]
 homing = {
 "proj_speed_init": 300.0, "proj_speed_max": 720.0, "accel": 900.0,
-"turn_rate": 480.0, "arm_delay": 0.15, "blast_r": 55.0, "blast_falloff": 0.6,
+"turn_rate": 480.0, "arm_delay": 0.15, "blast_r": 110.0, "blast_falloff": 0.6,
 "sub_count": 5, "sub_delay": 0.4, "sub_speed_init": 180.0, "sub_accel": 600.0,
 "sub_count_levels": [5.0, 6.0, 6.0, 8.0, 8.0]
 }

@@ -19,6 +19,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_setting_roundtrip()
 	_test_popup_scaling()
 	_test_particle_scaling()
+	_test_rocket_blast_fx()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -132,3 +133,42 @@ func _test_particle_scaling() -> void:
 	r.is_crit = false
 	gf.on_damage_resolved(r)
 	_check("高档：普命中恢复粒子", int(gf.particles.burst_requests) == b0 + 2)
+
+# ── R35/R36 火箭筒四层命中爆 ──────────────────────────────────────
+func _test_rocket_blast_fx() -> void:
+	print("── 火箭命中四层爆（R36 范围爆炸显示护栏） ──")
+	# 找 FX 层（elemental_fx_layer 挂 GameLoop 子树；事件订阅已在 boot 完成）
+	var fx: Node = null
+	var stack: Array[Node] = [_gl]
+	while not stack.is_empty() and fx == null:
+		var cur: Node = stack.pop_front()
+		if cur.has_method("_on_kill_blast") and cur.get("_blasts") != null:
+			fx = cur
+			break
+		for c in cur.get_children():
+			stack.append(c)
+	_check("前置：FX 层在册（_blasts 池持有者）", fx != null)
+	if fx == null:
+		return
+	var blasts: Array = fx.get("_blasts")
+	# 清场：把所有槽计时归零（防其他用例残留）
+	for slot: Dictionary in blasts:
+		slot["left"] = 0.0
+	EventBus.emit_kill_blast(Vector2(360.0, 640.0), 110.0)
+	_check("四层爆：emit 后计时槽就位", blasts.size() > 0 and float(blasts[0]["left"]) > 0.0)
+	var slot0: Dictionary = blasts[0]
+	var vis := 0
+	for key: String in ["flash", "fire", "ring", "smoke"]:
+		if slot0.has(key) and (slot0[key] as Sprite2D).visible:
+			vis += 1
+	_check("四层爆：白闪/火球/冲击环/烟尘 四层全可见", vis == 4, "visible=%d" % vis)
+	_check("四层爆：特效半径联动结算半径（r1 = 110×1.25）",
+		is_equal_approx(float(slot0["r1"]), 137.5), "r1=%.1f" % float(slot0["r1"]))
+	# 推进 0.6s → 全层自熄（寿命兜底）
+	for i in range(40):
+		fx.call("_tick_blasts", 0.016)
+	var all_off := true
+	for slot: Dictionary in blasts:
+		if float(slot["left"]) > 0.0:
+			all_off = false
+	_check("四层爆：0.64s 后全层自熄", all_off)
