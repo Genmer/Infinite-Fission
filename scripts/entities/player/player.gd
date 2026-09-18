@@ -131,6 +131,10 @@ func _ready() -> void:
 	_flame_r.position = POD_R * _visual_scale
 	_flame_r.visible = false
 	add_child(_flame_r)
+	# R25 武器悬浮层（用户点名「所有武器悬浮在主角身边，多武器动态绕主角排列」）
+	var orbit_avatars := WeaponOrbitAvatars.new()
+	orbit_avatars.name = "WeaponOrbitAvatars"
+	add_child(orbit_avatars)
 	_sprite = Sprite2D.new()
 	_sprite.name = "Visual"
 	_sprite.centered = true

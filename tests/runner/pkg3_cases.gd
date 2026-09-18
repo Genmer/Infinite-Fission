@@ -1413,7 +1413,9 @@ func _test_arc_slash() -> void:
 	var e_in1 := _spawn_enemy(_make_enemy_data("E_SL_A"), Vector2(440, 640))   # 0° 80px
 	var e_in2 := _spawn_enemy(_make_enemy_data("E_SL_B"), Vector2(463.9, 700)) # 30° 120px
 	var e_out := _spawn_enemy(_make_enemy_data("E_SL_C"), Vector2(360, 760))   # 90° 扇外
-	w1.tick(DT)                                    # 开窗（朝向最近敌 → facing 0）+ 首帧判定
+	w1._slash_window(0.0, false)                          # R25 随机砍后：确定性开窗（facing 0 对齐 0°/30° 靶）
+	w1.cooldown_left = 0.5                         # 阻断 tick 内随机重开（保持窗口朝向）
+	w1.tick(DT)                                    # 首帧判定
 	_check("挥斩：扇形内命中（0°/30° 各 −10）",
 		_approx(e_in1.hp, 990.0, 0.01) and _approx(e_in2.hp, 990.0, 0.01),
 		"A=%s B=%s" % [str(e_in1.hp), str(e_in2.hp)])
@@ -1451,6 +1453,9 @@ func _test_arc_slash() -> void:
 	var f1 := _spawn_enemy(_make_enemy_data("E_CAP_A"), Vector2(430, 150))
 	var f2 := _spawn_enemy(_make_enemy_data("E_CAP_B"), Vector2(460, 170))
 	var f3 := _spawn_enemy(_make_enemy_data("E_CAP_C"), Vector2(453.9, 210))
+	w2.tick(DT)
+	w2._slash_window(0.0, false)                          # R25：确定性开窗（对齐 f1/f2 扇内）
+	w2.cooldown_left = 0.5
 	w2.tick(DT)
 	var hurt := 0
 	for e in [f1, f2, f3]:

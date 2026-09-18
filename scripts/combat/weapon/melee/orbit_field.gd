@@ -268,6 +268,33 @@ func _draw_styled_orbs() -> void:
 				pass                                  # orb 默认：珠核贴图（_update_orb_sprites）
 
 
+func _draw_energy_orbs() -> void:
+	# R25 默认形态重设计（用户反馈「就是个球」）：
+	# 浮游球 = 等离子能量球——双层反向旋转内弧（电离层）+ 周期性电火花十字 + 命中脉冲增强
+	var mint := PopPalette.SUCCESS
+	for i in range(orbs):
+		var pos := _orb_position(i, Vector2.ZERO)
+		var phase := angle + TAU * float(i) / float(orbs)
+		var punch := float(_orb_punch[i]) if i < _orb_punch.size() else 0.0
+		var r := orb_radius * (0.62 + 0.10 * punch)
+		# 内弧对 1：顺时针旋（phase 驱动）
+		draw_arc(pos, r, phase, phase + PI * 0.9, 14,
+			Color(mint.r, mint.g, mint.b, 0.55 + 0.25 * punch), 2.6, true)
+		# 内弧对 2：逆时针旋（-phase × 1.6——反向电离层）
+		var a2 := -phase * 1.6 + float(i)
+		draw_arc(pos, r * 0.66, a2, a2 + PI * 0.7, 12,
+			Color(mint.r, mint.g, mint.b, 0.4), 2.0, true)
+		# 周期电火花十字（每球错相；闪现帧率 ~8% 占空）
+		var spark_t := fmod(_anim_t * 2.0 + float(i) * 0.37, 1.0)
+		if spark_t < 0.08:
+			var k := spark_t / 0.08
+			var sc := Color(1.0, 1.0, 1.0, (1.0 - k))
+			var d := orb_radius * 0.5
+			draw_line(pos - Vector2(d, 0), pos + Vector2(d, 0), sc, 2.0, true)
+			draw_line(pos - Vector2(0, d), pos + Vector2(0, d), sc, 2.0, true)
+			draw_circle(pos, 2.5 * (1.0 - k), sc)
+
+
 func _reset_state() -> void:
 	# 清零契约（武器回收期）
 	angle = 0.0
@@ -298,6 +325,8 @@ func _draw() -> void:
 	# R19 形态绘制（sword 剑 / axe 斧 / bolt 闪电——程序化多边形，贴图零实例化）
 	if style != "orb":
 		_draw_styled_orbs()
+	else:
+		_draw_energy_orbs()                       # R25：默认球形态重设计（不再是素球）
 	# 数值标注（力场下缘：环绕 ×N · 单击伤害；半透明贴纸风小字）
 	var atk := 0.0
 	if weapon != null and is_instance_valid(weapon):

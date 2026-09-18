@@ -75,6 +75,7 @@ func _test_w9_nullify() -> void:
 		return
 	for i in range(30):                            # 出生位稳定（几帧后 player 落位）
 		_gl._physics_process(DT)
+	_gl.player.global_position = Vector2(360.0, 640.0)   # 屏中心（出生位贴顶会让上扇区夹具越界出网格）
 	var ppos: Vector2 = _gl.player.global_position
 	# aim 回退 UP（无敌人）→ 上扇区（-90°±60°）摆 3 颗（应消）+ 下扇区 3 颗（应保留）
 	var up_angles := [-90.0, -45.0, -135.0]
@@ -90,18 +91,27 @@ func _test_w9_nullify() -> void:
 			"generation": 0, "team": 1,
 		})
 		bullets.append(b)
-	w9.call("try_fire")                            # 开斩窗（窗口 0.15s 内消弹）
+	w9._slash_window(-PI * 0.5, false)             # 确定性朝上开窗（上扇区夹具）
+	w9.cooldown_left = 1.0                          # 阻断 tick 内随机重开（固定朝向）
+	var slash_center: Vector2 = _gl.player.global_position   # 圆心钉死（玩家驱动帧会漂移）
 	for i in range(12):
-		if _gl.state == GameConst.GameStatus.LEVEL_UP:
-			_gl.change_state(GameConst.GameStatus.PLAYING)
-		_gl._physics_process(DT)
+		_gl.enemy_bullet_grid.rebuild(_gl._collect_enemy_bullets())
+		w9.get("arc_slash").call("tick", DT, slash_center)   # 只驱动挥斩本体（确定性）
+	var muzzle: Vector2 = _w1.muzzle_position()
+	var qu = _gl.enemy_bullet_grid.query_arc(muzzle, 150.0, -PI * 0.5, deg_to_rad(60.0))
+	var qd = _gl.enemy_bullet_grid.query_arc(muzzle, 150.0, PI * 0.5, deg_to_rad(60.0))
+	print("DBG muzzle=%s qu=%d qd=%d player=%s" % [str(muzzle), qu.size(), qd.size(),
+		str(_gl.player.global_position)])
 	var nullified := 0
 	var alive := 0
-	for b in bullets:
+	for idx in range(bullets.size()):
+		var b = bullets[idx]
 		if not bool(b.get("_live")):
 			nullified += 1
+			print("DBG nullified[%d] pos=%s" % [idx, str(b.global_position)])
 		else:
 			alive += 1
+			print("DBG alive[%d] pos=%s" % [idx, str(b.global_position)])
 	_check("W9：弧内敌弹被消弹（上扇区 3 颗 nullified）", nullified == 3,
 		"nullified=%d alive=%d" % [nullified, alive])
 	_check("W9：下扇区 3 颗保留（防全屏误消）", alive == 3)

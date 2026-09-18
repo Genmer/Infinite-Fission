@@ -74,13 +74,16 @@ func _on_tick_post(p_game_delta: float) -> void:
 		arc_slash.tick(p_game_delta, muzzle_position())
 
 
-func _slash_window() -> void:
-	# 挥斩窗口开启（持续 0.15s，窗口外无判定；朝向最近敌）
+func _slash_window(p_facing: float = 0.0, p_random: bool = true) -> void:
+	# 挥斩窗口开启（持续 0.15s，窗口外无判定）。
+	# R25（用户点名「在周围随机砍」）：朝向 = 每窗随机——刀绕主角 360° 游走，
+	# 随机方向 × 弧宽 = 大范围覆盖，前后左右都可能吃刀。
+	# p_random = false → 用 p_facing 确定性开窗（测试/特殊 AI 用；允许任意角度含负）。
 	if arc_slash == null:
 		_ensure_arc_slash()
 		if arc_slash == null:
 			return
-	var facing := aim_direction().angle()
+	var facing := (randf() * TAU) if p_random else p_facing
 	arc_slash.open_window(facing)
 
 
@@ -143,7 +146,7 @@ func _ensure_arc_slash() -> void:
 	arc_slash.enemy_grid = enemy_grid
 	arc_slash.enemy_bullet_grid = _enemy_bullet_grid   # R7 接线：消弹查询（此前恒 null = W9 消弹死功能）
 	arc_slash.spawn({
-		"slash_radius": float(data.melee.get("slash_radius", 150.0)),
+		"slash_radius": _leveled_param("slash_radius", float(data.melee.get("slash_radius", 150.0))),
 		"arc_deg": _leveled_param("arc_deg", float(data.melee.get("arc_deg", 120.0))),
 		"max_targets": int(data.melee.get("max_targets", 8)),
 		"knockback": float(data.melee.get("knockback", 180.0)),
