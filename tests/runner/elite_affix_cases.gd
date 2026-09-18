@@ -27,6 +27,9 @@ func run(p_tree: SceneTree) -> void:
 	_test_sniper_affix()
 	_test_trapper_affix()
 	_test_freeze_interrupt()
+	_test_charger_affix()
+	_test_caller_affix()
+	_test_exclusive_pair()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -240,3 +243,62 @@ func _test_freeze_interrupt() -> void:
 	_check("冻结打断：cd 退 50%（3.5s）", is_equal_approx(float(e._affix_cd[0]), 3.5),
 		"cd=%.2f" % float(e._affix_cd[0]))
 	(_gl.pools[&"enemy"] as EnemyPool).release(e)
+
+
+func _test_charger_affix() -> void:
+	print("── 冲锋者 affix_charger ──")
+	seed(23)
+	var e: Enemy = _make_elite(10)
+	e.set_elite_affixes([&"affix_charger"])
+	var base_speed: float = float(e.speed)
+	# 走完整前摇：cd 清零 → 驱动至释放
+	e._affix_cd[0] = 0.0
+	var pos0: Vector2 = e.global_position
+	_drive_cast(e, int(0.45 / DT) + 4)
+	_check("冲锋：前摇毕进入冲刺位移", e.global_position.distance_to(pos0) > 2.0,
+		"d=%.1f" % e.global_position.distance_to(pos0))
+	_check("冲锋：冲刺期接触伤 ×1.25", is_equal_approx(float(e._affix_dmg_mult), 1.25),
+		"mult=%.2f" % float(e._affix_dmg_mult))
+	# 冲刺段走完 → mult 复位
+	for i in range(int(0.4 / DT)):
+		e.call("_tick_elite_affixes", DT, _gl.player, 1.0)
+	_check("冲锋：段毕伤害复位", is_equal_approx(float(e._affix_dmg_mult), 1.0))
+	(_gl.pools[&"enemy"] as EnemyPool).release(e)
+
+
+var _summon_events: Array = []
+
+
+func _test_caller_affix() -> void:
+	print("── 唤潮者 affix_caller ──")
+	seed(29)
+	# 捕获广播（GameLoop 订阅的 cap 判定在同链路；此处锁 enemy 侧信号载荷）
+	var cb := func(uid: int, eid: StringName, pos: Vector2, ratio: float) -> void:
+		_summon_events.append([uid, eid, pos, ratio])
+	EventBus.elite_summon_requested.connect(cb)
+	var e: Enemy = _make_elite(10)
+	e.call("set_elite_affixes", [&"affix_caller"])
+	e._affix_cd[0] = 0.0
+	_drive_cast(e, int(1.15 / DT) + 4)
+	_check("唤潮：广播 1 次（E1_grunt / hp_ratio 0.5）",
+		_summon_events.size() == 1 and String(_summon_events[0][1]) == "E1_grunt"
+			and is_equal_approx(float(_summon_events[0][3]), 0.5),
+		str(_summon_events))
+	EventBus.elite_summon_requested.disconnect(cb)
+	(_gl.pools[&"enemy"] as EnemyPool).release(e)
+
+
+func _test_exclusive_pair() -> void:
+	print("── 互斥对（charger×trapper） ──")
+	seed(31)
+	var pool: Array = _gl.spawner.ELITE_AFFIX_POOL
+	var clash_seen := false
+	for i in range(60):
+		var e: Enemy = _make_elite(16)
+		var names: Array[String] = []
+		for a in e.elite_affixes:
+			names.append(String(a))
+		if names.has("affix_charger") and names.has("affix_trapper"):
+			clash_seen = true
+		(_gl.pools[&"enemy"] as EnemyPool).release(e)
+	_check("互斥对：60 次双词缀抽样无 charger×trapper 同叠", not clash_seen)

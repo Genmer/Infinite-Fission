@@ -87,8 +87,9 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 
 
 const ELITE_AFFIX_POOL: Array[StringName] = [
-	&"affix_ring", &"affix_sniper", &"affix_trapper",
-]   # 夜间R39 首批三词缀（charger/caller 二批接）；扫线/狂暴永不下发精英（§6）
+	&"affix_ring", &"affix_sniper", &"affix_trapper", &"affix_charger", &"affix_caller",
+]   # 五词缀齐（§6）；扫线/狂暴永不下发精英
+const ELITE_AFFIX_EXCLUSIVE := [["affix_charger", "affix_trapper"]]   # 互斥对：冲锋×布雷禁叠
 const ELITE_AFFIX_WAVE := 8                   # 词缀精英起始波（§6 投放节奏）
 
 
@@ -103,7 +104,13 @@ func _elite_affix_roll(p_enemy: Enemy, p_wave: int) -> void:
 	var affixes: Array[StringName] = [ELITE_AFFIX_POOL[randi() % ELITE_AFFIX_POOL.size()]]
 	if p_wave >= 15 and randf() < 0.3:
 		for extra in ELITE_AFFIX_POOL:
-			if not affixes.has(extra):
+			if affixes.has(extra):
+				continue
+			var clash := false
+			for pair in ELITE_AFFIX_EXCLUSIVE:
+				if (extra in pair) and (affixes[0] in pair):
+					clash = true
+			if not clash:
 				affixes.append(extra)
 				break
 	data = data.duplicate() as EnemyData

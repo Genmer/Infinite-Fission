@@ -250,6 +250,19 @@ func request_pause() -> bool:
 	return change_state(GameConst.GameStatus.PAUSED)
 
 
+func _on_elite_summon(p_uid: int, p_id: StringName, p_pos: Vector2, p_ratio: float) -> void:
+	# 夜间R40 唤潮者：cap 判定（场上该精英所召同种 <2）→ 精英环带落点入队
+	var alive := 0
+	for e in spawner.active:
+		if is_instance_valid(e) and not bool(e.get("dead")) 				and (e as Enemy).data != null and (e as Enemy).data.id == p_id 				and int(e.get_meta(&"_summoned_by", -1)) == p_uid:
+			alive += 1
+	if alive >= 2:
+		return
+	var ring := Vector2.from_angle(randf() * TAU) * randf_range(64.0, 110.0)
+	spawner.enqueue({"data_id": String(p_id), "wave": wave_director.current_wave,
+		"tags": 0, "pos": p_pos + ring, "hp_ratio": p_ratio, "summon_uid": p_uid})
+
+
 func _play_boss_phase_sfx(p_phase: int, p_enraged: bool) -> void:
 	# 夜间R19：Boss 阶段切换/狂暴音（phase=0 表狂暴）
 	if not _fx_sfx_allowed():
@@ -910,6 +923,7 @@ func _boot_build_presentation() -> void:
 	EventBus.reaction_triggered.connect(_play_reaction_sfx)
 	EventBus.state_triggered.connect(_play_state_trigger_sfx)
 	EventBus.boss_phase_changed.connect(_play_boss_phase_sfx)
+	EventBus.elite_summon_requested.connect(_on_elite_summon)
 	EventBus.boss_spawned.connect(_on_boss_spawned_track_summons)   # B4 召唤调度注册
 	EventBus.wave_cleared.connect(_on_wave_cleared_bless_heal)   # 祝福·滋养（词缀二期）
 	boss_bar = BossBar.new()

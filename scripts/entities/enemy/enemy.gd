@@ -144,6 +144,8 @@ const AFFIX_DEFS: Dictionary = {
 	&"affix_ring": {"cd": 7.0, "telegraph": 0.55, "type": "ring"},
 	&"affix_sniper": {"cd": 6.0, "telegraph": 0.85, "type": "sniper"},
 	&"affix_trapper": {"cd": 9.0, "telegraph": 0.85, "type": "trapper"},
+	&"affix_charger": {"cd": 6.0, "telegraph": 0.45, "type": "charger"},
+	&"affix_caller": {"cd": 14.0, "telegraph": 1.15, "type": "caller"},
 }
 var elite_affixes: Array[StringName] = []     # 生效词缀（≤2；charger×trapper 互斥由投放侧规避）
 var _affix_cd: Array[float] = []              # 各词缀独立冷却（与 Boss 弹幕计时器隔离）
@@ -153,6 +155,9 @@ var _affix_cast_total: float = 0.0
 var _affix_dir: Vector2 = Vector2.RIGHT       # 狙击扇锁定方向（起手快照）
 var _affix_tel_circle: Telegraph.TelegraphCircle = null
 var _affix_tel_fan: Telegraph.TelegraphFan = null
+var _affix_dash_left: float = 0.0             # charger 冲刺段剩余（0=非冲刺）
+var _affix_dash_dir: Vector2 = Vector2.RIGHT  # charger 锁定方向
+var _affix_dmg_mult: float = 1.0              # charger 冲刺期接触伤害 ×1.25（dmg 25%→平值 15 口径）
 var _dash_state: int = 0                      # E2 冲刺状态机（0 巡航/1 蓄力/2 冲刺/3 回弹）
 var _dash_left: float = 0.0                   # E2 当前阶段剩余
 var _dash_dir: Vector2 = Vector2.ZERO         # E2 冲刺锁定方向（蓄力期末采样）
@@ -412,7 +417,7 @@ func tick(p_game_delta: float) -> void:
 	if _hit_area != null:
 		for area in _hit_area.get_overlapping_areas():
 			if area is Player:
-				(area as Player).take_contact_damage(contact_dmg)
+				(area as Player).take_contact_damage(contact_dmg * _affix_dmg_mult)
 	_check_boss_phase()
 
 
@@ -566,7 +571,7 @@ func _explode(p_player: Node2D) -> void:
 	_fuse_ring.visible = false
 	if p_player != null and is_instance_valid(p_player):
 		if global_position.distance_to(p_player.global_position) <= VOLATILE_BLAST_RADIUS:
-			(p_player as Player).take_contact_damage(contact_dmg)
+			(p_player as Player).take_contact_damage(contact_dmg * _affix_dmg_mult)
 	hp = 0.0
 	_on_died()
 
@@ -997,6 +1002,20 @@ func _tick_elite_affixes(p_dt: float, p_player: Node2D, p_sf: float) -> void:
 		if _affix_casting >= 0:               # 冻结打断：前摇取消 + cd 退 50%
 			_affix_cancel_cast()
 		return
+	if _affix_dash_left > 0.0:
+		# charger 冲刺段：1.9× 锁定方向（不吃寒滞口径同 E2）；撞界即收
+		_affix_dash_left = maxf(_affix_dash_left - p_dt, 0.0)
+		global_position += _affix_dash_dir * speed * DASH_SPEED_MULT * p_dt
+		var size := Vector2(720.0, 1280.0)
+		if GameConfig.balance != null:
+			size = Vector2(GameConfig.balance.res_logic)
+		var p := global_position
+		if p.x <= hitbox_r or p.x >= size.x - hitbox_r 				or p.y <= hitbox_r or p.y >= size.y - hitbox_r:
+			global_position = p.clamp(Vector2.ONE * float(hitbox_r), size - Vector2.ONE * float(hitbox_r))
+			_affix_dash_left = 0.0
+		if _affix_dash_left <= 0.0:
+			_affix_dmg_mult = 1.0
+		return
 	if _affix_casting >= 0:
 		_affix_cast_left = maxf(_affix_cast_left - p_dt, 0.0)
 		_affix_push_telegraph()
@@ -1093,6 +1112,16 @@ func _affix_release(p_player: Node2D) -> void:
 		&"affix_trapper":
 			_spawn_mine_field({"count": 2, "blast_r": 80.0, "dmg": 15.0,
 				"telegraph_s": 0.85}, p_player)
+		&"affix_charger":
+			# 单段冲刺（E2 状态机口径）：1.9× 速 0.35s 锁定方向；期间接触伤 ×1.25（25%）
+			_affix_dash_dir = (p_player.global_position - global_position).normalized()
+			if _affix_dash_dir == Vector2.ZERO:
+				_affix_dash_dir = Vector2.RIGHT
+			_affix_dash_left = DASH_GO_TIME
+			_affix_dmg_mult = 1.25
+		&"affix_caller":
+			# 唤潮者：唤 1 只 E1_grunt（hp_ratio 0.5 / 场上限 2——cap 判定在 GameLoop 订阅侧）
+			EventBus.emit_elite_summon_requested(uid, &"E1_grunt", global_position, 0.5)
 
 
 func _fire_ring(def: Dictionary) -> void:

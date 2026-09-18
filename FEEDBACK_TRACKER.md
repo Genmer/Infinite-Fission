@@ -330,7 +330,7 @@
 
 | # | 事项 | 定性 | 状态 | 落点 |
 |---|---|---|---|---|
-| 1 | 精英技能词缀五件套（ENEMY_BOSS_TELEGRAPH §6，待办池遗留） | 功能 | ✅ 首批 R39 | **环爆体/狙击手/布雷者**三词缀落地：EnemyData.elite_affixes + spawner wave8+ 投放门（15+ 30% 双词缀）、enemy 侧独立冷却机（与 Boss 系统隔离）、前摇表值含 +150ms、复用 _fire_ring/_fire_spread/_spawn_mine_field（弱化参数 §6 表：ring 8发170速7伤 / sniper 3发24°300速11伤 / trapper 2雷blast80 15伤）、**冻结打断 = 前摇取消 + cd 退 50%**（冰系控制流对精英差异化）、Boss 恒免疫、扫线/狂暴永不下发精英；test_elite_affix 13/13 新套件；pkg2/pool_wiring/pkg3 回归绿。**二批待接**：charger（E2 疾冲复用）+ caller（召唤广播）+ 互斥对 |
+| 1 | 精英技能词缀五件套（ENEMY_BOSS_TELEGRAPH §6，待办池遗留） | 功能 | ✅ 首批 R39 | **环爆体/狙击手/布雷者**三词缀落地：EnemyData.elite_affixes + spawner wave8+ 投放门（15+ 30% 双词缀）、enemy 侧独立冷却机（与 Boss 系统隔离）、前摇表值含 +150ms、复用 _fire_ring/_fire_spread/_spawn_mine_field（弱化参数 §6 表：ring 8发170速7伤 / sniper 3发24°300速11伤 / trapper 2雷blast80 15伤）、**冻结打断 = 前摇取消 + cd 退 50%**（冰系控制流对精英差异化）、Boss 恒免疫、扫线/狂暴永不下发精英；test_elite_affix 13/13 新套件；pkg2/pool_wiring/pkg3 回归绿。**二批已接（R40）**：冲锋者（1.9× 速 0.35s 单段冲刺复用 E2 口径 + 冲刺期接触伤 ×1.25=平值15 + 撞界即收）+ 唤潮者（唤 E1_grunt×hp_ratio 0.5、场上 cap 2——EventBus.elite_summon_requested 广播 + GameLoop cap 判定入队）+ 互斥对（charger×trapper 禁叠，60 次抽样验证）——**五件套齐**；test_elite_affix 18/18；pkg2/pkg3/pool_wiring/verify_feedback/pkg4 回归绿 |
 
 ---
 
