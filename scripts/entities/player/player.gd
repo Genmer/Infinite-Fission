@@ -189,6 +189,7 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 		skill_active_left = maxf(skill_active_left - p_game_delta, 0.0)
 		if skill_active_left <= 0.0:
 			rof_mult = 1.0
+			refresh_weapon_intervals()   # R29：过载到期登记新基准（节拍变长不回罚）
 	# 毒云领域节拍（薇拉：剩余推进 + 0.5s 一跳域内结算/减速刷新）
 	if _poison_cloud_left > 0.0:
 		_poison_cloud_left = maxf(_poison_cloud_left - p_game_delta, 0.0)
@@ -430,9 +431,23 @@ func refresh_pickup_radius() -> void:
 func refresh_skill_cd() -> void:
 	# 技能冷却基线 = 角色 cd ×(1 − 养成CDR) ×(1 − 技能急速池)
 	#（AFF_SKILL_HASTE 2026-09-13 重做接线；挂卡后由 GameLoop 触发重算）
+	# R29 迟到减CD（用户反馈）：技能急速到手时**已在倒计时**的技能CD按新旧基线比例
+	# 立刻缩短——不再等本次冷却自然走完；基线变长不回罚（同武器侧口径）。
 	var base := float(CharacterTable.get_character(character_id).get("cd", 120.0))
-	skill_cd_base = base * (1.0 - Meta.skill_cdr_pct()) \
+	var new_base := base * (1.0 - Meta.skill_cdr_pct()) \
 		* (1.0 - clampf(_weapon_pool_sum(&"add_skillcdr"), 0.0, 0.6))
+	if skill_cd_base > 0.0 and new_base > 0.0 and skill_cd_left > 0.0 \
+			and new_base < skill_cd_base and not is_equal_approx(new_base, skill_cd_base):
+		skill_cd_left = clampf(skill_cd_left * new_base / skill_cd_base, 0.0, new_base)
+	skill_cd_base = new_base
+
+
+func refresh_weapon_intervals() -> void:
+	# R29 迟到减CD：角色侧射速增益变化（过载咆哮启停 / 地图祝福·狂热）时同步全部
+	# 武器节拍——增益开启的瞬间武器已在倒计时的冷却立刻按比例缩短（立刻见效）
+	for w in weapon_slots:
+		if w != null and is_instance_valid(w) and w is WeaponBase:
+			(w as WeaponBase).refresh_fire_interval()
 
 
 func _skill_time_stop() -> void:
@@ -523,6 +538,7 @@ func activate_skill() -> bool:
 		&"veles":
 			rof_mult = 2.0
 			skill_active_left = 4.0
+			refresh_weapon_intervals()   # R29：过载开启瞬间武器倒计时立刻按新节拍缩短
 		&"bulwark":
 			_skill_stomp()
 		&"ranger":

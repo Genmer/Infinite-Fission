@@ -470,6 +470,7 @@ func _apply_affix_ids(p_curses: Array, p_bless: StringName) -> void:
 			player.map_xp_mult = 1.10                   # 寒晶：经验 +10%
 		&"bless_fervor":
 			player.map_rof_mult = 1.06                  # 狂热：射速 +6%
+			player.refresh_weapon_intervals()           # R29：祝福到手即缩武器当前倒计时
 		&"bless_nurture":
 			player.map_wave_heal_pct = 0.02             # 滋养：每波回 2% max_hp
 		&"bless_rich_vein":

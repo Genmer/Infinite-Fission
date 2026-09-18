@@ -23,6 +23,7 @@ var meta_atk_pct: float = 0.0                 # 局外养成攻击 + 角色攻�
 var trait_stack: TraitStack = null             # 武器级词条（常驻面板聚合 + OnHit 注入源）
 var target_strategy: int = GameConst.TargetStrategy.NEAREST
 var cooldown_left: float = 0.0
+var _last_interval: float = 0.0                # 上次开火节拍（R29 迟到减CD 的比例缩放基准）
 var damage_pipeline: RefCounted = null          # 注入（DamagePipeline / 桩——resolve 签名一致）
 var projectile_pool: ProjectilePool = null      # 注入（ballistic 场景池）
 var enemy_grid: SpaceGrid = null               # 注入（索敌）
@@ -63,6 +64,7 @@ func tick(p_game_delta: float) -> void:
 	else:
 		if try_fire():
 			cooldown_left = _fire_interval()
+			_last_interval = cooldown_left
 	_on_tick_post(p_game_delta)
 
 
@@ -94,6 +96,7 @@ func attach_trait(p_trait: TraitData) -> bool:
 					DebugStats.count(&"trait_milestone")
 					break
 		_invalidate_panel()
+		refresh_fire_interval()          # R29 迟到减CD：挂卡即缩当前倒计时（add_cdr/add_rof/质变）
 		if p_trait.pool == GameConst.PoolClass.ADD \
 				and p_trait.pool_id == &"add_hp" and player != null:
 			# AFF_HP_UP 消费点（原死池接线修复）：add_hp 池逐层落地玩家血条——A3 §4.2
@@ -289,6 +292,7 @@ func level_up() -> void:
 	if level < MAX_LEVEL:
 		level += 1
 		_invalidate_panel()
+		refresh_fire_interval()          # R29：精通改 cd/rof 终值 → 当前倒计时同步缩放
 		leveled.emit(level)
 		if level >= MAX_LEVEL and data != null:
 			EventBus.emit_trait_milestone(StringName("max_%s" % String(data.id)),
@@ -348,6 +352,23 @@ func _fire_interval() -> float:
 		cap_cdr = GameConfig.balance.cap_cdr_sum
 	cdr = clampf(cdr, 0.0, cap_cdr)
 	return cd * (1.0 - cdr) / _player_rof_mult()
+
+
+func refresh_fire_interval() -> void:
+	# R29 迟到减CD（用户反馈「角色cd应该立刻见效、减少」）：减CD/射速词条、满层质变×1.6、
+	# 精通升级、过载咆哮等改节拍的时点，已在倒计时的冷却按新旧间隔比例立刻缩短——
+	# 不再等本回合自然走完才享受新射速。节拍变长（增益到期）不回罚：剩余原样保留，
+	# 下一周期自然按新节拍（防「增益结束反被拖慢」的负反馈手感）。冷却中且基准未知
+	#（_last_interval=0，如 setup 后未开火即挂卡）只登记基准不缩放。
+	if data == null:
+		return
+	var new_interval := _fire_interval()
+	if _last_interval <= 0.0 or is_equal_approx(new_interval, _last_interval):
+		_last_interval = new_interval
+		return
+	if cooldown_left > 0.0 and new_interval < _last_interval:
+		cooldown_left = minf(cooldown_left * new_interval / _last_interval, new_interval)
+	_last_interval = new_interval
 
 
 func _cap_rof() -> float:
