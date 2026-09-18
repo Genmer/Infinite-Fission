@@ -221,8 +221,9 @@ func _fire_hit_fx(p_orb_index: int, p_orb_pos: Vector2) -> void:
 
 func _draw_styled_orbs() -> void:
 	# R19 形态环绕体（用户点名「剑/斧头/闪电自己扩展」）：
-	# sword 裂空剑 = 径向外指的渐尖刃（蓝白）/ axe 裂空斧 = 柄+楔形斧头（金橙，厚重）/
-	# bolt 雷霆 = 切向锯齿闪电（葡萄紫，高频颤动）。朝向/相位随公转角推进。
+	# sword 裂空剑 = 径向外指的渐尖刃（蓝白）/ axe 裂空斧 = 双手战斧（R34 重做：
+	# 长柄+双层宽刃+配重锤头，金橙）/ bolt 雷霆 = 纯电弧（R34 重做：折线主干+
+	# 分叉副枝+端点火花星，废除紫球圆点标记）。朝向/相位随公转角推进。
 	for i in range(orbs):
 		var pos := _orb_position(i, Vector2.ZERO)
 		var phase := angle + TAU * float(i) / float(orbs)
@@ -241,31 +242,61 @@ func _draw_styled_orbs() -> void:
 				draw_line(pos - dir * orb_radius * 0.5, pos - dir * orb_radius * 1.05,
 					PopPalette.OUTLINE, 3.2, true)        # 剑柄
 			&"axe":
-				var handle_a := pos - dir * orb_radius * 0.9
-				var handle_b := pos + dir * orb_radius * 0.6
-				draw_line(handle_a, handle_b, PopPalette.OUTLINE, 4.0, true)   # 斧柄
-				var head_c := pos + dir * orb_radius * 0.35
+				# R34 斧形态重做（用户反馈「斧头也太儿戏了」）：厚重双手战斧——
+				# 深色长柄贯穿 + 双层宽刃（外弧金橙主刃 + 内层亮黄高光刃）+ 背部配重锤头
+				var handle_a := pos - dir * orb_radius * 1.05
+				var handle_b := pos + dir * orb_radius * 0.55
+				draw_line(handle_a, handle_b, PopPalette.OUTLINE, 5.2, true)   # 长柄
+				draw_circle(handle_a, orb_radius * 0.22,
+					Color(PopPalette.XP.r, PopPalette.XP.g, PopPalette.XP.b, 0.9))  # 柄尾缠头
+				# 配重锤头（柄背侧——厚重感来源）
+				var back := pos - dir * orb_radius * 0.28
+				draw_circle(back, orb_radius * 0.34,
+					Color(PopPalette.OUTLINE.r, PopPalette.OUTLINE.g, PopPalette.OUTLINE.b, 0.95))
+				# 主刃：外弧楔（金橙）
+				var head_c := pos + dir * orb_radius * 0.30
 				var wedge := PackedVector2Array([
-					head_c + tan * orb_radius * 0.85 + dir * orb_radius * 0.25,
-					head_c + tan * orb_radius * 0.55 - dir * orb_radius * 0.30,
-					head_c - tan * orb_radius * 0.10 - dir * orb_radius * 0.18,
+					head_c + tan * orb_radius * 1.05 + dir * orb_radius * 0.30,
+					head_c + tan * orb_radius * 0.62 - dir * orb_radius * 0.34,
+					head_c - tan * orb_radius * 0.06 - dir * orb_radius * 0.20,
 				])
-				draw_colored_polygon(wedge, PopPalette.XP)                     # 斧刃（外弧楔）
-				draw_arc(head_c + dir * orb_radius * 0.1, orb_radius * 0.72,
-					phase - PI * 0.5, phase + PI * 0.28, 10,
-					Color(PopPalette.ENEMY.r, PopPalette.ENEMY.g, PopPalette.ENEMY.b, 0.9),
-					3.4, true)
+				draw_colored_polygon(wedge, PopPalette.XP)
+				# 高光内刃（亮黄小楔——开锋读感）
+				var edge := PackedVector2Array([
+					head_c + tan * orb_radius * 0.95 + dir * orb_radius * 0.26,
+					head_c + tan * orb_radius * 0.55 - dir * orb_radius * 0.28,
+					head_c - tan * orb_radius * 0.02 - dir * orb_radius * 0.16,
+				])
+				draw_colored_polygon(edge, Color(1.0, 0.92, 0.55, 0.95))
+				# 刃口弧线（外缘白线——锋利轮廓）
+				draw_arc(head_c + dir * orb_radius * 0.12, orb_radius * 0.95,
+					phase - PI * 0.52, phase + PI * 0.30, 12,
+					Color(1.0, 1.0, 1.0, 0.85), 2.6, true)
 			&"bolt":
+				# R34 闪电形态重做（用户反馈「闪电的紫色球怎么还在」）：紫球是 bolt
+				# 画法末端的小圆点（r3.2 球心标记）——废除。现 = 纯电弧：高频颤动
+				# 折线主干 + 分叉副枝 + 端点火花星（无任何球状元素）
 				var flicker := 0.7 + 0.3 * sin(_anim_t * 26.0 + float(i) * 2.3)
 				var col := Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g,
 					PopPalette.SHOCK.b, clampf(flicker, 0.0, 1.0))
-				var zig := PackedVector2Array()
 				var origin := pos - dir * orb_radius * 0.9
-				for seg in range(5):
+				var joints: Array[Vector2] = [origin]
+				for seg in range(4):
 					var seg_dir := tan.rotated(0.9 if seg % 2 == 0 else -0.9)
-					zig.append(origin + seg_dir * orb_radius * (0.55 + 0.3 * float(seg)))
-				draw_polyline(zig, col, 3.2, true)
-				draw_circle(pos, 3.2, col)
+					joints.append(origin + seg_dir * orb_radius * (0.5 + 0.32 * float(seg)))
+				draw_polyline(PackedVector2Array(joints), col, 3.4, true)
+				# 分叉副枝（中段节点 → 切向斜出短线）
+				var branch_from: Vector2 = joints[2]
+				draw_line(branch_from, branch_from + tan.rotated(1.5) * orb_radius * 0.5,
+					Color(col.r, col.g, col.b, col.a * 0.7), 2.2, true)
+				draw_line(branch_from, branch_from + tan.rotated(-1.7) * orb_radius * 0.4,
+					Color(col.r, col.g, col.b, col.a * 0.6), 2.0, true)
+				# 端点火花星（四向短线——放电读感，替代原球心圆点）
+				var tip_j: Vector2 = joints[-1]
+				for k in range(4):
+					var spark_dir := Vector2.from_angle(TAU * float(k) / 4.0 + _anim_t * 6.0)
+					draw_line(tip_j, tip_j + spark_dir * orb_radius * 0.26,
+						Color(1.0, 1.0, 1.0, col.a), 1.8, true)
 			_:
 				pass                                  # orb 默认：飞刀程序化绘制（_draw_flying_knives）
 
