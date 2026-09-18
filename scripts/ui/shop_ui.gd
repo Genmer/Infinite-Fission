@@ -291,6 +291,10 @@ func _make_ware_row(p_index: int, p_ware: Dictionary) -> Control:
 	buy.size = Vector2(120.0, 44.0)
 	buy.focus_mode = Control.FOCUS_NONE
 	buy.disabled = not affordable
+	# 夜间R6：满血禁购维修包（此前满血仍可买=白花金币，无提示）
+	if kind == "heal" and _player != null 			and float(_player.get("hp")) >= float(_player.get("max_hp")) - 0.5:
+		buy.disabled = true
+		buy.text = "已满血"
 	buy.pressed.connect(_buy.bind(p_index))
 	buy.button_down.connect(func() -> void: StickerTheme.press_punch(buy))
 	row.add_child(buy)
