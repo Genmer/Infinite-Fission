@@ -248,6 +248,17 @@ func request_pause() -> bool:
 	return change_state(GameConst.GameStatus.PAUSED)
 
 
+func _play_state_trigger_sfx(p_code: int, _p_pos: Vector2) -> void:
+	# 夜间R16：满槽状态触发音（点燃/寒滞+冻结共用冰音/感电）
+	match p_code:
+		ElementalState.TRIGGER_BURN:
+			sfx.play(&"ele_ignite")
+		ElementalState.TRIGGER_CHILL, ElementalState.TRIGGER_FREEZE:
+			sfx.play(&"ele_frost")
+		ElementalState.TRIGGER_SHOCK:
+			sfx.play(&"ele_zap")
+
+
 func _play_reaction_sfx(p_rxn: int, _p_pos: Vector2, _p_target_uid: int) -> void:
 	# 夜间R15：元素反应音（按反应类型分音色——碎裂/过载/超导）
 	match p_rxn:
@@ -868,6 +879,7 @@ func _boot_build_presentation() -> void:
 	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
 	# 夜间R15：元素反应音（按反应类型分音色——碎裂/过载/超导）
 	EventBus.reaction_triggered.connect(_play_reaction_sfx)
+	EventBus.state_triggered.connect(_play_state_trigger_sfx)
 	EventBus.boss_spawned.connect(_on_boss_spawned_track_summons)   # B4 召唤调度注册
 	EventBus.wave_cleared.connect(_on_wave_cleared_bless_heal)   # 祝福·滋养（词缀二期）
 	boss_bar = BossBar.new()

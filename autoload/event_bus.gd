@@ -26,6 +26,7 @@ signal wave_started(wave: int)
 signal wave_cleared(wave: int)
 signal slot_unlocked(slot: int)                            # 武器槽解锁（HUD 提示）
 signal reaction_triggered(rxn: int, pos: Vector2, target_uid: int)
+signal state_triggered(code: int, pos: Vector2)            # 夜间R16：满槽状态触发（点燃/寒滞/冻结/感电音效广播）
 signal chain_lightning(from_pos: Vector2, to_pos: Vector2)  # 感电连锁主闪电（表现层专用广播，方向 C）
 signal elemental_dot_fired(pos: Vector2)                    # 点燃 DOT 跳伤结算（表现层火星专用广播）
 signal shield_blocked(pos: Vector2)                         # 格挡力场挡下接触伤害（护盾脉冲涟漪，A3 §4.4）
@@ -141,6 +142,10 @@ func emit_slot_unlocked(slot: int) -> void:
 func emit_reaction_triggered(rxn: int, pos: Vector2, target_uid: int) -> void:
 	_track_dispatch(&"reaction_triggered")
 	reaction_triggered.emit(rxn, pos, target_uid)
+
+
+func emit_state_triggered(p_code: int, p_pos: Vector2) -> void:
+	state_triggered.emit(p_code, p_pos)
 
 
 func emit_chain_lightning(from_pos: Vector2, to_pos: Vector2) -> void:

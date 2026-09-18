@@ -78,6 +78,8 @@ func apply_attach(p_enemy: Node2D, p_element: int, p_value: float,
 	var snapshot := float(p_info.get("snapshot", 0.0))
 	var overrides: Dictionary = p_info.get("overrides", {})
 	var code: int = (state as ElementalState).apply(p_element, p_value, snapshot, overrides)
+	if code != ElementalState.TRIGGER_NONE and p_enemy != null:
+		EventBus.emit_state_triggered(code, (p_enemy as Node2D).global_position)
 	if code == ElementalState.TRIGGER_SHOCK:
 		var hit_damage := float(p_info.get("hit_damage", snapshot))
 		if (state as ElementalState).shock_chain_cd <= 0.0:

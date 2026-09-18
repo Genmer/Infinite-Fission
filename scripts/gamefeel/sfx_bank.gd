@@ -115,6 +115,10 @@ func _build_all() -> void:
 	_make(&"rxn_shatter", 0.18, 2200.0, 620.0, "sine", 0.24)
 	_make(&"rxn_overload", 0.16, 320.0, 980.0, "saw", 0.22)
 	_make(&"rxn_super", 0.30, 180.0, 90.0, "saw", 0.20)
+	# 夜间R16 满槽状态触发音：点燃=低鸣上行 / 寒滞=结晶高频短音 / 感电=短促 zap
+	_make(&"ele_ignite", 0.22, 140.0, 420.0, "saw", 0.20)
+	_make(&"ele_frost", 0.14, 1800.0, 1100.0, "sine", 0.22)
+	_make(&"ele_zap", 0.08, 1200.0, 240.0, "square", 0.20)
 
 
 func _make(p_name: StringName, p_dur: float, p_f0: float, p_f1: float,
