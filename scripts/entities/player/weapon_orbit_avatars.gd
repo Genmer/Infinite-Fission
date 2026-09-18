@@ -45,6 +45,12 @@ func _process(p_delta: float) -> void:
 		avatar.visible = active
 		if not active:
 			continue
+		# R25b 修复（用户反馈「手枪的悬浮武器怎么是个球」）：化身贴图 = 对应武器
+		# 的程序化图标（此前占位圆珠忘了换——每一颗都是球）
+		var wid: StringName = StringName(String((w as WeaponBase).data.id))
+		var icon: ImageTexture = TextureFactory.weapon_icon(wid)
+		if avatar.texture != icon:
+			avatar.texture = icon
 		# 均匀分布：按在场武器数重排（动态绕主角排列——R25）
 		var slot_in_live := live.find(w)
 		var ang := _spin + TAU * float(slot_in_live) / float(n)
@@ -57,7 +63,7 @@ func _process(p_delta: float) -> void:
 			_tick_blade(w, avatar, r)
 			r = RING_R + 26.0                    # 刀悬浮更靠外一点
 		avatar.position = Vector2.from_angle(ang) * (r + bob)
-		avatar.rotation = ang + PI * 0.5         # 切向朝向（绕圈航向感）
+		avatar.rotation = ang                    # 朝向外侧（武器朝外的姿态读感）
 
 
 func avatar_global(p_weapon: WeaponBase) -> Variant:

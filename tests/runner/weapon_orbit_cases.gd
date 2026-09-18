@@ -98,6 +98,17 @@ func _test_avatar_layer() -> void:
 		if a is Sprite2D and a.visible:
 			angles.append((a.position).angle())
 	_check("悬浮层：多武器环绕分布（≥2 化身有角位）", angles.size() >= 2)
+	# R25b：化身贴图 = 对应武器图标（「手枪悬浮是个球」回归锁定）
+	var tex_ok := true
+	for i in range(_gl.player.get("weapon_slots").size()):
+		var w = _gl.player.get("weapon_slots")[i]
+		if w == null or not is_instance_valid(w):
+			continue
+		var expect: ImageTexture = TextureFactory.weapon_icon(
+			StringName(String(w.get("data").id)))
+		if _avatars_ref(i) != expect:
+			tex_ok = false
+	_check("悬浮层：化身贴图 = 对应武器图标（不是圆珠占位）", tex_ok)
 	if angles.size() >= 2:
 		angles.sort()
 		var spread: float = angles[-1] - angles[0]
@@ -167,6 +178,20 @@ func layer_process() -> void:
 
 
 # ── W9 随机挥砍 ───────────────────────────────────────────────────
+func _avatars_ref(i: int) -> ImageTexture:
+	# 用例辅助：按槽位取化身贴图（与 _ensure_avatars 槽位对齐一致）
+	var layer: Node = null
+	for c in _gl.player.get_children():
+		if c is WeaponOrbitAvatars:
+			layer = c
+	if layer == null:
+		return null
+	var kids := layer.get_children()
+	if i >= kids.size():
+		return null
+	return (kids[i] as Sprite2D).texture
+
+
 func _test_w9_random_facing() -> void:
 	print("── W9 随机挥砍 ──")
 	_gl.player.set("unlocked_slots", 5)            # 前面用例已占 4 槽
