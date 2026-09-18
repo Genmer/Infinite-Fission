@@ -330,6 +330,32 @@ func _test_build_details_panel() -> void:
 			found_gold = true
 	_check("叠层可视化：词条行显示「2/3 层」", found_stack, str(rtl_texts))
 	_check("叠层可视化：≥2 层首个数值改写为当前生效值（金色高亮）", found_gold)
+	# R31 品级徽记：金品层挂入 → 名字行带「◆金」（用户两轮反馈「为什么这个 buff 金色字」
+	# ——名字金 = 该词条抽到过金品级，徽记让品级语义自解释）
+	var gold_t: TraitData = crit_t.duplicate()
+	gold_t.rarity = 3
+	_check("前置：金品层挂入", crit_w.attach_trait(gold_t), "")
+	_gl.pause_overlay.toggle_details()
+	_gl.pause_overlay.toggle_details()
+	var found_badge := false
+	var badge_texts: Array[String] = []
+	_collect_rtl(_gl.pause_overlay._details_list, badge_texts)
+	for txt: String in badge_texts:
+		if "◆金" in txt and "3/3 层" in txt:
+			found_badge = true
+	_check("品级徽记：金品词条名字行带「◆金」+「3/3 层」（R31）", found_badge, str(badge_texts))
+	# 面板测试收尾（R31 修复：本块原缩进错位于递归函数 _collect_rtl 体内——每次递归
+	# 返回都重放 toggle/emit（历史 54 条非法迁移警告之源）；新增第二个 _collect_rtl
+	# 调用后按节点数平方引爆死循环。挪回本测试尾部，语义 = 面板互斥/恢复/退出验收）
+	_check("暂停卡隐藏（双卡互斥）", not _gl.pause_overlay.is_pause_visible()
+		or _gl.pause_overlay._card.visible == false)
+	_gl.pause_overlay.toggle_details()
+	_check("toggle → 切回暂停卡", not _gl.pause_overlay.is_details_visible())
+	_gl.hud.build_details_requested.emit()
+	_check("PAUSED 中再点 → 切回详情卡", _gl.pause_overlay.is_details_visible())
+	_gl.pause_overlay.resume_requested.emit()
+	_check("继续 → PLAYING", _gl.state == GameConst.GameStatus.PLAYING)
+	_gl.call(&"quit_to_menu")
 
 
 func _collect_rtl(p_node: Node, p_out: Array[String]) -> void:
@@ -340,15 +366,6 @@ func _collect_rtl(p_node: Node, p_out: Array[String]) -> void:
 		elif c is Label:
 			p_out.append((c as Label).text)
 		_collect_rtl(c, p_out)
-	_check("暂停卡隐藏（双卡互斥）", not _gl.pause_overlay.is_pause_visible()
-		or _gl.pause_overlay._card.visible == false)
-	_gl.pause_overlay.toggle_details()
-	_check("toggle → 切回暂停卡", not _gl.pause_overlay.is_details_visible())
-	_gl.hud.build_details_requested.emit()
-	_check("PAUSED 中再点 → 切回详情卡", _gl.pause_overlay.is_details_visible())
-	_gl.pause_overlay.resume_requested.emit()
-	_check("继续 → PLAYING", _gl.state == GameConst.GameStatus.PLAYING)
-	_gl.call(&"quit_to_menu")
 
 
 # ── ⑩ 粒子池寿命兜底 ─────────────────────────────────────────────

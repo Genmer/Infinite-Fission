@@ -434,7 +434,11 @@ func _make_weapon_section(p_w: Node) -> Control:
 			PopPalette.GOLD][clampi(eff_rarity, 0, 3)]
 		StickerTheme.label_sticker(tname, 16, rarity_col, 0, Color.WHITE, true)
 		# R11 叠层可视化：可叠词条显示「当前/上限 层」（如 2/3）
-		tname.text = String(td.get("display_name")) + ("　%d/%d 层" % [layers, stack_max] 			if stack_max > 1 else ("　×%d" % layers if layers > 1 else ""))
+		# R31 品级徽记（用户两轮反馈「为什么这个 buff 是金色字」——金色/紫色/蓝色名字 = 该词条抽到过对应品级，加 ◆ 标自解释）
+		var layers_txt := ("　%d/%d 层" % [layers, stack_max]) if stack_max > 1 else (("　×%d" % layers) if layers > 1 else "")
+		if eff_rarity >= 1:
+			layers_txt += "　◆%s" % ["蓝", "紫", "金"][eff_rarity - 1]
+		tname.text = String(td.get("display_name")) + layers_txt
 		tname.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		col.add_child(tname)
 		var tdesc := RichTextLabel.new()
