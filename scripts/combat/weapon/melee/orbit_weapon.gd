@@ -26,6 +26,14 @@ func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
 	arc_slash = null
 
 
+func has_target_now() -> bool:
+	# R33 无敌人不开火门（用户反馈）：W8 力场 = 常驻判定场（非射击）直接放行；
+	# W9 挥砍窗同门——无敌人不空挥（与 R25「无敌人时刀原位悬浮」设计一致）
+	if _is_slash_mode():
+		return super.has_target_now()
+	return true
+
+
 func try_fire() -> bool:
 	# 近战形态"开火"= 周期性判定调度（hit_cd / cd）
 	if data == null:

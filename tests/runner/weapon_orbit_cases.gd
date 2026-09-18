@@ -18,6 +18,7 @@ func run(p_tree: SceneTree) -> void:
 	_boot_game_loop()
 	_test_avatar_layer()
 	_test_muzzle_alignment()
+	_test_no_target_gate()
 	_test_w9_random_facing()
 	_test_energy_orb_visuals()
 	_teardown_game_loop()
@@ -184,6 +185,48 @@ func _test_muzzle_alignment() -> void:
 	var laser_muzzle: Vector2 = laser.call("muzzle_position")
 	_check("激光：束锚定仍在角色中心", laser_muzzle.distance_to(
 		_gl.player.global_position) < 0.5)
+
+
+# ── R33 无敌人不开火门 ────────────────────────────────────────────
+func _test_no_target_gate() -> void:
+	print("── 无敌人不开火（R33 门控） ──")
+	var pistol: WeaponBase = _gl.player.weapon_slots[0]
+	var pool: ProjectilePool = _gl.pools[&"projectile"]
+	var live0: int = int(pool.stats()["live"])
+	# 场上无敌：tick 不开火、冷却保持就绪
+	pistol.cooldown_left = 0.0
+	for i in range(12):
+		pistol.tick(DT)
+	_check("无敌门：tick 不开火（池不增）", int(pool.stats()["live"]) == live0,
+		"live=%d→%d" % [live0, int(pool.stats()["live"])])
+	_check("无敌门：冷却保持就绪（0）", is_equal_approx(pistol.cooldown_left, 0.0),
+		"cd=%.4f" % pistol.cooldown_left)
+	# 敌现即射：第一帧就开火进入冷却
+	var enemy: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	enemy.spawn(_gl.registry.get_enemy(&"E1_grunt"), 10, 0)
+	enemy.global_position = _gl.player.global_position + Vector2(0.0, -240.0)
+	_gl.spawner.active.append(enemy)
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	pistol.cooldown_left = 0.0
+	pistol.tick(DT)
+	_check("敌现即射：第一帧开火进冷却", pistol.cooldown_left > 0.0,
+		"cd=%.4f" % pistol.cooldown_left)
+	_check("敌现即射：池 +1", int(pool.stats()["live"]) == live0 + 1,
+		"live=%d" % int(pool.stats()["live"]))
+	# 敌灭即停：清场后冷却走完不再开火
+	_gl.spawner.active.erase(enemy)
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	(_gl.pools[&"enemy"] as EnemyPool).release(enemy)
+	for p in pool.active_projectiles():
+		if p is ProjectileBase and (p as ProjectileBase).team == 0:
+			p.call("nullify")
+	var live2: int = int(pool.stats()["live"])
+	while pistol.cooldown_left > 0.0:
+		pistol.tick(DT)
+	for i in range(6):
+		pistol.tick(DT)
+	_check("敌灭即停：清场后不再开火", int(pool.stats()["live"]) == live2,
+		"live=%d→%d" % [live2, int(pool.stats()["live"])])
 
 
 func layer_process() -> void:

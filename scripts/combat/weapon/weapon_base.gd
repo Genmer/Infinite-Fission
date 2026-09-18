@@ -61,11 +61,19 @@ func tick(p_game_delta: float) -> void:
 		trait_stack.advance_cooldowns(p_game_delta)
 	if cooldown_left > 0.0:
 		cooldown_left = maxf(cooldown_left - p_game_delta, 0.0)
-	else:
+	elif has_target_now():                  # R33：无敌人不开火（冷却保持就绪，敌现即射）
 		if try_fire():
 			cooldown_left = _fire_interval()
 			_last_interval = cooldown_left
 	_on_tick_post(p_game_delta)
+
+
+func has_target_now() -> bool:
+	# R33 无敌人不开火门（用户反馈「没有敌人的时候不要射击」）：索敌成功才进入
+	# try_fire——无敌人冷却保持就绪，敌人一出现即刻开火（不补等节拍；加特林预热
+	# 也随门保持，波间不清零）。子类覆写：OrbitWeapon（W8 力场常驻非射击放行，
+	# W9 挥砍窗同门防空挥）；try_fire 直调路径不受门控（测试/技能特殊通道）。
+	return acquire_target() != null
 
 
 func try_fire() -> bool:

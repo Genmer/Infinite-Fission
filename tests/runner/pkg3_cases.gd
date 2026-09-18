@@ -677,6 +677,8 @@ func _test_ballistic_weapon() -> void:
 		{"base_atk": 10.0, "rof": 5.0, "pierce": 1, "pellets": 1},
 		{"proj_speed": 600.0, "range": 600.0, "spread_deg": 0.0})
 	var w4 := _make_weapon(GameConst.WeaponForm.BALLISTIC, data4, Vector2(360, 640))
+	var beat_tgt := _spawn_enemy(_make_enemy_data("E_BEAT_T"), Vector2(360.0, 400.0))
+	# R33：tick 无敌人不开火门——节拍用例需在场目标（静止敌 hp1000 扛住 5 发）
 	for i in range(118):
 		w4.tick(DT)
 	_check("射速节拍：rof=5 → 118 tick（0.983s）恰 5 发",
@@ -687,7 +689,7 @@ func _test_ballistic_weapon() -> void:
 		{"base_atk": 10.0, "rof": 90.0, "pierce": 1, "pellets": 1},
 		{"proj_speed": 600.0, "range": 600.0, "spread_deg": 0.0})
 	var w5 := _make_weapon(GameConst.WeaponForm.BALLISTIC, data5, Vector2(360, 640))
-	w5.tick(DT)
+	w5.tick(DT)   # R33 门控：beat_tgt 仍在场（同网格）→ 开火路径不变
 	_check("射速封顶：rof=90 → clamp 30 → 冷却 1/30（性能双护栏）",
 		_approx(w5.cooldown_left, 1.0 / 30.0, 0.0005), "cd=%s" % str(w5.cooldown_left))
 	_nullify_all_proj_pool()

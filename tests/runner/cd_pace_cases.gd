@@ -65,10 +65,13 @@ func _check(p_name: String, p_cond: bool, p_detail: String = "") -> void:
 
 
 func _fire_once(p_w: WeaponBase) -> float:
-	# 清冷却后推一帧 → 开火进入冷却；返回当前节拍（cooldown_left = _fire_interval()）
+	# 直挂节拍进冷却（与 tick 开火分支同式）。R33：tick 无敌人不开火门生效后，
+	# 冷却数学用例不再经 tick 开火路径（本套聚焦节拍缩放，索敌门属 weapon_orbit 域）
 	p_w.cooldown_left = 0.0
-	p_w.tick(DT)
-	return p_w.cooldown_left
+	var iv: float = p_w._fire_interval()
+	p_w.cooldown_left = iv
+	p_w._last_interval = iv
+	return iv
 
 
 func _trait(p_path: String) -> TraitData:
