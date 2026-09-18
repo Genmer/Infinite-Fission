@@ -57,6 +57,10 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 			break                             # 池满：留在队首等待下帧（不丢弃）
 		spawn_queue.pop_front()
 		enemy.spawn(data, int(entry.get("wave", 1)), int(entry.get("tags", 0)))
+		# R28 基线强化（用户裁定「敌人攻击、生命值提升 20%」）：出生管线单次应用
+		enemy.max_hp = enemy.max_hp * 1.2
+		enemy.hp = enemy.max_hp
+		enemy.contact_dmg = enemy.contact_dmg * 1.2
 		# 召唤物面值折算（B4 裂变召唤 hp_ratio 0.08/0.5——ENEMY_BOSS_TELEGRAPH §2）
 		var hp_ratio: Variant = entry.get("hp_ratio", null)
 		if hp_ratio != null:

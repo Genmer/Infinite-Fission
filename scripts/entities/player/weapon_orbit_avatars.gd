@@ -56,12 +56,11 @@ func _process(p_delta: float) -> void:
 		var ang := _spin + TAU * float(slot_in_live) / float(n)
 		var bob := sin(_t * BOB_FREQ + float(i) * 1.7) * BOB_AMP
 		var r := RING_R
-		# W9 化身 = 真刀：挥斩窗口贴弧扫动（无窗口原位悬浮呼吸）
+		# W9 化身 = 真刀：挥斩窗口贴弧扫动（返回 true = 刀已贴弧定位，跳过默认环绕位）
 		var w9_data: Variant = (w as WeaponBase).data
 		var is_blade: bool = w9_data != null and String(w9_data.id).begins_with("W9")
-		if is_blade:
-			_tick_blade(w, avatar, r)
-			r = RING_R + 26.0                    # 刀悬浮更靠外一点
+		if is_blade and _tick_blade(w, avatar, r + 26.0):
+			continue                             # 刀已贴弧（挥斩中）
 		avatar.position = Vector2.from_angle(ang) * (r + bob)
 		avatar.rotation = ang                    # 朝向外侧（武器朝外的姿态读感）
 
@@ -93,7 +92,7 @@ func _ensure_avatars(p_slots: int) -> void:
 		_avatars.append(sp)
 
 
-func _tick_blade(p_w: WeaponBase, p_avatar: Sprite2D, p_ring_r: float) -> void:
+func _tick_blade(p_w: WeaponBase, p_avatar: Sprite2D, p_ring_r: float) -> bool:
 	# W9 刀联动：挥斩窗口内贴挥砍弧扫动（前缘位置对齐窗口进度）；无窗口原位悬浮
 	var slash: Variant = p_w.get("arc_slash")
 	var data: Variant = p_w.data
@@ -104,11 +103,11 @@ func _tick_blade(p_w: WeaponBase, p_avatar: Sprite2D, p_ring_r: float) -> void:
 			float(data.melee.get("slash_radius", 150.0))))
 		arc = float(p_w.call("_leveled_param", "arc_deg", float(data.melee.get("arc_deg", 120.0))))
 	if slash == null or not is_instance_valid(slash):
-		return
+		return false
 	var window_left: float = float(slash.get("window_left"))
 	var facing: float = float(slash.get("facing"))
 	if window_left <= 0.0:
-		return                                  # 无窗口：调用方保持原位悬浮
+		return false                            # 无窗口：默认悬浮
 	# 窗口内：刀贴到挥砍弧前缘（进度 0→1 从 -arc/2 扫到 +arc/2）
 	var progress: float = clampf(1.0 - window_left / OrbitWeapon.SLASH_WINDOW, 0.0, 1.0)
 	var half := deg_to_rad(arc) * 0.5
@@ -116,3 +115,4 @@ func _tick_blade(p_w: WeaponBase, p_avatar: Sprite2D, p_ring_r: float) -> void:
 	p_avatar.position = Vector2.from_angle(sweep) * (radius + 10.0)
 	p_avatar.rotation = sweep + PI * 0.5         # 刃指向扫动方向
 	p_avatar.scale = Vector2.ONE * (AVATAR_SCALE * 1.25)   # 挥斩时略放大
+	return true
