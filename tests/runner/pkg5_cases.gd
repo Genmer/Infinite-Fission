@@ -166,8 +166,8 @@ func _test_full_chain_smoke() -> void:
 		_gl.state == GameConst.GameStatus.PLAYING and not _gl.card_select_ui.is_open)
 	var applied := false
 	match kind:
-		0:                                      # MASTERY：武器 +1 级
-			applied = w.level == wlevel0 + 1
+		0:                                      # MASTERY：武器 +boosts 级（白/蓝 +1，紫/金 +2——卡池每局随机，断言跟卡面 boosts 走）
+			applied = w.level == wlevel0 + maxi(int(card.get("level_boosts", 1)), 1)
 		1:                                      # TRAIT：词条挂载生效
 			applied = w.trait_stack.traits.size() > traits0
 		2:                                      # RELIC：遗物入场

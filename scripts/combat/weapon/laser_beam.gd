@@ -20,6 +20,7 @@ var team: int = 0
 var tick_atk: float = 6.0                      # 每跳基础 ATK（L 表 tick_atk × dmg_mult）
 var tick_rate: float = 8.0                     # 跳/s
 var beam_length: float = 560.0
+var is_refraction: bool = false              # 折射副束标识（R26：紫色细束视觉区分主束）
 var beam_width: float = 14.0
 var lifetime: float = 0.0     # 脉冲寿命 s（0=常驻，>0=脉冲收束，用户反馈「激光常驻」）
 var scorch_max_layers: int = 5                 # ≤8（schema 上限；W4 L5 = 8）
@@ -83,6 +84,15 @@ func spawn(p_params: Dictionary) -> void:
 	beam_length = maxf(float(p_params.get("beam_length", 560.0)), 1.0)
 	lifetime = maxf(float(p_params.get("lifetime", 0.0)), 0.0)
 	beam_width = maxf(float(p_params.get("beam_width", 14.0)), 1.0)
+	# R26：折射束专属紫罗兰色 + 细束（池化节点颜色按次设置——「棱镜和激光一样」观感根源修复）
+	is_refraction = bool(p_params.get("is_refraction", false))
+	var tint := Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g, PopPalette.SHOCK.b, 0.85) 		if is_refraction else Color(PopPalette.PLAYER.r, PopPalette.PLAYER.g, PopPalette.PLAYER.b, 0.85)
+	if is_refraction:
+		beam_width *= 0.7
+	if _line != null:
+		_line.default_color = tint
+	if _core != null:
+		_core.default_color = tint.lerp(Color.WHITE, 0.9)
 	scorch_max_layers = clampi(int(p_params.get("scorch_max_layers", 5)), 1, 8)
 	scorch_per_layer = float(p_params.get("scorch_per_layer", 0.08))
 	refract_beams = int(p_params.get("refract_beams", 0))

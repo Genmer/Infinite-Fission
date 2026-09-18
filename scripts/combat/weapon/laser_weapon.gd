@@ -84,6 +84,7 @@ func _spawn_beam(p_origin: Vector2, p_dir: Vector2, p_depth: int, p_dmg_mult: fl
 		"scorch_max_layers": int(_leveled_param("scorch_max_layers",
 			float(data.laser.get("scorch_max_layers", 5)))),
 		"scorch_per_layer": float(data.laser.get("scorch_per_layer", 0.08)),
+		"is_refraction": p_depth > 0,
 		"refract_beams": int(_leveled_param("refract_beams",
 			float(data.laser.get("refract_beams", 0)))),
 		"refract_ratio": _leveled_param("refract_ratio",
