@@ -604,6 +604,10 @@ func _sync_visual() -> void:
 		if wid == &"W6_micro_missile" or wid == &"W7_cluster_rocket":
 			_sprite.texture = TextureFactory.missile_tex()
 			_sprite.rotation = velocity.angle() + PI * 0.5 if velocity.length() > 1.0 				else _sprite.rotation
+			# R26 弹体放大（用户点名「看不见火箭」）：W7 集束主火箭 ×3.4 / W6 微导 ×2.2
+			# （命中盒不变——纯表现层放大）
+			var missile_mult := 3.4 if wid == &"W7_cluster_rocket" else 2.2
+			_sprite.scale = Vector2(scale_f * missile_mult, scale_f * missile_mult)
 			return
 		if wid == &"W2_gatling":
 			# 加特林曳光弹（R19 用户反馈「手枪和加特林表现没啥不一样」）：圆珠换

@@ -5,7 +5,7 @@
 
 [sub_resource type="Resource" id="WeaponLevelStats_l1"]
 script = ExtResource("2_wls")
-base_atk = 14.0
+base_atk = 38.0
 rof = 0.3125
 cd = 3.2
 pierce = 1
@@ -14,7 +14,7 @@ note = "A3 §3.7 L1：主/子弹头同值 14；sub_count 5；群体 DPS 28/目�
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
-base_atk = 14.0
+base_atk = 38.0
 rof = 0.3125
 cd = 3.2
 pierce = 1
@@ -23,7 +23,7 @@ note = "A3 §3.7 L2：sub_count 5→6；群体 DPS 43/目标"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
-base_atk = 17.0
+base_atk = 46.0
 rof = 0.3125
 cd = 3.2
 pierce = 1
@@ -32,7 +32,7 @@ note = "A3 §3.7 L3：atk 14→17；群体 DPS 53/目标"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
-base_atk = 17.0
+base_atk = 54.0
 rof = 0.3125
 cd = 3.2
 pierce = 1
@@ -41,7 +41,7 @@ note = "A3 §3.7 L4：sub_count 6→8；群体 DPS 74/目标"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
-base_atk = 22.0
+base_atk = 68.0
 rof = 0.3846
 cd = 2.6
 pierce = 1

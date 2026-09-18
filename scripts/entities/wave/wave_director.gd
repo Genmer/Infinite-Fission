@@ -39,8 +39,8 @@ var _escort_mix: Array[EnemyData] = []                # 本波伴随敌池（空
 var _escort_cursor: int = 0                           # 混合轮转游标（确定性）
 
 const HARD_CAP_BONUS := 8.0                   # wave_hard_cap = spawn_window + 8s（A3 §1.3）
-const INTER_WAVE_BUFFER := 1.0                # 波间缓冲 1s
-const LOOT_BUFFER := 3.0                       # 全清后拾取缓冲 3s
+const INTER_WAVE_BUFFER := 0.6                # 波间缓冲（R26：1.0→0.6——「打完很久没怪」）
+const LOOT_BUFFER := 1.2                       # 全清后拾取缓冲（R26：3.0→1.2——碎片磁吸秒收不再需要长窗）
 const BOSS_TRICKLE_INTERVAL := 2.5             # Boss 伴随怪节奏 fallback（A3 §2.4 w10 行：×1/2.5s 场上≤12）
 const BOSS_TRICKLE_CAP := 12
 # Boss 波伴随怪分波节奏（包 4 遗留项；真源 A3 §2.4 波表行原文：w10「Boss1+G×1/2.5s（场上≤12）」、

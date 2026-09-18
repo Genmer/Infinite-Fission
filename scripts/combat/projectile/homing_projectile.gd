@@ -146,6 +146,7 @@ func _on_settled(p_target: Node2D, p_result: DamageResult, p_tctx: TraitContext 
 		last_hit_pos = global_position
 	if impact_hook.is_valid():
 		impact_hook.call(global_position, blast_radius)
+	EventBus.emit_kill_blast(global_position, blast_radius)   # R26 爆炸环特效（火箭命中=看得见的爆炸）
 	_blast_secondaries(p_target)
 	_apply_elemental(p_target, p_result, p_tctx)
 	_recycle(GameConst.RecycleReason.PIERCE_DEPLETED)
