@@ -10,7 +10,7 @@ rof = 0.3125
 cd = 3.2
 pierce = 1
 pellets = 1
-note = "A3 §3.7 L1：主/子弹头同值 14；sub_count 5；群体 DPS 28/目标"
+note = "A3 §3.7 L1（R27/R36 后口径）：主/子弹头 38；sub_count 5；blast_r 110"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")

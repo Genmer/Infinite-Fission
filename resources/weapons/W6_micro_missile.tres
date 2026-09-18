@@ -46,7 +46,7 @@ rof = 2.0833
 cd = 0.48
 pierce = 1
 pellets = 1
-note = "A3 §3.6 L5：cd 0.48s；blast_r 45→60；单体 DPS 66.7"
+note = "A3 §3.6 L5（R36 后口径）：cd 0.48s；blast_r 级表 L5=100；单体 DPS 66.7"
 
 [resource]
 script = ExtResource("1_wd")
