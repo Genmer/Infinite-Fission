@@ -134,6 +134,8 @@ func _test_avatar_layer() -> void:
 # ── R25 发射口对齐（用户点名禁令） ────────────────────────────────
 func _test_muzzle_alignment() -> void:
 	print("── 发射口对齐 ──")
+	_gl.player.global_position = Vector2(360.0, 640.0)   # R30：居中——出生点贴顶会触发
+	                                                     # 枪口屏幕钳制，干扰前伸断言
 	for i in range(3):
 		layer_process()
 	var pistol: WeaponBase = _gl.player.weapon_slots[0]
@@ -143,16 +145,33 @@ func _test_muzzle_alignment() -> void:
 		muzzle.distance_to(avatar_g) < 0.5 and muzzle.distance_to(_gl.player.global_position) > 20.0,
 		"muzzle=%s avatar=%s player=%s" % [str(muzzle), str(avatar_g),
 			str(_gl.player.global_position)])
-	# 实弹出膛位 = 发射口
+	# 实弹出膛位 = 发射口；R30 朝向/枪口尖断言同遍收集（nullify 前取完数据）
 	var b0: int = int((_gl.pools[&"projectile"] as ProjectilePool).stats()["live"])
 	pistol.call("try_fire")
 	var spawned_at_muzzle := false
+	var tip_ahead := false
+	var tip_dbg := ""
+	var av0: Sprite2D = _avatar_node(0)
+	var av_center: Vector2 = av0.global_position if av0 != null else Vector2.ZERO
 	for p in (_gl.pools[&"projectile"] as ProjectilePool).active_projectiles():
 		if p is ProjectileBase and (p as ProjectileBase).team == 0 				and p.get("weapon_ref") == pistol:
-			if (p as ProjectileBase).global_position.distance_to(muzzle) < 24.0:
+			var pos: Vector2 = (p as ProjectileBase).global_position
+			if pos.distance_to(muzzle) < 24.0:
 				spawned_at_muzzle = true
+			var off: Vector2 = pos - av_center
+			var bdir: Vector2 = (p as ProjectileBase).velocity.normalized()
+			if absf(off.length() - 18.0) < 2.0 and off.normalized().dot(bdir) > 0.99:
+				tip_ahead = true
+			tip_dbg = "off_len=%.2f dot=%.4f bullet=%s center=%s muzzle=%s" % [
+				off.length(), off.normalized().dot(bdir), str(pos), str(av_center), str(muzzle)]
 			p.call("nullify")
 	_check("发射口：实弹从化身位出膛", spawned_at_muzzle)
+	# R30：化身朝向 = 武器开火指向（枪口始终向发射的方向；+X 画布直接取角）
+	var aim: Vector2 = pistol.call("aim_direction")
+	_check("朝向：化身 rotation 跟随开火指向",
+		av0 != null and is_equal_approx(av0.rotation, aim.angle()),
+		"rot=%.3f aim_ang=%.3f" % [av0.rotation if av0 != null else -99.0, aim.angle()])
+	_check("朝向：子弹从化身前方枪口尖出膛（≈18px 前伸且与弹速同向）", tip_ahead, tip_dbg)
 	# 近战保持角色中心（力场/挥砍圆心不变）
 	var w8: WeaponBase = _add(&"W8_orbit_field")
 	w8.call("try_fire")
@@ -175,6 +194,17 @@ func layer_process() -> void:
 	if layer != null:
 		for i in range(3):
 			layer.call("_process", DT)
+
+
+func _avatar_node(p_i: int) -> Sprite2D:
+	# R30 用例辅助：按槽位取化身 Sprite2D 节点（_ensure_avatars 槽位对齐，子节点序 = 槽位）
+	var layer: Node = null
+	for c in _gl.player.get_children():
+		if c is WeaponOrbitAvatars:
+			layer = c
+	if layer == null:
+		return null
+	return layer.get_child(p_i) as Sprite2D
 
 
 # ── W9 随机挥砍 ───────────────────────────────────────────────────
@@ -221,7 +251,16 @@ func _test_w9_random_facing() -> void:
 # ── 环绕能量球 ────────────────────────────────────────────────────
 func _test_energy_orb_visuals() -> void:
 	print("── 环绕能量球 ──")
-	var w8: WeaponBase = _add(&"W8_orbit_field")
+	# R30 修复：weapon_slots 数组上限 5 且前面用例已占满——此前 _add 返回 null 在
+	# 首个断言前崩掉整段（脚本错误不落 fail → 假绿漏测）。复用在场 W8，不再新占槽。
+	var w8: WeaponBase = null
+	for w in _gl.player.weapon_slots:
+		if w != null and is_instance_valid(w) and String(w.data.id).begins_with("W8"):
+			w8 = w
+			break
+	_check("前置：W8 在场", w8 != null, "全槽占满且无 W8（数组上限 5）")
+	if w8 == null:
+		return
 	w8.call("try_fire")
 	var field: Node = w8.get("orbit_field")
 	_check("前置：力场创建", field != null)

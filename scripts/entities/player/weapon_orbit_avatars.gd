@@ -13,6 +13,7 @@ const SPIN := 0.7                             # 公转角速度 rad/s
 const BOB_AMP := 4.0                          # 悬浮呼吸幅度 px
 const BOB_FREQ := 2.2                         # 呼吸频率 rad/s
 const AVATAR_SCALE := 0.62                    # 化身缩放（56px 画布 → ~35px）
+const MUZZLE_REACH := 18.0                    # 枪口前伸 px（56×0.62 半长 ~17 ≈ 枪口尖）
 
 var _avatars: Array[Sprite2D] = []            # 槽位对齐化身（4 槽，惰性创建）
 var _spin: float = 0.0                        # 公转相位
@@ -41,10 +42,11 @@ func _process(p_delta: float) -> void:
 	for i in range(_avatars.size()):
 		var w: Variant = slots[i] if i < slots.size() else null
 		var avatar := _avatars[i]
-		var active: bool = w != null and is_instance_valid(w)
-		avatar.visible = active
-		if not active:
+		# R30 防御：无数据的槽位武器（测试桩/装配中途）跳过取贴图——data.id 空引用
+		if w == null or not is_instance_valid(w) or (w as WeaponBase).data == null:
+			avatar.visible = false
 			continue
+		avatar.visible = true
 		# R25b 修复（用户反馈「手枪的悬浮武器怎么是个球」）：化身贴图 = 对应武器
 		# 的程序化图标（此前占位圆珠忘了换——每一颗都是球）
 		var wid: StringName = StringName(String((w as WeaponBase).data.id))
@@ -62,11 +64,18 @@ func _process(p_delta: float) -> void:
 		if is_blade and _tick_blade(w, avatar, r + 26.0):
 			continue                             # 刀已贴弧（挥斩中）
 		avatar.position = Vector2.from_angle(ang) * (r + bob)
-		avatar.rotation = ang                    # 朝向外侧（武器朝外的姿态读感）
+		# R30（用户反馈「转圈子弹从屁股出来，枪口要始终向发射的方向」）：化身朝向跟随
+		# 真实开火指向——aim_direction 与实弹出膛方向同源（无目标=UP 回退一致）。
+		# 图标画布口径：枪械类朝右（+X）直接取角；W9 刀画布朝上（-Y）+90° 补偿
+		#（与挥斩姿态同式，悬浮待机 = 指向最近敌人的持刀姿态）
+		var aim: Vector2 = (w as WeaponBase).aim_direction()
+		avatar.rotation = aim.angle() + (PI * 0.5 if is_blade else 0.0)
 
 
 func avatar_global(p_weapon: WeaponBase) -> Variant:
-	# 发射口查询（R25）：返回该武器化身的全局位置；化身不可见/未建 → null（调用方回退）
+	# 发射口查询（R25）：返回该武器化身**枪口**的全局位置；化身不可见/未建 → null
+	#（调用方回退）。R30：化身随射击指向旋转后，出膛点前伸到枪管尖端（化身位 + 朝向
+	# ×MUZZLE_REACH）——子弹从枪口出膛而非枪身中段；W9 刀画布朝上，朝向 −90° 还原。
 	var player := get_parent()
 	if player == null or not is_instance_valid(player):
 		return null
@@ -79,7 +88,17 @@ func avatar_global(p_weapon: WeaponBase) -> Variant:
 	var a := _avatars[idx]
 	if not a.visible:
 		return null
-	return a.global_position
+	var facing := a.rotation - PI * 0.5 if _is_blade_slot(slots, idx) else a.rotation
+	return a.global_position + Vector2.from_angle(facing) * MUZZLE_REACH
+
+
+func _is_blade_slot(p_slots: Variant, p_idx: int) -> bool:
+	# 槽位武器是否 W9（画布朝上口径——朝向还原用）
+	var w: Variant = p_slots[p_idx] if p_idx < (p_slots as Array).size() else null
+	if w == null or not is_instance_valid(w):
+		return false
+	var d: Variant = (w as WeaponBase).data
+	return d != null and String(d.id).begins_with("W9")
 
 
 func _ensure_avatars(p_slots: int) -> void:
