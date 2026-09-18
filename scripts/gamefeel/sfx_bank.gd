@@ -110,6 +110,11 @@ func _build_all() -> void:
 	_make(&"cast_warn", 0.14, 260.0, 620.0, "sine", 0.22)
 	_make(&"cast_snap", 0.06, 900.0, 420.0, "square", 0.22)
 	_make(&"tier_epic", 0.22, 240.0, 70.0, "saw", 0.34)
+	# 夜间R15 反应音色（此前反应只有视觉无声音）：碎裂=玻璃感高频下滑 /
+	# 过载=电感锯齿上行 / 超导=低频衰减嗡鸣
+	_make(&"rxn_shatter", 0.18, 2200.0, 620.0, "sine", 0.24)
+	_make(&"rxn_overload", 0.16, 320.0, 980.0, "saw", 0.22)
+	_make(&"rxn_super", 0.30, 180.0, 90.0, "saw", 0.20)
 
 
 func _make(p_name: StringName, p_dur: float, p_f0: float, p_f1: float,

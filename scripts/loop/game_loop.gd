@@ -248,6 +248,17 @@ func request_pause() -> bool:
 	return change_state(GameConst.GameStatus.PAUSED)
 
 
+func _play_reaction_sfx(p_rxn: int, _p_pos: Vector2, _p_target_uid: int) -> void:
+	# 夜间R15：元素反应音（按反应类型分音色——碎裂/过载/超导）
+	match p_rxn:
+		GameConst.ReactionType.RXN_FIR_ICE:
+			sfx.play(&"rxn_shatter")
+		GameConst.ReactionType.RXN_FIR_LTG:
+			sfx.play(&"rxn_overload")
+		GameConst.ReactionType.RXN_ICE_LTG:
+			sfx.play(&"rxn_super")
+
+
 func _on_shop_requested(p_wave: int) -> void:
 	# 战地黑市开店仲裁（M7）：PLAYING 态 → LEVEL_UP（复用弹卡态，E-16 仲裁同源）
 	if state != GameConst.GameStatus.PLAYING:
@@ -855,6 +866,8 @@ func _boot_build_presentation() -> void:
 			player.refresh_skill_cd())
 	EventBus.shield_blocked.connect(func(_p: Vector2) -> void: sfx.play(&"shield"))
 	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
+	# 夜间R15：元素反应音（按反应类型分音色——碎裂/过载/超导）
+	EventBus.reaction_triggered.connect(_play_reaction_sfx)
 	EventBus.boss_spawned.connect(_on_boss_spawned_track_summons)   # B4 召唤调度注册
 	EventBus.wave_cleared.connect(_on_wave_cleared_bless_heal)   # 祝福·滋养（词缀二期）
 	boss_bar = BossBar.new()
