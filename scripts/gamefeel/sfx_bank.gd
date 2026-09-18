@@ -122,6 +122,9 @@ func _build_all() -> void:
 	# 夜间R19 Boss 阶段音：切换=号角上行 / 狂暴=低吼下行
 	_make(&"boss_phase", 0.35, 220.0, 660.0, "saw", 0.30)
 	_make(&"boss_enrage", 0.45, 160.0, 60.0, "saw", 0.36)
+	# 夜间R24 结算音：胜利=三段上行琶音感 / 失败=低沉下行
+	_make(&"victory", 0.85, 440.0, 1560.0, "sine", 0.32)
+	_make(&"defeat", 0.70, 300.0, 70.0, "saw", 0.32)
 
 
 func _make(p_name: StringName, p_dur: float, p_f0: float, p_f1: float,

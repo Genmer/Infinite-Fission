@@ -233,6 +233,8 @@ func change_state(p_new: int) -> bool:
 				shard.force_magnet()
 	if p_new == GameConst.GameStatus.GAME_OVER:
 		time_scale = 1.0                          # 结算屏恢复常态缩放（下一局干净起步）
+		if not _victory_pending_active():         # 夜间R24：非通关（死亡/暂停中放弃）→ 失败音
+			sfx.play(&"defeat")
 	# BGM 环境音拨运输（P2）：战斗态播放 / 菜单暂停（简化口径——PAUSED/LEVEL_UP 沿用
 	# 战斗态不中断；Boss 层随回菜单收起）
 	if sfx != null:
@@ -307,6 +309,12 @@ func _on_wave_cleared_victory(p_wave: int) -> void:
 	_victory_pending_left = 2.2
 
 
+func _victory_pending_active() -> bool:
+	# 夜间R24：通关收尾窗内（=即将 show_victory）返回 true——change_state(GAME_OVER)
+	# 的失败音兜底要跳过这条胜利路径（victory 音已在 _tick_victory_pending 播放）
+	return _victory_pending_left > 0.0
+
+
 func _tick_victory_pending(p_raw_delta: float) -> void:
 	if _victory_pending_left <= 0.0:
 		return
@@ -319,6 +327,7 @@ func _tick_victory_pending(p_raw_delta: float) -> void:
 			active_shards.erase(shard)
 	RunSave.clear()
 	if change_state(GameConst.GameStatus.GAME_OVER):
+		sfx.play(&"victory")                 # 夜间R24：通关结算音
 		game_over_screen.show_victory()
 
 
