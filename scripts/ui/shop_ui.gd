@@ -63,10 +63,19 @@ func _reroll_wares(p_paid: bool) -> void:
 	var slot := 0
 	for category in ["ADD", "MULT", "MECH", "ELEM"]:
 		var pool := card_generator._trait_candidates(category, _player, [])
-		if pool.is_empty():
+		# R37（用户反馈「黑市还有武器+经验获取这种异常 buff」）：玩家侧池词条
+		# （经验/金币/磁吸/技能急速/血量上限）全局生效——混进黑市配武器前缀就是
+		# 「【手枪】经验获取」错乱货。过滤：黑市只卖武器侧词条（玩家侧词条保留
+		# 在升级卡池的【通用】语境）
+		var clean: Array[StringName] = []
+		for tid in pool:
+			var td: TraitData = card_generator.registry.get_trait(tid)
+			if td != null and not (td.pool_id in CardGenerator.PLAYER_SIDE_POOLS):
+				clean.append(tid)
+		if clean.is_empty():
 			continue
-		var tid: StringName = pool[randi() % pool.size()]
-		var t := card_generator.registry.get_trait(tid)
+		var tid2: StringName = clean[randi() % clean.size()]
+		var t := card_generator.registry.get_trait(tid2)
 		if t == null:
 			continue
 		var target_w := card_generator._random_owned_weapon(_player)

@@ -42,6 +42,7 @@ const EARLY_WEAPON_UNTIL_WAVE := 5
 const EARLY_WEAPON_UNTIL_LEVEL := 3
 const CANDIDATE_COUNT := 3                    # 三选一
 const MAX_WEAPON_TRAITS := 12                 # 单武器词条上限（WeaponBase.attach_trait 拒绝线）
+const PLAYER_SIDE_POOLS: Array[StringName] = [&"add_hp", &"add_xp", &"add_pickup", &"add_skillcdr", &"add_gold"]   # 玩家侧池（R37 上移类级：黑市货架过滤/升级卡【通用】前缀共用真源）
 const FALLBACK_ATK_PCT := 0.05                # fallback 属性卡：攻击 +5%（AC-16.4 原文）
 # 稀有度数值倍率（用户反馈 2026-08-29「不同等级数值差距大点，不然没有刷金卡的爽感」：
 # 原口径稀有度 roll 只影响卡面颜色，词条 value 恒为 .tres 定值 → 金白同值无爽感）。
@@ -447,7 +448,6 @@ func _make_trait_card(p_tid: StringName, p_wave: int, p_target: WeaponBase = nul
 		milestone = cur + 1 >= t.stack_max
 	# 前缀体系（R10 整理）：玩家侧池（生命/经验/磁吸/技能急速）=【通用】——效果全局生效，
 	# 不再误导性地挂武器名；武器侧词条 =【武器名】（绑定目标武器）
-	const PLAYER_SIDE_POOLS: Array[StringName] = [&"add_hp", &"add_xp", &"add_pickup", &"add_skillcdr", &"add_gold"]
 	var prefix := "【通用】" if t != null and (t.pool_id in PLAYER_SIDE_POOLS) 		else (("【%s】" % _weapon_short_name(p_target)) if p_target != null else "")
 	if milestone:
 		prefix = "◆质变◆" + prefix

@@ -93,6 +93,18 @@ func _test_pre_boss_shop() -> void:
 	if _gl.state == GameConst.GameStatus.LEVEL_UP:
 		_check("黑市：常规开店标题 = 战地黑市",
 			_gl.shop_ui._title.text == "战地黑市")
+		# R37 货架纯净：多轮重抽扫描——玩家侧池（经验/金币/磁吸/技能急速/血量）
+		# 不得出现在黑市（全局生效词条配武器前缀 = 「【手枪】经验获取」错乱货）
+		var junk_seen := false
+		for round in range(12):
+			_gl.shop_ui._reroll_wares(true)
+			for ware: Dictionary in _gl.shop_ui._wares:
+				if String(ware.get("kind", "")) != "trait":
+					continue
+				var td: TraitData = ware.get("data")
+				if td != null and td.pool_id in CardGenerator.PLAYER_SIDE_POOLS:
+					junk_seen = true
+		_check("黑市：货架无玩家侧池词条（12 轮重抽纯净）", not junk_seen)
 		_gl.shop_ui.close()
 	else:
 		_check("黑市：常规开店标题 = 战地黑市", false, "未进入 LEVEL_UP")
