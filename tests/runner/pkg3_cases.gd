@@ -1438,10 +1438,10 @@ func _test_arc_slash() -> void:
 			and (DebugStats.get_counter(&"bullet_nullified") == bn0 + 2
 				and int(_proj_pool.stats()["free"]) == free0 + 2))
 	_check("消弹格挡：弧外弹保留存活", not b_out.is_clean and b_out.visible)
-	# 同窗同目标单次 + 窗口 0.15s 过期
-	for i in range(19):
-		w1.tick(DT)                                # 窗口耗尽（0.15s = 18 帧）
-	_check("挥斩窗口：0.15s 判定窗 → 窗口外无判定（visible 复位）",
+	# 同窗同目标单次 + 窗口 0.34s 过期（R65：0.15→0.34——用户点名挥砍动画放慢）
+	for i in range(43):
+		w1.tick(DT)                                # 窗口耗尽（0.34s ≈ 41 帧 @DT）
+	_check("挥斩窗口：0.34s 判定窗 → 窗口外无判定（visible 复位）",
 		_approx(w1.arc_slash.window_left, 0.0) and not w1.arc_slash.visible)
 	_check("挥斩去重：同窗同目标单次（A/B 不再扣血）",
 		_approx(e_in1.hp, 990.0, 0.01) and _approx(e_in2.hp, 990.0, 0.01))

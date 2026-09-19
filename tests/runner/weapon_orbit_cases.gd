@@ -21,6 +21,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_no_target_gate()
 	_test_w9_random_facing()
 	_test_energy_orb_visuals()
+	_test_w9_chaser()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -290,6 +291,107 @@ func _test_w9_random_facing() -> void:
 	_check("W9：L5 刀范围 230（活动范围放大）",
 		absf(float(w9.call("_leveled_param", "slash_radius",
 			float(w9.data.melee.get("slash_radius", 150.0)))) - 230.0) < 0.001)
+
+# ── W9 追击者（R65 重定义） ──────────────────────────────────────
+func _test_w9_chaser() -> void:
+	print("── W9 追击者（R65 重定义） ──")
+	var w9: OrbitWeapon = null
+	for w in _gl.player.weapon_slots:
+		if w != null and is_instance_valid(w) and String(w.data.id) == "W9_arc_slash":
+			w9 = w as OrbitWeapon
+	_check("前置：W9 在场（复用随机朝向用例已装）", w9 != null)
+	if w9 == null:
+		return
+	w9.level = 1                                # 前序用例升至 L5——本段按 L1 口径断言
+	# ① 活动范围内（300px：旧攻击半径外、活动半径内）敌被追上开砍
+	var enemy := _spawn_chase_enemy(Vector2(300.0, 0.0))
+	var hp0 := float(enemy.hp)
+	w9.cooldown_left = 0.0
+	var fired := false
+	for i in range(360):                        # 3s @120Hz：刀 420px/s 追 300px ≈ 0.7s
+		w9.tick(DT)
+		if w9.cooldown_left > 0.0:
+			fired = true
+			break
+	_check("追击：旧攻击半径外的敌被追上开砍（cd 进节拍）", fired,
+		"fired=%b cd=%.3f" % [fired, w9.cooldown_left])
+	_check("追击：追击力场常驻（W9 刀体可见）", w9.orbit_field != null)
+	_check("追击：判定半径不变（150——攻击范围口径）",
+		absf(w9.effective_slash_radius() - 150.0) < 0.001)
+	_check("追击：敌吃刀掉血", float(enemy.hp) < hp0,
+		"hp=%s→%s" % [str(hp0), str(enemy.hp)])
+	# ② 活动范围外（700px > 375）不开砍：cd 恒就绪、刀不越界
+	_clear_chase_enemies()
+	_spawn_chase_enemy(Vector2(700.0, 0.0))
+	w9.cooldown_left = 0.0
+	var fired_far := false
+	for i in range(240):
+		w9.tick(DT)
+		if w9.cooldown_left > 0.0:
+			fired_far = true
+			break
+	var leashed := true
+	for kp in w9.orbit_field._knife_pos:
+		if kp.length() > 376.0:
+			leashed = false
+	_check("追击：活动半径外（700px）不开砍（cd 保持就绪）", not fired_far)
+	_check("追击：刀不越活动半径（≤375px）", leashed)
+	_check("追击：活动半径 = 挥砍半径 ×250% = 375",
+		absf(w9.orbit_field.leash_radius - 375.0) < 0.001)
+	# ③ 无敌回轨（刀位 ≤ 轨道半径 90 + 余量）
+	_clear_chase_enemies()
+	for i in range(300):
+		w9.tick(DT)
+	var homed := true
+	for kp in w9.orbit_field._knife_pos:
+		if kp.length() > 95.0:
+			homed = false
+	_check("追击：无敌回归环绕（刀位回轨道半径）", homed)
+	# ④ 挥砍动画放慢（0.15→0.34，用户点名）
+	_check("追击：挥砍窗口放慢（0.34s）", absf(OrbitWeapon.SLASH_WINDOW - 0.34) < 0.001)
+	# ⑤ 刀数量轴：谐振轨道 ×2 → 3 刀（W9 适配）
+	var link: TraitData = _gl.registry.get_trait(&"MEC_ORBIT_LINK")
+	w9.attach_trait(link)
+	w9.attach_trait(link)
+	var tctx := TraitContext.new()
+	tctx.event = GameConst.TraitEvent.ON_SPAWN
+	tctx.weapon = w9
+	w9.trait_stack.dispatch(GameConst.TraitEvent.ON_SPAWN, tctx)
+	_check("刀数量：谐振轨道 ×2 → 3 刀（即时重铺）",
+		w9.orbit_field != null and w9.orbit_field.orbs == 3,
+		"orbs=%d" % (w9.orbit_field.orbs if w9.orbit_field != null else -1))
+	# ⑥ 大小轴：巨刃 ×1 → 判定 ×1.2 / 刀体视觉 ×1.25
+	w9.attach_trait(_gl.registry.get_trait(&"MEC_GIANT_BLADE"))
+	_check("巨刃：挥砍范围 ×1.2（150→180）",
+		absf(w9.effective_slash_radius() - 180.0) < 0.001,
+		"r=%.1f" % w9.effective_slash_radius())
+	_check("巨刃：刀体视觉 ×1.25", absf(w9.orbit_field.knife_scale - 1.25) < 0.001)
+	# ⑦ 攻速轴：刀势如风 ×1 → 出手间隔 -15%（1.8→1.53）
+	var tempo: TraitData = _gl.registry.get_trait(&"MEC_SLASH_TEMPO")
+	var t_ok := w9.attach_trait(tempo)
+	var interval: float = w9.call("_fire_interval")
+	_check("攻速：刀势如风 → 出手间隔 -15%（1.8→1.53）",
+		absf(interval - 1.53) < 0.01,
+		"i=%.3f attach=%s tempo=%s cdr=%s" % [interval, str(t_ok),
+			str(tempo != null and int(tempo.pool)),
+			str(w9.trait_stack.aggregate_panel().get("add_cdr", -1.0))])
+
+
+func _spawn_chase_enemy(p_offset: Vector2) -> Enemy:
+	var enemy := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	enemy.spawn(_gl.registry.get_enemy(&"E1_grunt"), 1, 0)
+	enemy.global_position = _gl.player.global_position + p_offset
+	_gl.spawner.active.append(enemy)
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	return enemy
+
+
+func _clear_chase_enemies() -> void:
+	for e in _gl.spawner.active.duplicate():
+		_gl.spawner.active.erase(e)
+		(_gl.pools[&"enemy"] as EnemyPool).release(e)
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+
 
 # ── 环绕飞刀 ────────────────────────────────────────────────────
 func _test_energy_orb_visuals() -> void:

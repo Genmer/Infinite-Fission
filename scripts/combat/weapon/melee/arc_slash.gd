@@ -3,8 +3,10 @@
 # R7：击退权移交霰弹枪（本武器 180px 强击退每刀推飞全屏怪 = 用户实测「闪退」根因）；
 # R61 视觉（用户两轮反馈「怎么是个扇子」）：z_index 提层 + 实体刀形抡过（刀身/刃口/
 # 护手/柄多边形旋转扫扇角，淡刀残影 + 刀尖短弧光）——R59 弧带方案铺满扇区读感仍是扇子。
-# · 判定窗口 0.15s（窗口外无判定，AC-06.3 ±1° 扇形口径）；朝向 = 开窗时刻最近敌方向
-#   （窗口期内固定不扫摆）。
+# R65 追击者重做（用户重定义 W9）：中心 = 追击刀位（strike_center）、判定窗口放慢
+#（0.15→0.34s——用户点名「动画慢点」）；判定口径（query_arc 半径/半角/上限/消弹）不变。
+# · 判定窗口 SLASH_WINDOW（窗口外无判定，AC-06.3 ±1° 扇形口径）；朝向 = 开窗时刻
+#   刀→目标方向（窗口期内固定不扫摆）。
 # · 扇形判定：query_arc（中心角 facing、半角 arc_deg/2、半径 slash_radius）；
 #   单斩目标上限 max_targets；同窗同目标单次（_struck 去重）。
 # · 消弹（nullify=true，W9）：弧内敌方弹幕 → ProjectileBase.nullify() →
@@ -15,7 +17,8 @@ extends Node2D
 var slash_radius: float = 150.0
 var arc_deg: float = 120.0                    # 扇形角
 var facing: float = 0.0                       # 固定角度窗口中心（rad）
-var window_left: float = 0.0                  # 判定窗口剩余（0.15s）
+var window_left: float = 0.0                  # 判定窗口剩余（R65：0.34s）
+var strike_center: Vector2 = Vector2.INF      # R65 刀位中心（INF = 未设 → 跟随宿主）
 var max_targets: int = 8                      # 单斩目标上限
 var knockback: float = 0.0                   # R7：默认无击退（击退权在霰弹枪；保留参数位）
 var nullify: bool = false                     # 消弹开关（W9=true）
@@ -39,9 +42,15 @@ func spawn(p_params: Dictionary) -> void:
 	z_index = 5                                  # 敌/玩家之上（R7：原默认 z 被怪精灵压住）
 
 
-func open_window(p_facing: float) -> void:
-	# 挥斩窗口开启（持续 0.15s；窗口中心固定于开窗时刻朝向）
+func open_window(p_facing: float, p_center: Vector2 = Vector2.INF,
+		p_radius: float = -1.0) -> void:
+	# 挥斩窗口开启（持续 SLASH_WINDOW；窗口中心固定于开窗时刻朝向）。
+	# R65：p_center = 刀位世界中心（追击开砍——中心从玩家移到刀，判定口径不变）；
+	# p_radius > 0 = 本窗判定半径（巨刃乘区后的面板值）。缺省 → 旧口径（跟随宿主）。
 	facing = p_facing
+	strike_center = p_center
+	if p_radius > 0.0:
+		slash_radius = p_radius
 	window_left = OrbitWeapon.SLASH_WINDOW
 	_struck.clear()
 	visible = true
@@ -55,13 +64,15 @@ func tick(p_game_delta: float, p_center: Vector2) -> void:
 			visible = false
 			queue_redraw()
 		return
+	# R65：刀位开窗后中心固定在刀位（不随玩家移动）；宿主中心口径保留给旧调用方
+	var center := strike_center if strike_center != Vector2.INF else p_center
 	# R10 根因修复：本节点是武器（玩家子节点）的子节点——position 为局部坐标，
 	# 此前直接塞 muzzle_position() 全局值 → 视觉画到屏幕外（判定用全局所以只有「虚空伤害」）
-	position = weapon.to_local(p_center) if weapon != null and is_instance_valid(weapon) 		else p_center
+	position = weapon.to_local(center) if weapon != null and is_instance_valid(weapon) 		else center
 	window_left = maxf(window_left - p_game_delta, 0.0)
-	_judge_arc(p_center)
+	_judge_arc(center)
 	if nullify:
-		_nullify_enemy_bullets(p_center)
+		_nullify_enemy_bullets(center)
 	queue_redraw()
 
 

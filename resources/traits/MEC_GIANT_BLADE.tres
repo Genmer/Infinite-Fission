@@ -4,23 +4,23 @@
 
 [resource]
 script = ExtResource("1_td")
-id = &"MEC_ORBIT_LINK"
-display_name = "谐振轨道"
-description = "环绕武器（环绕力场/周期挥砍）的飞刀 +1，可叠 3 层"
+id = &"MEC_GIANT_BLADE"
+display_name = "巨刃"
+description = "环绕武器的刀体 +25% 且挥砍范围 +20%，可叠 2 层"
 pool = 3
 pool_id = &""
-effect_id = &"EF_MECH"
-value = 1.0
+effect_id = &"EF_STAT"
+value = 0.25
 value2 = 0.0
-params = {"required_weapon": [&"W8_orbit_field", &"W9_arc_slash"]}
-event_hooks = [0]
-stack_max = 3
+params = {"knife_scale": true, "required_weapon": [&"W8_orbit_field", &"W9_arc_slash"]}
+event_hooks = []
+stack_max = 2
 decay_delta = 0.0
 cap_pool_p = 0.0
 cap_local = 0.0
 inheritable = false
 proc_chance = 1.0
 cooldown = 0.0
-rarity = 1
+rarity = 2
 tags = 0
 condition = {}

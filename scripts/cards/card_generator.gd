@@ -365,8 +365,18 @@ func _form_allows(p_t: TraitData, p_target: WeaponBase) -> bool:
 					if td != null and StringName(str(td.get("id"))) == StringName(String(need_trait)):
 						has_trait_req = true
 						break
-	if weapon_req != null and wid != StringName(String(weapon_req)):
-		return false
+	if weapon_req != null:
+		# R65：required_weapon 支持数组（MEC_ORBIT_LINK 同时适配 W8/W9；单值口径不变）
+		if weapon_req is Array:
+			var allowed := false
+			for wv in (weapon_req as Array):
+				if wid == StringName(String(wv)):
+					allowed = true
+					break
+			if not allowed:
+				return false
+		elif wid != StringName(String(weapon_req)):
+			return false
 	if need_trait != null and not has_trait_req:
 		return false
 	if forms is Array and not (forms as Array).is_empty() and not (forms as Array).has(form):

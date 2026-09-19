@@ -14,7 +14,9 @@ func handle(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 		GameConst.TraitEvent.ON_SPAWN:
 			if p_ctx.weapon != null and is_instance_valid(p_ctx.weapon) \
 					and p_ctx.weapon is OrbitWeapon:
-				(p_ctx.weapon as OrbitWeapon).orbs_bonus += p_trait.layers
+				var orbit_w := p_ctx.weapon as OrbitWeapon
+				orbit_w.orbs_bonus += p_trait.layers
+				orbit_w.refresh_orbit_field()   # R65：+1 刀即时重铺（W8 浮游球 / W9 追击刀）
 		GameConst.TraitEvent.ON_EXPIRE:
 			_maybe_kill_blast(p_trait, p_ctx)
 

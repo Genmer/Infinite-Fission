@@ -15,6 +15,10 @@ const HIT_FLASH_LIFE := 0.22                  # 命中小环时长 s
 const PATH_DASHES := 26                       # 轨道虚线段数（奇数段绘制 = 虚线观感）
 
 var style: String = "orb"                      # 环绕形态（orb 飞刀默认 / sword 剑 / axe 斧 / bolt 闪电，R19/R32；键名 orb 为卡组契约保持）
+var leash_radius: float = 0.0                  # R65 追击活动半径（>0 = W9 追击模式；0 = W8 环绕模式不变）
+var chase_speed: float = 420.0                 # R65 追击移速（px/s）
+var engage_r: float = 46.0                     # R65 贴身开砍距离（刀心-目标心）
+var knife_scale: float = 1.0                   # R65 巨刃词条：刀体视觉缩放
 var orbs: int = 2                              # 浮游球数
 var orbit_radius: float = 90.0
 var angular_speed: float = 240.0               # °/s
@@ -32,6 +36,10 @@ var _orb_punch: Array[float] = []              # 命中膨胀脉冲（每球独�
 var _hit_flashes: Array[Dictionary] = []       # [{sprite, left}]（命中冲击小环池）
 var _flash_idx: int = 0
 var _anim_t: float = 0.0                       # 表现时钟（bolt 颤动相位，R19）
+var _knife_pos: Array[Vector2] = []            # R65 逐刀位置（局部坐标，相对玩家）
+var _knife_face: Array[float] = []             # R65 逐刀朝向（rad；追击=行进方向 / 环绕=切向）
+var _knife_target: Array[Node2D] = []          # R65 逐刀当前目标（null = 无目标回轨）
+var _last_center: Vector2 = Vector2.ZERO       # R65 最近宿主世界位（strike 世界位换算基准）
 
 
 func spawn(p_params: Dictionary) -> void:
@@ -42,14 +50,32 @@ func spawn(p_params: Dictionary) -> void:
 	orb_radius = maxf(float(p_params.get("orb_radius", 16.0)), 1.0)
 	knockback = float(p_params.get("knockback", 40.0))
 	hit_cd = maxf(float(p_params.get("hit_cd", 0.5)), 0.01)
+	leash_radius = maxf(float(p_params.get("leash_radius", 0.0)), 0.0)
+	chase_speed = maxf(float(p_params.get("chase_speed", 420.0)), 60.0)
+	engage_r = maxf(float(p_params.get("engage_r", 46.0)), 8.0)
+	knife_scale = maxf(float(p_params.get("knife_scale", 1.0)), 0.4)
 	style = String(p_params.get("style", "orb"))
 	angle = 0.0
 	target_hit_cd.clear()
 	visible = true
 	z_index = 4                                  # 敌/弹（z=0 树序层）之上、元素特效层（z=5）之下
+	_sync_knife_arrays()
 	_build_visuals()
 	_sync_orb_visibility()
 	queue_redraw()
+
+
+func _sync_knife_arrays() -> void:
+	# R65 逐刀状态数组对齐 orbs（新增刀落位轨道槽；收缩保留——再扩复用）
+	while _knife_pos.size() < orbs:
+		var i := _knife_pos.size()
+		_knife_pos.append(_orbit_slot(i))
+		_knife_face.append(_knife_pos[i].angle() + PI * 0.5)
+		_knife_target.append(null)
+	if _knife_pos.size() > orbs:
+		_knife_pos.resize(orbs)
+		_knife_face.resize(orbs)
+		_knife_target.resize(orbs)
 
 
 func _build_visuals() -> void:
@@ -96,10 +122,22 @@ func tick(p_game_delta: float, p_center: Vector2) -> void:
 	# 公转推进 + 球位更新 + 判定调度（每目标独立 hit_cd）+ 击退 + 表现推进
 	# R10 根因修复：同弧斩——局部/全局坐标空间错配（环绕力场此前同样整场不可见）
 	position = weapon.to_local(p_center) if weapon != null and is_instance_valid(weapon) 		else p_center
+	_last_center = p_center
 	_anim_t += p_game_delta
 	angle = wrapf(angle + deg_to_rad(angular_speed) * p_game_delta, 0.0, TAU)
 	for key in target_hit_cd:
 		target_hit_cd[key] = maxf(float(target_hit_cd[key]) - p_game_delta, 0.0)
+	if leash_radius > 0.0:
+		# R65 W9 追击模式：逐刀索敌追击/回轨（无接触判定——伤害全部走挥砍弧）
+		_tick_chase(p_game_delta, p_center)
+		_update_orb_sprites(p_game_delta)
+		queue_redraw()
+		return
+	# W8 环绕模式（口径不变）：刀位 = 轨道槽 + 逐球周期接触判定
+	_sync_knife_arrays()
+	for i in range(orbs):
+		_knife_pos[i] = _orbit_slot(i)
+		_knife_face[i] = _knife_pos[i].angle() + PI * 0.5
 	if weapon == null or weapon.enemy_grid == null:
 		_update_orb_sprites(p_game_delta)
 		queue_redraw()
@@ -175,18 +213,95 @@ func _orb_position(p_index: int, p_center: Vector2) -> Vector2:
 	return p_center + Vector2(cos(phase), sin(phase)) * orbit_radius
 
 
+func _orbit_slot(p_index: int) -> Vector2:
+	# R65 轨道槽位（局部偏移；环绕模式刀位 = 本槽，追击模式回归点）
+	var phase := angle + TAU * float(p_index) / float(orbs)
+	return Vector2(cos(phase), sin(phase)) * orbit_radius
+
+
+func _tick_chase(p_game_delta: float, p_center: Vector2) -> void:
+	# R65 W9 追击 AI：逐刀在活动半径（leash_radius）内索最近敌 → 追至贴身悬停；
+	# 无敌 → 回轨道槽环绕。攻击判定不在本层（贴身开砍由 OrbitWeapon 消费
+	# collect_engaged_strikes → ArcSlash 弧形判定——攻击范围口径零变化）。
+	var candidates: Array[Node2D] = []
+	if weapon != null and is_instance_valid(weapon) and weapon.enemy_grid != null:
+		candidates.append_array(weapon.enemy_grid.query_circle(p_center, leash_radius))
+	var step := chase_speed * p_game_delta
+	for i in range(orbs):
+		var target: Node2D = _pick_chase_target(candidates, p_center + _knife_pos[i],
+			_knife_target[i])
+		_knife_target[i] = target
+		if target != null:
+			var to_t: Vector2 = weapon.to_local(target.global_position) - _knife_pos[i]
+			var dist := to_t.length()
+			var dir := to_t / maxf(dist, 0.001)
+			_knife_face[i] = dir.angle()
+			if dist > engage_r * 0.55:
+				_knife_pos[i] += dir * minf(step, maxf(dist - engage_r * 0.5, 0.0))
+		else:
+			var slot := _orbit_slot(i)
+			var to_s: Vector2 = slot - _knife_pos[i]
+			var d_s := to_s.length()
+			if d_s > 0.5:
+				_knife_pos[i] += (to_s / d_s) * minf(step, d_s)
+				_knife_face[i] = to_s.angle()
+			else:
+				_knife_face[i] = slot.angle() + PI * 0.5
+		# 活动半径硬钳（刀不离玩家超过 leash——「行动范围 250%」边界）
+		if _knife_pos[i].length() > leash_radius:
+			_knife_pos[i] = _knife_pos[i].normalized() * leash_radius
+
+
+func _pick_chase_target(p_candidates: Array[Node2D], p_knife_world: Vector2,
+		p_sticky: Node2D) -> Node2D:
+	# 目标选取：粘性优先（现目标仍活且在候选内不换——防抖动）；否则取离刀最近者
+	if p_sticky != null and is_instance_valid(p_sticky) and not bool(p_sticky.get("dead")) \
+			and p_candidates.has(p_sticky):
+		return p_sticky
+	var best: Node2D = null
+	var best_d := 1e9
+	for cand in p_candidates:
+		if cand == null or bool(cand.get("dead")):
+			continue
+		var d := p_knife_world.distance_to(cand.global_position)
+		if d < best_d:
+			best_d = d
+			best = cand
+	return best
+
+
+func collect_engaged_strikes() -> Array[Dictionary]:
+	# R65 贴身开砍点收集（OrbitWeapon 冷却就绪时消费）：
+	# [{center: 世界刀位, facing: 刀→目标角}]；空表 = 刀还在路上（不消耗武器节拍）
+	var out: Array[Dictionary] = []
+	for i in range(orbs):
+		var target: Node2D = _knife_target[i]
+		if target == null or not is_instance_valid(target) or bool(target.get("dead")):
+			continue
+		var knife_world := _last_center + _knife_pos[i]
+		var to_t: Vector2 = target.global_position - knife_world
+		if to_t.length() <= engage_r + float(target.get("hitbox_r")):
+			out.append({
+				"center": knife_world,
+				"facing": to_t.angle(),
+				"index": i,
+			})
+	return out
+
+
 func _update_orb_sprites(p_game_delta: float) -> void:
-	# 球体表现推进：跟位 + 命中膨胀脉冲 + 辉光呼吸（本体 position = 轨道中心，局部零点）
+	# 球体表现推进：跟位（R65：逐刀位 _knife_pos——环绕=轨道槽/追击=追击位）+
+	# 命中膨胀脉冲 + 辉光呼吸（本体 position = 轨道中心，局部零点）
 	for i in range(orbs):
 		if i >= _orb_cores.size():
 			break
-		var pos := _orb_position(i, Vector2.ZERO)
+		var pos := _knife_pos[i] if i < _knife_pos.size() else _orbit_slot(i)
 		var punch := float(_orb_punch[i])
 		_orb_glows[i].position = pos
 		_orb_cores[i].position = pos
 		_orb_cores[i].rotation = angle * 3.0
 		_orb_cores[i].scale = Vector2.ONE * (orb_radius / 32.0) * (1.0 + 0.38 * punch)
-		_orb_glows[i].scale = Vector2.ONE * (orb_radius * 1.9 / 32.0) * (1.0 + 0.5 * punch)
+		_orb_glows[i].scale = Vector2.ONE * (orb_radius * 1.9 / 32.0) * (1.0 + 0.5 * punch) * knife_scale
 		# R32：辉光按元素染色（_orb_tint）——附魔刀的底光跟随元素色
 		var tint := _orb_tint(i)
 		_orb_glows[i].modulate = Color(tint.r, tint.g, tint.b,
@@ -312,14 +427,13 @@ func _draw_flying_knives() -> void:
 	# 「绿点不是刀」——刀体加长度下限（判定半径 orb_radius 不动，视觉>判定是
 	# 动作游戏惯例）+ 全轮廓亮描边 + 刃口亮线，刀形一眼可辨。
 	for i in range(orbs):
-		var pos := _orb_position(i, Vector2.ZERO)
-		var phase := angle + TAU * float(i) / float(orbs)
-		var dir := Vector2.from_angle(phase)              # 径向
-		var motion := Vector2(-dir.y, dir.x)              # 切向（运动方向 = 刀尖指向）
+		var pos := _knife_pos[i] if i < _knife_pos.size() else _orbit_slot(i)
+		var face := _knife_face[i] if i < _knife_face.size() else pos.angle() + PI * 0.5
+		var motion := Vector2.from_angle(face)          # R65：追击=行进方向 / 环绕=切向
 		var side := Vector2(-motion.y, motion.x)
 		var punch := float(_orb_punch[i]) if i < _orb_punch.size() else 0.0
-		var blade := maxf(orb_radius * 1.05, 34.0) * (1.05 + 0.22 * punch)   # 刀体全长
-		var w := maxf(orb_radius * 0.17, 3.4)             # 半刀宽
+		var blade := maxf(orb_radius * 1.05, 34.0) * (1.05 + 0.22 * punch) * knife_scale   # 刀体全长（R65 巨刃缩放）
+		var w := maxf(orb_radius * 0.17, 3.4) * knife_scale                              # 半刀宽
 		var tip := pos + motion * blade * 0.55
 		var shoulder := pos + motion * blade * 0.08
 		var base := pos - motion * blade * 0.45
@@ -378,24 +492,32 @@ func _reset_state() -> void:
 func _draw() -> void:
 	# 力场本体渲染：淡薄荷填充 + 虚线轨道环 + 公转扫掠残辉（占位圆已废——用户反馈）
 	# + 底部数值标注（用户反馈二轮「下面还要有具体的值」：环绕数 / 单击伤害）
+	# R65 追击模式：环示 = 活动范围（leash_radius，更淡——「刀能跑多远」）；
+	# 环绕模式口径不变（轨道环 = orbit_radius）
 	if not visible:
 		return
 	var mint := PopPalette.SUCCESS
-	draw_circle(Vector2.ZERO, orbit_radius, Color(mint.r, mint.g, mint.b, 0.07))
+	var ring_r := orbit_radius
+	var ring_a_faint := 0.07
+	if leash_radius > 0.0:
+		ring_r = leash_radius
+		ring_a_faint = 0.045
+	draw_circle(Vector2.ZERO, ring_r, Color(mint.r, mint.g, mint.b, ring_a_faint))
 	var pulse := 0.5 + 0.5 * sin(angle * 2.0)
-	draw_arc(Vector2.ZERO, orbit_radius, 0.0, TAU, 64,
+	draw_arc(Vector2.ZERO, ring_r, 0.0, TAU, 64,
 		Color(mint.r, mint.g, mint.b, 0.05 + 0.04 * pulse), orbit_radius * 0.10, true)
 	var seg_arc := TAU / float(PATH_DASHES)
 	for i in range(PATH_DASHES):
 		if i % 2 == 0:
 			continue                            # 奇数段绘制 = 虚线
 		var a0 := float(i) * seg_arc
-		draw_arc(Vector2.ZERO, orbit_radius, a0, a0 + seg_arc, 5,
+		draw_arc(Vector2.ZERO, ring_r, a0, a0 + seg_arc, 5,
 			Color(mint.r, mint.g, mint.b, 0.38), 2.4, true)
-	# 扫掠残辉：公转相位后方 42° 渐隐厚弧（运动方向读感）
-	var trail_a := angle - deg_to_rad(42.0)
-	draw_arc(Vector2.ZERO, orbit_radius, trail_a, angle, 12,
-		Color(mint.r, mint.g, mint.b, 0.18), orb_radius * 1.5, true)
+	# 扫掠残辉：公转相位后方 42° 渐隐厚弧（运动方向读感；追击模式无公转带——不画）
+	if leash_radius <= 0.0:
+		var trail_a := angle - deg_to_rad(42.0)
+		draw_arc(Vector2.ZERO, orbit_radius, trail_a, angle, 12,
+			Color(mint.r, mint.g, mint.b, 0.18), orb_radius * 1.5, true)
 	# R19 形态绘制（sword 剑 / axe 斧 / bolt 闪电——程序化多边形，贴图零实例化）
 	# R32：默认 = 环绕飞刀（程序化绘制，不再是能量球）
 	if style != "orb":
@@ -406,7 +528,10 @@ func _draw() -> void:
 	var atk := 0.0
 	if weapon != null and is_instance_valid(weapon):
 		atk = float(weapon.build_panel_snapshot().get("base_atk", 0.0))
-	var txt := "环绕 ×%d · %.0f/击" % [orbs, atk]
+	var fmt := "环绕 ×%d · %.0f/击"
+	if leash_radius > 0.0:
+		fmt = "追击 ×%d · %.0f/斩"
+	var txt := fmt % [orbs, atk]
 	var font := ThemeDB.fallback_font
 	draw_string(font, Vector2(-60.0, orbit_radius + 22.0), txt,
 		HORIZONTAL_ALIGNMENT_CENTER, 120.0, 13, Color(mint.r, mint.g, mint.b, 0.85))
