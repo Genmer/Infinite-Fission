@@ -168,7 +168,7 @@ var _burn_flames: Array[Sprite2D] = []        # 点燃：顶部上飘火苗 ×4�
 var _burn_ember: Sprite2D = null              # 点燃：体周余烬光晕（本底下层呼吸，用户反馈「燃烧看不见」）
 var _frost_shards: Array[Sprite2D] = []       # 寒滞/冻结：结霜菱形冰渣 ×3
 var _frost_ring: Sprite2D = null              # 冻结冰壳描边圈（白环）
-var _super_mist: Sprite2D = null              # 超导淡紫雾圈（低 alpha 底层氛围）
+var _super_mist: Array[Sprite2D] = []         # 超导电离雾点群（R57：3 个小雾点绕体漂浮——单块大 soft_dot 读作「纯紫圆球」，用户反馈三轮）
 var _shock_arcs: Array[Line2D] = []           # 感电：双锯齿电弧（相位错开→半常亮感）
 var _shock_arc_left: float = 0.0              # 电弧剩余显示时长（两弧共用相位）
 var _shock_arc_cd: float = 0.0                # 下次电弧倒计时
@@ -1908,27 +1908,33 @@ func _tick_status_fx(p_game_delta: float) -> void:
 
 
 func _ensure_super_mist() -> void:
-	# 超导：淡紫雾圈（低 alpha 氛围底层；电场感由高频电弧承担——去环去「球」，用户反馈二轮）
-	if _super_mist == null:
-		_super_mist = Sprite2D.new()
-		_super_mist.name = "SuperMist"
-		_super_mist.texture = TextureFactory.soft_dot(64)
-		_super_mist.modulate = Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g,
-			PopPalette.SHOCK.b, 0.3)
-		add_child(_super_mist)
+	# 超导电离雾点群（夜间R57 去球化三轮：单块大 soft_dot 低 alpha 下仍读作「纯紫圆球」）——
+	# 3 个小雾点绕体错相漂浮，读感 = 电离雾屑而非实心球；电场感仍由高频电弧承担
+	for i in range(3):
+		if i < _super_mist.size():
+			continue
+		var sp := Sprite2D.new()
+		sp.name = "SuperMist%d" % i
+		sp.texture = TextureFactory.soft_dot(64)
+		sp.modulate = Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g,
+			PopPalette.SHOCK.b, 0.14)
+		sp.scale = Vector2.ONE * (hitbox_r * 0.9 / 64.0)
+		add_child(sp)
+		_super_mist.append(sp)
 
 
 func _tick_super_fx(p_supercon: bool) -> void:
-	# 超导表现：雾圈压暗到氛围级 + 电弧双倍频率（电场感，无圆环）
+	# 超导表现：雾点群绕体慢转漂浮（错相呼吸）+ 电弧双倍频率（电场感，无圆环无球）
 	if not p_supercon:
-		if _super_mist != null:
-			_super_mist.visible = false
+		for sp in _super_mist:
+			sp.visible = false
 		return
 	_ensure_super_mist()
-	_super_mist.visible = true
-	_super_mist.position = Vector2.ZERO
-	_super_mist.scale = Vector2.ONE * (hitbox_r * 3.0 / 64.0)
-	_super_mist.modulate.a = 0.16 + 0.05 * sin(_anim_t * 3.1)
+	for i in range(_super_mist.size()):
+		var sp: Sprite2D = _super_mist[i]
+		var ang := _anim_t * 0.9 + TAU * float(i) / 3.0
+		sp.position = Vector2.from_angle(ang) * hitbox_r * 0.85 			+ Vector2(0.0, sin(_anim_t * 2.2 + float(i) * 1.9) * 3.0)
+		sp.modulate.a = 0.10 + 0.06 * (0.5 + 0.5 * sin(_anim_t * 2.6 + float(i) * 2.1))
 	if _shock_arc_cd > SHOCK_ARC_PERIOD * 0.5:
 		_shock_arc_cd = SHOCK_ARC_PERIOD * 0.5    # 超导期电弧加倍频繁
 
@@ -1999,7 +2005,7 @@ func _tick_shock_bolt(p_game_delta: float) -> void:
 	if _shock_impact == null:
 		_shock_impact = Sprite2D.new()
 		_shock_impact.name = "ShockImpact"
-		_shock_impact.texture = TextureFactory.star(48, Color.WHITE)
+		_shock_impact.texture = TextureFactory.spark4(48, Color.WHITE)   # 夜间R57：四芒细星（五角粗星自旋读作紫球）
 		_shock_impact.modulate = PopPalette.SHOCK.lerp(Color.WHITE, 0.7)
 		_shock_impact.visible = false
 		add_child(_shock_impact)
@@ -2009,7 +2015,7 @@ func _tick_shock_bolt(p_game_delta: float) -> void:
 			_shock_bolt.visible = false
 			_shock_impact.visible = false
 		else:
-			_shock_impact.rotation += p_game_delta * 16.0
+			_shock_impact.rotation += p_game_delta * 5.0
 			_shock_impact.scale = Vector2.ONE * (hitbox_r * 0.09) \
 				* (1.0 + _shock_bolt_left / SHOCK_BOLT_TIME)
 			return
@@ -2046,8 +2052,8 @@ func _reset_status_fx() -> void:
 		s.visible = false
 	if _frost_ring != null:
 		_frost_ring.visible = false
-	if _super_mist != null:
-		_super_mist.visible = false
+	for sp in _super_mist:
+		sp.visible = false
 	for arc in _shock_arcs:
 		arc.visible = false
 	if _shock_bolt != null:

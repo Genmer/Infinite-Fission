@@ -833,6 +833,17 @@ static func star(p_size: int = 44, p_fill: Color = PopPalette.XP) -> ImageTextur
 		])))
 
 
+static func spark4(p_size: int = 48, p_fill: Color = Color.WHITE) -> ImageTexture:
+	# 四芒细星（夜间R57：感电落雷命中点专用——五角星粗描边圆角化+高速自旋读作「紫球」；
+	# 内径 0.16 尖芒 + 细描边保锐利）
+	var key := "spark4_%d_%s" % [p_size, p_fill.to_html()]
+	return _cached(key, func() -> ImageTexture:
+		var outer := float(p_size) * 0.5 - 2.0
+		return _render(p_size, p_size, _shade([
+			{"sd": _poly_sd(_star_pts(outer, outer * 0.16, -PI * 0.5, 4)), "fill": p_fill, "ow": outer * 0.10},
+		])))
+
+
 static func shadow_ellipse(p_w: int = 64, p_h: int = 20) -> ImageTexture:
 	# 柔边椭圆底影（E5 精英悬浮 / Boss 底影；深藏青低透明，引擎侧只做缩放）
 	var key := "shadow_%d_%d" % [p_w, p_h]
@@ -1362,10 +1373,12 @@ static func _regular_pts(p_sides: int, p_radius: float, p_rot: float = -PI * 0.5
 	return pts
 
 
-static func _star_pts(p_outer: float, p_inner: float, p_rot: float = -PI * 0.5) -> PackedVector2Array:
+static func _star_pts(p_outer: float, p_inner: float, p_rot: float = -PI * 0.5,
+		p_sides: int = 5) -> PackedVector2Array:
 	var pts := PackedVector2Array()
-	for i in range(10):
+	var n := p_sides * 2
+	for i in range(n):
 		var r := p_outer if i % 2 == 0 else p_inner
-		var a := p_rot + TAU * float(i) / 10.0
+		var a := p_rot + TAU * float(i) / float(n)
 		pts.append(Vector2(cos(a), sin(a)) * r)
 	return pts
