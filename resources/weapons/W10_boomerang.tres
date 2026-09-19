@@ -57,7 +57,16 @@ crit_rate = 0.05
 crit_dmg = 2.0
 hitbox_r = 7.0
 unlock_rarity = 1
-threshold_traits = []
+threshold_traits = [{
+"threshold_id": &"TH_SIZE_NOVA", "metric": "size_mult", "threshold": 3.0,
+"effect_id": &"EF_SIZE", "params": {"radius_mult": 1.5, "atk_ratio": 0.4}
+}, {
+"threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
+"effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
+}, {
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
+}]
 ballistic = {
 "proj_speed": 520.0, "range": 380.0, "spread_deg": 3.0,
 "pierce": 3, "pellets": 1, "spin_up_time": 0.0, "rof_hot": 0.0,

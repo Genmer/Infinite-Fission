@@ -5,7 +5,7 @@
 - 一句话：竖屏单手割草 roguelike（Godot 4.3），晴空糖果美术，难度三档 × 成对抉择构筑深度
 - 技术栈/入口：GDScript；scenes/main.tscn → GameLoop（scripts/loop/game_loop.gd 编排一切）
 - 运行：`../tools/Godot_v4.3-stable_win64_console.exe --path .`（已验证可跑）
-- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 508 断言（无 lint）
+- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 513 断言（无 lint）
 - 核心体验：割草爽感 + 局内构筑滚雪球 + 走位反制（telegraph/盾面/法术圈走位有解）
 - 红线与坑：E-04~E-08 池化清零契约；.tres 注册表禁运行期落改（深拷贝）；测试直调无 add_child
   （池化实体本就是池节点子节点）；-s 入口两文件模式；写测试输出到日志文件防管道挂死
@@ -32,3 +32,4 @@
 - G1 2026-09-19 连杀音调爬升（sfx pitch ×combo 1.0→1.5 钳制）+ G5 元素死亡迸色（DeathPop 按 F/I/L 主元素染色）（af70156）
 - G2 2026-09-19 F2 受击方向双弧指示 HurtIndicator + F3 双选行内提示 + E11 图鉴「普/困/狱」三难度记录列（同批提交）
 - G3 2026-09-19 W10 回旋刃新武器：出程指数减速→翻转→回程加速返航双程伤害；金色新月刃贴图+自旋；L5 双刃齐掷；图鉴 icon；verify 508/508
+- G4 2026-09-19 G6 W10 构筑收口：三条阈值质变钩子（巨刃新星/永动回旋/暴击碎屑）+ 金弧拖尾 _draw；修复 G4 测试静默中止（player._process 不存在→tick 真实入口，出程/回程运动断言首次真正执行并通过）

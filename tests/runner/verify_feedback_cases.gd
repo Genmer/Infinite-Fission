@@ -3469,6 +3469,10 @@ func _test_g4_boomerang() -> void:
 			and int(wdata.upgrade_table[4].pellets) == 2,
 		"ballistic=%s pellets_L5=%d" % [str(wdata.ballistic.get("boomerang", false)),
 			int(wdata.upgrade_table[4].pellets)])
+	_check("G6：W10 三条阈值质变钩子（巨刃新星/永动回旋/暴击碎屑）",
+		wdata.threshold_traits.size() == 3,
+		"n=%d" % wdata.threshold_traits.size())
+
 	# 装备到空槽（槽 0 手枪全程不动——后续套件依赖主武器暖状态），按 weapon_ref 过滤弹体
 	_gl.player.set("unlocked_slots", 4)
 	_check("G4：装备 W10", _gl.player.add_weapon(wdata) != null, "")
@@ -3481,8 +3485,8 @@ func _test_g4_boomerang() -> void:
 		return
 	var pos0: Vector2 = _gl.player.global_position
 	_gl.player.global_position = Vector2(360.0, 640.0)
-	for i in range(3):
-		_gl.player._process(0.016)
+	for _k in range(3):
+		_gl.player.call(&"tick", 0.016, Vector2.ZERO)   # 真实驱动入口（player 无 _process）
 	boom.call("try_fire")
 	var proj: ProjectileBase = null
 	for p in (_gl.pools[&"projectile"] as ProjectilePool).active_projectiles():
@@ -3490,6 +3494,8 @@ func _test_g4_boomerang() -> void:
 			proj = p
 	_check("G4：发射产出回旋弹体（带 boomerang 标记）",
 		proj != null and bool(proj.get("_boomerang")), "")
+	_check("G6：回旋弹体有拖尾绘制（_draw 就位）",
+		proj != null and proj.has_method(&"_draw"), "")
 	if proj == null:
 		return
 	var speed0: float = proj.velocity.length()
@@ -3497,7 +3503,7 @@ func _test_g4_boomerang() -> void:
 	# 出程：撒出（远离玩家）且减速
 	var i := 0
 	while is_instance_valid(proj) and bool(proj.get("_live")) and i < 120:
-		proj._process(0.016)
+		proj.tick(0.016)
 		i += 1
 		if int(proj.get("_boom_phase")) == 1:
 			break
@@ -3511,7 +3517,7 @@ func _test_g4_boomerang() -> void:
 	# 回程：返航到手回收（FORCED）
 	var j := 0
 	while is_instance_valid(proj) and bool(proj.get("_live")) and j < 400:
-		proj._process(0.016)
+		proj.tick(0.016)
 		j += 1
 	var recycled_ok := not is_instance_valid(proj) or not bool(proj.get("_live"))
 	_check("G4：回程返航到手自回收", recycled_ok,

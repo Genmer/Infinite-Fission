@@ -153,6 +153,7 @@ func tick(p_game_delta: float) -> void:
 		_sprite.rotation += p_game_delta * 10.0   # 电花自旋（星形电弹读感——去球化配套）
 	if _boomerang and _sprite != null:
 		_sprite.rotation += p_game_delta * 16.0   # G4 旋刃高速自旋
+		queue_redraw()                            # G6 拖尾弧重绘
 	_dispatch_event(GameConst.TraitEvent.ON_TICK,
 		{"game_delta": p_game_delta})
 	_check_collision()
@@ -547,6 +548,21 @@ func _check_edge_bounce() -> void:
 		_apply_bounce(normal)
 	elif _had_bounces:
 		_recycle(GameConst.RecycleReason.BOUNCE_DEPLETED)
+
+
+func _draw() -> void:
+	# G6 回旋刃拖尾：速度反方向渐隐金弧（局部坐标；节点不随速度旋转，弧向即尾迹向）
+	if not _boomerang or not _live:
+		return
+	var back := -velocity.normalized()
+	var side := back.orthogonal() * 0.35
+	var prev := Vector2.ZERO
+	for i in range(1, 6):
+		var k := float(i) / 5.0
+		var pt := back * (20.0 * k) + side * (10.0 * k * k)   # 微弯外扫
+		draw_line(prev, pt, Color(PopPalette.GOLD.r, PopPalette.GOLD.g, PopPalette.GOLD.b,
+			(1.0 - k) * 0.45), 3.0 * (1.0 - k * 0.6))
+		prev = pt
 
 
 func _check_offscreen() -> void:
