@@ -135,26 +135,47 @@ func _reset_state() -> void:
 
 
 func _draw() -> void:
-	# 挥斩视觉（R7 重做）：窗口 0.15s 内——
-	# ① 底层淡金扇面（全程，α 0.22）②扫动前缘亮弧（lerp 扫过扇角，白金色）③外缘描边
+	# 挥斩视觉（夜间R59 重做——用户反馈「不是个刀吗，怎么是个扇子」：旧版铺整扇
+	# 面填充+全弧描边 = 判定范围画成扇子）。现 = 一道弯月刀光沿扇角扫过：
+	# 主体钢白弯月（窄弧带）+ 三道渐隐拖尾弧 + 亮白前缘；判定仍为 query_arc 扇形。
 	if not visible or window_left <= 0.0:
 		return
 	var half := deg_to_rad(arc_deg) * 0.5
-	var progress := 1.0 - window_left / OrbitWeapon.SLASH_WINDOW   # 0→1
-	var steps := maxi(int(arc_deg / 10.0), 4)
-	# ① 扇面
-	var pts := PackedVector2Array([Vector2.ZERO])
-	for i in range(steps + 1):
-		var a := facing - half + 2.0 * half * float(i) / float(steps)
-		pts.append(Vector2(cos(a), sin(a)) * slash_radius)
-	draw_colored_polygon(pts, Color(1.0, 0.9, 0.4, 0.20))
-	# ② 扫动前缘（从 -half 扫到 +half：挥动感）
+	var progress := clampf(1.0 - window_left / OrbitWeapon.SLASH_WINDOW, 0.0, 1.0)
 	var sweep := facing - half + 2.0 * half * clampf(progress * 1.15, 0.0, 1.0)
-	draw_line(Vector2.ZERO, Vector2(cos(sweep), sin(sweep)) * slash_radius,
-		Color(1.0, 0.97, 0.8, 0.95), 5.0)
-	# ③ 外缘描边弧（亮金）
-	var rim := PackedVector2Array()
+	var band := deg_to_rad(34.0)                 # 刀光弧带张角（窄月）
+	var r_out := slash_radius
+	var r_in := slash_radius * 0.55
+	# 拖尾残影（3 道，位置滞后、α 递减——挥砍轨迹读感）
+	for k in range(3):
+		var tp := clampf(progress - 0.16 * float(k + 1), 0.0, 1.0)
+		if tp <= 0.0:
+			continue
+		var ts := facing - half + 2.0 * half * clampf(tp * 1.15, 0.0, 1.0)
+		var trail_a := [0.26, 0.14, 0.07][k]
+		_draw_moon(ts, band * 1.25, r_out * 0.98, r_in * 1.08,
+			Color(0.62, 0.85, 1.0, trail_a))
+	# 主体弯月（钢白，青蓝辉光边）
+	_draw_moon(sweep, band, r_out, r_in, Color(0.93, 0.97, 1.0, 0.8))
+	# 前缘亮线（刀刃）
+	var half_b := band * 0.5
+	var edge := PackedVector2Array()
+	for i in range(7):
+		var a := sweep - half_b + band * float(i) / 6.0
+		edge.append(Vector2(cos(a), sin(a)) * r_out)
+	draw_polyline(edge, Color(1.0, 1.0, 1.0, 0.95), 4.0, true)
+
+
+func _draw_moon(p_center_a: float, p_band: float, p_r_out: float, p_r_in: float,
+		p_color: Color) -> void:
+	# 弯月弧带多边形：外弧 a-band/2 → a+band/2（半径 p_r_out）+ 内弧反向（p_r_in）
+	var half_b := p_band * 0.5
+	var steps := 8
+	var pts := PackedVector2Array()
 	for i in range(steps + 1):
-		var a2 := facing - half + 2.0 * half * float(i) / float(steps)
-		rim.append(Vector2(cos(a2), sin(a2)) * slash_radius)
-	draw_polyline(rim, Color(1.0, 0.85, 0.3, 0.85), 3.0)
+		var a := p_center_a - half_b + p_band * float(i) / float(steps)
+		pts.append(Vector2(cos(a), sin(a)) * p_r_out)
+	for j in range(steps + 1):
+		var a2 := p_center_a + half_b - p_band * float(j) / float(steps)
+		pts.append(Vector2(cos(a2), sin(a2)) * p_r_in)
+	draw_colored_polygon(pts, p_color)
