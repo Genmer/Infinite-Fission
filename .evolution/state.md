@@ -15,14 +15,9 @@
 
 ## Backlog
 <!-- 格式：- [Pn][类型][状态] ID: 标题 — 一行描述 -->
-- [P1][feature][todo] E1: 难度风险回报闭环 — 困难/地狱金币与经验全局加成（×1.5/×2.5）+ HUD 显示
-- [P1][feature][todo] E2: 复活演出 — 复活瞬间全屏光圈冲击 + 「复活！」跳字 + 无敌余晖（现静默满血）
-- [P1][effect][todo] E3: 升级瞬间波纹 — 选卡确认回 PLAYING 时以玩家为心的清爽扩散环（Level-up burst）
-- [P2][perf][todo] E4: 彩纸 GPUParticles 化排查 — 90 Sprite2D 逐帧 _process vs 单发射器（先测后改）
-- [P2][feature][todo] E5: 首遇新怪提示条 — E25~E30 首次登场屏幕上方机制一句话（图鉴行复用）
-- [P2][effect][todo] E6: Boss 血条打击反馈 — 受击端闪 + 段位刻度（当前静态条）
-- [P3][perf][todo] E7: enemy_grid rebuild 频率审查 — 每帧全量 rebuild vs 增量（先 profile）
-- [P3][effect][todo] E8: 地狱难度画面氛围 — 云层红移 tint + 地图名后缀已有（补氛围）
+- [P3][perf][todo] F1: _collect_enemy_bullets 快照 O(总弹) 扫描 — 池侧 team 计数可再省（收益小，缓）
+- [P3][effect][todo] F2: 玩家受击方向指示 — 屏缘朝伤害来源红光（现仅 trauma 无方向感）
+- [P3][feature][todo] F3: 成对抉择行内组合提示 — 双选模式行内两卡的联动文案（如「攻速+穿透」组合标注）
 
 ## 验收记录
 - E1: ① 困难/地狱局金币·经验拾取实测 ×1.5/×2.5 ② HUD 或结算可见加成来源 ③ 测试断言乘区

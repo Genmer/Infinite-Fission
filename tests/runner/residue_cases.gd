@@ -160,9 +160,7 @@ func _test_confetti_realtime_cleanup() -> void:
 
 
 func _count_confetti() -> int:
-	var n := 0
+	# E4 单节点化：彩纸为纯数据字典（无子 Sprite）——计数走 _pieces
 	if _gl.confetti != null and is_instance_valid(_gl.confetti):
-		for c in _gl.confetti.get_children():
-			if c is Sprite2D:
-				n += 1
-	return n
+		return (_gl.confetti.get("_pieces") as Array).size()
+	return 0
