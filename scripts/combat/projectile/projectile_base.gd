@@ -17,6 +17,11 @@ var velocity: Vector2 = Vector2.ZERO
 var lifetime_left: float = 0.0                # 寿命（超程/超时 → EXPIRED）
 var pierce_left: int = 0                      # 穿透计数器（剩余可命中目标数）
 var bounces_left: int = 0                     # 反弹计数器
+# G4 回旋刃（W10）：出程减速 → 回程加速返航（双程伤害——pierce 走两遍敌群）
+var _boomerang: bool = false
+var _boom_phase: int = 0                       # 0=出程减速 1=回程返航
+var _boom_speed_init: float = 0.0
+var _boom_return_speed: float = 0.0              # 回程返航速度（加速爬升）
 var generation: int = 0                       # 分裂代数（≤3，E-01）
 var hitbox_radius: float = 6.0
 var element: int = GameConst.Element.KIN
@@ -79,6 +84,9 @@ func spawn(p_params: Dictionary) -> void:
 	lifetime_left = maxf(float(p_params.get("lifetime", 2.0)), 0.0)
 	pierce_left = maxi(int(p_params.get("pierce", 1)), 0)
 	bounces_left = maxi(int(p_params.get("bounces", 0)), 0)
+	_boomerang = bool(p_params.get("boomerang", false))   # G4 回旋刃标记
+	_boom_phase = 0
+	_boom_speed_init = velocity.length()
 	_had_bounces = bounces_left > 0
 	hitbox_radius = maxf(float(p_params.get("hitbox_radius", 6.0)), 0.0)
 	element = int(p_params.get("element", GameConst.Element.KIN))
@@ -129,6 +137,8 @@ func tick(p_game_delta: float) -> void:
 	if lifetime_left <= 0.0:
 		_recycle(GameConst.RecycleReason.EXPIRED)
 		return
+	if _boomerang and _boom_step(p_game_delta):
+		return                                # G4 回旋运动接管；收回即回收本帧不再落位
 	_move(p_game_delta)
 	if not _live:
 		return
@@ -141,6 +151,8 @@ func tick(p_game_delta: float) -> void:
 	_sync_visual()
 	if element == GameConst.Element.LTG and _sprite != null:
 		_sprite.rotation += p_game_delta * 10.0   # 电花自旋（星形电弹读感——去球化配套）
+	if _boomerang and _sprite != null:
+		_sprite.rotation += p_game_delta * 16.0   # G4 旋刃高速自旋
 	_dispatch_event(GameConst.TraitEvent.ON_TICK,
 		{"game_delta": p_game_delta})
 	_check_collision()
@@ -149,6 +161,27 @@ func tick(p_game_delta: float) -> void:
 func _move(p_game_delta: float) -> void:
 	# 抽象：子类运动模型（直线/转向插值）。基类=匀速直线。
 	global_position += velocity * p_game_delta
+
+
+func _boom_step(p_game_delta: float) -> bool:
+	# G4 回旋刃运动接管：出程指数减速（撒出）→ 低速翻转 → 回程向玩家加速返航（收线）。
+	# 只改写 velocity，落位仍由 _move 完成；返回 true = 已回收（tick 跳过本帧 _move）。
+	if _boom_phase == 0:
+		velocity *= pow(0.20, p_game_delta)      # 每秒保留 20%——约 0.7s 后掉到初速三成
+		if velocity.length() <= _boom_speed_init * 0.3:
+			_boom_phase = 1
+			_boom_return_speed = velocity.length()
+	else:
+		var player := _find_player()
+		if player == null:
+			return false                          # 无锚点：维持漂移交由寿命兜底
+		var to_player: Vector2 = player.global_position - global_position
+		_boom_return_speed = move_toward(_boom_return_speed, 860.0, 1500.0 * p_game_delta)
+		velocity = to_player.normalized() * _boom_return_speed
+		if to_player.length() <= 28.0:
+			_recycle(GameConst.RecycleReason.FORCED)   # 收回——整段双程伤害结算完毕
+			return true
+	return false
 
 
 func _read_form_params(p_params: Dictionary) -> void:
@@ -566,6 +599,10 @@ func _reset_state() -> void:
 	bounces_left = 0
 	_had_bounces = false
 	_bounces_done = 0
+	_boomerang = false                            # G4 回旋态随归还清零
+	_boom_phase = 0
+	_boom_speed_init = 0.0
+	_boom_return_speed = 0.0
 	_pierce_hits = 0
 	generation = 0
 	hitbox_radius = 6.0
@@ -605,6 +642,11 @@ func _sync_visual() -> void:
 		var wid := &""
 		if weapon_ref != null and is_instance_valid(weapon_ref) 				and weapon_ref.data != null:
 			wid = weapon_ref.data.id
+		if _boomerang:
+			# G4 回旋刃：金色新月刃 ×3.4 表现层放大（命中盒不变），自旋见 tick
+			_sprite.texture = TextureFactory.boomerang_tex()
+			_sprite.scale = Vector2(scale_f * 3.4, scale_f * 3.4)
+			return
 		if wid == &"W6_micro_missile" or wid == &"W7_cluster_rocket":
 			_sprite.texture = TextureFactory.missile_tex()
 			_sprite.rotation = velocity.angle() + PI * 0.5 if velocity.length() > 1.0 				else _sprite.rotation

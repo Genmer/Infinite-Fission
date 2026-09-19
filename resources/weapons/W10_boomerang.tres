@@ -1,0 +1,66 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_level_stats.gd" id="2_wls"]
+
+[sub_resource type="Resource" id="WeaponLevelStats_l1"]
+script = ExtResource("2_wls")
+base_atk = 13.0
+rof = 2.6
+cd = 0.0
+pierce = 3
+pellets = 1
+note = "G4 回旋刃 L1：出手减速撒出 → 低速翻转 → 加速返航，去回双程各结算一次；面板 DPS 34（双程×2≈68）"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l2"]
+script = ExtResource("2_wls")
+base_atk = 15.0
+rof = 2.6
+cd = 0.0
+pierce = 3
+pellets = 1
+note = "L2：面板 DPS 39（双程≈78）"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l3"]
+script = ExtResource("2_wls")
+base_atk = 16.0
+rof = 2.8
+cd = 0.0
+pierce = 5
+pellets = 1
+note = "L3 小质变：穿透 3→5（去回可扫 10 段）；面板 DPS 45（双程≈89）"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l4"]
+script = ExtResource("2_wls")
+base_atk = 18.0
+rof = 2.8
+cd = 0.0
+pierce = 5
+pellets = 1
+note = "L4：面板 DPS 50（双程≈100）"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l5"]
+script = ExtResource("2_wls")
+base_atk = 14.0
+rof = 2.8
+cd = 0.0
+pierce = 5
+pellets = 2
+note = "L5 大质变：双刃齐掷（14×2，两条独立回旋轨迹）；面板 DPS ≈78（双程×2≈157）"
+
+[resource]
+script = ExtResource("1_wd")
+id = &"W10_boomerang"
+display_name = "回旋刃"
+form = 0
+crit_rate = 0.05
+crit_dmg = 2.0
+hitbox_r = 7.0
+unlock_rarity = 1
+threshold_traits = []
+ballistic = {
+"proj_speed": 520.0, "range": 380.0, "spread_deg": 3.0,
+"pierce": 3, "pellets": 1, "spin_up_time": 0.0, "rof_hot": 0.0,
+"boomerang": true
+}
+upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

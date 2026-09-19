@@ -1082,6 +1082,33 @@ static func tracer_tex() -> ImageTexture:
 		return ImageTexture.create_from_image(img))
 
 
+static func boomerang_tex() -> ImageTexture:
+	# G4 回旋刃（W10）弹体：金色新月刃——外圆挖偏心内圆的月牙，外缘白热刃口、
+	# 藏青描边（晴空亮底可读）；tick 高速自旋下成金色旋轮
+	var key := "boomerang_tex"
+	return _cached(key, func() -> ImageTexture:
+		var w := 44
+		var h := 44
+		var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+		var outer_c := Vector2(18.0, 22.0)          # 外圆
+		var inner_c := Vector2(13.0, 22.0)          # 偏心内圆（右挖月牙）
+		var gold := PopPalette.GOLD
+		for x in range(w):
+			for y in range(h):
+				var p := Vector2(float(x), float(y))
+				var sd := maxf(p.distance_to(outer_c) - 15.0,
+					-(p.distance_to(inner_c) - 13.5))
+				if sd > 0.0:
+					continue                          # 画布外
+				var col := gold.lerp(Color(0.72, 0.5, 0.1), clampf(-sd / 5.0, 0.0, 1.0))
+				if sd > -1.3:
+					col = PopPalette.INK.lerp(col, 0.25)   # 藏青描边
+				elif sd < -10.5:
+					col = col.lerp(Color.WHITE, clampf((-sd - 10.5) / 3.5, 0.0, 1.0) * 0.7)
+				img.set_pixel(x, y, col)
+		return ImageTexture.create_from_image(img))
+
+
 static func missile_tex() -> ImageTexture:
 	# 微型导弹/集束火箭弹体（R13 用户反馈「给个导弹建模」）：灰蓝弹体 + 橙色弹头 +
 	# 尾鳍 + 底部尾焰（画布 22×30，朝上——弹体飞行时按速度方向旋转）
@@ -1142,7 +1169,7 @@ static func shield_bubble() -> ImageTexture:
 
 
 static func weapon_icon(p_id: StringName) -> ImageTexture:
-	# 武器库图标（HUD 构筑面板 + 设定图共用）：9 把武器各一枚贴纸风程序化图形，
+	# 武器库图标（HUD 构筑面板 + 设定图共用）：10 把武器各一枚贴纸风程序化图形，
 	# 56px 画布、玩家蓝填充 + 藏青描边 + 白高光，剪影差异承载辨识度。
 	var key := "weapon_icon_%s" % p_id
 	return _cached(key, func() -> ImageTexture:
@@ -1224,6 +1251,18 @@ static func weapon_icon(p_id: StringName) -> ImageTexture:
 					])), "fill": Color(1.0, 1.0, 1.0, 0.85), "ow": 0.0},
 					{"sd": _box_at(Vector2(0.75, 8.0), Vector2(7.0, 1.8), 1.2), "fill": deep, "ow": 2.4},
 					{"sd": _box_at(Vector2(0.75, 13.5), Vector2(1.8, 6.0), 1.2), "fill": deep, "ow": 2.4},
+				]
+			"W10_boomerang":                 # G4 回旋刃：金色新月刃 + 外圈旋转轨迹环 + 刃口白高光
+				var gold_i := PopPalette.GOLD
+				layers = [
+					{"sd": _ring_at(21.0, 1.8), "fill": Color(gold_i.r, gold_i.g, gold_i.b, 0.4), "ow": 0.0},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(0.4, -12.6), Vector2(5.4, -10.0), Vector2(8.8, -5.5), Vector2(10.0, 0.0),
+						Vector2(8.8, 5.5), Vector2(5.4, 10.0), Vector2(0.4, 12.6),
+						Vector2(-3.7, 10.6), Vector2(0.6, 8.4), Vector2(3.5, 4.7), Vector2(4.5, 0.0),
+						Vector2(3.5, -4.7), Vector2(0.6, -8.4), Vector2(-3.7, -10.6),
+					])), "fill": gold_i, "ow": 2.8},
+					{"sd": _circle_at(Vector2(9.0, -8.5), 2.2), "fill": white, "ow": 0.0},
 				]
 			_:                                # 兜底：四角星
 				layers = [

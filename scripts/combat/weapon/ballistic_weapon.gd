@@ -63,13 +63,17 @@ func try_fire() -> bool:
 		_inject_projectile_deps(proj)
 		var angle := _spread_angle(i, pellets)
 		var range_left := _range()
+		# G4 回旋刃：出程减速 + 回程返航由弹体自身接管——寿命走固定 3.2s 兜底
+		#（常规弹 range/speed×1.5 会在回程中途过期截断双程伤害）
+		var is_boom := bool(data.ballistic.get("boomerang", false))
 		proj.spawn({
 			"position": muzzle_position(),
 			"velocity": dir.rotated(angle) * speed,
-			"lifetime": maxf(range_left / maxf(speed, 1.0), 0.1) * 1.5,
+			"lifetime": 3.2 if is_boom else maxf(range_left / maxf(speed, 1.0), 0.1) * 1.5,
 			"range": range_left,
 			"pierce": _pierce_count(),
 			"bounces": 0,
+			"boomerang": is_boom,
 			"hitbox_radius": data.hitbox_r * size_mult,
 			"element": _shot_element(),
 			"attach_value": 0.0,

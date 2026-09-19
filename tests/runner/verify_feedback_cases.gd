@@ -71,6 +71,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_f2_indicator()
 	_test_f3_e11()
 	_test_g1_g5()
+	_test_g4_boomerang()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3453,3 +3454,72 @@ func _test_g1_g5() -> void:
 		tint_fir.r > tint_fir.b and tint_fir.r > 0.6, str(tint_fir))
 	_check("G5：无元素→白（不染色）", is_equal_approx(tint_kin.r, 1.0))
 	_release_r72_enemy(e1)
+
+
+func _test_g4_boomerang() -> void:
+	print("── G4 回旋刃 W10 ──")
+	# 注册表加载 + 数据面
+	var wdata: WeaponData = _gl.registry.get_weapon(&"W10_boomerang")
+	_check("G4：W10 注册可加载", wdata != null, "")
+	if wdata == null:
+		return
+	_check("G4：W10 回旋标记 + L5 双刃（质变在表）",
+		bool(wdata.ballistic.get("boomerang", false))
+			and wdata.upgrade_table.size() == 5
+			and int(wdata.upgrade_table[4].pellets) == 2,
+		"ballistic=%s pellets_L5=%d" % [str(wdata.ballistic.get("boomerang", false)),
+			int(wdata.upgrade_table[4].pellets)])
+	# 装备到空槽（槽 0 手枪全程不动——后续套件依赖主武器暖状态），按 weapon_ref 过滤弹体
+	_gl.player.set("unlocked_slots", 4)
+	_check("G4：装备 W10", _gl.player.add_weapon(wdata) != null, "")
+	var boom: WeaponBase = null
+	for w in _gl.player.weapon_slots:
+		if w != null and is_instance_valid(w) and w.data != null and w.data.id == &"W10_boomerang":
+			boom = w
+	_check("G4：W10 入槽且为 BALLISTIC 形态", boom != null and boom is BallisticWeapon, "")
+	if boom == null:
+		return
+	var pos0: Vector2 = _gl.player.global_position
+	_gl.player.global_position = Vector2(360.0, 640.0)
+	for i in range(3):
+		_gl.player._process(0.016)
+	boom.call("try_fire")
+	var proj: ProjectileBase = null
+	for p in (_gl.pools[&"projectile"] as ProjectilePool).active_projectiles():
+		if p is ProjectileBase and (p as ProjectileBase).team == 0 				and p.get("weapon_ref") == boom:
+			proj = p
+	_check("G4：发射产出回旋弹体（带 boomerang 标记）",
+		proj != null and bool(proj.get("_boomerang")), "")
+	if proj == null:
+		return
+	var speed0: float = proj.velocity.length()
+	var dist0: float = proj.global_position.distance_to(_gl.player.global_position)
+	# 出程：撒出（远离玩家）且减速
+	var i := 0
+	while is_instance_valid(proj) and bool(proj.get("_live")) and i < 120:
+		proj._process(0.016)
+		i += 1
+		if int(proj.get("_boom_phase")) == 1:
+			break
+	var dist_mid: float = proj.global_position.distance_to(_gl.player.global_position)
+	_check("G4：出程减速翻转（phase 0→1，速度掉档）",
+		i < 120 and int(proj.get("_boom_phase")) == 1
+			and proj.velocity.length() < speed0 * 0.32
+			and dist_mid > dist0,
+		"i=%d speed=%.0f<%.0f dist %.0f>%.0f" % [i, proj.velocity.length(), speed0 * 0.32,
+			dist_mid, dist0])
+	# 回程：返航到手回收（FORCED）
+	var j := 0
+	while is_instance_valid(proj) and bool(proj.get("_live")) and j < 400:
+		proj._process(0.016)
+		j += 1
+	var recycled_ok := not is_instance_valid(proj) or not bool(proj.get("_live"))
+	_check("G4：回程返航到手自回收", recycled_ok,
+		"j=%d pos=%s" % [j, str(proj.global_position) if is_instance_valid(proj) else "-"])
+	# 状态恢复（后续套件假定槽 0 = 手枪、原玩家位）：只摘 W10
+	for k in range(_gl.player.weapon_slots.size()):
+		var w: WeaponBase = _gl.player.weapon_slots[k]
+		if w != null and is_instance_valid(w) and w.data != null and w.data.id == &"W10_boomerang":
+			_gl.player.weapon_slots[k] = null
+			w.queue_free()
+	_gl.player.global_position = pos0
