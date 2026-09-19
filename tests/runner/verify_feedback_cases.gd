@@ -56,6 +56,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r66_icd_and_corpse()
 	_test_r68_confetti()
 	_test_r69_rarity_ladder()
+	_test_r70_details_haste()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -2601,6 +2602,49 @@ func _gold_card(p_gen: CardGenerator, p_id: StringName) -> Dictionary:
 	}]
 	p_gen._apply_rarity_values(cards)
 	return cards[0]
+
+
+func _test_r70_details_haste() -> void:
+	print("── R70 技能急速终值行 + 加特林深色弹条 ──")
+	# 用户反馈「我技能急速一直点，但是详情没写最终加成多少」：详情卡个人属性区补
+	# 技能急速终值行（skill_haste_pct 跨武器聚合，与 refresh_skill_cd 同 clamp）
+	_gl.call(&"start_run")
+	var haste_t: TraitData = _gl.registry.get_trait(&"AFF_SKILL_HASTE")
+	var w: WeaponBase = _gl.player.weapon_slots[0]
+	w.attach_trait(haste_t)
+	w.attach_trait(haste_t)
+	_check("R70：技能急速 2 层聚合终值 -24%（skill_haste_pct）",
+		absf(_gl.player.skill_haste_pct() - 0.24) <= 0.001,
+		"p=%.3f" % _gl.player.skill_haste_pct())
+	_gl.hud.build_details_requested.emit()
+	_check("R70 前置：详情卡打开（PAUSED）", _gl.pause_overlay.is_details_visible())
+	var texts: Array[String] = []
+	_collect_rtl(_gl.pause_overlay._details_list, texts)
+	var haste_row := ""
+	for txt: String in texts:
+		if "技能急速 -" in txt:                  # 个人属性终值行（区别于武器区块词条行）
+			haste_row = txt
+	_check("R70：详情卡「技能急速 -24%」终值行可见",
+		"-24%" in haste_row and "技能冷却" in haste_row, haste_row)
+	_gl.pause_overlay.resume_requested.emit()
+	for tb in w.trait_stack.traits.duplicate():
+		if tb.data.id == haste_t.id:
+			w.trait_stack.traits.erase(tb)
+	_gl.call(&"quit_to_menu")
+	# 用户反馈「加特林子弹加黑一点，加粗一点，看的很不清楚」：R69 白亮芯曳光在晴空
+	# 亮底下对比不足——贴图重做为藏青弹体 + 白热弹头；画布 56×12 加厚
+	var tex := TextureFactory.tracer_tex()
+	var img := tex.get_image()
+	var mid_lum := 0.0
+	for x in range(20, 40):                        # 中段（避开头部白热段）
+		var c := img.get_pixel(x, img.get_height() / 2)
+		mid_lum += (c.r + c.g + c.b) / 3.0
+	mid_lum /= 20.0
+	_check("R70：曳光条中段弹体深色（藏青基调，亮底可读——均亮度 <0.5）",
+		mid_lum < 0.5, "%.2f" % mid_lum)
+	_check("R70：曳光条画布加厚 56×12（宽高比 >4 保持横条读感）",
+		img.get_width() == 56 and img.get_height() == 12,
+		"%d×%d" % [img.get_width(), img.get_height()])
 
 
 func _bounce_probe(p_proj: ProjectileBase, p_bounce: TraitData, p_params: Dictionary) -> void:

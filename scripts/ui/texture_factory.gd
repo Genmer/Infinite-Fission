@@ -955,21 +955,27 @@ static func flame_bit() -> ImageTexture:
 
 
 static func tracer_tex() -> ImageTexture:
-	# 加特林曳光弹条（R19 用户反馈「手枪和加特林表现没啥不一样」）：横向亮芯曳光——
-	# 头部白热 + 渐隐尾焰（画布 56×10，朝右——弹体按速度方向旋转，高射速下成线束）
+	# 加特林曳光弹条（R19 用户反馈「手枪和加特林表现没啥不一样」）：横向曳光——
+	# 画布 56×12，朝右（弹体按速度方向旋转，高射速下成线束）。
+	# R70 深色重做（用户反馈「加黑一点，看的很不清楚」）：R69 版白亮芯曳光在晴空
+	# 亮底美术下对比不足——改藏青弹体（中轴微亮塑形）+ 头部白热段（方向读感）+
+	# 尾部渐隐；深色在亮底/暗底两头都可读
 	var key := "tracer_tex"
 	return _cached(key, func() -> ImageTexture:
 		var w := 56
-		var h := 10
+		var h := 12
 		var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 		var mid := float(h - 1) * 0.5
+		var body := PopPalette.INK                       # 藏青弹体（#22254a）
 		for x in range(w):
-			var t := float(x) / float(w - 1)                 # 0 头（白热）→ 1 尾（渐隐）
+			var t := float(x) / float(w - 1)             # 0 头 → 1 尾（渐隐）
 			for y in range(h):
 				var core := 1.0 - absf(float(y) - mid) / mid   # 1 中轴 → 0 边缘
-				var a := pow(1.0 - t, 0.55) * (0.28 + 0.72 * core)
-				var col := Color.WHITE.lerp(PopPalette.PLAYER, (1.0 - core) * 0.6)
-				col = col.lerp(PopPalette.XP, t * 0.5)
+				var col := body.lerp(Color(0.45, 0.5, 0.72), 0.55 * core)
+				if t < 0.14:
+					# 弹头白热段（航向读感；头 14% 混向白）
+					col = col.lerp(Color.WHITE, (0.14 - t) / 0.14 * 0.85)
+				var a := (0.62 + 0.38 * core) * pow(1.0 - t, 0.5)
 				img.set_pixel(x, y, Color(col.r, col.g, col.b, clampf(a, 0.0, 1.0)))
 		return ImageTexture.create_from_image(img))
 

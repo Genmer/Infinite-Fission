@@ -431,6 +431,12 @@ func refresh_pickup_radius() -> void:
 		(_pickup_shape.shape as CircleShape2D).radius = pickup_radius   # 磁吸判定圈同步
 
 
+func skill_haste_pct() -> float:
+	# 技能急速最终加成（构筑详情展示口，R70 用户反馈「详情没写最终加成多少」）：
+	# 跨武器 add_skillcdr 池合计，与 refresh_skill_cd 消费同 clamp（上限 -60%）
+	return clampf(_weapon_pool_sum(&"add_skillcdr"), 0.0, 0.6)
+
+
 func refresh_skill_cd() -> void:
 	# 技能冷却基线 = 角色 cd ×(1 − 养成CDR) ×(1 − 技能急速池)
 	#（AFF_SKILL_HASTE 2026-09-13 重做接线；挂卡后由 GameLoop 触发重算）

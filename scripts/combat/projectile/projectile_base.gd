@@ -612,12 +612,12 @@ func _sync_visual() -> void:
 		if wid == &"W2_gatling":
 			# 加特林曳光弹（R19 用户反馈「手枪和加特林表现没啥不一样」）：圆珠换
 			# 横向曳光条——高射速下一条条线束扫射，读感与手枪彻底区分
-			# R69 加粗（用户反馈「太细了」）：Y 2.2→4.5（可视 ~3.4px→~7px，带 EF_SIZE
-			# ×1.5 时 ~10.5px），X 同步 7.0→8.0 配重——弹条有分量不显瘦长
+			# R69 加粗 Y 2.2→4.5；R70 再加黑加粗（用户反馈「加黑一点，加粗一点，看的
+			# 很不清楚」）：贴图 56×12 深色弹体重做，Y 5.5 / X 8.5（原生可视 ~10px 厚）
 			_sprite.texture = TextureFactory.tracer_tex()
 			if velocity.length() > 1.0:
 				_sprite.rotation = velocity.angle()
-			_sprite.scale = Vector2(scale_f * 8.0, scale_f * 4.5)
+			_sprite.scale = Vector2(scale_f * 8.5, scale_f * 5.5)
 			return
 		match element:
 			GameConst.Element.FIR:

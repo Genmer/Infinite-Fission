@@ -266,7 +266,7 @@ func _rebuild_details() -> void:
 	# 个人所有属性」）：全局三行 + 武器侧（暴击率/暴伤/穿透/间隔）见各武器区块头行
 	var pstats := Panel.new()
 	pstats.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 3, false))
-	pstats.custom_minimum_size = Vector2(576.0, 88.0)
+	pstats.custom_minimum_size = Vector2(576.0, 110.0)
 	pstats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pstats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var ptitle := Label.new()
@@ -278,31 +278,45 @@ func _rebuild_details() -> void:
 	pstats.add_child(ptitle)
 	var prow := Label.new()
 	StickerTheme.label_sticker(prow, 13, PopPalette.INK, 0, Color.WHITE, true)
-	prow.text = "生命上限 %d　磁吸 %dpx　技能冷却 %.0fs　换一批 ×%d" % [
+	prow.text = "生命上限 %d　磁吸 %dpx　换一批 ×%d" % [
 		int(float(_player_ref.get("max_hp"))),
 		int(float(_player_ref.get("pickup_radius"))),
-		float(_player_ref.get("skill_cd_base")),
 		int(float(_player_ref.get("reroll_charges")))]
 	prow.position = Vector2(12.0, 30.0)
 	prow.size = Vector2(552.0, 18.0)
 	prow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pstats.add_child(prow)
+	# R70 技能急速终值行（用户反馈「技能急速一直点，但是详情没写最终加成多少」）：
+	# 跨武器 add_skillcdr 池合计（与 refresh_skill_cd 消费同 clamp，上限 -60%），
+	# 达上限时明示——连点数张后可核对实际生效
 	var prow2 := Label.new()
 	StickerTheme.label_sticker(prow2, 13, PopPalette.INK, 0, Color.WHITE, true)
-	var xp_pct := float(_player_ref.call("xp_gain_pct")) \
-		if _player_ref.has_method("xp_gain_pct") else 0.0
-	var gold_pct := float(_player_ref.call("gold_gain_pct")) \
-		if _player_ref.has_method("gold_gain_pct") else 0.0
-	prow2.text = "经验获取 +%d%%　金币获取 +%d%%" % [roundi(xp_pct * 100.0),
-		roundi(gold_pct * 100.0)]
+	var haste_pct := float(_player_ref.call("skill_haste_pct")) \
+		if _player_ref.has_method("skill_haste_pct") else 0.0
+	var haste_capped := haste_pct >= 0.6 - 0.0001
+	prow2.text = "技能急速 -%d%%%s　技能冷却 %.0fs" % [roundi(haste_pct * 100.0),
+		"（已达 -60% 上限）" if haste_capped else "",
+		float(_player_ref.get("skill_cd_base"))]
 	prow2.position = Vector2(12.0, 50.0)
 	prow2.size = Vector2(552.0, 18.0)
 	prow2.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pstats.add_child(prow2)
+	var prow3 := Label.new()
+	StickerTheme.label_sticker(prow3, 13, PopPalette.INK, 0, Color.WHITE, true)
+	var xp_pct := float(_player_ref.call("xp_gain_pct")) \
+		if _player_ref.has_method("xp_gain_pct") else 0.0
+	var gold_pct := float(_player_ref.call("gold_gain_pct")) \
+		if _player_ref.has_method("gold_gain_pct") else 0.0
+	prow3.text = "经验获取 +%d%%　金币获取 +%d%%" % [roundi(xp_pct * 100.0),
+		roundi(gold_pct * 100.0)]
+	prow3.position = Vector2(12.0, 70.0)
+	prow3.size = Vector2(552.0, 18.0)
+	prow3.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pstats.add_child(prow3)
 	var pnote := Label.new()
 	StickerTheme.label_sticker(pnote, 12, PopPalette.INK_SOFT)
 	pnote.text = "暴击率 / 爆伤 / 穿透（贯穿敌人数）/ 出招间隔 随每把武器独立生效——见下方各武器区块"
-	pnote.position = Vector2(12.0, 70.0)
+	pnote.position = Vector2(12.0, 90.0)
 	pnote.size = Vector2(552.0, 16.0)
 	pnote.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pstats.add_child(pnote)
