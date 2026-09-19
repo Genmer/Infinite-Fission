@@ -793,10 +793,17 @@ func _on_card_choice(p_cards: Array) -> void:
 	# R72 成对抉择：p_cards 为同行两张（普通模式单元素数组——协议统一为数组）
 	if state != GameConst.GameStatus.LEVEL_UP:
 		return
+	var applied := 0
 	for card_v: Variant in p_cards:
 		if card_v is Dictionary and not (card_v as Dictionary).is_empty():
 			card_generator.apply_choice(card_v as Dictionary, player)
+			applied += 1
 	card_select_ui.close()
+	# E3 升级波纹（self-evolution）：确认瞬间以玩家为心的金色扩散环——奖励即刻感。
+	# 成对抉择双环错峰（两张卡两次脉冲）
+	if applied > 0 and player != null and is_instance_valid(player):
+		for k in range(applied):
+			_spawn_level_burst(player.global_position, 0.12 * float(k))
 	change_state(GameConst.GameStatus.PLAYING)
 	if pending_level_ups > 0:
 		pending_level_ups -= 1
@@ -1349,6 +1356,44 @@ func _early_xp_mult() -> float:
 		until_wave = maxi(int(GameConfig.balance.early_xp_boost.get("until_wave", 6)), 1)
 	var wave := wave_director.current_wave if wave_director != null else 0
 	return mult if wave >= 1 and wave < until_wave else 1.0
+
+
+func _spawn_level_burst(p_pos: Vector2, p_delay: float = 0.0) -> void:
+	# E3 升级波纹：一次性自清表现件（双环：亮芯扩散 + 淡晕跟随；0.5s 生命周期）
+	var burst := LevelBurst.new()
+	burst.name = "LevelBurst"
+	burst.position = p_pos
+	burst.delay = p_delay
+	add_child(burst)
+
+
+class LevelBurst:
+	extends Node2D
+
+	const LIFE := 0.5
+	const MAX_R := 150.0
+
+	var _t: float = 0.0
+	var delay: float = 0.0                       # 错峰延迟（成对抉择第二环）
+
+	func _process(p_delta: float) -> void:
+		if delay > 0.0:
+			delay -= p_delta
+			return
+		_t += p_delta
+		if _t >= LIFE:
+			queue_free()
+			return
+		queue_redraw()
+
+	func _draw() -> void:
+		var k := clampf(_t / LIFE, 0.0, 1.0)
+		var ease_out := 1.0 - pow(1.0 - k, 3.0)   # easeOutCubic 扩散
+		var r := 24.0 + MAX_R * ease_out
+		var a := (1.0 - k)
+		var gold := Color(1.0, 0.84, 0.29)
+		draw_arc(Vector2.ZERO, r, 0.0, TAU, 40, Color(gold.r, gold.g, gold.b, 0.85 * a), 4.0, true)
+		draw_arc(Vector2.ZERO, r * 0.72, 0.0, TAU, 32, Color(gold.r, gold.g, gold.b, 0.3 * a), 9.0, true)
 
 
 func _spawn_xp_shard(p_pos: Vector2, p_value: float) -> void:

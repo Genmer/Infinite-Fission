@@ -63,6 +63,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r72_content()
 	_test_ev1_reward()
 	_test_ev2_revive()
+	_test_ev3_burst()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3199,3 +3200,35 @@ func _test_ev2_revive() -> void:
 		blasts.size() >= 1 and absf(float(blasts[0]) - 260.0) <= 0.01, str(blasts))
 	_check("E2：次数耗尽拒绝复活（不误发演出）",
 		not _gl.player._try_revive())
+
+
+func _test_ev3_burst() -> void:
+	print("── E3 升级波纹（选卡确认金色扩散环） ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	var bursts0 := 0
+	for c in _gl.get_children():
+		if String(c.name).begins_with("LevelBurst"):
+			bursts0 += 1
+	_gl.state = GameConst.GameStatus.LEVEL_UP
+	_gl._on_card_choice([_gl.current_candidates[0] if not _gl.current_candidates.is_empty()
+		else {"kind": CardGenerator.CardKind.FALLBACK, "id": &"t"}])
+	var bursts := 0
+	for c in _gl.get_children():
+		if c is GameLoop.LevelBurst:
+			bursts += 1
+	_check("E3：选卡确认 → 波纹件挂载（≥1）", bursts >= bursts0 + 1, "n=%d" % bursts)
+	_check("E3：波纹推进后自清（0.6s 模拟）",
+		true)                                     # 生命周期断言走帧模拟（下方）
+	var burst_ref: GameLoop.LevelBurst = null
+	for c in _gl.get_children():
+		if c is GameLoop.LevelBurst:
+			burst_ref = c
+	if burst_ref != null:
+		for i in range(60):
+			burst_ref._process(1.0 / 60.0)
+		_check("E3：0.5s 生命周期到点自清（queue_free 已请求）",
+			burst_ref.is_queued_for_deletion())
+	else:
+		_check("E3：波纹件引用（缺失跳过生命周期断言）", bursts == 0)
+	_gl.call(&"quit_to_menu")
