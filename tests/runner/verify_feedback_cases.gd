@@ -66,6 +66,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_ev3_burst()
 	_test_ev5_first_met()
 	_test_ev6_bossbar()
+	_test_ev78()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3300,3 +3301,26 @@ func _test_ev6_bossbar() -> void:
 	EventBus.emit_enemy_killed(boss)             # 死亡链内 spawner 归还（勿二次 release）
 	bar._root.visible = false
 	bar.boss = null
+
+
+func _test_ev78() -> void:
+	print("── E7 敌弹零分配缓冲 + E8 地狱云层氛围 ──")
+	# E7：缓冲复用（同引用 + 快照正确性）
+	var buf_a: Array = _gl._collect_enemy_bullets()
+	var buf_b: Array = _gl._collect_enemy_bullets()
+	_check("E7：敌弹快照缓冲复用（同数组实例——零每帧分配）", buf_a == buf_b)
+	# E8：难度 tint（地狱红移倍率）
+	_gl._difficulty = GameConst.Difficulty.HELL
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	var hell_tint: Color = _gl._backdrop.modulate if _gl._backdrop != null else Color.WHITE
+	_check("E8：地狱云层红移（r>1 且 g<1）", hell_tint.r > 1.0 and hell_tint.g < 1.0,
+		str(hell_tint))
+	_gl._difficulty = GameConst.Difficulty.NORMAL
+	_gl.call(&"quit_to_menu")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	var normal_tint: Color = _gl._backdrop.modulate if _gl._backdrop != null else Color.WHITE
+	_check("E8：普通云层原色（无难度染色）", normal_tint.r <= 1.001 and normal_tint.g >= 0.999,
+		str(normal_tint))
+	_gl.call(&"quit_to_menu")

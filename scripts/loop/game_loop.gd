@@ -554,6 +554,12 @@ func start_run(p_daily_seed: int = -1) -> bool:
 		_apply_affix_ids(daily_curses, StringName(String(affixes.get("bless", ""))))
 	if _backdrop != null:
 		_backdrop.modulate = map_def.get("tint", Color.WHITE)   # 分图云层主题色
+		# E8 地狱氛围（self-evolution）：难度染色——普通原色 / 困难暖橙压 / 地狱红移
+		#（选关面板文案之外的「画面一眼可辨」通道；g 通道压暗 + r 抬升近似红移）
+		if _difficulty == GameConst.Difficulty.HARD:
+			_backdrop.modulate = _backdrop.modulate * Color(1.06, 0.94, 0.88)
+		elif _difficulty == GameConst.Difficulty.HELL:
+			_backdrop.modulate = _backdrop.modulate * Color(1.16, 0.82, 0.78)
 	hud.set_map_name(("每日挑战 · " if p_daily_seed >= 0 else "")
 		+ String(map_def.get("name", ""))
 		+ ("" if _difficulty == GameConst.Difficulty.NORMAL
@@ -1265,13 +1271,17 @@ func _tick_projectiles(p_gd: float) -> void:
 		idx -= 1
 
 
+var _enemy_bullet_buf: Array[Node2D] = []     # E7 复用缓冲（敌弹网格快照——零每帧分配）
+
+
 func _collect_enemy_bullets() -> Array[Node2D]:
-	# 敌弹列表（team==1；供消弹查询网格重建——上一帧位置的确定性快照口径）
-	var out: Array[Node2D] = []
+	# 敌弹列表（team==1；供消弹查询网格重建——上一帧位置的确定性快照口径）。
+	# E7 审查后微优化：复用成员缓冲（rebuild 只读遍历一帧内完成，覆写安全）
+	_enemy_bullet_buf.clear()
 	for proj in _projectile_pool.active_projectiles():
 		if proj is ProjectileBase and (proj as ProjectileBase).team == 1:
-			out.append(proj)
-	return out
+			_enemy_bullet_buf.append(proj)
+	return _enemy_bullet_buf
 
 
 func _tick_ui(p_raw_delta: float) -> void:
