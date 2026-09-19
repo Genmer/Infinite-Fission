@@ -62,6 +62,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r72_new_enemies()
 	_test_r72_content()
 	_test_ev1_reward()
+	_test_ev2_revive()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3173,3 +3174,28 @@ func _test_ev1_reward() -> void:
 	_gl._difficulty = GameConst.Difficulty.NORMAL
 	_gl.player.set_difficulty(GameConst.Difficulty.NORMAL)
 	_gl.call(&"quit_to_menu")
+
+
+func _test_ev2_revive() -> void:
+	print("── E2 复活演出（冲击环 + 横幅 + 最高档顿帧） ──")
+	_gl.player.revives_left = 1
+	_gl.player.hp = 0.0
+	_gl.player.invuln_left = 0.0
+	var banners: Array[String] = []
+	var banner_cb := func(p_text: String) -> void: banners.append(p_text)
+	EventBus.mechanics_intro.connect(banner_cb)
+	var blasts: Array = []
+	var blast_cb := func(p_pos: Vector2, p_radius: float) -> void: blasts.append(p_radius)
+	EventBus.kill_blast.connect(blast_cb)
+	var ok := _gl.player._try_revive()
+	EventBus.mechanics_intro.disconnect(banner_cb)
+	EventBus.kill_blast.disconnect(blast_cb)
+	_check("E2 前置：复活成功且满血+无敌", ok and _gl.player.hp == _gl.player.max_hp
+		and _gl.player.invuln_left > 0.0)
+	_check("E2：复活横幅（剩余次数提示）",
+		banners.size() >= 1 and String(banners[0]).contains("复活"),
+		str(banners))
+	_check("E2：白环冲击表现（kill_blast 通道 r=260）",
+		blasts.size() >= 1 and absf(float(blasts[0]) - 260.0) <= 0.01, str(blasts))
+	_check("E2：次数耗尽拒绝复活（不误发演出）",
+		not _gl.player._try_revive())

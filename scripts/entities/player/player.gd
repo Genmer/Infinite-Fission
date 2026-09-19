@@ -789,12 +789,21 @@ func _on_died() -> void:
 
 
 func _try_revive() -> bool:
-	# 应急协议（局外养成·复活）：满血复活 + 2s 无敌（每局次数 = 养成等级）
+	# 应急协议/难度附赠复活：满血复活 + 2s 无敌（每局次数 = 养成等级 + 难度附赠）。
+	# R74 复活演出（E2）：白环冲击（kill_blast 表现通道）+ 顿帧震屏（BOSS_DEATH 档
+	# 复用）+ 全屏横幅——高光时刻给足分量（原实现静默满血，玩家根本不知道发生了什么）
 	if revives_left <= 0:
 		return false
 	revives_left -= 1
 	hp = max_hp
 	invuln_left = 2.0
+	EventBus.emit_kill_blast(global_position, 260.0)   # 白环冲击（纯表现通道）
+	EventBus.emit_mechanics_intro("✦ 复活！（剩余 %d 次）" % revives_left)
+	var tree := get_tree()
+	if tree != null:
+		var feel := tree.get_first_node_in_group(&"game_feel")
+		if feel != null and feel.has_method(&"on_boss_death_feel"):
+			feel.call(&"on_boss_death_feel")   # 120ms 顿帧 + trauma 1.0 + 色差（最高档）
 	return true
 
 

@@ -30,6 +30,10 @@ var _chromatic_material: ShaderMaterial = null
 const EMITTER_SCENE_ID := &"burst_default"
 
 
+func _ready() -> void:
+	add_to_group(&"game_feel")                  # R74：复活演出等跨系统查找口
+
+
 func early_bind() -> void:
 	# ★ enemy_killed 前置订阅（连接序 = 派发序，审查 Fix 2）：Boss 击杀打击感读取
 	#   enemy.tags 必须先于 EnemySpawner 死亡归还清零（tags=0）——GameLoop 在 spawner
@@ -85,13 +89,18 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 		particles.burst(EMITTER_SCENE_ID, p_result.pos, pri)
 
 
+func on_boss_death_feel() -> void:
+	# R74 最高档感受（Boss 死亡/玩家复活共用）：120ms 顿帧 + trauma 1.0 + 色差
+	request_hit_stop(_hit_stop_ms_for(GameConst.FeelLevel.BOSS_DEATH))
+	add_trauma_for_level(GameConst.FeelLevel.BOSS_DEATH)
+	_apply_chromatic(_ca_intensity_for(GameConst.FeelLevel.BOSS_DEATH))
+
+
 func on_enemy_killed(p_enemy: Node2D) -> void:
 	# Boss 死亡 → 120ms 顿帧 + trauma 1.0（BOSS_DEATH 档）；普通击杀 → KILL 优先级粒子
 	var tags := int(p_enemy.get("tags")) if p_enemy != null else 0
 	if (tags & GameConst.TAG_BOSS) != 0:
-		request_hit_stop(_hit_stop_ms_for(GameConst.FeelLevel.BOSS_DEATH))
-		add_trauma_for_level(GameConst.FeelLevel.BOSS_DEATH)
-		_apply_chromatic(_ca_intensity_for(GameConst.FeelLevel.BOSS_DEATH))
+		on_boss_death_feel()
 	elif (tags & GameConst.TAG_ELITE) != 0:
 		# R19 打击质感：精英击杀 → CRIT 档顿帧 + 震屏（大怪击杀更有分量）
 		request_hit_stop(_hit_stop_ms_for(GameConst.FeelLevel.CRIT))
