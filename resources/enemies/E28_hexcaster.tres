@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/enemy_data.gd" id="1_ed"]
+
+[resource]
+script = ExtResource("1_ed")
+id = &"E28_hexcaster"
+display_name = "咒术师"
+behavior = 1
+hp_base = 90.0
+spd_base = 62.0
+dmg_base = 22.0
+exp_base = 14.0
+tp_cost = 2.0
+resist = [0.0, 0.0, 0.0, 0.0]
+immune_mask = 0
+tags = 0
+hitbox_r = 14.0
+ranged = {"bullet_speed": 260.0, "fire_cd": 3.2, "bullet_atk_ratio": 0.7, "spread": 6.0, "fire_range": 400.0}
+special = {"spell": true, "spell_radius": 95.0, "spell_delay": 0.9, "spell_atk_ratio": 1.0}
+elite_mult = {"hp": 3.2, "spd": 0.9, "dmg": 1.4, "exp": 7.0}
+boss = {}
+gold_drop = {"chance": 0.1, "min": 12, "max": 20}

@@ -59,6 +59,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r70_details_haste()
 	_test_r71_shop_fallback()
 	_test_r72_difficulty()
+	_test_r72_new_enemies()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -2852,3 +2853,155 @@ func _test_r72_difficulty() -> void:
 	_gl._difficulty = GameConst.Difficulty.NORMAL
 	_gl.spawner.difficulty = GameConst.Difficulty.NORMAL
 	_gl.state = GameConst.GameStatus.MENU
+
+
+func _spawn_r72_enemy(p_id: StringName, p_pos: Vector2) -> Enemy:
+	# R72 新形态敌生成辅助（真件池 + 入树 + 网格注册）
+	var e := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	e.spawn(_gl.registry.get_enemy(p_id), 1, 0)
+	# 池化实例本就是 EnemyPool 节点子节点（spawner 同口径——不 reparent）
+	e.global_position = p_pos
+	_gl.spawner.active.append(e)
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	return e
+
+
+func _release_r72_enemy(p_e: Enemy) -> void:
+	_gl.spawner.active.erase(p_e)
+	(_gl.pools[&"enemy"] as EnemyPool).release(p_e)
+
+
+func _test_r72_new_enemies() -> void:
+	print("── R72 新形态敌六种（盾/反弹/法术/预判/闪现自爆×2） ──")
+	# ① 注册与形象
+	for pair in [["E25_phase_bomber", &"phase"], ["E26_shield_lancer", &"shieldlancer"],
+			["E27_warden_orb", &"warden"], ["E28_hexcaster", &"hexcaster"],
+			["E29_longbowhawk", &"longbow"], ["E30_hellfire_revenant", &"revenant"]]:
+		var e_data: EnemyData = _gl.registry.get_enemy(StringName(pair[0]))
+		_check("R72：%s 注册可查 + 形象贴图非空" % String(pair[0]),
+			e_data != null and TextureFactory.enemy_tex(pair[1]) != null)
+	# ② 正面盾：E26 前方命中的伤害 ≈ 后方的 15%（绕后全伤）
+	var shield_e := _spawn_r72_enemy(&"E26_shield_lancer",
+		_gl.player.global_position + Vector2(180.0, 0.0))
+	_check("R72：壁垒枪兵快照 正面减伤 0.85",
+		absf(shield_e._frontal_shield - 0.85) <= 0.001,
+		"s=%.2f" % shield_e._frontal_shield)
+	var hp0 := shield_e.hp
+	var r_front := DamageResult.new()
+	r_front.final_value = 100.0
+	r_front.pos = shield_e.global_position + Vector2(-14.0, 0.0)   # 玩家侧 = 前方
+	shield_e.take_result(r_front)
+	var dmg_front := hp0 - shield_e.hp
+	hp0 = shield_e.hp
+	var r_back := DamageResult.new()
+	r_back.final_value = 100.0
+	r_back.pos = shield_e.global_position + Vector2(14.0, 0.0)     # 背后
+	shield_e.take_result(r_back)
+	var dmg_back := hp0 - shield_e.hp
+	_check("R72：正面命中伤害 ≈ 背后 ×0.15（盾面判向）",
+		absf(dmg_front - 15.0) <= 1.0 and absf(dmg_back - 100.0) <= 1.0,
+		"front=%.1f back=%.1f" % [dmg_front, dmg_back])
+	_release_r72_enemy(shield_e)
+	# ③ 反弹盾：E27 首击折返（team 翻 1）→ 冷却期不弹 → 冷却走完再弹
+	var warden := _spawn_r72_enemy(&"E27_warden_orb",
+		_gl.player.global_position + Vector2(160.0, 0.0))
+	var proj := ProjectileBase.new()
+	proj.velocity = Vector2(300.0, 0.0)
+	proj.team = 0
+	proj.panel_snapshot = {"base_atk": 40.0}
+	var bounced: bool = warden.try_reflect_projectile(proj)
+	_check("R72：秘纹守卫就绪反弹（team 翻 1 + 伤害 ×0.6）",
+		bounced and proj.team == 1
+			and absf(float(proj.panel_snapshot.get("base_atk", 0.0)) - 24.0) <= 0.01,
+		"team=%d atk=%.1f" % [proj.team, float(proj.panel_snapshot.get("base_atk", 0.0))])
+	proj.team = 0
+	_check("R72：冷却期不反弹（伤害照常）",
+		not warden.try_reflect_projectile(proj))
+	warden._reflect_cd = 0.0
+	_check("R72：冷却走完恢复反弹", warden.try_reflect_projectile(proj))
+	proj.free()
+	_release_r72_enemy(warden)
+	# ④ 法术圈：E28 施法生成紫圈 + 引爆圈内掉血/圈外免伤
+	var caster := _spawn_r72_enemy(&"E28_hexcaster",
+		_gl.player.global_position + Vector2(120.0, 0.0))
+	caster._cast_spell(_gl.player)              # 圈钉在玩家位置
+	var rings := 0
+	for c in caster.get_parent().get_children():   # 圈挂敌池节点下（_blink_teleport 同口径）
+		if c is Telegraph.TelegraphCircle or String(c.name) == "SpellRing":
+			rings += 1
+	_check("R72：咒术师施法 → 法术圈挂世界层", rings >= 1, "rings=%d" % rings)
+	var hp_save: float = _gl.player.hp
+	_gl.player.invuln_left = 0.0
+	caster._detonate_spell(_gl.player.global_position, 95.0)   # 圈内（玩家就在圈心）
+	_check("R72：法术圈引爆 圈内玩家掉血（contact_dmg 口径）",
+		_gl.player.hp < hp_save, "hp %.0f→%.0f" % [hp_save, _gl.player.hp])
+	hp_save = _gl.player.hp
+	_gl.player.invuln_left = 0.0
+	caster._detonate_spell(_gl.player.global_position + Vector2(400.0, 0.0), 95.0)
+	_check("R72：圈外引爆 玩家不掉血", is_equal_approx(_gl.player.hp, hp_save))
+	for c in caster.get_parent().get_children():
+		if String(c.name) == "SpellRing":
+			c.queue_free()
+	_release_r72_enemy(caster)
+	# ⑤ 预判箭：E29 玩家右移 → 弹道朝玩家前方（x 速度分量显著）
+	var hawk := _spawn_r72_enemy(&"E29_longbowhawk",
+		_gl.player.global_position + Vector2(0.0, 200.0))
+	hawk._player_vel_est = Vector2(500.0, 0.0)
+	hawk.projectile_pool = _gl.pools[&"projectile"]
+	_break_fire(hawk, _gl.player)              # 直调开火（绕过冷却推进）
+	for p in (_gl.pools[&"projectile"] as ProjectilePool).active_projectiles():
+		if p is ProjectileBase and (p as ProjectileBase).team == 1:
+			var bv: Vector2 = (p as ProjectileBase).velocity
+			_check("R72：长弓隼卫提前量（玩家右移 → 弹道右倾）",
+				bv.x > 250.0, "v=%s" % str(bv))
+			(_gl.pools[&"projectile"] as ProjectilePool).release(p)
+			break
+	_release_r72_enemy(hawk)
+	# ⑥ E30 地狱闪现自爆参数快照
+	var rev_e := _spawn_r72_enemy(&"E30_hellfire_revenant",
+		_gl.player.global_position + Vector2(150.0, 0.0))
+	_check("R72：狱焰归魂 爆面 150 / 引信 0.55（地狱强化口径）",
+		absf(rev_e._blink_blast_r - 150.0) <= 0.01 and absf(rev_e._blink_fuse - 0.55) <= 0.01,
+		"r=%.0f fuse=%.2f" % [rev_e._blink_blast_r, rev_e._blink_fuse])
+	_release_r72_enemy(rev_e)
+	# ⑦ 波表织入：普通零改动 / 困难混入 / 地狱全量 + 高波精英化
+	var wd := _gl.wave_director
+	wd.wave_table = MapTable.load_table(MapTable.FIRST_MAP_ID, _gl.registry)
+	wd.difficulty = GameConst.Difficulty.NORMAL
+	var normal_roll: Array[Dictionary] = wd._roll_composition(3)
+	var has_new := false
+	for en in normal_roll:
+		if String(en.get("data_id", "")).begins_with("E25") 				or String(en.get("data_id", "")).begins_with("E26") 				or String(en.get("data_id", "")).begins_with("E28"):
+			has_new = true
+	_check("R72：普通局波表零改动（新形态不出现）", not has_new)
+	wd.difficulty = GameConst.Difficulty.HARD
+	var hard_roll: Array[Dictionary] = wd._roll_composition(3)
+	var hard_new := 0
+	for en in hard_roll:
+		var sid := String(en.get("data_id", ""))
+		if sid.begins_with("E25") or sid.begins_with("E26") or sid.begins_with("E28"):
+			hard_new += 1
+	_check("R72：困难局每波混入 ≥2 只新形态", hard_new >= 2, "n=%d" % hard_new)
+	wd.difficulty = GameConst.Difficulty.HELL
+	var hell_roll: Array[Dictionary] = wd._roll_composition(8)
+	var hell_new := 0
+	var hell_elite_new := false
+	for en in hell_roll:
+		var sid := String(en.get("data_id", ""))
+		if sid.begins_with("E25") or sid.begins_with("E26") or sid.begins_with("E27") 				or sid.begins_with("E28") or sid.begins_with("E29") or sid.begins_with("E30"):
+			hell_new += 1
+			if int(en.get("tags", 0)) & GameConst.TAG_ELITE:
+				hell_elite_new = true
+	_check("R72：地狱局伴随 ≥4 只新形态 + 高波精英化", hell_new >= 4 and hell_elite_new,
+		"n=%d elite=%s" % [hell_new, str(hell_elite_new)])
+	wd.difficulty = GameConst.Difficulty.NORMAL
+	# ⑧ 图鉴：攻击方式行 + 图标映射
+	_check("R72：图鉴攻击方式行（壁垒枪兵 = 绕后提示）",
+		_gl.menu_screen._enemy_attack_note("E26_shield_lancer").contains("绕"))
+	_check("R72：图鉴图标映射（E27 → warden 贴图）",
+		_gl.menu_screen._enemy_icon_tex("E27_warden_orb") == TextureFactory.enemy_tex(&"warden"))
+
+
+func _break_fire(p_enemy: Enemy, p_player: Node2D) -> void:
+	# 射箭兵开火直调（绕过冷却推进——测试注入）
+	p_enemy._fire_at(p_player)

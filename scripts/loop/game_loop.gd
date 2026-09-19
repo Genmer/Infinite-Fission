@@ -541,6 +541,7 @@ func start_run(p_daily_seed: int = -1) -> bool:
 		card_generator.rng.randomize()            # 卡池每局随机（固定种子=「选项写死」观感根因；pkg 测试自行定种子）
 	player.set_character(Meta.character_id)   # 角色应用（含养成加成——M8/角色系统）
 	spawner.difficulty = _difficulty             # R72 敌数值乘区（出生管线单点）
+	wave_director.difficulty = _difficulty        # R72 波表织入（新形态敌伴随）
 	player.revives_left += GameConst.difficulty_revives(_difficulty)   # R72 难度附赠复活
 	var map_def := MapTable.get_map(current_map_id)
 	_apply_map_affixes(map_def)                  # 词缀二期：双词缀注入（祝→玩家 / 诅→敌侧）
@@ -1149,6 +1150,7 @@ func continue_run() -> bool:
 		return false
 	wave_director.wave_table = MapTable.load_table(current_map_id, registry)
 	spawner.difficulty = _difficulty
+	wave_director.difficulty = _difficulty       # R72 继续局保持织入口径
 	Meta.set_run_map(current_map_id)
 	var is_daily := bool(data.get("daily", false))
 	Meta.set_run_daily(is_daily)

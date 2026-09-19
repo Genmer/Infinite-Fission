@@ -137,6 +137,17 @@ var _hit_jolt_dir: Vector2 = Vector2.ZERO     # 颤动方向（远离命中点�
 var _face_state: int = 0                      # E4 脸状态（0 平静/1 惊恐/2 引爆）
 var _anim_t: float = 0.0                      # 表现时钟（卫星公转/抖动相位）
 var _boss_orbit: float = 0.0                  # 卫星公转角
+# ── R72 新形态机制（困难/地狱扩展敌：盾兵/反弹盾/法术兵/射箭兵） ──────────────
+var _frontal_shield: float = 0.0               # 正面减伤比（0=无盾；命中来向与「面向玩家」
+                                               # 夹角在 shield_arc 半角内 → 伤害 ×(1−比)）
+var _shield_arc: float = deg_to_rad(110.0)     # 盾面有效弧（全角弧度）
+var _reflect_cd_max: float = 0.0               # 反弹盾周期（0=无；就绪时来弹折返攻玩家）
+var _reflect_cd: float = 0.0                   # 反弹冷却剩余
+var _is_caster: bool = false                   # 法术兵（RANGED 特化：法术圈 AoE 替代直射）
+var _spell_cfg: Dictionary = {}                # {radius, delay, atk_ratio}
+var _aim_lead: bool = false                    # 射箭兵（提前量射击）
+var _player_vel_est: Vector2 = Vector2.ZERO    # 玩家速度估计（逐帧差分 + 平滑）
+var _last_player_pos: Vector2 = Vector2.INF    # 上一帧玩家位置（差分锚点）
 var _boss_angry: bool = false                 # Boss 二阶段变脸贴图标志
 var _spawn_left: float = 0.0                  # 出生弹入剩余（0→1 带 overshoot）
 # 夜间R39 精英词缀技（ENEMY_BOSS_TELEGRAPH §6：Boss 技弱化版，前摇 +150ms 已含表值）
@@ -316,6 +327,20 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 		_blink_cd = _blink_cd_max * randf_range(0.5, 1.0)
 		_blink_state = 0
 		_blink_target = global_position
+	# R72 新形态机制快照（special 驱动；见成员块注释）
+	_frontal_shield = clampf(float(data.special.get("frontal_shield", 0.0)), 0.0, 0.95)
+	_shield_arc = deg_to_rad(clampf(float(data.special.get("shield_arc", 110.0)), 20.0, 180.0))
+	_reflect_cd_max = maxf(float(data.special.get("reflect_cd", 0.0)), 0.0)
+	_reflect_cd = 0.0                          # 出生即就绪（首弹必弹——威胁立现；此后走冷却）
+	_is_caster = bool(data.special.get("spell", false))
+	_spell_cfg = {
+		"radius": maxf(float(data.special.get("spell_radius", 95.0)), 20.0),
+		"delay": maxf(float(data.special.get("spell_delay", 0.9)), 0.3),
+		"atk_ratio": clampf(float(data.special.get("spell_atk_ratio", 1.0)), 0.1, 3.0),
+	}
+	_aim_lead = bool(data.special.get("aim_lead", false))
+	_player_vel_est = Vector2.ZERO
+	_last_player_pos = Vector2.INF
 	if is_boss():
 		poise_max = maxf(float(data.boss.get("poise_max", 50.0)), 0.0)
 		_chg_cfg = data.boss.get("charge", {})
@@ -381,6 +406,15 @@ func tick(p_game_delta: float) -> void:
 	if knock_vel != Vector2.ZERO:
 		global_position += knock_vel * p_game_delta
 		knock_vel = knock_vel.lerp(Vector2.ZERO, minf(9.0 * p_game_delta, 1.0))
+	# R72 射箭兵提前量：玩家速度估计（逐帧差分 + 平滑；供 _fire_at 提前量解算）
+	if player != null:
+		if _last_player_pos != Vector2.INF:
+			var pv := (player.global_position - _last_player_pos) / maxf(p_game_delta, 0.001)
+			_player_vel_est = _player_vel_est.lerp(pv, 0.35)
+		_last_player_pos = player.global_position
+	# R72 反弹盾冷却推进
+	if _reflect_cd > 0.0:
+		_reflect_cd = maxf(_reflect_cd - p_game_delta, 0.0)
 	match behavior:
 		GameConst.EnemyBehavior.CHASE:
 			if player != null:
@@ -424,9 +458,19 @@ func tick(p_game_delta: float) -> void:
 func take_result(p_result: DamageResult) -> void:
 	# 受击入口（pipeline 步骤 9 之后由投射物侧调用）：扣血 + 受击闪白/果冻抖动 + 死亡广播
 	# 易伤标记：包 3 ElementalSystem 合入后经 elemental 容器承担（get_vuln_factor 已就绪）
-	apply_damage(p_result.final_value)
-	if is_boss() and poise_max > 0.0 and p_result.final_value > 0.0:
-		_accumulate_poise(p_result.final_value)
+	# R72 带盾兵（壁垒枪兵）：盾面面向玩家——命中来向在盾弧内 → 伤害 ×(1−减伤比)
+	# （绕后/侧翼全伤害；测向用命中点向量 vs 「自身→玩家」向量点积，≥ 半弧余弦即正面）
+	var final_dmg := p_result.final_value
+	if _frontal_shield > 0.0:
+		var shield_player := _player()
+		if shield_player != null and is_instance_valid(shield_player):
+			var to_hit := (p_result.pos - global_position).normalized()
+			var to_player := (shield_player.global_position - global_position).normalized()
+			if to_hit.dot(to_player) >= cos(_shield_arc * 0.5):
+				final_dmg *= (1.0 - _frontal_shield)
+	apply_damage(final_dmg)
+	if is_boss() and poise_max > 0.0 and final_dmg > 0.0:
+		_accumulate_poise(final_dmg)
 	if not dead:
 		_flash_left = FLASH_TIME
 		_wobble_left = WOBBLE_TIME           # 方向 C：果冻抖动（squash & stretch）
@@ -659,7 +703,12 @@ func _tick_ranged(p_game_delta: float, p_player: Node2D, p_speed_factor: float) 
 		global_position += dir * speed * p_speed_factor * p_game_delta
 	fire_cd_left -= p_game_delta
 	if fire_cd_left <= 0.0 and dist <= fire_range:
-		_fire_at(p_player)
+		# R72 法术兵（咒术师）：直射改法术圈——玩家脚下读条紫圈 → 延迟 AoE
+		#（走位永远有解：读条 delay 给足移出半径的时间）
+		if _is_caster:
+			_cast_spell(p_player)
+		else:
+			_fire_at(p_player)
 		fire_cd_left = fire_cd
 
 
@@ -671,7 +720,13 @@ func _fire_at(p_player: Node2D) -> void:
 	if bullet == null:
 		return
 	bullet.pool = projectile_pool
-	var dir := (p_player.global_position - global_position).normalized()
+	var aim := p_player.global_position
+	if _aim_lead:
+		# R72 射箭兵（长弓隼卫）：提前量——飞行时间 × 玩家速度估计（0.9 收敛系数
+		# 防 100% 命中；快弹速压缩走位窗 = 「被预判」的体感来源）
+		var flight := global_position.distance_to(aim) / maxf(bullet_speed, 1.0)
+		aim += _player_vel_est * flight * 0.9
+	var dir := (aim - global_position).normalized()
 	if spread_deg > 0.0:
 		dir = dir.rotated(randf_range(-deg_to_rad(spread_deg), deg_to_rad(spread_deg)))
 	bullet.position = global_position
@@ -685,6 +740,64 @@ func _fire_at(p_player: Node2D) -> void:
 		"panel_snapshot": {"base_atk": contact_dmg * bullet_atk_ratio},
 	})
 
+
+
+func _cast_spell(p_player: Node2D) -> void:
+	# R72 法术兵施法：玩家位置钉紫圈（TelegraphCircle）→ delay 后引爆——圈内玩家吃
+	# contact_dmg × atk_ratio；圈随 SceneTreeTimer 推进（process_always=false：暂停
+	# 随战斗冻结，读条不偷跑）。施法者本体安全（远距威胁，逼走位不逼贴脸）
+	if p_player == null or not is_instance_valid(p_player):
+		return
+	var ring := Telegraph.TelegraphCircle.new()
+	ring.name = "SpellRing"
+	ring.radius = float(_spell_cfg.get("radius", 95.0))
+	ring.color = Color(0.62, 0.4, 1.0)          # 紫 = 法术/狙击读条（§1.2 语义）
+	ring.position = p_player.global_position
+	ring.progress = 0.0
+	get_parent().add_child(ring)
+	var delay := float(_spell_cfg.get("delay", 0.9))
+	var tree := get_tree()
+	if tree == null:
+		ring.queue_free()
+		return
+	var timer := tree.create_timer(delay, false, false, true)
+	var center: Vector2 = ring.position
+	var radius := ring.radius
+	timer.timeout.connect(func() -> void:
+		_detonate_spell(center, radius)
+		if is_instance_valid(ring):
+			ring.queue_free())
+
+
+func _detonate_spell(p_center: Vector2, p_radius: float) -> void:
+	# 法术圈引爆（timer 回调；宿主可能已死/归还——按位置结算与宿主无关）
+	EventBus.emit_kill_blast(p_center, p_radius)   # 爆炸环表现（复用通道）
+	var player := _player()
+	if player != null and is_instance_valid(player) 			and player.global_position.distance_to(p_center) <= p_radius:
+		(player as Player).take_contact_damage(
+			contact_dmg * float(_spell_cfg.get("atk_ratio", 1.0)))
+
+
+func try_reflect_projectile(p_proj: Node) -> bool:
+	# R72 反弹盾（秘纹守卫）：就绪期来弹整体折返——team 翻 1（敌弹）、速度改指向
+	# 玩家、伤害按原弹面板 ×0.6；命中取消（不落血/不耗穿透）。冷却期伤害照常
+	if _reflect_cd_max <= 0.0 or _reflect_cd > 0.0 or dead:
+		return false
+	_reflect_cd = _reflect_cd_max
+	var vel_v: Variant = p_proj.get("velocity")
+	var speed := (vel_v as Vector2).length() if vel_v is Vector2 else 320.0
+	var player := _player()
+	var dir := (player.global_position - global_position).normalized() 		if player != null and is_instance_valid(player) else -Vector2.UP
+	p_proj.set("velocity", dir * maxf(speed, 300.0))
+	p_proj.set("team", 1)
+	var snap_v: Variant = p_proj.get("panel_snapshot")
+	if snap_v is Dictionary:
+		var snap := (snap_v as Dictionary).duplicate()
+		snap["base_atk"] = float(snap.get("base_atk", 10.0)) * 0.6
+		p_proj.set("panel_snapshot", snap)
+	EventBus.emit_bullet_nullified(global_position)   # 青涟漪表现（消弹同款）
+	DebugStats.count(&"reflect_guard_bounce")
+	return true
 
 # ── BLINK 闪现爆炸族（ENEMY_PATTERNS_BASIC §3.3） ────────────────────
 func _tick_blink(p_dt: float, p_player: Node2D, p_sf: float) -> void:
@@ -1385,6 +1498,16 @@ func _reset_cast_state() -> void:
 
 
 func _reset_state() -> void:
+	# R72 新形态机制复位（池化归还清零——E-04）
+	_frontal_shield = 0.0
+	_shield_arc = deg_to_rad(110.0)
+	_reflect_cd_max = 0.0
+	_reflect_cd = 0.0
+	_is_caster = false
+	_spell_cfg = {}
+	_aim_lead = false
+	_player_vel_est = Vector2.ZERO
+	_last_player_pos = Vector2.INF
 	knock_vel = Vector2.ZERO                     # R7：击退冲量归还清零
 	# 归还清零契约（E-04/E-05：状态容器/行为参数/计时/位标志；uid 保留——同帧网格快照去重依赖）
 	data = null
@@ -1566,6 +1689,19 @@ func _visual_kind() -> StringName:
 	if data == null:
 		return &"grunt"
 	var sid := String(data.id)
+	# R72 新形态（E25~E30 必须先于 E2/E3 短前缀判定——begins_with 撞前缀）
+	if sid.begins_with("E25"):
+		return &"phase"
+	if sid.begins_with("E26"):
+		return &"shieldlancer"
+	if sid.begins_with("E27"):
+		return &"warden"
+	if sid.begins_with("E28"):
+		return &"hexcaster"
+	if sid.begins_with("E29"):
+		return &"longbow"
+	if sid.begins_with("E30"):
+		return &"revenant"
 	if sid.begins_with("E2"):
 		return &"dart"
 	if sid.begins_with("E3"):
@@ -1735,6 +1871,34 @@ func _tick_visual(p_game_delta: float) -> void:
 				breathe_r *= 1.0 - 0.25 * prog_r      # 读条收缩
 			sx = _base_scale * breathe_r
 			sy = _base_scale * breathe_r
+		&"shieldlancer", &"warden":
+			# R72 盾面朝玩家（贴图朝上 = 盾在前；引擎侧旋转）+ 呼吸
+			var p_face := _player()
+			if p_face != null and is_instance_valid(p_face):
+				rot = (p_face.global_position - global_position).angle() + PI * 0.5
+			var breathe_s := 1.0 + 0.025 * sin(_anim_t * 3.8 + float(uid % 32))
+			sx = _base_scale * breathe_s
+			sy = _base_scale * (2.0 - breathe_s)
+		&"phase", &"revenant":
+			# R72 幻影/狱焰（闪现自爆族）：漂浮微旋 + 读条收缩（rift 同款）
+			rot = 0.07 * sin(_anim_t * 4.2 + float(uid % 32))
+			var breathe_p := 1.0 + 0.035 * sin(_anim_t * 5.4 + float(uid % 32))
+			if _blink_state == 1:
+				var prog_p := 1.0 - clampf(_blink_left / maxf(_blink_prep, 0.01), 0.0, 1.0)
+				breathe_p *= 1.0 - 0.25 * prog_p
+			sx = _base_scale * breathe_p
+			sy = _base_scale * breathe_p
+		&"hexcaster":
+			# R72 咒术师：法杖抬手脉冲（射击冷却临近时鼓胀——施法预警）
+			var cast_glow_h := 1.0 - clampf(fire_cd_left / maxf(fire_cd, 0.01), 0.0, 1.0)
+			var breathe_h := 1.0 + 0.03 * sin(_anim_t * 4.0 + float(uid % 32)) 				+ 0.12 * pow(cast_glow_h, 2.0)
+			sx = _base_scale * breathe_h
+			sy = _base_scale * (2.0 - breathe_h)
+		&"longbow":
+			# R72 长弓隼卫：朝玩家的隼形（dart 同款朝向逻辑）
+			rot = _dart_rotation()
+			sx = _base_scale * 0.94
+			sy = _base_scale * 1.06
 		&"elite":
 			var hover := (1.0 - cos(_anim_t * 2.2)) * 0.5
 			off.y = -hover * HOVER_AMP

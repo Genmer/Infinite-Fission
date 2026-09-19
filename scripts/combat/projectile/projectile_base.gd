@@ -225,6 +225,10 @@ func _submit_hit(p_target: Node2D) -> void:
 	hits_this_frame[t_uid] = true
 	if bool(p_target.get("dead")):
 		return                                # E-06 死亡短路
+	# R72 反弹盾（秘纹守卫）：就绪期来弹折返攻玩家——本次命中取消（不落血/不耗穿透；
+	# 反弹后的弹 team=1，后续走敌弹通道，不再与发射者友军判定）
+	if p_target.has_method(&"try_reflect_projectile") 			and bool(p_target.call(&"try_reflect_projectile", self)):
+		return
 	_pierce_hits += 1                        # 命中序数（HIT_AFTER_PIERCE 条件）
 	var ctx := _build_damage_ctx(p_target)
 	# 包 3 收口（§4.4 ②）：TraitStack 真件乘区预聚合 + 目标易伤乘区注入（A2 §1.8）

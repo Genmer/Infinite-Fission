@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/enemy_data.gd" id="1_ed"]
+
+[resource]
+script = ExtResource("1_ed")
+id = &"E25_phase_bomber"
+display_name = "幻影爆袭者"
+behavior = 5
+hp_base = 70.0
+spd_base = 88.0
+dmg_base = 20.0
+exp_base = 12.0
+tp_cost = 1.8
+resist = [0.0, 0.0, 0.0, 0.0]
+immune_mask = 0
+tags = 0
+hitbox_r = 14.0
+ranged = {}
+special = {"blink_cd": 2.6, "blink_prep": 0.3, "fuse": 0.7, "blast_r": 115.0, "blink_range": 380.0}
+elite_mult = {"hp": 3.2, "spd": 0.9, "dmg": 1.4, "exp": 7.0}
+boss = {}
+gold_drop = {"chance": 0.1, "min": 12, "max": 20}

@@ -33,6 +33,7 @@ var _phase: int = WavePhase.IDLE
 var _wave_elapsed: float = 0.0
 var _hard_cap_left: float = 0.0
 var _boss_wave: bool = false
+var difficulty: int = 0                         # R72 难度档（GameLoop 开局注入；波表织入新形态敌）
 var _boss_ref: Node2D = null                  # 本波 Boss 实例（boss_spawned 记录；死亡即停伴随流水）
 var _boss_seen: bool = false                  # 本波 Boss 是否实际登场（false = Boss 数据缺失降级波）
 var _trickle_left: float = 0.0
@@ -201,6 +202,7 @@ func _roll_composition(p_wave: int) -> Array[Dictionary]:
 			var tags := int(comp.get("tags", 0))
 			for i in range(count):
 				out.append({"data_id": id, "wave": p_wave, "tags": tags})
+		_apply_difficulty_weave(out, p_wave)   # R72 难度织入（普通零改动）
 		return out
 	# —— 公式 fallback：最便宜敌填满 TP 预算（floor 扣减）；Boss 波伴随怪由 tick 流水补 ——
 	if _boss_wave:
@@ -216,6 +218,28 @@ func _roll_composition(p_wave: int) -> Array[Dictionary]:
 	if _is_elite_wave(p_wave):
 		out.append({"data_id": cheapest.id, "wave": p_wave, "tags": GameConst.TAG_ELITE})
 	return out
+
+
+func _apply_difficulty_weave(p_out: Array[Dictionary], p_wave: int) -> void:
+	# R72 难度织入（用户裁定「新形态怪分摊到困难和地狱」）：普通局波表零改动；
+	# 困难起把新形态敌混入每波伴随；地狱全量 + 更高频 + 高波精英化。普通波表
+	# 语义不变（同表复用——用户「复用这些关卡」）
+	if difficulty < GameConst.Difficulty.HARD:
+		return
+	var pool: Array[StringName] = [&"E25_phase_bomber", &"E26_shield_lancer", &"E28_hexcaster"]
+	if p_wave >= 6:
+		pool.append(&"E29_longbowhawk")        # 长弓：中波解锁（前几波走位教学期不压满）
+	if difficulty >= GameConst.Difficulty.HELL:
+		pool.append(&"E27_warden_orb")
+		pool.append(&"E30_hellfire_revenant")
+	var extra := 2 if difficulty == GameConst.Difficulty.HARD else 4
+	if _boss_wave:
+		extra = maxi(extra / 2, 1)             # Boss 波伴随减半（Boss 本体已是主威胁）
+	for k in range(extra):
+		p_out.append({"data_id": pool[randi() % pool.size()], "wave": p_wave, "tags": 0})
+	# 地狱高波：最后一只伴随怪精英化（新形态 + 精英词缀 = 组合压力）
+	if difficulty >= GameConst.Difficulty.HELL and p_wave >= 8 and not _boss_wave 			and not p_out.is_empty():
+		p_out[p_out.size() - 1]["tags"] = int(GameConst.TAG_ELITE)
 
 
 func _tp_for_wave(p_wave: int) -> float:

@@ -115,6 +115,108 @@ static func _enemy_layers(p_kind: StringName, p_angry: bool) -> Array:
 	# 表内常量的 lerp 派生——单源不变）。腮红/软色 = 珊瑚红向白插值的派生浅珊瑚。
 	var blush := PopPalette.ENEMY.lerp(Color.WHITE, 0.45)
 	match p_kind:
+		&"phase":
+			# R72 E25 幻影爆袭者（闪现自爆）：深紫菱晶浮幻 + 重影环 + 空洞双眸——
+			# 重影层半透明错位（引擎侧微旋 = 「相位不稳定」读感）
+			var ph_body := PackedVector2Array([
+				Vector2(0.0, -28.0), Vector2(17.0, 0.0), Vector2(0.0, 28.0),
+				Vector2(-17.0, 0.0),
+			])
+			return [
+				{"sd": _poly_sd(ph_body), "fill": PopPalette.SHOCK.lerp(PopPalette.ENEMY, 0.35), "ow": 6.0},
+				{"sd": _circle_at(Vector2(-3.0, 3.0), 21.0), "fill": Color(0.7, 0.5, 1.0, 0.22), "ow": 0.0},
+				{"sd": _circle_at(Vector2(-6.0, -7.0), 5.2), "fill": Color.WHITE, "ow": 2.2},
+				{"sd": _circle_at(Vector2(6.0, -7.0), 5.2), "fill": Color.WHITE, "ow": 2.2},
+				{"sd": _circle_at(Vector2(-6.0, -6.2), 2.2), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(6.0, -6.2), 2.2), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(0.0, 10.0), 4.6), "fill": PopPalette.OUTLINE, "ow": 0.0},
+			]
+		&"shieldlancer":
+			# R72 E26 壁垒枪兵（带盾兵）：顶置厚重弧盾（贴图朝上 = 盾面朝玩家，引擎侧
+			# 旋转）+ 底部圆躯 + 侧探矛尖——「打正面没用，绕后」一眼可读
+			return [
+				{"sd": _box_at(Vector2(0.0, -18.0), Vector2(44.0, 15.0), 7.0),
+					"fill": PopPalette.PLAYER.lerp(Color.WHITE, 0.25), "ow": 6.0},
+				{"sd": _box_at(Vector2(0.0, -18.0), Vector2(34.0, 7.0), 4.0),
+					"fill": PopPalette.INK, "ow": 0.0},
+				{"sd": _circle_at(Vector2(0.0, 7.0), 15.0), "fill": PopPalette.ENEMY, "ow": 5.5},
+				{"sd": _circle_at(Vector2(-5.5, 4.0), 4.4), "fill": Color.WHITE, "ow": 1.8},
+				{"sd": _circle_at(Vector2(5.5, 4.0), 4.4), "fill": Color.WHITE, "ow": 1.8},
+				{"sd": _circle_at(Vector2(-5.0, 4.8), 1.8), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(6.0, 4.8), 1.8), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(21.0, 2.0), Vector2(2.2, 14.0), 1.0, 0.5),
+					"fill": PopPalette.INK, "ow": 0.0},
+			]
+		&"warden":
+			# R72 E27 秘纹守卫（反弹盾兵）：六边法核 + 外圈符文环 + 三浮点——
+			# 「符文环亮 = 反弹就绪」（引擎侧按冷却调环层透明度）
+			var hex := PackedVector2Array()
+			for k in range(6):
+				var a := TAU * float(k) / 6.0 - PI * 0.5
+				hex.append(Vector2(cos(a), sin(a)) * 17.0)
+			var ward: Array = [
+				{"sd": _poly_sd(hex), "fill": PopPalette.SHOCK.lerp(PopPalette.INK, 0.4), "ow": 5.5},
+				{"sd": _circle_at(Vector2.ZERO, 24.0), "fill": Color(0.7, 0.5, 1.0, 0.28), "ow": 0.0},
+				{"sd": _circle_at(Vector2.ZERO, 8.5), "fill": Color.WHITE, "ow": 2.4},
+			]
+			for k in range(3):
+				var ra := TAU * float(k) / 3.0
+				ward.append({"sd": _circle_at(Vector2(cos(ra), sin(ra)) * 24.0, 3.4),
+					"fill": Color.WHITE, "ow": 1.6})
+			return ward
+		&"hexcaster":
+			# R72 E28 咒术师（法术兵）：尖顶法帽 + 圆脸 + 前伸法杖星点——
+			# 紫色系施法者读感（法术圈同色）
+			var hat := PackedVector2Array([
+				Vector2(-15.0, -8.0), Vector2(15.0, -8.0), Vector2(3.0, -30.0),
+			])
+			return [
+				{"sd": _circle_at(Vector2(0.0, 6.0), 14.5), "fill": PopPalette.SHOCK.lerp(PopPalette.ENEMY, 0.5), "ow": 5.5},
+				{"sd": _poly_sd(hat), "fill": PopPalette.SHOCK.lerp(PopPalette.INK, 0.35), "ow": 4.5},
+				{"sd": _circle_at(Vector2(-5.5, 5.0), 4.0), "fill": Color.WHITE, "ow": 1.8},
+				{"sd": _circle_at(Vector2(5.5, 5.0), 4.0), "fill": Color.WHITE, "ow": 1.8},
+				{"sd": _circle_at(Vector2(-5.0, 5.6), 1.7), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(6.0, 5.6), 1.7), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(19.0, 6.0), Vector2(2.0, 16.0), 1.0, 0.7),
+					"fill": PopPalette.INK, "ow": 0.0},
+				{"sd": _circle_at(Vector2(24.5, -1.5), 4.2), "fill": Color(0.8, 0.6, 1.0), "ow": 1.8},
+			]
+		&"longbow":
+			# R72 E29 长弓隼卫（射箭兵）：尖喙隼形（朝上）+ 后掠翼 + 预判缝眼——
+			# 「快箭 + 会预判」的猎手剪影
+			var hawk := PackedVector2Array([
+				Vector2(0.0, -29.0), Vector2(9.0, -10.0), Vector2(27.0, 14.0),
+				Vector2(8.0, 9.0), Vector2(0.0, 18.0), Vector2(-8.0, 9.0),
+				Vector2(-27.0, 14.0), Vector2(-9.0, -10.0),
+			])
+			return [
+				{"sd": _poly_sd(hawk), "fill": PopPalette.ENEMY.lerp(Color(1.0, 0.75, 0.3), 0.4), "ow": 6.0},
+				{"sd": _box_rot_at(Vector2(0.0, -18.0), Vector2(4.4, 9.0), 1.6, 0.0),
+					"fill": Color(1.0, 0.85, 0.4), "ow": 2.0},
+				{"sd": _box_rot_at(Vector2(-5.0, -4.0), Vector2(5.8, 2.0), 1.0, -0.35),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _box_rot_at(Vector2(5.0, -4.0), Vector2(5.8, 2.0), 1.0, 0.35),
+					"fill": Color.WHITE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-4.6, -3.4), 1.5), "fill": PopPalette.OUTLINE, "ow": 0.0},
+				{"sd": _circle_at(Vector2(5.4, -3.4), 1.5), "fill": PopPalette.OUTLINE, "ow": 0.0},
+			]
+		&"revenant":
+			# R72 E30 狱焰归魂（地狱特化闪现自爆）：暗红幽灵火苗 + 空洞骷眼 +
+			# 底部余烬飘点——地狱难度门面怪
+			var flame := PackedVector2Array([
+				Vector2(0.0, -30.0), Vector2(12.0, -12.0), Vector2(20.0, -2.0),
+				Vector2(16.0, 16.0), Vector2(0.0, 24.0), Vector2(-16.0, 16.0),
+				Vector2(-20.0, -2.0), Vector2(-12.0, -12.0),
+			])
+			return [
+				{"sd": _poly_sd(flame), "fill": PopPalette.ENEMY.lerp(Color(0.55, 0.1, 0.15), 0.55), "ow": 6.0},
+				{"sd": _circle_at(Vector2(0.0, -20.0), 7.0), "fill": Color(1.0, 0.55, 0.2, 0.85), "ow": 0.0},
+				{"sd": _circle_at(Vector2(-6.5, 0.0), 5.6), "fill": PopPalette.INK, "ow": 2.0},
+				{"sd": _circle_at(Vector2(6.5, 0.0), 5.6), "fill": PopPalette.INK, "ow": 2.0},
+				{"sd": _box_at(Vector2(0.0, 11.0), Vector2(7.0, 3.4), 1.6), "fill": PopPalette.INK, "ow": 0.0},
+				{"sd": _circle_at(Vector2(-13.0, 22.0), 2.2), "fill": Color(1.0, 0.5, 0.2, 0.8), "ow": 0.0},
+				{"sd": _circle_at(Vector2(11.0, 24.0), 1.7), "fill": Color(1.0, 0.5, 0.2, 0.7), "ow": 0.0},
+			]
 		&"dart":
 			# E2 疾冲者：尖头飞镖（朝上，引擎侧旋转）——尖吻 + 后掠翼 + 怒目缝眼
 			var body := PackedVector2Array([
