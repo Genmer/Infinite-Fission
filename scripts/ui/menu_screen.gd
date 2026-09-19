@@ -11,7 +11,7 @@ class_name MenuScreen
 extends CanvasLayer
 
 signal start_requested()                      # → GameLoop.start_run()（MENU → PLAYING，兼容口）
-signal start_map_requested(map_id: StringName)   # 选图启动（M2 多地图 → GameLoop._on_menu_start）
+signal start_map_requested(map_id: StringName, difficulty: int)   # 选图启动（M2 多地图 + R72 难度档 → GameLoop._on_menu_start）
 signal start_daily_requested()                # 每日挑战启动（P2 → GameLoop._on_menu_start_daily）
 signal settings_requested()                   # 设置页打开（P3 → GameLoop 接线 SettingsPanel.open）
 signal continue_requested()                   # 继续上次进度（局内存档 → GameLoop.continue_run，2026-08-31）
@@ -27,6 +27,8 @@ var name_tag: Label = null                    # 吉祥物名签（R13：随当�
 var _bob_tween: Tween = null                  # 吉祥物漂浮 idle
 var _lobby_btns: Dictionary = {}              # 入口按钮（kind → Button，刷新计数角标）
 # 详情面板运行期
+var _sel_difficulty: int = 0                   # R72 难度三档（0 普通/1 困难/2 地狱；选关面板内切换）
+var _diff_btns: Array[Button] = []             # 难度三档切换按钮（选中态刷新）
 var _panel_root: Control = null
 var _panel_title: Label = null
 var _panel_list: Control = null
@@ -235,6 +237,7 @@ func _open_map_select() -> void:
 		(_codex_tabs[kind] as Button).visible = false
 	for c in _panel_list.get_children():
 		(c as Node).queue_free()
+	_build_difficulty_row()
 	for i in range(MapTable.count()):
 		var def := MapTable.MAPS[i]
 		var mid: StringName = def.id
@@ -307,9 +310,72 @@ func _open_map_select() -> void:
 	StickerTheme.squash_pop(_panel_root.get_node("LobbyPanel") as Control)
 
 
+func selected_difficulty() -> int:
+	# 测试观测口（R72）
+	return _sel_difficulty
+
+
+func _build_difficulty_row() -> void:
+	# R72 难度选择行（选关面板顶部）：普通 / 困难 / 地狱 三档单选——出发时随图携带
+	var row := Panel.new()
+	row.name = "DifficultyRow"
+	row.add_theme_stylebox_override("panel", StickerTheme.panel_style(14.0, 3, false))
+	row.custom_minimum_size = Vector2(576.0, 112.0)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var title := Label.new()
+	StickerTheme.label_sticker(title, 15, PopPalette.GOLD, 0, Color.WHITE, true)
+	title.text = "◈ 难度"
+	title.position = Vector2(16.0, 8.0)
+	title.size = Vector2(544.0, 20.0)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(title)
+	_diff_btns.clear()
+	for d in range(3):
+		var btn := Button.new()
+		btn.text = GameConst.difficulty_name(d)
+		btn.add_theme_font_size_override("font_size", 17)
+		btn.add_theme_font_override("font", StickerTheme.font_bold())
+		btn.position = Vector2(16.0 + d * 188.0, 34.0)
+		btn.size = Vector2(176.0, 50.0)
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.pressed.connect(_on_difficulty_pick.bind(d))
+		btn.button_down.connect(func() -> void: StickerTheme.press_punch(btn))
+		row.add_child(btn)
+		_diff_btns.append(btn)
+	var desc := Label.new()
+	StickerTheme.label_sticker(desc, 12, PopPalette.INK_SOFT)
+	desc.text = GameConst.difficulty_desc(_sel_difficulty)
+	desc.name = "DiffDesc"
+	desc.position = Vector2(16.0, 90.0)
+	desc.size = Vector2(544.0, 18.0)
+	desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(desc)
+	_panel_list.add_child(row)
+	_refresh_difficulty_row()
+
+
+func _on_difficulty_pick(p_d: int) -> void:
+	_sel_difficulty = p_d
+	_refresh_difficulty_row()
+
+
+func _refresh_difficulty_row() -> void:
+	# 选中态：选中档高亮描边 + 描述行同步（图鉴口径文案）
+	for d in range(_diff_btns.size()):
+		var btn := _diff_btns[d]
+		btn.modulate = Color.WHITE if d == _sel_difficulty else Color(0.62, 0.62, 0.66)
+	var desc_l := _panel_list.get_node_or_null("DifficultyRow/DiffDesc") as Label
+	if desc_l == null and not _diff_btns.is_empty():
+		# 行名为默认 Panel（无 name 时按子树找）——直接从按钮父级取
+		desc_l = _diff_btns[0].get_parent().get_node_or_null("DiffDesc") as Label
+	if desc_l != null:
+		desc_l.text = GameConst.difficulty_desc(_sel_difficulty)
+
+
 func _on_map_pick(p_map_id: StringName) -> void:
 	_panel_root.visible = false
-	start_map_requested.emit(p_map_id)
+	start_map_requested.emit(p_map_id, _sel_difficulty)
 
 
 func is_menu_visible() -> bool:

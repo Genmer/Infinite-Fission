@@ -8,7 +8,7 @@
 class_name CardSelectUI
 extends CanvasLayer
 
-signal choice_made(card: Dictionary)          # → CardGenerator.apply_choice → card_chosen 事件
+signal choice_made(cards: Array)              # → GameLoop 逐张 apply_choice（R72 成对：同行两张；普通=单元素）
 signal reroll_requested()                     # → GameLoop 仲裁（消耗刷新次数 + 重新发牌，2026-08-31）
 
 var is_open: bool = false                     # 界面可见状态（GameLoop 状态联动）
@@ -25,6 +25,13 @@ const CARD_SIZE := Vector2(600.0, 180.0)
 const CARD_X := 60.0
 const CARD_TOP := 264.0                       # 首卡 y（错峰果冻出场基准）
 const CARD_STEP := 196.0                      # 卡距（含 16px 间隙）
+# R72 成对抉择（地狱/困难 5%）：2 列 ×3 行 6 卡，点任一张 = 带走同行两张
+const DUAL_CARD_SIZE := Vector2(324.0, 176.0)
+const DUAL_X := [24.0, 372.0]                 # 双列 x
+const DUAL_TOP := 300.0
+const DUAL_STEP := 196.0
+
+var _dual: bool = false                       # 当前货架是否成对模式
 
 
 func _ready() -> void:
@@ -32,18 +39,24 @@ func _ready() -> void:
 	_build_ui()
 
 
-func open(p_candidates: Array[Dictionary]) -> void:
-	# 展示三选一货架（candidates 由 CardGenerator.generate_candidates 产出）+ 果冻错峰出场
+func open(p_candidates: Array[Dictionary], p_dual: bool = false) -> void:
+	# 展示货架（candidates 由 CardGenerator.generate_candidates 产出）+ 果冻错峰出场。
+	# R72 p_dual = 成对模式：双列 6 卡（槽 4~9），点任一张带走同行两张；普通模式槽 0~3
+	_dual = p_dual
 	_cards = p_candidates
-	for i in range(_buttons.size()):
-		var card: Dictionary = _cards[i] if i < _cards.size() else {}
-		_setup_button(_buttons[i], card)
-		# REL_GAMBLER 四选一：按钮 4 仅在货架 ≥4 张时可见（三选一时隐藏占位）
-		_buttons[i].visible = i < _cards.size()
+	var slot_base := 4 if _dual else 0
+	var slot_cap := 10 if _dual else 4
+	for s in range(_buttons.size()):
+		var in_mode: bool = s >= slot_base and s < slot_cap
+		var idx := s - slot_base
+		var card: Dictionary = _cards[idx] if in_mode and idx < _cards.size() else {}
+		_setup_button(_buttons[s], card)
+		_buttons[s].visible = in_mode and idx < _cards.size()
+	_title.text = "成对抉择！带走同一行的两张" if _dual else "升级！选择一项"
 	_root.visible = true
 	is_open = true
-	for i in range(mini(_cards.size(), _buttons.size())):
-		StickerTheme.squash_pop(_buttons[i], 0.07 * float(i))
+	for i in range(mini(_cards.size(), slot_cap - slot_base)):
+		StickerTheme.squash_pop(_buttons[slot_base + i], 0.07 * float(i))
 
 
 func close() -> void:
@@ -54,11 +67,26 @@ func close() -> void:
 
 
 func choose(p_index: int) -> void:
-	# 选择入口（按钮 pressed / 测试直调）；无效索引忽略
-	if not is_open or p_index < 0 or p_index >= _cards.size():
+	# 选择入口（按钮 pressed / 测试直调）；无效索引忽略。
+	# R72 成对模式：p_index = 槽位（4~9），映射到行（同行两张一起 emit）；普通单张
+	if not is_open:
 		return
-	var card := _cards[p_index]
-	choice_made.emit(card)
+	if _dual:
+		var local := p_index - 4                 # 槽 4~9 → 0~5
+		if local < 0 or local >= _cards.size():
+			return
+		var row := local / 2                     # 同行两张 = [row*2, row*2+1]
+		var pair: Array = []
+		for k in range(2):
+			if row * 2 + k < _cards.size():
+				pair.append(_cards[row * 2 + k])
+		if pair.is_empty():
+			return
+		choice_made.emit(pair)
+		return
+	if p_index < 0 or p_index >= _cards.size():
+		return
+	choice_made.emit([_cards[p_index]])
 
 
 func candidate_count() -> int:
@@ -191,10 +219,25 @@ func _build_ui() -> void:
 		_root.add_child(btn)
 		_buttons.append(btn)
 		_card_faces.append(_build_card_face(btn))
+	# R72 成对模式 6 槽（4~9：双列三行；初始隐藏，open(…, true) 启用）
+	for d in range(6):
+		var dbtn := Button.new()
+		dbtn.name = "DualCard%d" % d
+		dbtn.focus_mode = Control.FOCUS_NONE
+		dbtn.position = Vector2(DUAL_X[d % 2], DUAL_TOP + DUAL_STEP * float(d / 2))
+		dbtn.size = DUAL_CARD_SIZE
+		dbtn.visible = false
+		dbtn.pressed.connect(_on_pressed.bind(4 + d))
+		dbtn.button_down.connect(func() -> void: StickerTheme.press_punch(dbtn))
+		_root.add_child(dbtn)
+		_buttons.append(dbtn)
+		_card_faces.append(_build_card_face(dbtn, true))
 
 
-func _build_card_face(p_btn: Button) -> Dictionary:
-	# 卡面子件组装（一次装配，open 期仅换色/换文/换点——零重建）
+func _build_card_face(p_btn: Button, p_compact: bool = false) -> Dictionary:
+	# 卡面子件组装（一次装配，open 期仅换色/换文/换点——零重建）。
+	# p_compact = 成对窄卡（324 宽）：子件尺寸跟随按钮实际宽度，字号收缩
+	var cw := p_btn.size.x
 	var band := Panel.new()
 	var band_style := StyleBoxFlat.new()
 	band_style.bg_color = PopPalette.RARITY_NORMAL
@@ -203,38 +246,44 @@ func _build_card_face(p_btn: Button) -> Dictionary:
 	band_style.corner_radius_bottom_right = 0
 	band.add_theme_stylebox_override("panel", band_style)
 	band.position = Vector2(4.0, 4.0)
-	band.size = Vector2(CARD_SIZE.x - 8.0, 14.0)
+	band.size = Vector2(cw - 8.0, 14.0)
 	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p_btn.add_child(band)
 	var kind_label := StickerTheme.label_sticker(Label.new(), 15, PopPalette.RARITY_NORMAL)
 	kind_label.name = "KindChip"
-	kind_label.position = Vector2(24.0, 26.0)
-	kind_label.size = Vector2(300.0, 20.0)
+	kind_label.position = Vector2(18.0, 26.0)
+	kind_label.size = Vector2(cw - 120.0, 20.0)
+	if p_compact:
+		kind_label.add_theme_font_size_override("font_size", 12)
 	p_btn.add_child(kind_label)
 	var stamp := TextureRect.new()
 	stamp.name = "TypeStamp"
-	stamp.position = Vector2(CARD_SIZE.x - 76.0, 28.0)
-	stamp.custom_minimum_size = Vector2(52.0, 52.0)
+	stamp.position = Vector2(cw - 66.0, 26.0)
+	stamp.custom_minimum_size = Vector2(46.0, 46.0) if p_compact else Vector2(52.0, 52.0)
 	stamp.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	stamp.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	stamp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p_btn.add_child(stamp)
 	var name_label := StickerTheme.label_sticker(Label.new(), 22, PopPalette.INK, 0, Color.WHITE, true)
 	name_label.name = "CardName"
-	name_label.position = Vector2(24.0, 50.0)
-	name_label.size = Vector2(CARD_SIZE.x - 110.0, 30.0)
+	name_label.position = Vector2(18.0, 50.0)
+	name_label.size = Vector2(cw - 90.0, 30.0)
+	if p_compact:
+		name_label.add_theme_font_size_override("font_size", 18)
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	p_btn.add_child(name_label)
 	var desc_label := StickerTheme.label_sticker(Label.new(), 18, PopPalette.INK_SOFT)
 	desc_label.name = "CardDesc"
-	desc_label.position = Vector2(24.0, 88.0)
-	desc_label.size = Vector2(CARD_SIZE.x - 48.0, 58.0)
+	desc_label.position = Vector2(18.0, 88.0)
+	desc_label.size = Vector2(cw - 36.0, 58.0)
+	if p_compact:
+		desc_label.add_theme_font_size_override("font_size", 14)
 	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc_label.clip_text = true
 	p_btn.add_child(desc_label)
 	var dots := HBoxContainer.new()
 	dots.name = "RarityDots"
-	dots.position = Vector2(24.0, 150.0)
+	dots.position = Vector2(18.0, 150.0)
 	dots.size = Vector2(160.0, 16.0)
 	dots.add_theme_constant_override("separation", 6)
 	dots.mouse_filter = Control.MOUSE_FILTER_IGNORE

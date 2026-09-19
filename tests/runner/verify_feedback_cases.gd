@@ -58,6 +58,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r69_rarity_ladder()
 	_test_r70_details_haste()
 	_test_r71_shop_fallback()
+	_test_r72_difficulty()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -782,8 +783,8 @@ func _test_maps_systems() -> void:
 	# 大厅：选关面板 4 行
 	_gl.state = GameConst.GameStatus.MENU
 	_gl.menu_screen._open_map_select()
-	_check("大厅：选关面板 5 张地图卡",
-		_live_children(_gl.menu_screen._panel_list) == MapTable.count())
+	_check("大厅：选关面板 5 张地图卡 + R72 难度选择行",
+		_live_children(_gl.menu_screen._panel_list) == MapTable.count() + 1)
 	_gl.menu_screen._on_panel_close()
 
 
@@ -2136,7 +2137,7 @@ func _test_r2_reroll() -> void:
 	_check("刷新：候选内容变化（重 roll 生效）", changed or before.is_empty())
 	_gl._on_card_reroll()
 	_check("刷新：第二次消耗 1 次（2→1）", p.reroll_charges == 1)
-	_gl._on_card_choice(_gl.current_candidates[0])
+	_gl._on_card_choice([_gl.current_candidates[0]])   # R72 协议统一为数组
 	_check("刷新：选卡后回 PLAYING", _gl.state == GameConst.GameStatus.PLAYING)
 	var charges0: int = p.reroll_charges
 	_gl._on_wave_started_reroll_grant(5)
@@ -2747,3 +2748,107 @@ func _bounce_probe(p_proj: ProjectileBase, p_bounce: TraitData, p_params: Dictio
 	var tb := TraitBase.new()
 	tb.setup(p_bounce)
 	tb.on_event(GameConst.TraitEvent.ON_SPAWN, tctx)   # 效果入口（闸门→effect.handle）
+
+
+func _test_r72_difficulty() -> void:
+	print("── R72 难度三档（困难 ×3 / 地狱 ×9 + 复活 + 成对抉择） ──")
+	# ① 档位口径（GameConst 静态真源）
+	_check("R72：HP/攻击乘区 1/3/9（困难 ×3，地狱再 ×3）",
+		GameConst.difficulty_hp_mult(0) == 1.0 and GameConst.difficulty_hp_mult(1) == 3.0
+			and GameConst.difficulty_hp_mult(2) == 9.0
+			and GameConst.difficulty_dmg_mult(1) == 3.0
+			and GameConst.difficulty_dmg_mult(2) == 9.0)
+	_check("R72：附赠复活 0/1/3",
+		GameConst.difficulty_revives(0) == 0 and GameConst.difficulty_revives(1) == 1
+			and GameConst.difficulty_revives(2) == 3)
+	_check("R72：成对抉择判定（地狱必触发 / 困难 5% 边界 / 普通永不）",
+		GameConst.difficulty_dual_pick(2, 0.999)
+			and GameConst.difficulty_dual_pick(1, 0.049)
+			and not GameConst.difficulty_dual_pick(1, 0.051)
+			and not GameConst.difficulty_dual_pick(0, 0.0))
+	# ② 地狱局开局：难度注入 spawner + 复活 +3
+	_gl._difficulty = GameConst.Difficulty.HELL
+	_gl.state = GameConst.GameStatus.MENU            # 直达 MENU（start_run 前置；套件既有口径）
+	_gl.call(&"start_run")
+	_check("R72：地狱局 spawner 难度注入（出生管线乘区生效点）",
+		_gl.spawner.difficulty == GameConst.Difficulty.HELL)
+	_check("R72：地狱开局复活 = 应急协议 + 3",
+		_gl.player.revives_left - Meta.revive_charges() == 3,
+		"rev=%d" % _gl.player.revives_left)
+	# ③ 出生管线实测：同一敌数据 普通 vs 地狱 → HP/接触伤 恰 ×9
+	var e_data: EnemyData = _gl.registry.get_enemy(&"E1_grunt")
+	var hp_n := 0.0
+	var hp_h := 0.0
+	var dmg_n := 0.0
+	var dmg_h := 0.0
+	for d in [GameConst.Difficulty.NORMAL, GameConst.Difficulty.HELL]:
+		var spawner := EnemySpawner.new()
+		spawner.pool = _gl.pools[&"enemy"]
+		spawner.registry = _gl.registry
+		spawner.difficulty = d
+		spawner.enqueue({"data_id": &"E1_grunt", "wave": 1, "tags": 0})
+		spawner.tick(0.016, _gl.enemy_grid)
+		if spawner.active.is_empty():
+			_check("R72：难度出生管线出怪（d=%d）" % d, false)
+			spawner.free()
+			continue
+		var e: Enemy = spawner.active[0]
+		if d == GameConst.Difficulty.NORMAL:
+			hp_n = e.max_hp
+			dmg_n = e.contact_dmg
+		else:
+			hp_h = e.max_hp
+			dmg_h = e.contact_dmg
+		(spawner.pool as EnemyPool).release(e)   # 池正确归还（E-04 纪律）
+		spawner.active.clear()
+		spawner.free()
+		_check("R72：%s局 E1 出生（数值采样）" % GameConst.difficulty_name(d), true)
+	if hp_n > 0.0 and hp_h > 0.0:
+		_check("R72：地狱敌 HP = 普通 ×9（出生管线难度乘区）",
+			absf(hp_h / hp_n - 9.0) <= 0.001, "%.1f/%.1f=%.2f" % [hp_h, hp_n, hp_h / hp_n])
+		_check("R72：地狱敌接触伤 = 普通 ×9",
+			absf(dmg_h / dmg_n - 9.0) <= 0.001, "%.1f/%.1f" % [dmg_h, dmg_n])
+	# ④ 成对抉择 UI：6 卡双列 + 点行带走两张 + 普通模式单选协议。
+	# 独立 CardSelectUI 实例（绕开 game_loop 的 choice_made 连接——避免选卡副作用
+	# 关闭界面/切状态干扰后续断言）
+	var dual_cards: Array[Dictionary] = []
+	for i in range(6):
+		dual_cards.append({
+			"kind": CardGenerator.CardKind.TRAIT, "id": &"T%d" % i, "rarity": i % 4,
+			"value_scale": 1.0, "display_name": "测试卡%d" % i, "description": "d",
+		})
+	var ui := CardSelectUI.new()
+	_gl.add_child(ui)
+	ui.open(dual_cards, true)
+	_check("R72：成对模式 6 卡可见（candidate_count）", ui.candidate_count() == 6)
+	var got_pair: Array = []
+	ui.choice_made.connect(func(p_cards: Array) -> void:
+		got_pair.clear()
+		got_pair.append_array(p_cards))      # 容器内变异（lambda 捕贝语义下重绑不可见）
+	ui.choose(4)                                # 槽 4 = 行 0 左 → 带走行 0 两张
+	_check("R72：点行内任一张 → 同行两张一起选中",
+		got_pair.size() == 2 and String(got_pair[0].get("display_name")) == "测试卡0"
+			and String(got_pair[1].get("display_name")) == "测试卡1",
+		str(got_pair))
+	ui.choose(7)                                # 槽 7 = 行 1 右 → 测试卡3
+	_check("R72：第二行选择映射正确（槽 7 → 卡 2/3）",
+		got_pair.size() == 2 and String(got_pair[1].get("display_name")) == "测试卡3")
+	ui.close()
+	var three_cards: Array[Dictionary] = [dual_cards[0], dual_cards[1], dual_cards[2]]
+	ui.open(three_cards, false)                 # 普通模式 3 卡
+	ui.choose(0)
+	_check("R72：普通模式单选协议（数组单元素——向后兼容）",
+		got_pair.size() == 1 and String(got_pair[0].get("display_name")) == "测试卡0")
+	ui.close()
+	ui.free()
+	# ⑤ 存档往返：难度入 RunSave
+	_gl._difficulty = GameConst.Difficulty.HARD
+	var payload := _gl.serialize_run()
+	RunSave.save_run(payload)
+	var loaded: Dictionary = RunSave.load_run()
+	_check("R72：局内存档携带难度档（继续局保持 ×3 口径）",
+		int(loaded.get("difficulty", -1)) == GameConst.Difficulty.HARD)
+	RunSave.clear()
+	_gl._difficulty = GameConst.Difficulty.NORMAL
+	_gl.spawner.difficulty = GameConst.Difficulty.NORMAL
+	_gl.state = GameConst.GameStatus.MENU

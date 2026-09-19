@@ -11,6 +11,44 @@ enum WeaponForm { BALLISTIC, LASER, HOMING, MELEE }       # 武器四形态
 enum EnemyBehavior { CHASE, RANGED, DASHER, ORBIT, SENTRY, BLINK }  # M1：CHASE/RANGED；BLINK R16 起支持（ENEMY_PATTERNS_BASIC §3.3）
 enum GameStatus { BOOT, MENU, PLAYING, PAUSED, LEVEL_UP, GAME_OVER }
 enum RecycleReason { EXPIRED, PIERCE_DEPLETED, BOUNCE_DEPLETED, NULLIFIED, FORCED }  # 回收五路径
+
+# ── R72 难度三档（用户大活「新增困难和地狱」：复用关卡，普通=现行口径） ──────────
+enum Difficulty { NORMAL = 0, HARD = 1, HELL = 2 }
+
+
+static func difficulty_hp_mult(p_d: int) -> float:
+	# 敌 HP 乘区：困难 ×3、地狱 ×9（困难基础上再 ×3——用户口径「最基础的数值」）
+	return [1.0, 3.0, 9.0][clampi(p_d, 0, 2)]
+
+
+static func difficulty_dmg_mult(p_d: int) -> float:
+	# 敌接触伤害乘区：同 HP 口径（×3 / ×9）
+	return [1.0, 3.0, 9.0][clampi(p_d, 0, 2)]
+
+
+static func difficulty_revives(p_d: int) -> int:
+	# 开局附赠复活次数：普通 0（原口径）/ 困难 1 / 地狱 3（用户裁定）
+	return [0, 1, 3][clampi(p_d, 0, 2)]
+
+
+static func difficulty_dual_pick(p_d: int, p_roll: float) -> bool:
+	# 升级双选卡判定：地狱 100%（每次）/ 困难 5%（p_roll = [0,1) 随机数，测试可注入）
+	return p_d == Difficulty.HELL or (p_d == Difficulty.HARD and p_roll < 0.05)
+
+
+static func difficulty_name(p_d: int) -> String:
+	return ["普通", "困难", "地狱"][clampi(p_d, 0, 2)]
+
+
+static func difficulty_desc(p_d: int) -> String:
+	# 选难度行副文案（图鉴口径同源）
+	match clampi(p_d, 0, 2):
+		Difficulty.HARD:
+			return "敌 HP/攻击 ×3 · 复活 +1 · 升级 5% 概率成对抉择"
+		Difficulty.HELL:
+			return "敌 HP/攻击 ×9 · 复活 +3 · 每次升级成对抉择（2 列 6 卡选同行两张）"
+		_:
+			return "现行口径 · 无附赠复活"
 enum PopupStyle { NORMAL, CRIT, REACTION, DOT, HEAL, XP, IMMUNE }   # IMMUNE：R22 元素免疫跳字
 enum FeelLevel { HIT, CRIT, CATALYST, BOSS_DEATH }        # GameFeel 分级（Q-12）
 enum ReactionType { RXN_FIR_ICE, RXN_FIR_LTG, RXN_ICE_LTG }  # 碎裂/过载/超导（中性 ID）

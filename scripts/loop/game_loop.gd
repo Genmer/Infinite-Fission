@@ -60,6 +60,8 @@ var enemy_bullet_grid: SpaceGrid              # 敌弹格（消弹查询）
 var player: Player = null
 var wave_director: WaveDirector = null
 var current_map_id: StringName = MapTable.FIRST_MAP_ID   # 当前地图（M2 多地图，用户反馈）
+var _difficulty: int = GameConst.Difficulty.NORMAL   # R72 难度三档（0 普通/1 困难/2 地狱；开局随图带入）
+var _dual_pending: bool = false                # R72 本轮选卡是否成对模式（重发牌保持同模式）
 var _backdrop: CloudBackdrop = null                       # 云层主题色宿主（分图换色）
 var spawner: EnemySpawner = null
 var elemental: ElementalSystem = null
@@ -538,6 +540,8 @@ func start_run(p_daily_seed: int = -1) -> bool:
 		Meta.set_run_daily(false)
 		card_generator.rng.randomize()            # 卡池每局随机（固定种子=「选项写死」观感根因；pkg 测试自行定种子）
 	player.set_character(Meta.character_id)   # 角色应用（含养成加成——M8/角色系统）
+	spawner.difficulty = _difficulty             # R72 敌数值乘区（出生管线单点）
+	player.revives_left += GameConst.difficulty_revives(_difficulty)   # R72 难度附赠复活
 	var map_def := MapTable.get_map(current_map_id)
 	_apply_map_affixes(map_def)                  # 词缀二期：双词缀注入（祝→玩家 / 诅→敌侧）
 	if p_daily_seed >= 0:
@@ -548,7 +552,10 @@ func start_run(p_daily_seed: int = -1) -> bool:
 		_apply_affix_ids(daily_curses, StringName(String(affixes.get("bless", ""))))
 	if _backdrop != null:
 		_backdrop.modulate = map_def.get("tint", Color.WHITE)   # 分图云层主题色
-	hud.set_map_name(("每日挑战 · " if p_daily_seed >= 0 else "") + String(map_def.get("name", "")))
+	hud.set_map_name(("每日挑战 · " if p_daily_seed >= 0 else "")
+		+ String(map_def.get("name", ""))
+		+ ("" if _difficulty == GameConst.Difficulty.NORMAL
+			else " · %s" % GameConst.difficulty_name(_difficulty)))
 	hud.endless_depth_base = 0                  # R62：波次徽标回常规口径
 	wave_director.start_wave(1)
 	return true
@@ -622,12 +629,14 @@ func _on_wave_cleared_bless_heal(_p_wave: int) -> void:
 	player.hp = minf(player.hp + player.max_hp * player.map_wave_heal_pct, player.max_hp)
 
 
-func _on_menu_start(p_map_id: StringName) -> void:
-	# 选图启动（大厅出发/地图卡；未解锁拒绝——解锁判据 = 上一关已通关）
+func _on_menu_start(p_map_id: StringName, p_difficulty: int = 0) -> void:
+	# 选图启动（大厅出发/地图卡；未解锁拒绝——解锁判据 = 上一关已通关）。
+	# R72：携带难度档（普通/困难/地狱——数值乘区 + 复活 + 双选卡口径见 GameConst）
 	if not Meta.is_map_unlocked(p_map_id):
 		push_warning("[GameLoop] 地图未解锁（%s）——拒绝启动" % String(p_map_id))
 		return
 	current_map_id = p_map_id
+	_difficulty = clampi(p_difficulty, 0, 2)
 	start_run()
 	# 大关新机制横幅（2026-09-13 解锁节奏表：每张大关一个新体验主题，开局宣告。
 	# 第 1 关为起点口径不上横幅；continue_run 不重复宣告——选关面板行已常驻展示）
@@ -724,11 +733,15 @@ func _open_card_flow(p_new_level: int) -> void:
 	# 三选一流程：roll 3 张 → LEVEL_UP（暂停战斗）→ 选卡界面打开。
 	# 集成包 B.2：遗物改写发牌参数（GAMBLER 四选一+诅咒 / OVERCLOCK 稀有度保底），
 	# WORDS_TIDE 每波一次重随货架（保留稀有度 roll 序列）
+	# R72 成对抉择（用户裁定：困难 5% 概率 / 地狱每次）：2 列 6 卡、必选同一行两张。
+	# 判定留在本流程入口（换一批沿用同一模式——同一次升级内体验一致）
+	_dual_pending = GameConst.difficulty_dual_pick(_difficulty, randf())
+	var deal_n := 6 if _dual_pending else relic_handler.deal_count()
 	var context := {
 		"player": player,
 		"wave": wave_director.current_wave,
 		"level": p_new_level,
-		"deal_count": relic_handler.deal_count(),
+		"deal_count": deal_n,
 		"curse_last": relic_handler.curse_requested(),
 		"min_rarity_floor": relic_handler.take_rarity_floor(),
 	}
@@ -742,7 +755,7 @@ func _open_card_flow(p_new_level: int) -> void:
 		reroll_context["fixed_rarities"] = rarities
 		current_candidates = card_generator.generate_candidates(reroll_context)
 	change_state(GameConst.GameStatus.LEVEL_UP)
-	card_select_ui.open(current_candidates)
+	card_select_ui.open(current_candidates, _dual_pending)
 	card_select_ui.update_reroll(player.reroll_charges, not _free_reroll_used)
 
 
@@ -762,22 +775,25 @@ func _on_card_reroll() -> void:
 		"player": player,
 		"wave": wave_director.current_wave,
 		"level": player.level,
-		"deal_count": relic_handler.deal_count(),
+		"deal_count": 6 if _dual_pending else relic_handler.deal_count(),
 		"curse_last": relic_handler.curse_requested(),
 		"min_rarity_floor": -1,                # 保底已折入首 roll 稀有度序列
 	}
 	current_candidates = card_generator.generate_candidates(context)
-	card_select_ui.open(current_candidates)
+	card_select_ui.open(current_candidates, _dual_pending)
 	card_select_ui.update_reroll(player.reroll_charges, not _free_reroll_used)
 	if sfx != null:
 		sfx.play(&"buy")
 
 
-func _on_card_choice(p_card: Dictionary) -> void:
-	# 选卡应用（CardGenerator）→ 恢复 PLAYING；连升排队继续弹（A3 §6.2）
+func _on_card_choice(p_cards: Array) -> void:
+	# 选卡应用（CardGenerator）→ 恢复 PLAYING；连升排队继续弹（A3 §6.2）。
+	# R72 成对抉择：p_cards 为同行两张（普通模式单元素数组——协议统一为数组）
 	if state != GameConst.GameStatus.LEVEL_UP:
 		return
-	card_generator.apply_choice(p_card, player)
+	for card_v: Variant in p_cards:
+		if card_v is Dictionary and not (card_v as Dictionary).is_empty():
+			card_generator.apply_choice(card_v as Dictionary, player)
 	card_select_ui.close()
 	change_state(GameConst.GameStatus.PLAYING)
 	if pending_level_ups > 0:
@@ -1097,6 +1113,7 @@ func serialize_run() -> Dictionary:
 		weapons.append({"id": String(wid), "level": int(w.level), "traits": traits})
 	return {
 		"map_id": String(current_map_id),
+		"difficulty": _difficulty,               # R72：继续局保持难度档
 		"daily": Meta.is_run_daily(),
 		"wave": maxi(wave_director.current_wave, 1),
 		"kills": hud.kills,
@@ -1127,9 +1144,11 @@ func continue_run() -> bool:
 		RunSave.clear()
 		return false
 	current_map_id = map_id
+	_difficulty = clampi(int(data.get("difficulty", 0)), 0, 2)   # R72 继续局保持难度档
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
 	wave_director.wave_table = MapTable.load_table(current_map_id, registry)
+	spawner.difficulty = _difficulty
 	Meta.set_run_map(current_map_id)
 	var is_daily := bool(data.get("daily", false))
 	Meta.set_run_daily(is_daily)
@@ -1142,8 +1161,11 @@ func continue_run() -> bool:
 		_apply_affix_ids(affixes.get("curses", []), StringName(String(affixes.get("bless", ""))))
 	if _backdrop != null:
 		_backdrop.modulate = map_def.get("tint", Color.WHITE)
-	hud.set_map_name(("每日挑战 · " if is_daily else "") + String(map_def.get("name", "")))
+	hud.set_map_name(("每日挑战 · " if is_daily else "") + String(map_def.get("name", ""))
+		+ ("" if _difficulty == GameConst.Difficulty.NORMAL
+			else " · %s" % GameConst.difficulty_name(_difficulty)))
 	_restore_run_state(data)
+	player.revives_left += GameConst.difficulty_revives(_difficulty)   # R72 难度复活随恢复补齐
 	# R62：恢复档波次已过 final_wave → 无尽局续打（波次徽标切无尽口径）
 	var final_wave := int(MapTable.get_map(map_id).get("final_wave", 1 << 30))
 	var resume_wave := maxi(int(data.get("wave", 1)), 1)

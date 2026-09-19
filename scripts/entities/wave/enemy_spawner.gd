@@ -18,6 +18,7 @@ var elemental_system: ElementalSystem = null  # 注入（包 4 帧序⑤：出�
 var spawn_queue: Array[Dictionary] = []      # 待生成队列 {data_id, wave, tags, pos}
 var active: Array[Node2D] = []                # 活跃敌列表（GameLoop ④ enemy_grid.rebuild 数据源）
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var difficulty: int = 0                         # R72 难度档（GameLoop 开局注入；0=普通）
 
 
 func _ready() -> void:
@@ -59,9 +60,11 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		enemy.spawn(data, int(entry.get("wave", 1)), int(entry.get("tags", 0)))
 		_elite_affix_roll(enemy, int(entry.get("wave", 1)))
 		# R28 基线强化（用户裁定「敌人攻击、生命值提升 20%」）：出生管线单次应用
-		enemy.max_hp = enemy.max_hp * 1.2
+		# R72 难度乘区（困难 ×3 / 地狱 ×9——用户口径「最基础的数值：攻击、血量」）：
+		# 与基线同点单次应用，覆盖全部自然刷怪/Boss/召唤
+		enemy.max_hp = enemy.max_hp * 1.2 * GameConst.difficulty_hp_mult(difficulty)
 		enemy.hp = enemy.max_hp
-		enemy.contact_dmg = enemy.contact_dmg * 1.2
+		enemy.contact_dmg = enemy.contact_dmg * 1.2 * GameConst.difficulty_dmg_mult(difficulty)
 		# 召唤物面值折算（B4 裂变召唤 hp_ratio 0.08/0.5——ENEMY_BOSS_TELEGRAPH §2）
 		var hp_ratio: Variant = entry.get("hp_ratio", null)
 		if hp_ratio != null:
