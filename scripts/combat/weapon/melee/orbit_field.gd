@@ -70,7 +70,10 @@ func _build_visuals() -> void:
 		var glow := Sprite2D.new()
 		glow.name = "OrbGlow%d" % i
 		glow.texture = TextureFactory.soft_dot(64)
-		glow.modulate = Color(mint2.r, mint2.g, mint2.b, 0.42)
+		# R64 刀形可读化：光晕缩到刀体尺度（64→32px）并压暗——此前满幅光球的轮廓
+		# 压过 17px 小刀，整体读感仍是「绿球不是飞刀」（用户四轮同类反馈的环绕版）
+		glow.scale = Vector2.ONE * 0.5
+		glow.modulate = Color(mint2.r, mint2.g, mint2.b, 0.26)
 		add_child(glow)
 		_orb_glows.append(glow)
 		var core := Sprite2D.new()
@@ -305,6 +308,9 @@ func _draw_flying_knives() -> void:
 	# R32 默认形态重做（用户反馈「环绕力场球太怪了，换成飞刀」）：
 	# 浮游体 = 环绕飞刀——刀尖沿运动方向（公转切向）回旋飞行；钢白刀身 +
 	# 元素附魔刀脊辉光（_orb_tint 染色）+ 深色刀柄；命中 → 刀刃白闪脉冲。
+	# R64 刀形可读化：刀长原 = orb_radius×1.05（≈17px），比光晕球还小，读感仍
+	# 「绿点不是刀」——刀体加长度下限（判定半径 orb_radius 不动，视觉>判定是
+	# 动作游戏惯例）+ 全轮廓亮描边 + 刃口亮线，刀形一眼可辨。
 	for i in range(orbs):
 		var pos := _orb_position(i, Vector2.ZERO)
 		var phase := angle + TAU * float(i) / float(orbs)
@@ -312,19 +318,22 @@ func _draw_flying_knives() -> void:
 		var motion := Vector2(-dir.y, dir.x)              # 切向（运动方向 = 刀尖指向）
 		var side := Vector2(-motion.y, motion.x)
 		var punch := float(_orb_punch[i]) if i < _orb_punch.size() else 0.0
-		var blade := orb_radius * (1.05 + 0.22 * punch)   # 刀体全长
-		var w := orb_radius * 0.17                        # 半刀宽
+		var blade := maxf(orb_radius * 1.05, 34.0) * (1.05 + 0.22 * punch)   # 刀体全长
+		var w := maxf(orb_radius * 0.17, 3.4)             # 半刀宽
 		var tip := pos + motion * blade * 0.55
 		var shoulder := pos + motion * blade * 0.08
 		var base := pos - motion * blade * 0.45
 		var steel := Color(0.93, 0.96, 1.0, 0.96)
-		draw_colored_polygon(PackedVector2Array([
+		var body := PackedVector2Array([
 			tip, shoulder + side * w, base + side * w,
 			base - side * w, shoulder - side * w,
-		]), steel)
+		])
+		draw_colored_polygon(body, steel)
+		# 全轮廓亮描边（深底上压出刀形剪影——R61 弧斩同款手法）
+		draw_polyline(body, Color(1.0, 1.0, 1.0, 0.85), 1.8, true)
 		# 刀脊元素辉光（附魔色；未附魔 = 薄荷绿）+ 刀尾护线
 		var tint := _orb_tint(i)
-		draw_line(shoulder + side * w * 0.9, tip, Color(tint.r, tint.g, tint.b, 0.9), 2.0, true)
+		draw_line(shoulder + side * w * 0.9, tip, Color(tint.r, tint.g, tint.b, 0.9), 2.4, true)
 		draw_line(base + side * w * 0.9, base - side * w * 0.9,
 			Color(tint.r, tint.g, tint.b, 0.55), 2.0, true)
 		# 刀柄（刀体后方短柄）
