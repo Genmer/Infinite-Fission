@@ -70,6 +70,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_ev9_combo()
 	_test_f2_indicator()
 	_test_f3_e11()
+	_test_g1_g5()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3427,3 +3428,28 @@ func _test_f3_e11() -> void:
 	Meta.map_records = save_map_records
 	Meta.crystals = crystals0
 	Meta.set_run_difficulty(GameConst.Difficulty.NORMAL)
+
+
+func _test_g1_g5() -> void:
+	print("── G1 连杀音调 + G5 元素死亡迸色 ──")
+	# G1：音调乘子钳制
+	_check("G1：音调乘子钳制域 [0.25, 2.0]",
+		absf(SfxBank.I.pitch_scale_clamped(1.5) - 1.5) <= 0.001
+			and SfxBank.I.pitch_scale_clamped(9.0) == 2.0
+			and SfxBank.I.pitch_scale_clamped(0.01) == 0.25)
+	# G5：死因元素染色（火橙/冰青/雷紫/无元素白）
+	var e1 := _spawn_r72_enemy(&"E1_grunt", Vector2(100.0, 100.0))
+	e1.elemental = ElementalState.new() if e1.elemental == null else e1.elemental
+	e1.elemental.gauges[GameConst.Element.LTG] = 60.0
+	var tint_ltg: Color = e1._death_element_tint()
+	e1.elemental.gauges[GameConst.Element.LTG] = 0.0
+	e1.elemental.gauges[GameConst.Element.FIR] = 40.0
+	var tint_fir: Color = e1._death_element_tint()
+	var tint_kin: Color = e1._death_element_tint() if e1.elemental.gauges[GameConst.Element.FIR] == 0.0 else Color.WHITE
+	e1.elemental.gauges[GameConst.Element.FIR] = 0.0
+	_check("G5：雷死→电紫染色（b 分量最高）",
+		tint_ltg.b > tint_ltg.r and tint_ltg.b > 0.5, str(tint_ltg))
+	_check("G5：火死→橙红染色（r 分量最高）",
+		tint_fir.r > tint_fir.b and tint_fir.r > 0.6, str(tint_fir))
+	_check("G5：无元素→白（不染色）", is_equal_approx(tint_kin.r, 1.0))
+	_release_r72_enemy(e1)

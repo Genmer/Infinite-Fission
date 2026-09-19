@@ -82,7 +82,8 @@ func apply_settings_volumes() -> void:
 		_bgm_boss_player.volume_db = BGM_BOSS_DB + bgm_db
 
 
-func play(p_name: StringName) -> void:
+func play(p_name: StringName, p_pitch_mult: float = 1.0) -> void:
+	# p_pitch_mult：G1 连杀音调爬升（击杀声随 combo 档位升 key——爽感听感化）
 	if not _players.has(p_name):
 		return
 	var now := Time.get_ticks_msec()
@@ -90,8 +91,13 @@ func play(p_name: StringName) -> void:
 		return
 	_last_ms[p_name] = now
 	var player: AudioStreamPlayer = _players[p_name]
-	player.pitch_scale = randf_range(0.94, 1.06)   # R19 打击质感：微随机音调（去重复感）
+	player.pitch_scale = randf_range(0.94, 1.06) * pitch_scale_clamped(p_pitch_mult)
 	player.play()
+
+
+func pitch_scale_clamped(p_mult: float) -> float:
+	# 音调乘子钳制（AudioStreamPlayer 安全域 0.05~10；连杀实用域 ≤1.5）
+	return clampf(p_mult, 0.25, 2.0)
 
 
 func _build_all() -> void:

@@ -1026,7 +1026,9 @@ func _boot_build_presentation() -> void:
 	sfx.name = "SfxBank"
 	add_child(sfx)
 	EventBus.damage_resolved.connect(func(_r: DamageResult) -> void: sfx.play(&"hit"))
-	EventBus.enemy_killed.connect(func(_e: Node2D) -> void: sfx.play(&"kill"))
+	EventBus.enemy_killed.connect(func(_e: Node2D) -> void:
+		# G1：连杀音调爬升（每杀 +2% 音高，封顶 ×1.5——听觉上的 combo 档位）
+		sfx.play(&"kill", minf(1.0 + float(_combo_count) * 0.02, 1.5)))
 	EventBus.level_up.connect(func(_l: int) -> void: sfx.play(&"level"))
 	EventBus.card_chosen.connect(func(_i: StringName, _k: int) -> void: sfx.play(&"coin"))
 	# 玩家侧词条挂卡生效刷新（2026-09-13 死卡接线：AFF_PICKUP 磁吸 / AFF_SKILL_HASTE 技能急速）

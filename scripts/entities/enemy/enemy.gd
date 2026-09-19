@@ -652,10 +652,34 @@ func _on_died() -> void:
 		var pop := DeathPop.new()
 		pop.name = "DeathPop"
 		pop.position = global_position
+		pop.tint = _death_element_tint()            # G5：死因元素迸色
 		get_parent().add_child(pop)
 	_death_poison_splash()
 	_death_element_discharge()
 	EventBus.emit_enemy_killed(self)
+
+
+func _death_element_tint() -> Color:
+	# G5 死因元素染色：死亡瞬间元素槽最高者决定迸色（阈值 25——挂零元素不染）；
+	# 火=派生橙（点燃火苗同源）/ 冰=淡冰蓝（冰弹同源）/ 雷=电紫（连锁同族）
+	if elemental == null:
+		return Color.WHITE
+	var best := GameConst.Element.KIN
+	var best_gauge := 25.0
+	for e in range(4):
+		var g := float(elemental.gauges[e])
+		if g > best_gauge:
+			best_gauge = g
+			best = e
+	match best:
+		GameConst.Element.FIR:
+			return PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)
+		GameConst.Element.ICE:
+			return PopPalette.PLAYER.lerp(Color.WHITE, 0.5)
+		GameConst.Element.LTG:
+			return PopPalette.SHOCK.lerp(Color.WHITE, 0.2)
+		_:
+			return Color.WHITE
 
 
 func _death_poison_splash() -> void:
@@ -2627,6 +2651,8 @@ class DeathPop:
 
 	const LIFE := 0.2
 
+	var tint := Color.WHITE                        # G5 元素染色（死因元素迸色——构筑可读性）
+
 	var _t: float = LIFE
 
 	func _process(p_delta: float) -> void:
@@ -2638,9 +2664,10 @@ class DeathPop:
 
 	func _draw() -> void:
 		var t := 1.0 - clampf(_t / LIFE, 0.0, 1.0)
-		var col := Color(1.0, 1.0, 1.0, (1.0 - t) * 0.9)
+		var col := Color(tint.r, tint.g, tint.b, (1.0 - t) * 0.9)
 		draw_arc(Vector2.ZERO, 8.0 + 22.0 * t, 0.0, TAU, 20, col, 3.0, true)
-		draw_circle(Vector2.ZERO, 7.0 * (1.0 - t), Color(1.0, 1.0, 1.0, (1.0 - t) * 0.5))
+		draw_circle(Vector2.ZERO, 7.0 * (1.0 - t),
+			Color(tint.r, tint.g, tint.b, (1.0 - t) * 0.5))
 		for i in range(4):
 			var a := TAU * float(i) / 4.0 + t * 1.2
 			var d := 10.0 + 16.0 * t
