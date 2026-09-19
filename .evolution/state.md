@@ -5,7 +5,7 @@
 - 一句话：竖屏单手割草 roguelike（Godot 4.3），晴空糖果美术，难度三档 × 成对抉择构筑深度
 - 技术栈/入口：GDScript；scenes/main.tscn → GameLoop（scripts/loop/game_loop.gd 编排一切）
 - 运行：`../tools/Godot_v4.3-stable_win64_console.exe --path .`（已验证可跑）
-- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 522 断言（无 lint）
+- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 529 断言（无 lint）
 - 核心体验：割草爽感 + 局内构筑滚雪球 + 走位反制（telegraph/盾面/法术圈走位有解）
 - 红线与坑：E-04~E-08 池化清零契约；.tres 注册表禁运行期落改（深拷贝）；测试直调无 add_child
   （池化实体本就是池节点子节点）；-s 入口两文件模式；写测试输出到日志文件防管道挂死
@@ -37,3 +37,4 @@
 - G6 2026-09-19 G8 新武器首获横幅：weapon_note 十武器一句话（GameConst）+ add_weapon 首获 Meta 标记发 mechanics_intro（一次不打扰）；verify 515/515
 - G7 2026-09-19 G9 连杀奖励：×10/×20 档位金币滴灌（同掉账三乘区口径）+ 跳字奖励行；每窗口每档一次，窗口过期复位；verify 519/519
 - G8 2026-09-19 G10 收官：结算行「最高连杀 ×N」（HUD.combo_peak 峰值 + GameOverScreen 追加段，≥5 才显示）+ 困难/地狱开局规则横幅（数值×N/复活/奖励/每级双选，普通不打扰）；verify 522/522 + 23 套件回归全绿——本批 G1~G10 探索轮收官
+- R75 2026-09-19 场景自适应音乐：离线作曲器 tools/gen_music.gd（六轨 16s 烘焙 .res——大厅/和声床/贝斯/琶音/踩镲/战鼓，循环点护栏无爆音）；sfx_bank 六轨装载 + 强度档（w<5 pad+贝斯 / <10 +琶音 / w10+ +踩镲，Boss 战鼓独立叠加）+ 大厅曲（MENU 独占，选卡音乐连续，暂停/结算静默）；顺手修 tags null 四处运行期崩溃；verify 529/529 + 24 套件零错

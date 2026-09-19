@@ -164,7 +164,7 @@ func on_enemy_killed(p_enemy: Node2D) -> void:
 	# 存活计数由 tick 从 spawner 刷新（无漂移）；Boss 掉落武器槽（F-19）；首杀位重置
 	if not wave_first_kill_done:
 		wave_first_kill_done = true
-	var enemy_tags := int(p_enemy.get("tags"))
+	var enemy_tags := int(p_enemy.get("tags")) if p_enemy.get("tags") != null else 0
 	if (enemy_tags & GameConst.TAG_BOSS) != 0:
 		if current_wave >= 20:
 			EventBus.emit_slot_unlocked(5)      # Boss2 击杀提前解锁（F-19）

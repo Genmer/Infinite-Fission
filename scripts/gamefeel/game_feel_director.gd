@@ -98,7 +98,7 @@ func on_boss_death_feel() -> void:
 
 func on_enemy_killed(p_enemy: Node2D) -> void:
 	# Boss 死亡 → 120ms 顿帧 + trauma 1.0（BOSS_DEATH 档）；普通击杀 → KILL 优先级粒子
-	var tags := int(p_enemy.get("tags")) if p_enemy != null else 0
+	var tags := int(p_enemy.get("tags")) if p_enemy.get("tags") != null else 0 if p_enemy != null else 0
 	if (tags & GameConst.TAG_BOSS) != 0:
 		on_boss_death_feel()
 	elif (tags & GameConst.TAG_ELITE) != 0:

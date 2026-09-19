@@ -255,10 +255,12 @@ func change_state(p_new: int) -> bool:
 		active_shards.clear()
 		if not _victory_pending_active():         # 夜间R24：非通关（死亡/暂停中放弃）→ 失败音
 			sfx.play(&"defeat")
-	# BGM 环境音拨运输（P2）：战斗态播放 / 菜单暂停（简化口径——PAUSED/LEVEL_UP 沿用
-	# 战斗态不中断；Boss 层随回菜单收起）
+	# BGM 场景运输（R75 六轨）：战斗/选卡连续播放（LEVEL_UP 不掐音乐——选卡高频，
+	# 掐断听感差）；暂停/结算全场静默；MENU 换大厅曲（Boss 层随回菜单收起）
 	if sfx != null:
-		sfx.bgm_set_active(p_new == GameConst.GameStatus.PLAYING)
+		var in_combat := p_new == GameConst.GameStatus.PLAYING 			or p_new == GameConst.GameStatus.LEVEL_UP
+		sfx.bgm_set_active(in_combat)
+		sfx.bgm_set_scene_menu(p_new == GameConst.GameStatus.MENU)
 		if p_new == GameConst.GameStatus.MENU:
 			sfx.bgm_set_boss_layer(false)
 	EventBus.emit_state_changed(p_new)
@@ -1119,6 +1121,9 @@ func _popup_tier_baseline() -> float:
 func _on_wave_started_reroll_grant(p_wave: int) -> void:
 	# 波次里程碑授予（选卡刷新机制「获取或许次数」方向）：每 5 波 +1 换一批次数
 	#（MENU 态回流的 wave_started 不存在——⑥ 波次推进仅 PLAYING 驱动；防御性判 player）
+	# R75 音乐强度档：w1-4 pad+贝斯 / w5-9 +琶音 / w10+ +踩镲（Boss 战鼓独立叠加）
+	if sfx != null:
+		sfx.bgm_set_intensity(0 if p_wave < 5 else (1 if p_wave < 10 else 2))
 	if p_wave > 0 and p_wave % 5 == 0 and player != null and is_instance_valid(player):
 		player.reroll_charges += 1
 		EventBus.emit_reroll_granted(1)
@@ -1275,9 +1280,9 @@ func _restore_run_state(p_data: Dictionary) -> void:
 func _on_boss_killed_bgm(p_enemy: Node2D) -> void:
 	# Boss 击杀 → BGM 战鼓层收起（tags 判定；连接序先于 spawner 归还清零——2026-08-31
 	# 修复：连接已前置至 actors 段）+ 刷新次数 +1（选卡刷新机制的「获取」来源之一）
-	if sfx != null and (int(p_enemy.get("tags")) & GameConst.TAG_BOSS) != 0:
+	if sfx != null and (int(p_enemy.get("tags")) if p_enemy.get("tags") != null else 0 & GameConst.TAG_BOSS) != 0:
 		sfx.bgm_set_boss_layer(false)
-	if (int(p_enemy.get("tags")) & GameConst.TAG_BOSS) != 0 and player != null \
+	if (int(p_enemy.get("tags")) if p_enemy.get("tags") != null else 0 & GameConst.TAG_BOSS) != 0 and player != null \
 			and is_instance_valid(player):
 		player.reroll_charges += 1
 		EventBus.emit_reroll_granted(1)

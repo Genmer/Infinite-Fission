@@ -1791,6 +1791,39 @@ func _test_p2_bgm() -> void:
 	_check("BGM：菜单暂停（双层 stream_paused）",
 		SfxBank.I._bgm_player.stream_paused
 		and SfxBank.I._bgm_boss_player.stream_paused)
+	# R75 六轨场景音乐：轨道装载 / 强度分层 / 大厅曲 / 贝斯等长锁相
+	_check("R75：六轨全部装载（.res 循环资源）",
+		SfxBank.I._bgm_bass_player.stream is AudioStreamWAV
+			and SfxBank.I._bgm_arp_player.stream is AudioStreamWAV
+			and SfxBank.I._bgm_hats_player.stream is AudioStreamWAV
+			and SfxBank.I._bgm_menu_player.stream is AudioStreamWAV, "")
+	var bass_wav: AudioStreamWAV = SfxBank.I.bgm_bass_stream()
+	_check("R75：贝斯/琶音轨与 pad 等长锁相（16s 循环）",
+		absf(bass_wav.get_length() - SfxBank.I.bgm_loop_seconds()) <= 0.01
+			and absf((SfxBank.I._bgm_arp_player.stream as AudioStreamWAV).get_length()
+				- SfxBank.I.bgm_loop_seconds()) <= 0.01, "")
+	SfxBank.I.bgm_set_active(true)
+	SfxBank.I.bgm_set_intensity(0)
+	_check("R75：强度 0（前期）= pad+贝斯，琶音/踩镲收起",
+		SfxBank.I._bgm_arp_player.stream_paused
+			and SfxBank.I._bgm_hats_player.stream_paused, "")
+	SfxBank.I.bgm_set_intensity(1)
+	_check("R75：强度 1（中期）琶音层进",
+		not SfxBank.I._bgm_arp_player.stream_paused, "")
+	SfxBank.I.bgm_set_intensity(2)
+	_check("R75：强度 2（后期）踩镲层进",
+		not SfxBank.I._bgm_hats_player.stream_paused, "")
+	SfxBank.I.bgm_set_scene_menu(true)
+	SfxBank.I.bgm_set_active(false)
+	_check("R75：大厅曲播放 + 战斗五轨收起",
+		SfxBank.I._bgm_menu_player.playing
+			and not SfxBank.I._bgm_menu_player.stream_paused
+			and SfxBank.I._bgm_player.stream_paused, "")
+	SfxBank.I.bgm_set_scene_menu(false)
+	_check("R75：离菜单大厅曲停（结算/暂停静默口径）",
+		SfxBank.I._bgm_menu_player.stream_paused, "")
+	SfxBank.I.bgm_set_intensity(1)
+	SfxBank.I.bgm_set_boss_layer(false)
 	SfxBank.I.bgm_set_boss_layer(false)
 
 

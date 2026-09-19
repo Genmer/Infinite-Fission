@@ -404,7 +404,7 @@ func _on_enemy_killed(p_enemy: Node2D) -> void:
 	records["total_kills"] = int(records["total_kills"]) + 1
 	if eid != &"":
 		codex_kills[String(eid)] = codex_kill_count(eid) + 1
-	if (int(p_enemy.get("tags")) & GameConst.TAG_BOSS) != 0:
+	if (int(p_enemy.get("tags")) if p_enemy.get("tags") != null else 0 & GameConst.TAG_BOSS) != 0:
 		_run_boss_slain += 1
 	_check_achievements()
 	# 击杀侧不落盘（高频事件；计数随 GAME_OVER 结算统一落盘——防测试/高频帧 IO 风暴）
