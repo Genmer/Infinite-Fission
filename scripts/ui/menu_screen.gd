@@ -549,7 +549,7 @@ func _rebuild_codex() -> void:
 				if ed == null:
 					continue
 				var kills := Meta.codex_kill_count(eid)
-				var atk_note := _enemy_attack_note(eid)
+				var atk_note := GameConst.enemy_attack_note(String(eid))
 				_panel_list.add_child(_make_codex_row(
 					_enemy_icon_tex(eid), kills > 0,
 					ed.display_name if kills > 0 else "？？？",
@@ -586,25 +586,6 @@ func _form_stat_line(p_wd: WeaponData) -> String:
 	if p_wd.upgrade_table.size() > 0:
 		atk = float(p_wd.upgrade_table[0].get("base_atk"))
 	return "%s形态 · Lv1 攻击 %.0f" % [form_names[clampi(int(p_wd.form), 0, 3)], atk]
-
-
-func _enemy_attack_note(p_eid: Variant) -> String:
-	# R72 图鉴攻击方式行（用户「所有变化图鉴都需要跟上」——新形态怪的机制一眼可读）
-	match String(p_eid):
-		"E25_phase_bomber":
-			return " · 闪现到你身边自爆（落地红圈 = 走位窗）"
-		"E26_shield_lancer":
-			return " · 正面盾面减伤 85%——绕到侧面或背后打"
-		"E27_warden_orb":
-			return" · 符文环亮起时弹开你的子弹（等冷却窗口）"
-		"E28_hexcaster":
-			return " · 在你脚下施放法术圈，读条结束引爆——时刻保持移动"
-		"E29_longbowhawk":
-			return " · 高速箭矢带预判——别走直线"
-		"E30_hellfire_revenant":
-			return " · 地狱特化：大范围闪现自爆，引信更短"
-		_:
-			return ""
 
 
 func _enemy_icon_tex(p_eid: Variant) -> ImageTexture:

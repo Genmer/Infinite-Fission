@@ -64,6 +64,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_ev1_reward()
 	_test_ev2_revive()
 	_test_ev3_burst()
+	_test_ev5_first_met()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3233,3 +3234,38 @@ func _test_ev3_burst() -> void:
 	else:
 		_check("E3：波纹件引用（缺失跳过生命周期断言）", bursts == 0)
 	_gl.call(&"quit_to_menu")
+
+
+func _test_ev5_first_met() -> void:
+	print("── E5 新怪首遇提示条（跨局一次） ──")
+	Meta.codex_first_met.clear()                # 测试档清位（首遇态复位）
+	var notices: Array[String] = []
+	var cb := func(p_text: String) -> void: notices.append(p_text)
+	EventBus.mechanics_intro.connect(cb)
+	var e := _spawn_r72_enemy(&"E26_shield_lancer",
+		_gl.player.global_position + Vector2(150.0, 0.0))
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	_gl.spawner.tick(0.016, _gl.enemy_grid)     # 出队管线（同帧无队列——直触首遇判定经 spawner tick 不覆盖此路）
+	# 直接走出队路径验证：enqueue + tick
+	var sp := EnemySpawner.new()
+	sp.pool = _gl.pools[&"enemy"]
+	sp.registry = _gl.registry
+	sp.enqueue({"data_id": &"E28_hexcaster", "wave": 1, "tags": 0})
+	sp.tick(0.016, _gl.enemy_grid)
+	EventBus.mechanics_intro.disconnect(cb)
+	_check("E5：首遇出队 → 提示条（首次遭遇 + 机制一句话）",
+		notices.size() >= 1 and String(notices[0]).contains("首次遭遇")
+			and String(notices[0]).contains("法术圈"), str(notices))
+	_check("E5：meta 标记落账（跨局记忆）",
+		Meta.codex_first_met.has("E28_hexcaster"))
+	_check("E5：二次遭遇不再提示",
+		not Meta.mark_first_met(&"E28_hexcaster"))
+	_check("E5：旧怪无提示文案（零打扰）",
+		GameConst.enemy_attack_note("E1_grunt").is_empty())
+	_release_r72_enemy(e)
+	if sp.active.size() > 0:
+		var se: Enemy = sp.active[0]
+		sp.active.clear()
+		(_gl.pools[&"enemy"] as EnemyPool).release(se)
+	sp.free()
+	Meta.codex_first_met.clear()

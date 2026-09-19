@@ -59,6 +59,10 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		spawn_queue.pop_front()
 		enemy.spawn(data, int(entry.get("wave", 1)), int(entry.get("tags", 0)))
 		_elite_affix_roll(enemy, int(entry.get("wave", 1)))
+		# E5 首遇提示条：新形态敌第一次实际登场 → 屏上机制一句话（跨局只提示一次）
+		var note := GameConst.enemy_attack_note(String(data.id))
+		if not note.is_empty() and Meta.mark_first_met(data.id):
+			EventBus.emit_mechanics_intro("【首次遭遇】%s：%s" % [data.display_name, note])
 		# R28 基线强化（用户裁定「敌人攻击、生命值提升 20%」）：出生管线单次应用
 		# R72 难度乘区（困难 ×3 / 地狱 ×9——用户口径「最基础的数值：攻击、血量」）：
 		# 与基线同点单次应用，覆盖全部自然刷怪/Boss/召唤

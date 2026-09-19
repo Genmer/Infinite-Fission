@@ -41,6 +41,25 @@ static func difficulty_dual_pick(p_d: int, p_roll: float) -> bool:
 	return p_d == Difficulty.HELL or (p_d == Difficulty.HARD and p_roll < 0.05)
 
 
+static func enemy_attack_note(p_enemy_id: String) -> String:
+	# E5/R72 新形态机制一句话（图鉴行 + 首遇提示条共用；空 = 旧怪不提示）
+	match p_enemy_id:
+		"E25_phase_bomber":
+			return "闪现到你身边自爆——落地红圈就是走位窗"
+		"E26_shield_lancer":
+			return "正面盾面减伤 85%——绕到侧面或背后打"
+		"E27_warden_orb":
+			return "符文环亮起时弹开你的子弹——等冷却窗口"
+		"E28_hexcaster":
+			return "在你脚下施放法术圈——读条结束前移开"
+		"E29_longbowhawk":
+			return "高速箭矢带预判——别走直线"
+		"E30_hellfire_revenant":
+			return "大范围闪现自爆——引信更短，快速脱离"
+		_:
+			return ""
+
+
 static func difficulty_name(p_d: int) -> String:
 	return ["普通", "困难", "地狱"][clampi(p_d, 0, 2)]
 

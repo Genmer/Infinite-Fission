@@ -38,6 +38,7 @@ const ACHIEVEMENTS: Array[Dictionary] = [
 
 # 运行期状态（存档落盘口径）
 var codex_kills: Dictionary = {}              # enemy_id(String) → 累计击杀数
+var codex_first_met: Dictionary = {}          # E5：enemy_id(String) → true（首次遭遇已提示）
 var codex_weapons: Dictionary = {}            # weapon_id(String) → true（获得解锁）
 var codex_traits: Dictionary = {}             # trait_id(String) → true（抽取解锁）
 var achievements_done: Dictionary = {}        # ach_id(String) → true
@@ -371,6 +372,16 @@ func codex_kill_count(p_enemy_id: StringName) -> int:
 	return int(codex_kills.get(String(p_enemy_id), 0))
 
 
+func mark_first_met(p_enemy_id: StringName) -> bool:
+	# E5 首遇提示：第一次实际刷出 → true（调用方发机制提示条）；此后 false 不再打扰
+	var key := String(p_enemy_id)
+	if codex_first_met.has(key):
+		return false
+	codex_first_met[key] = true
+	# 首遇标记与击杀计数同口径：不立即落盘（GAME_OVER 结算统一 _save——防高频 IO）
+	return true
+
+
 func is_weapon_unlocked(p_id: StringName) -> bool:
 	return codex_weapons.has(String(p_id))
 
@@ -516,6 +527,7 @@ func _check_achievements() -> void:
 func _save() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("codex", "kills", codex_kills)
+	cfg.set_value("codex", "first_met", codex_first_met)
 	cfg.set_value("codex", "weapons", codex_weapons.keys())
 	cfg.set_value("codex", "traits", codex_traits.keys())
 	cfg.set_value("achievements", "done", achievements_done.keys())
@@ -539,6 +551,7 @@ func _load() -> void:
 	var kills: Variant = cfg.get_value("codex", "kills", {})
 	if kills is Dictionary:
 		codex_kills = kills
+		codex_first_met = cfg.get_value("codex", "first_met", {})
 	for wid in cfg.get_value("codex", "weapons", []):
 		codex_weapons[String(wid)] = true
 	for tid in cfg.get_value("codex", "traits", []):
