@@ -379,6 +379,17 @@
 
 ---
 
+## 二ai、R62 登记（自主整备：META_ROADMAP §5.10 两个 P1 清账）
+
+| # | 原话摘要 | 定性 | 状态 | 落点 |
+|---|---|---|---|---|
+| 1 | （自主）地图词缀二期（诅咒/祝福双词缀）——文档标未做 | 文档滞后 | ✅ R62 | 调研实锤：双词缀 2026-08-31 已全量落地（map_table bless/curse 对 + game_loop._apply_map_affixes 注入 + 敌侧/玩家侧应用点 + 选关面板双行展示 + 验收用例），§5.10 该行未划线纯属文档滞后——本批补划线，不改代码 |
+| 2 | （自主）无尽模式分图延伸——每图独立无尽表 | 功能缺口 | ✅ R62 | 调研实锤：5 表 endless_entries/表尽公式/per-map Boss 轮换/Meta 分图深度记录均已落地，但**无玩家可达入口**——清完 final_wave 恒胜利结算，无尽段内容正常游玩不可达。R62 补齐：①通关屏「▶ 继续挑战 · 无尽」主出口（与重开同槽互换；每日局不出）；②GameLoop._endless_mode 流转（继续后不再重复胜利，打到死亡为止）+ continue_run 恢复档波次>final 自动回无尽态；③Meta 延迟结算（defer_settle_once/settle_now/cancel——选无尽则整局合并到死亡一次结算，total_runs/结晶不双记）；④HUD 波次徽标超基切「无尽 N」；⑤RunSave 无尽波次照常落档（大厅可继续无尽局）。19 项新验收 |
+| 3 | （自查连带）通关收尾窗 2.2s > 波间缓冲 1.8s → 第 final+1 波被短暂开出 | bug | ✅ R62 | 通关待结算窗内 wave_director BUFFER 到点自动 start_wave(final+1)（1.8s < 2.2s）→ wave_started 派发 → Meta._run_max_wave=final+1 → **每局正常通关都被记 endless_depth=1**。修复：驱动器加 advance_blocked 闸，_tick_victory_pending 首行随窗置位/复位（用例锁定：闸住时 BUFFER 到点不开波） |
+| 4 | （自查连带）`_on_wave_cleared_collect` 签名 0 参 vs signal wave_cleared(wave) 1 参 | bug | ✅ R62 | R62 用例首跑暴露：每次清波报「Method expected 0 arguments, but called with 1」且**回调不执行**——R7 波清空全屏碎片磁吸兜底长期失效（wave_cleared 连接 0 参方法，Godot 4 信号参数严格匹配）。修复：签名补 `_p_wave: int` |
+
+---
+
 ## 三、历史轮摘要（已完结，详情见 META_ROADMAP.md §5.9~§5.15）
 
 - **R1~R4（2026-08-29~31）**：命中反馈/护盾条/波次 toast/多地图/图鉴/养成/每日挑战/角色技能/BGM 重制/换一批/满层质变/局内存档 等（全绿基线 293+731）

@@ -21,6 +21,9 @@ var window_left: float = 0.0                  # 18 + 0.4w（无尽段 min(30+0.2
 var buffer_left: float = 0.0                  # 波间缓冲 1s + loot_buffer 3s
 var enemies_alive: int = 0
 var wave_first_kill_done: bool = false        # SYN_FIRST_STRIKE 重置位
+var advance_blocked: bool = false             # R62：通关收尾窗闸——true 时 BUFFER 到点不开下一波
+                                               #（GameLoop 收尾窗 2.2s > 波间缓冲 1.8s，不闸则第
+                                               #  final+1 波被短暂开出 → 每局通关误记 endless_depth=1）
 
 enum WavePhase { IDLE, SPAWNING, CLEARING, BUFFER }
 
@@ -150,7 +153,7 @@ func tick(p_game_delta: float) -> void:
 				_phase = WavePhase.BUFFER
 		WavePhase.BUFFER:
 			buffer_left -= p_game_delta
-			if buffer_left <= 0.0:
+			if buffer_left <= 0.0 and not advance_blocked:
 				start_wave(current_wave + 1)
 		_:
 			pass

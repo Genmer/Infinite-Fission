@@ -20,6 +20,8 @@ var _xp_fill: Panel = null                    # 经验条填充
 var _level_label: Label = null
 var _wave_label: Label = null
 var map_name: String = ""                  # 当前地图名（M2 多地图，HUD 波次前缀）
+var endless_depth_base: int = 0            # R62 无尽徽标基准（final_wave）：wave 超基后波次
+                                            # 徽章切「无尽 N」（N = 超出波数）；0 = 常规口径
 var _skill_btn: Button = null              # 角色技能键（右下角；冷却中置灰倒计时）
 var _skill_icon: TextureRect = null        # 技能键底图（28% 印刷感）
 var _skill_icon_fg: TextureRect = null     # 技能键前景图标（就绪亮显 / 冷却压暗）
@@ -113,7 +115,12 @@ func refresh_stats() -> void:
 		if sig != _build_sig:
 			_build_sig = sig
 			_refresh_build()
-	_wave_label.text = "第 %d 波" % wave   # R7 修复（§5.12 P0）：徽章只显波数——图名前缀在 106px 圆内溢出裁切 = 波次看不见根因
+	# R7 修复（§5.12 P0）：徽章只显波数——图名前缀在 106px 圆内溢出裁切 = 波次看不见根因
+	# R62 无尽局：超基波切「无尽 N」（N = wave − final_wave）——玩家可见的无尽深度进度
+	if endless_depth_base > 0 and wave > endless_depth_base:
+		_wave_label.text = "无尽 %d" % (wave - endless_depth_base)
+	else:
+		_wave_label.text = "第 %d 波" % wave
 	if _gold_label != null and player != null and is_instance_valid(player):
 		_gold_label.text = "◎ %d" % int(player.get("gold"))
 	if _skill_btn != null and player != null and is_instance_valid(player):

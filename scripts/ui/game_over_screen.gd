@@ -9,6 +9,7 @@ extends CanvasLayer
 var _title_label: Label = null
 signal restart_requested()                    # → GameLoop 重开申请（迁移矩阵仲裁）
 signal menu_requested()                       # → GameLoop.quit_to_menu（R13 结算屏回主菜单）
+signal endless_continue_requested()           # R62 → GameLoop 无尽继续（通关屏专属出口）
 
 var stats_source: Node = null                 # 注入（HUD：kills/wave/total_damage）
 
@@ -30,11 +31,17 @@ func setup(p_stats_source: Node) -> void:
 
 
 var _victory: bool = false                     # 胜利模式（R10：通关即结算——标题/引言换胜利口径）
+var _endless_allowed: bool = false             # R62：本局通关屏是否提供「继续挑战·无尽」出口
+var _endless_btn: Button = null                # R62：无尽继续按钮（与重开按钮同槽位互换）
+var _restart_btn: Button = null
+
 
 func show_summary() -> void:
 	# 显示结算（击杀/波次/总伤害；AC-16.1）+ 随机引言 + 果冻出场
 	_victory = false
+	_endless_allowed = false
 	_refresh_title()
+	_refresh_exit_buttons()
 	if stats_source != null and is_instance_valid(stats_source):
 		var kills: int = stats_source.get("kills")
 		var wave: int = stats_source.get("wave")
@@ -47,13 +54,25 @@ func show_summary() -> void:
 	StickerTheme.squash_pop(_card)
 
 
-func show_victory() -> void:
+func show_victory(p_allow_endless: bool = true) -> void:
 	# 通关结算（R10：清完 final Boss 波 → 关卡胜利——波次不再无限叠加）
+	# R62：非每日局默认提供「继续挑战·无尽」出口（p_allow_endless=false → 每日局不出）
 	_victory = true
+	_endless_allowed = p_allow_endless
 	_refresh_title()
+	_refresh_exit_buttons()
 	_quote_label.text = Lore.game_over_quote()
 	_root.visible = true
 	StickerTheme.squash_pop(_card)
+
+
+func _refresh_exit_buttons() -> void:
+	# R62 出口互换：胜利且无尽可用 → 无尽按钮占主槽（重开隐藏）；否则重开占主槽
+	if _endless_btn == null or _restart_btn == null:
+		return
+	var endless_visible := _victory and _endless_allowed
+	_endless_btn.visible = endless_visible
+	_restart_btn.visible = not endless_visible
 
 
 func _refresh_title() -> void:
@@ -74,6 +93,11 @@ func hide_screen() -> void:
 func summary_text() -> String:
 	# 测试观测口
 	return _summary_label.text
+
+
+func is_endless_offer_visible() -> bool:
+	# R62 测试观测口：通关屏「继续挑战·无尽」出口当前是否可见
+	return _endless_btn != null and _endless_btn.visible
 
 
 func request_restart() -> void:
@@ -166,6 +190,24 @@ func _build_ui() -> void:
 	btn.pressed.connect(request_restart)
 	btn.button_down.connect(func() -> void: StickerTheme.press_punch(btn))
 	_card.add_child(btn)
+	_restart_btn = btn
+	# R62 无尽继续（通关屏主出口——与重开同槽位互换；胜利 + 非每日局才可见）
+	var endless := Button.new()
+	endless.name = "EndlessContinueButton"
+	endless.text = "▶ 继续挑战 · 无尽"
+	endless.add_theme_font_size_override("font_size", 22)
+	endless.add_theme_font_override("font", StickerTheme.font_bold())
+	endless.add_theme_color_override("font_color", PopPalette.SUCCESS)
+	endless.add_theme_color_override("font_pressed_color", PopPalette.SUCCESS)
+	endless.add_theme_color_override("font_hover_color", PopPalette.SUCCESS)
+	endless.position = Vector2(150.0, 322.0)
+	endless.size = Vector2(280.0, 64.0)
+	endless.pivot_offset = endless.size * 0.5
+	endless.visible = false
+	endless.pressed.connect(func() -> void: endless_continue_requested.emit())
+	endless.button_down.connect(func() -> void: StickerTheme.press_punch(endless))
+	_card.add_child(endless)
+	_endless_btn = endless
 	# 回主菜单（R13：通关/死亡结算第二出口——回大厅解锁链/换构筑）
 	var menu_btn := Button.new()
 	menu_btn.name = "MenuButton"

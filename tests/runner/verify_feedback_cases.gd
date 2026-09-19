@@ -52,6 +52,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_map_bosses()
 	_test_map_affixes2()
 	_test_endless_maps()
+	_test_r62_endless_continue()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -1431,6 +1432,93 @@ func _test_endless_maps() -> void:
 	# ⑧ HUD 波次号无尽段继续递增
 	EventBus.emit_wave_started(41)
 	_check("HUD：无尽段波次号递增（41）", _gl.hud.wave == 41)
+
+
+# ── R62 无尽继续入口（通关屏出口 + 延迟结算 + 收尾窗开波闸 + 每日抑制） ──
+func _test_r62_endless_continue() -> void:
+	print("── R62 无尽继续入口 ──")
+	# 快照隔离（records/crystals 顶层 + map_records 深拷——结算会改写内层字典）
+	var saved_records: Dictionary = Meta.records.duplicate()
+	var saved_crystals: int = Meta.crystals
+	var saved_mr: Dictionary = {}
+	for k in Meta.map_records:
+		saved_mr[k] = (Meta.map_records[k] as Dictionary).duplicate()
+	# 清残留单局计数（前序用例 wave_started(41) 泄漏 _run_max_wave——同 _test_endless_maps
+	# ⑦ 手法：残留结算先行改道 grass；其写入的 grass 残留深度随后清表；测试尾整体还原快照）
+	Meta.map_records = {}
+	Meta.set_run_map(&"world_grass")
+	Meta._on_state_changed(GameConst.GameStatus.GAME_OVER)
+	Meta.map_records = {}
+	var runs0: int = int(Meta.records.get("total_runs", 0))
+	RunSave.clear()
+	_gl.current_map_id = &"world_grass"          # final_wave=10
+	_gl.start_run()
+	var wd: WaveDirector = _gl.wave_director
+	wd.start_wave(10)
+	# ① 收尾窗开波闸（R62 行3 bug 修复）：窗内 BUFFER 到点不开 final+1 波
+	EventBus.emit_wave_cleared(10)
+	_check("R62：清完 final 波开启收尾窗", _gl._victory_pending_left > 0.0)
+	_gl._tick_victory_pending(0.02)             # 窗计时（首行置位开波闸）
+	_check("R62：收尾窗内驱动器开波闸关闭", wd.advance_blocked)
+	wd.set("_phase", WaveDirector.WavePhase.BUFFER)
+	wd.buffer_left = 0.01
+	wd.tick(0.02)
+	_check("R62：闸住时 BUFFER 到点不开 final+1 波（深度误记根因拔除）", wd.current_wave == 10)
+	wd.advance_blocked = false                   # 还原（后续直接驱动）
+	# ② 窗结束 → GAME_OVER 胜利屏：无尽出口可见 + 重开让位 + Meta 延迟不落账
+	_gl._tick_victory_pending(2.3)
+	_check("R62：收尾窗结束进入 GAME_OVER（胜利屏）",
+		_gl.state == GameConst.GameStatus.GAME_OVER)
+	_check("R62：通关屏「继续挑战·无尽」出口可见",
+		_gl.game_over_screen.is_endless_offer_visible())
+	var rb: Button = _gl.game_over_screen.get_node_or_null(
+		"GameOverRoot/ReportCard/RestartButton")
+	_check("R62：通关屏重开按钮让位（无尽占主槽）", rb != null and not rb.visible)
+	_check("R62：Meta 延迟结算（GAME_OVER 后 total_runs 不变）",
+		int(Meta.records.get("total_runs", 0)) == runs0)
+	# ③ 无尽继续：PLAYING + final+1 波续打 + 无尽态 + HUD 徽标 + RunSave
+	_check("R62：无尽继续成功回 PLAYING",
+		_gl.continue_endless() and _gl.state == GameConst.GameStatus.PLAYING)
+	_check("R62：自 final+1 波续打（w11）", wd.current_wave == 11)
+	_check("R62：无尽态置位（后续清波不再胜利）", _gl._endless_mode)
+	_gl.hud.refresh_stats()
+	var wl: Label = _gl.hud.get("_wave_label")
+	_check("R62：HUD 波次徽标切无尽口径（无尽 1）",
+		_gl.hud.endless_depth_base == 10 and wl != null and wl.text == "无尽 1")
+	_check("R62：无尽波次入局内存档（w11——大厅可继续无尽局）",
+		int(RunSave.load_run().get("wave", 0)) == 11)
+	# ④ 无尽局后续清波不再触发胜利
+	EventBus.emit_wave_cleared(12)
+	EventBus.emit_wave_started(13)
+	_check("R62：无尽局清波不再开胜利窗",
+		_gl._victory_pending_left <= 0.0
+			and _gl.state == GameConst.GameStatus.PLAYING)
+	# ⑤ 死亡结算：单次落账（total_runs 恰 +1 / 结晶单次）+ 深度入账（13−10=3）
+	var cry0: int = Meta.crystals
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_check("R62：无尽局死亡结算恰好一次（total_runs +1）",
+		int(Meta.records.get("total_runs", 0)) == runs0 + 1)
+	_check("R62：结晶单次产出（不双记）", Meta.crystals - cry0 == int(ceil(13.0 * 1.5)),
+		"delta=%d" % (Meta.crystals - cry0))
+	_check("R62：无尽深度入账（13 波 − final 10 = 3）",
+		Meta.endless_depth(&"world_grass") == 3,
+		"depth=%d" % Meta.endless_depth(&"world_grass"))
+	# ⑥ 每日局抑制：通关屏不出无尽出口 + continue_endless 拒绝
+	_gl.game_over_screen.show_victory(false)
+	_check("R62：每日局通关屏不出无尽出口",
+		not _gl.game_over_screen.is_endless_offer_visible())
+	var rb2: Button = _gl.game_over_screen.get_node_or_null(
+		"GameOverRoot/ReportCard/RestartButton")
+	_check("R62：每日局重开按钮回归主槽", rb2 != null and rb2.visible)
+	Meta.set_run_daily(true)
+	_check("R62：每日局 continue_endless 拒绝", not _gl.continue_endless())
+	Meta.set_run_daily(false)
+	# 收尾还原（GAME_OVER → MENU 合法迁移 + 战场清场）
+	_gl.quit_to_menu()
+	Meta.records = saved_records
+	Meta.crystals = saved_crystals
+	Meta.map_records = saved_mr
+	RunSave.clear()
 
 
 # ── P2-1 伤害数字分级（白/蓝/紫/金——大小/颜色/音效三联动） ────────

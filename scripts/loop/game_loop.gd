@@ -83,6 +83,9 @@ var confetti: ConfettiBurst = null            # 方向 C：Boss 死亡彩纸屑�
 var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp}
 var resume_grace_left: float = 0.0
 var _victory_pending_left: float = 0.0        # 通关结算延迟窗（R15：给磁吸碎片收集时间）
+var _endless_mode: bool = false               # R62：无尽继续态——清完 final_wave 后选「继续挑战」
+                                               # 置位；此局不再重复胜利结算，打到死亡为止
+var _victory_settle_pending: bool = false     # R62：通关屏延迟结算待决（玩家未选出口前 Meta 不落账）
 var _boss_summons: Dictionary = {}            # Boss 裂变召唤追踪（B4 R18 P3：uid → 调度态）
 
 var frame_order: Array[StringName] = []       # 帧序探针（每帧重建；测试断言固定帧序）
@@ -313,8 +316,10 @@ func _on_shop_requested(p_wave: int) -> void:
 		shop_ui.open(player, p_wave)
 
 
-func _on_wave_cleared_collect() -> void:
+func _on_wave_cleared_collect(_p_wave: int) -> void:
 	# R7：波清空全屏碎片磁吸回收（含 Boss 大珠——残留不消失兜底；资源不丢）
+	# R62 自查连带修复：本回调签名原为 0 参——signal wave_cleared(wave) 带 1 参派发，
+	# 每次清波都报「Method expected 0 arguments」且**回调不执行**（磁吸兜底长期失效）
 	for shard in active_shards:
 		if is_instance_valid(shard):
 			shard.force_magnet()
@@ -326,6 +331,9 @@ func _on_wave_cleared_victory(p_wave: int) -> void:
 	# R15：不立刻切结算——Boss 爆炸的碎片球/彩纸需要收尾（用户实测「彩色球残留屏幕」
 	# =结算瞬间停帧把表现件冻在屏上）。开 2.2s 收尾窗：波末磁吸继续工作，窗口结束
 	# 回收残余碎片 + RunSave.clear + 胜利结算
+	# R62：无尽继续局不再重复胜利——打到死亡为止（本局记录由死亡结算统一落账）
+	if _endless_mode:
+		return
 	if state != GameConst.GameStatus.PLAYING or current_map_id == StringName(""):
 		return
 	var final_wave := int(MapTable.get_map(current_map_id).get("final_wave", 1 << 30))
@@ -341,6 +349,9 @@ func _victory_pending_active() -> bool:
 
 
 func _tick_victory_pending(p_raw_delta: float) -> void:
+	# R62：收尾窗期间闸住驱动器自动开波（窗 2.2s > 波间缓冲 1.8s，不闸则第 final+1 波
+	# 被短暂开出 → wave_started 派发 → Meta 误记 endless_depth=1）；窗结束/未开窗即复位
+	wave_director.advance_blocked = _victory_pending_left > 0.0
 	if _victory_pending_left <= 0.0:
 		return
 	_victory_pending_left = maxf(_victory_pending_left - p_raw_delta, 0.0)
@@ -351,9 +362,36 @@ func _tick_victory_pending(p_raw_delta: float) -> void:
 			(pools[&"xp"] as XPPool).release(shard)
 			active_shards.erase(shard)
 	RunSave.clear()
+	# R62：非每日局延迟结算——通关屏提供「继续挑战·无尽」出口，玩家未选出口前
+	# Meta 不落账（选重开/回菜单 → settle_now 兑现；选无尽 → 本局合并到死亡一次结算）
+	var allow_endless := not Meta.is_run_daily()
+	if allow_endless:
+		Meta.defer_settle_once()
+		_victory_settle_pending = true
 	if change_state(GameConst.GameStatus.GAME_OVER):
 		sfx.play(&"victory")                 # 夜间R24：通关结算音
-		game_over_screen.show_victory()
+		game_over_screen.show_victory(allow_endless)
+
+
+func continue_endless() -> bool:
+	# R62 无尽继续（通关屏「▶ 继续挑战 · 无尽」）：GAME_OVER → PLAYING，本局构筑/数值
+	# 原样保留，自 final_wave+1 波续打；此局转为无尽态（不再重复胜利，打到死亡为止）。
+	# 延迟结算取消（与死亡结算合并为一次——total_runs/结晶不双记）
+	if state != GameConst.GameStatus.GAME_OVER or current_map_id == StringName("") \
+			or Meta.is_run_daily():
+		return false
+	if not change_state(GameConst.GameStatus.PLAYING):
+		return false
+	if _victory_settle_pending:
+		Meta.cancel_deferred_settle()
+		_victory_settle_pending = false
+	_endless_mode = true
+	var map_def := MapTable.get_map(current_map_id)
+	hud.endless_depth_base = int(map_def.get("final_wave", 1 << 30))
+	var next_wave := hud.endless_depth_base + 1
+	wave_director.advance_blocked = false      # 收尾窗闸复位（防御）
+	wave_director.start_wave(next_wave)
+	return true
 
 
 func _on_boss_spawned_track_summons(p_boss: Node2D) -> void:
@@ -459,6 +497,9 @@ func start_run(p_daily_seed: int = -1) -> bool:
 	# 口径）+ 应用当日三词缀；-1 = 常规局（卡池每局随机）
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
+	_endless_mode = false                       # R62：新局非无尽态（continue_endless 置位）
+	_victory_settle_pending = false
+	wave_director.advance_blocked = false        # R62：收尾窗闸复位（防御）
 	wave_director.wave_table = MapTable.load_table(current_map_id, registry)
 	Meta.set_run_map(current_map_id)
 	if p_daily_seed >= 0:
@@ -480,6 +521,7 @@ func start_run(p_daily_seed: int = -1) -> bool:
 	if _backdrop != null:
 		_backdrop.modulate = map_def.get("tint", Color.WHITE)   # 分图云层主题色
 	hud.set_map_name(("每日挑战 · " if p_daily_seed >= 0 else "") + String(map_def.get("name", "")))
+	hud.endless_depth_base = 0                  # R62：波次徽标回常规口径
 	wave_director.start_wave(1)
 	return true
 
@@ -574,6 +616,10 @@ func restart_run() -> bool:
 	# 重开 = 放弃旧档（局内存档清除——「重新开始」语义下继续入口不再指向被放弃的进度）
 	if state != GameConst.GameStatus.GAME_OVER and state != GameConst.GameStatus.PAUSED:
 		return false
+	# R62：通关屏延迟结算兑现（玩家选「再来一局」放弃无尽继续——本局在此落账）
+	if _victory_settle_pending:
+		Meta.settle_now()
+		_victory_settle_pending = false
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
 	RunSave.clear()
@@ -589,6 +635,10 @@ func quit_to_menu() -> bool:
 	# 主动退出落盘（GAME_OVER → MENU 的同路径退出不存——死亡局已由 _on_player_died
 	# 清档，此处再存会把 hp≤0 的尸体局写进「继续」入口）
 	var was_paused := state == GameConst.GameStatus.PAUSED
+	# R62：通关屏延迟结算兑现（玩家选「回主菜单」放弃无尽继续——本局在此落账）
+	if _victory_settle_pending:
+		Meta.settle_now()
+		_victory_settle_pending = false
 	if not change_state(GameConst.GameStatus.MENU):
 		return false
 	if was_paused:
@@ -934,6 +984,7 @@ func _boot_build_presentation() -> void:
 	add_child(game_over_screen)
 	game_over_screen.setup(hud)
 	game_over_screen.restart_requested.connect(restart_run)
+	game_over_screen.endless_continue_requested.connect(continue_endless)   # R62 通关屏无尽继续
 	game_over_screen.menu_requested.connect(quit_to_menu)   # R13 结算屏回主菜单
 	card_generator = CardGenerator.new()
 	card_generator.setup(registry)
@@ -1065,7 +1116,12 @@ func continue_run() -> bool:
 		_backdrop.modulate = map_def.get("tint", Color.WHITE)
 	hud.set_map_name(("每日挑战 · " if is_daily else "") + String(map_def.get("name", "")))
 	_restore_run_state(data)
-	wave_director.start_wave(maxi(int(data.get("wave", 1)), 1))
+	# R62：恢复档波次已过 final_wave → 无尽局续打（波次徽标切无尽口径）
+	var final_wave := int(MapTable.get_map(map_id).get("final_wave", 1 << 30))
+	var resume_wave := maxi(int(data.get("wave", 1)), 1)
+	_endless_mode = resume_wave > final_wave and not is_daily
+	hud.endless_depth_base = final_wave if _endless_mode else 0
+	wave_director.start_wave(resume_wave)
 	hud.kills = int(data.get("kills", 0))
 	hud.run_elapsed = float(data.get("elapsed", 0.0))
 	hud.refresh_stats()
@@ -1348,6 +1404,10 @@ func _reset_run_state() -> void:
 	pending_level_ups = 0
 	resume_grace_left = 0.0
 	_free_reroll_used = false                  # 刷新机制：本局首次免费位复位
+	_endless_mode = false                       # R62：无尽态/延迟结算位/驱动器闸 一并复位
+	_victory_settle_pending = false
+	wave_director.advance_blocked = false
+	hud.endless_depth_base = 0
 	player.input_enabled = true
 	game_feel.hit_stop_left = 0.0
 	game_feel.hit_stop_active_ms = 0.0

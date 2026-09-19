@@ -423,6 +423,16 @@ func _on_level_up(p_level: int) -> void:
 func _on_state_changed(p_state: int) -> void:
 	if p_state != GameConst.GameStatus.GAME_OVER:
 		return
+	# R62 通关延迟结算：通关屏「继续挑战·无尽」决策期不结算——玩家选重开/回菜单时由
+	# GameLoop 调 settle_now() 兑现；选无尽继续则整局合并到死亡 GAME_OVER 时一次结算
+	#（防重复 total_runs++ / 重复结晶产出）
+	if _settle_deferred:
+		return
+	_settle_run_result()
+
+
+func _settle_run_result() -> void:
+	# 局结算（每日分流 → 全局/分图记录 + 结晶 + 成就 + 落盘 + 单局计数复位）
 	# 每日挑战结算分流（P2）：只记 daily_best（波次+击杀）——不混常规 records/map_records/
 	# 结晶/成就（当日独立口径），单局计数复位后即返
 	if _run_daily:
@@ -448,6 +458,27 @@ func _on_state_changed(p_state: int) -> void:
 	_check_achievements()
 	_save()
 	_reset_run_counters()
+
+
+var _settle_deferred: bool = false             # R62 通关延迟结算位（见 _on_state_changed 注释）
+
+
+func defer_settle_once() -> void:
+	# R62：标记下一局 GAME_OVER 先不自动结算（GameLoop 通关路径调用；本局仅一次）
+	_settle_deferred = true
+
+
+func cancel_deferred_settle() -> void:
+	# R62：玩家选「继续挑战·无尽」——延迟结算取消（本局合并到之后死亡时一次结算）
+	_settle_deferred = false
+
+
+func settle_now() -> void:
+	# R62：兑现延迟结算（通关屏玩家选重开/回菜单时 GameLoop 调用；无待兑现则空操作）
+	if not _settle_deferred:
+		return
+	_settle_deferred = false
+	_settle_run_result()
 
 
 func _reset_run_counters() -> void:
