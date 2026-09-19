@@ -5,7 +5,7 @@
 - 一句话：竖屏单手割草 roguelike（Godot 4.3），晴空糖果美术，难度三档 × 成对抉择构筑深度
 - 技术栈/入口：GDScript；scenes/main.tscn → GameLoop（scripts/loop/game_loop.gd 编排一切）
 - 运行：`../tools/Godot_v4.3-stable_win64_console.exe --path .`（已验证可跑）
-- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 515 断言（无 lint）
+- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 519 断言（无 lint）
 - 核心体验：割草爽感 + 局内构筑滚雪球 + 走位反制（telegraph/盾面/法术圈走位有解）
 - 红线与坑：E-04~E-08 池化清零契约；.tres 注册表禁运行期落改（深拷贝）；测试直调无 add_child
   （池化实体本就是池节点子节点）；-s 入口两文件模式；写测试输出到日志文件防管道挂死
@@ -35,3 +35,4 @@
 - G4 2026-09-19 G6 W10 构筑收口：三条阈值质变钩子（巨刃新星/永动回旋/暴击碎屑）+ 金弧拖尾 _draw；修复 G4 测试静默中止（player._process 不存在→tick 真实入口，出程/回程运动断言首次真正执行并通过）
 - G5 2026-09-19 G7 性能轮：压测负载扩六新怪混编 20%（盾面/反弹盾/法术/预判/闪现/地狱火 tick 全走真实路径）——P95 5.90ms（前值 5.53），判定线 8.3/参考线 7.3 双 PASS，超阈帧 0.2%；尖峰归因 enemy 阶段事件驱动（死亡/生成突发），逻辑性能达标无需强改
 - G6 2026-09-19 G8 新武器首获横幅：weapon_note 十武器一句话（GameConst）+ add_weapon 首获 Meta 标记发 mechanics_intro（一次不打扰）；verify 515/515
+- G7 2026-09-19 G9 连杀奖励：×10/×20 档位金币滴灌（同掉账三乘区口径）+ 跳字奖励行；每窗口每档一次，窗口过期复位；verify 519/519

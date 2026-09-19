@@ -151,6 +151,7 @@ func _physics_process(p_raw_delta: float) -> void:
 				_combo_left -= gd
 				if _combo_left <= 0.0:
 					_combo_count = 0
+					_combo_tier_paid = 0            # G9 档位随窗口复位
 			if stage_probe_enabled:
 				stage_probe_us[&"player"] = Time.get_ticks_usec() - _probe_t0
 				_probe_t0 = Time.get_ticks_usec()
@@ -534,6 +535,7 @@ func start_run(p_daily_seed: int = -1) -> bool:
 		return false
 	_endless_mode = false                       # R62：新局非无尽态（continue_endless 置位）
 	_combo_count = 0                            # E9：连杀窗口复位
+	_combo_tier_paid = 0                        # G9：连杀档位同步复位
 	_combo_left = 0.0
 	_victory_settle_pending = false
 	wave_director.advance_blocked = false        # R62：收尾窗闸复位（防御）
@@ -1287,6 +1289,8 @@ func _tick_projectiles(p_gd: float) -> void:
 
 var _enemy_bullet_buf: Array[Node2D] = []     # E7 复用缓冲（敌弹网格快照——零每帧分配）
 var _combo_count: int = 0                     # E9 连杀计数（1.2s 窗口；割草爽感跳字）
+var _combo_tier_paid: int = 0                 # G9 连杀奖励已发档位（每窗口每档一次）
+var _combo_reward_line := ""                  # G9 本跳奖励行（跳字消费后即清）
 var _combo_left: float = 0.0                  # 连杀窗口剩余
 var _combo_label: Label = null                # ×N 连杀跳字（复用单 Label 重写文本）
 
@@ -1362,6 +1366,13 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 	# E9 连杀：窗口内击杀 +1；≥5 起显示 ×N 跳字（档位色阶 5/10/20——爽感可视化）
 	_combo_count += 1
 	_combo_left = 1.2
+	# G9 连杀奖励：×10/×20 档位各发一次金币滴灌（同掉账乘区口径；先于跳字结算）
+	if _combo_count >= 10 and _combo_tier_paid < 1:
+		_combo_tier_paid = 1
+		_pay_combo_reward(6)
+	if _combo_count >= 20 and _combo_tier_paid < 2:
+		_combo_tier_paid = 2
+		_pay_combo_reward(14)
 	if _combo_count >= 5:
 		_show_combo_toast()
 	# 金币掉账（M7 战地黑市货币：gold_drop = {chance, min, max}，首次接线——此前为死数据；
@@ -1428,6 +1439,14 @@ class LevelBurst:
 		draw_arc(Vector2.ZERO, r * 0.72, 0.0, TAU, 32, Color(gold.r, gold.g, gold.b, 0.3 * a), 9.0, true)
 
 
+func _pay_combo_reward(p_gold: int) -> void:
+	# G9 连杀奖励：金币入账（map_gold/点金/难度三乘区同掉账口径）+ 跳字奖励行
+	var mult: float = player.map_gold_mult * (1.0 + player.gold_find_pct()) 		* GameConst.difficulty_reward_mult(_difficulty)
+	var paid := int(round(float(p_gold) * mult))
+	player.gold += paid
+	_combo_reward_line = "  奖励+%d金" % paid
+
+
 func _show_combo_toast() -> void:
 	# E9 ×N 连杀跳字：屏幕中带单 Label 复用（低频事件零池化压力）——
 	# 果冻弹入 + 上浮自隐；档位色阶（5 白 / 10 蓝 / 20 金）
@@ -1442,7 +1461,8 @@ func _show_combo_toast() -> void:
 	elif _combo_count >= 10:
 		col = PopPalette.XP
 	_combo_label.add_theme_color_override("font_color", col)
-	_combo_label.text = "×%d 连杀！" % _combo_count
+	_combo_label.text = "×%d 连杀！%s" % [_combo_count, _combo_reward_line]
+	_combo_reward_line = ""                     # 消费即清（下一跳不残留）
 	_combo_label.reset_size()
 	_combo_label.position = Vector2(360.0 - _combo_label.size.x * 0.5, 420.0)
 	_combo_label.pivot_offset = _combo_label.size * 0.5
@@ -1605,3 +1625,4 @@ func _tick_combo_for_test() -> void:
 		_combo_left -= 0.05
 		if _combo_left <= 0.0:
 			_combo_count = 0
+			_combo_tier_paid = 0            # G9 档位随窗口复位（与帧序内联同口径）

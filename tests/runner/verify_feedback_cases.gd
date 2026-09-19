@@ -72,6 +72,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_f3_e11()
 	_test_g1_g5()
 	_test_g4_boomerang()
+	_test_g9_combo_reward()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3348,8 +3349,9 @@ func _test_ev9_combo() -> void:
 	_gl._combo_count = 0
 	for i in range(20):
 		EventBus.emit_enemy_killed(stub)         # 20+：金色档
-	_check("E9：20 连杀 → 金色档位色", String(_gl._combo_label.text) == "×20 连杀！"
-		and _gl._combo_label.get_theme_color("font_color") == PopPalette.GOLD)
+	_check("E9：20 连杀 → 金色档位色（G9 起尾缀奖励行）",
+		String(_gl._combo_label.text).begins_with("×20 连杀！")
+			and _gl._combo_label.get_theme_color("font_color") == PopPalette.GOLD)
 	# 窗口过期清零
 	_gl._combo_left = 0.01
 	_gl._tick_combo_for_test()
@@ -3545,3 +3547,37 @@ func _test_g4_boomerang() -> void:
 			_gl.player.weapon_slots[k] = null
 			w.queue_free()
 	_gl.player.global_position = pos0
+
+
+func _test_g9_combo_reward() -> void:
+	print("── G9 连杀奖励 ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	var stub := _make_killed_enemy_stub(false)
+	_gl._combo_count = 9                        # 下一杀 = ×10 档
+	_gl._combo_tier_paid = 0
+	var gold0: int = _gl.player.gold
+	EventBus.emit_enemy_killed(stub)
+	_check("G9：×10 档发奖（入账 + 跳字含奖励行）",
+		_gl._combo_tier_paid == 1 and _gl.player.gold >= gold0
+			and String(_gl._combo_label.text).contains("奖励+"),
+		"paid=%d gold %d→%d label=%s" % [_gl._combo_tier_paid, gold0,
+			_gl.player.gold, str(_gl._combo_label.text)])
+	var gold1: int = _gl.player.gold
+	EventBus.emit_enemy_killed(stub)            # ×11：档内不重发
+	EventBus.emit_enemy_killed(stub)            # ×12
+	_check("G9：档内击杀不重发（tier_paid 不变）", _gl._combo_tier_paid == 1,
+		"paid=%d" % _gl._combo_tier_paid)
+	while _gl._combo_count < 19:
+		EventBus.emit_enemy_killed(stub)
+	EventBus.emit_enemy_killed(stub)            # ×20 档
+	_check("G9：×20 档二段发奖", _gl._combo_tier_paid == 2
+			and _gl.player.gold >= gold1 + 14,
+		"paid=%d gold %d→%d" % [_gl._combo_tier_paid, gold1, _gl.player.gold])
+	# 窗口过期 → 档位复位（下一窗口可再发）
+	_gl._combo_left = 0.01
+	_gl._tick_combo_for_test()
+	_check("G9：窗口过期档位复位", _gl._combo_count == 0 and _gl._combo_tier_paid == 0,
+		"count=%d paid=%d" % [_gl._combo_count, _gl._combo_tier_paid])
+	(_gl.pools[&"enemy"] as EnemyPool).release(stub)
+	_gl.call(&"quit_to_menu")
