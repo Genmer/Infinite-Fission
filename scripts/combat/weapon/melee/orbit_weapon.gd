@@ -72,10 +72,10 @@ func level_up() -> void:
 
 func attach_trait(p_trait: TraitData) -> bool:
 	# 词条挂载（R19 环绕形态卡：orbit_style 形态卡挂上即重铺外观+乘区；
-	# R65 巨刃（knife_scale）/环绕体数（orbs_bonus 由词条效果置位）挂上即时重铺）
+	# R65 巨刃（knife_scale）挂上即时重铺；R69 谐振轨道聚合直读 → 挂上即重铺刀数）
 	var ok := super.attach_trait(p_trait)
 	if ok and p_trait != null and (p_trait.params.has("orbit_style") \
-			or p_trait.params.has("knife_scale")):
+			or p_trait.params.has("knife_scale") or p_trait.id == &"MEC_ORBIT_LINK"):
 		refresh_orbit_field()
 	return ok
 
@@ -183,7 +183,7 @@ func _orbit_params() -> Dictionary:
 			angular *= 1.5
 			hit_cd *= 1.15
 	var out := {
-		"orbs": _leveled_param("orbs", float(data.melee.get("orbs", 2))) + orbs_bonus,
+		"orbs": _leveled_param("orbs", float(data.melee.get("orbs", 2))) + orbs_bonus + _orbit_link_knives(),
 		"orbit_radius": orbit_radius,
 		"angular_speed": angular,
 		"orb_radius": orb_r,
@@ -197,6 +197,22 @@ func _orbit_params() -> Dictionary:
 		out["chase_speed"] = CHASE_SPEED
 		out["engage_r"] = ENGAGE_R
 	return out
+
+
+func _orbit_link_knives() -> int:
+	# R69 谐振轨道聚合直读：旧实现走 ON_SPAWN 效果派发 += layers——但环绕武器不产
+	# 投射物、生产链路唯一的 ON_SPAWN 派发点在投射物生成（projectile_base），实战中
+	# 该效果**永不触发**（测试手动派发掩盖，真机死卡）。改为参数构造侧直读挂载表：
+	# LOCAL 池同 ID 取优（挂载侧语义）→ 最高品质 value × 层数；value 1.45 的取整梯
+	# = 白/蓝/紫/金每层 +1/+2/+3/+4 刀（品质梯分化，用户反馈「不同级别数值一样」）
+	if trait_stack == null:
+		return 0
+	var knives := 0
+	for tb in trait_stack.traits:
+		if tb.data != null and tb.data.id == &"MEC_ORBIT_LINK":
+			knives = maxi(int(round(float(tb.data.value))), 1) * tb.layers
+			break
+	return knives
 
 
 func refresh_orbit_field() -> void:

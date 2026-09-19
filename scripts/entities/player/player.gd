@@ -284,12 +284,15 @@ func apply_max_hp_up(p_amount: float) -> void:
 	hp = minf(hp + p_amount, max_hp)
 
 
-func apply_shield_trait(p_layers: int, p_params: Dictionary) -> void:
+func apply_shield_trait(p_layers: int, p_params: Dictionary, p_charge_mult: float = 1.0) -> void:
 	# MEC_SHIELD 消费点（A3 §4.4）：每 interval_s 生成护盾格挡 1 次接触伤害；
 	# 2 层 → interval_lv2(5.5s)。重复挂载/层变化即刷新间隔；首个护盾需走完一次充能。
-	shield_interval = float(p_params.get(
+	# R69 品质梯分化：p_charge_mult = 词条 value（白 1.0 → 蓝/紫/金 1.4/1.9/2.6），
+	# 充能间隔 = 基准 / 倍率（8s → 5.7/4.2/3.1s）——旧实现 value 死数字、四品质同速
+	var base: float = float(p_params.get(
 		"interval_lv2", p_params.get("interval_s", 8.0))) if p_layers >= 2 \
 		else float(p_params.get("interval_s", 8.0))
+	shield_interval = maxf(base / maxf(p_charge_mult, 0.05), 0.5)
 	if not shield_ready and shield_timer <= 0.0:
 		shield_timer = shield_interval
 

@@ -349,16 +349,21 @@ func _test_w9_chaser() -> void:
 	_check("追击：无敌回归环绕（刀位回轨道半径）", homed)
 	# ④ 挥砍动画放慢（0.15→0.34，用户点名）
 	_check("追击：挥砍窗口放慢（0.34s）", absf(OrbitWeapon.SLASH_WINDOW - 0.34) < 0.001)
-	# ⑤ 刀数量轴：谐振轨道 ×2 → 3 刀（W9 适配）
+	# ⑤ 刀数量轴：谐振轨道 ×2 → 3 刀（R69 聚合直读——挂上即重铺，无需事件派发；
+	# 白 value 1.45 → round ×2 层 = +2，基 1 刀 → 3 刀）
 	var link: TraitData = _gl.registry.get_trait(&"MEC_ORBIT_LINK")
 	w9.attach_trait(link)
 	w9.attach_trait(link)
-	var tctx := TraitContext.new()
-	tctx.event = GameConst.TraitEvent.ON_SPAWN
-	tctx.weapon = w9
-	w9.trait_stack.dispatch(GameConst.TraitEvent.ON_SPAWN, tctx)
-	_check("刀数量：谐振轨道 ×2 → 3 刀（即时重铺）",
+	_check("刀数量：谐振轨道 ×2 → 3 刀（挂载即聚合直读重铺）",
 		w9.orbit_field != null and w9.orbit_field.orbs == 3,
+		"orbs=%d" % (w9.orbit_field.orbs if w9.orbit_field != null else -1))
+	# R69 品质梯：金卡第 3 层（LOCAL 取优 value 1.45×2.6=3.77 → round 4 ×3 层 = +12）
+	var link_gold: TraitData = link.duplicate()
+	link_gold.rarity = 3
+	link_gold.value = 1.45 * 2.6
+	w9.attach_trait(link_gold)
+	_check("刀数量：金卡取优梯 ×3 层 → 基1 + round(3.77)×3 = 13 刀",
+		w9.orbit_field != null and w9.orbit_field.orbs == 13,
 		"orbs=%d" % (w9.orbit_field.orbs if w9.orbit_field != null else -1))
 	# ⑥ 大小轴：巨刃 ×1 → 判定 ×1.2 / 刀体视觉 ×1.25
 	w9.attach_trait(_gl.registry.get_trait(&"MEC_GIANT_BLADE"))

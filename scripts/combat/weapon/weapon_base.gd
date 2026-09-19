@@ -113,18 +113,25 @@ func attach_trait(p_trait: TraitData) -> bool:
 			player.call(&"apply_max_hp_up", p_trait.value)
 		if p_trait.pool == GameConst.PoolClass.ELEM \
 				and p_trait.params.has("reaction_mult") and elemental != null:
-			# ELE_REACTION_VOID：反应强化注册到 ElementalSystem（全局 ×1.8 聚合）
-			elemental.register_reaction_mult(uid, float(p_trait.params["reaction_mult"]))
+			# ELE_REACTION_VOID：反应强化注册到 ElementalSystem（全局聚合）
+			# R69 品质梯分化：改读 data.value（旧读 params.reaction_mult 固定 ×1.8——
+			# 四品质完全一样；value 语义 = 反应乘数，白 1.8 → 蓝/紫/金 ×2.5/×3.4/×4.7）
+			elemental.register_reaction_mult(uid,
+				maxf(float(p_trait.value), float(p_trait.params.get("reaction_mult", 1.8))))
 		if p_trait.id == &"MEC_SHIELD" and player != null:
 			# MEC_SHIELD 消费点接线（A3 §4.4 格挡力场：每 interval_s 护盾挡 1 次接触伤害，
 			# 2 层 → 5.5s）。层数取挂载后的 TraitBase（p_trait 是 TraitData 定义，无 layers
 			# 运行时字段——2026-08-31 P0 修复：直读 p_trait.layers 运行时崩溃致护盾条不显示）。
+			# R69：充能倍率同取挂载最优 value（LOCAL 池同 ID 取优——高品质卡 value 更大，
+			# 白 8s/蓝 5.7s/紫 4.2s/金 3.1s，品质梯分化）。
 			var shield_layers := 0
+			var shield_mult := 1.0
 			for mounted in trait_stack.traits:
 				if mounted.data != null and mounted.data.id == p_trait.id:
 					shield_layers = mounted.layers
+					shield_mult = maxf(float(mounted.data.value), 0.05)
 			if shield_layers > 0:
-				player.call(&"apply_shield_trait", shield_layers, p_trait.params)
+				player.call(&"apply_shield_trait", shield_layers, p_trait.params, shield_mult)
 	return attached
 
 

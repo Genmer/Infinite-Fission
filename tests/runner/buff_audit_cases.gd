@@ -256,7 +256,7 @@ func _test_add_value_table() -> void:
 		&"AFF_ATK_UP": 0.15, &"AFF_ROF_UP": 0.12, &"AFF_CDR": 0.1,
 		&"AFF_CRIT_RATE": 0.08, &"AFF_CRIT_DMG": 0.3, &"AFF_PROJ_SPD": 0.18,
 		&"AFF_HP_UP": 25.0, &"AFF_SKILL_HASTE": 0.12, &"AFF_PICKUP": 0.3,
-		&"AFF_AREA": 0.15, &"AFF_PIERCE": 1.0, &"AFF_MULTI": 1.0,
+		&"AFF_AREA": 0.15, &"AFF_PIERCE": 1.45, &"AFF_MULTI": 1.45,
 		&"AFF_XP_GAIN": 0.15, &"AFF_GOLD": 0.2,
 	}
 	var bad: Array[String] = []

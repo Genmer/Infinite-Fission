@@ -55,6 +55,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r62_endless_continue()
 	_test_r66_icd_and_corpse()
 	_test_r68_confetti()
+	_test_r69_rarity_ladder()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -2535,6 +2536,71 @@ func _test_r68_confetti() -> void:
 	_check("R68：复位后再爆发满编 90（多 Boss 复用不残留）",
 		burst._pieces.size() == 90, "size=%d" % burst._pieces.size())
 	burst.free()                                   # 宿主自清（ding Label 等余项）
+
+
+func _test_r69_rarity_ladder() -> void:
+	print("── R69 品质梯审计修复 ──")
+	# 用户反馈「自己检查一下有哪些buff多品质的分配不合理（金色不够强），或者干脆
+	# 不同级别数值一样的情况」——审计 6 处实锤，本块验收修复后的品质梯分化：
+	# ① 计数型取整塌缩（AFF_PIERCE/AFF_MULTI 基值 1.0 ×1.4 取整回 +1「蓝=白」）
+	# ② MEC_ORBIT_LINK value 死数字 + ON_SPAWN 实机永不派发（真机死卡）
+	# ③ MEC_SHIELD value 死数字（四品质同 8s）④ MEC_KILL_BLAST 同（同 30%）
+	# ⑤ ELE_REACTION_VOID 读 params 不读 value（同 ×1.8）
+	var gen: CardGenerator = _gl.card_generator
+	# ① 计数梯：基值 1.45 → round 梯 +1/+2/+3/+4（四档全分化）
+	for id in [&"AFF_PIERCE", &"AFF_MULTI", &"MEC_ORBIT_LINK"]:
+		var src: TraitData = _gl.registry.get_trait(id)
+		var ladder: Array = []
+		for r in range(4):
+			var cards: Array[Dictionary] = [{
+				"kind": CardGenerator.CardKind.TRAIT, "id": src.id, "rarity": r,
+				"data": src, "value_scale": 1.0, "display_name": "t", "description": "t",
+			}]
+			gen._apply_rarity_values(cards)
+			ladder.append(int(round(float((cards[0].get("data") as TraitData).value))))
+		_check("R69：%s 取整梯 +1/+2/+3/+4（基值 1.45 治「蓝=白」塌缩）" % String(id),
+			ladder == [1, 2, 3, 4], str(ladder))
+	# ② 卡面真值（金卡）：计数 +4（非通用分支的 +3.8 假数字）
+	var pierce_gold := _gold_card(gen, &"AFF_PIERCE")
+	_check("R69：穿透弹头金卡卡面「+4」（round 终值，非 +3.8）",
+		String(pierce_gold.get("description")).contains("+4")
+		and not String(pierce_gold.get("description")).contains("+3.8"),
+		String(pierce_gold.get("description")))
+	# ③ 格挡力场：金卡充能 ×2.6 → 8s/5.7/4.2/3.1s（卡面 + 实际间隔）
+	var shield_gold := _gold_card(gen, &"MEC_SHIELD")
+	var sd := String(shield_gold.get("description"))
+	_check("R69：格挡力场金卡卡面「3.1s」/「2.1s」（充能 ×2.6）",
+		sd.contains("3.1s") and sd.contains("2.1s"), sd)
+	_gl.player.apply_shield_trait(1, {"interval_s": 8.0, "interval_lv2": 5.5}, 2.6)
+	_check("R69：格挡金卡实际充能间隔 8/2.6 ≈ 3.08s",
+		absf(_gl.player.shield_interval - 8.0 / 2.6) <= 0.01,
+		"i=%.2f" % _gl.player.shield_interval)
+	_gl.player.apply_shield_trait(1, {"interval_s": 8.0, "interval_lv2": 5.5}, 1.0)
+	# ④ 死亡新星：金卡 value 0.78 + 卡面 78%/层2 117%
+	var blast_gold := _gold_card(gen, &"MEC_KILL_BLAST")
+	var bd := String(blast_gold.get("description"))
+	_check("R69：死亡新星金卡 value 0.78（42/57/78% ATK 品质梯）",
+		absf(float((blast_gold.get("data") as TraitData).value) - 0.78) <= 0.001,
+		"v=%.3f" % float((blast_gold.get("data") as TraitData).value))
+	_check("R69：死亡新星金卡卡面「78%」/层2「117%」",
+		bd.contains("78%") and bd.contains("117%"), bd)
+	# ⑤ 虚空反应：金卡 value 4.68 + 卡面 ×4.7（直乘口径，非 1+(N−1)×s）
+	var void_gold := _gold_card(gen, &"ELE_REACTION_VOID")
+	_check("R69：虚空反应金卡 value ×4.68 + 卡面「×4.7」（直乘口径）",
+		absf(float((void_gold.get("data") as TraitData).value) - 4.68) <= 0.001
+			and String(void_gold.get("description")).contains("×4.7"),
+		String(void_gold.get("description")))
+
+
+func _gold_card(p_gen: CardGenerator, p_id: StringName) -> Dictionary:
+	# 品质化单卡生成辅助（rarity=3 金）
+	var src: TraitData = _gl.registry.get_trait(p_id)
+	var cards: Array[Dictionary] = [{
+		"kind": CardGenerator.CardKind.TRAIT, "id": src.id, "rarity": 3,
+		"data": src, "value_scale": 1.0, "display_name": "t", "description": "t",
+	}]
+	p_gen._apply_rarity_values(cards)
+	return cards[0]
 
 
 func _bounce_probe(p_proj: ProjectileBase, p_bounce: TraitData, p_params: Dictionary) -> void:

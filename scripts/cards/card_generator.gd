@@ -167,9 +167,16 @@ func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
 					out.condition["params"]["pct"] = new_pct
 					hp_old_txt = "HP<%d%%" % int(round(base_pct * 100.0))
 					hp_new_txt = "HP<%d%%" % int(round(new_pct * 100.0))
-				out.description = _scaled_description(data.description, scale, rarity)
-				if not hp_new_txt.is_empty() and out.description.contains(hp_old_txt):
-					out.description = out.description.replace(hp_old_txt, hp_new_txt)
+				# R69 机制/计数型词条特例卡面（_rarity_desc_mech）：这些词条的品质数值
+				# 口径（取整计数/除法间隔/直接乘数）与通用 ×N、带符号% 重写不匹配——
+				# 通用 ③ 分支会把「+1」重写成非整数「+3.8」与实际 round 消费不符
+				var custom_desc := _rarity_desc_mech(data, scale, rarity)
+				if custom_desc != "":
+					out.description = custom_desc
+				else:
+					out.description = _scaled_description(data.description, scale, rarity)
+					if not hp_new_txt.is_empty() and out.description.contains(hp_old_txt):
+						out.description = out.description.replace(hp_old_txt, hp_new_txt)
 				card["description"] = out.description
 				card["data"] = out
 			CardKind.MASTERY:
@@ -189,6 +196,47 @@ func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
 					if boosts > 1 else ""
 				card["description"] = ("武器等级 +%d%s（终值表口径）" % [target - lv, boost_txt]) \
 					if target > lv else "已满级（终值表口径）"
+
+
+# R69 计数型词条（+N 取整消费；基值 1.45 → 取整梯 = 白/蓝/紫/金 +1/+2/+3/+4——
+# 基值 1.0 时 ×1.4 取整塌回 +1，「蓝=白」；1.45 是四档全分化的最小实用基值）
+const COUNT_TRAIT_IDS: Array[StringName] = [&"AFF_PIERCE", &"AFF_MULTI", &"MEC_ORBIT_LINK"]
+
+
+func _rarity_desc_mech(p_data: TraitData, p_scale: float, p_rarity: int) -> String:
+	# R69 机制/计数型词条卡面品质重写（返回 "" = 非特例，走通用 _scaled_description）：
+	# 这些词条的品质口径与通用分支不匹配——通用 ③ 会把「+1」写成非整数「+3.8」、
+	# ×N 分支按 1+(N−1)×scale 而它们的乘数是 value 直乘、间隔是除法。
+	# · 计数型（AFF_PIERCE/AFF_MULTI/MEC_ORBIT_LINK）：「+1」→「+N」按 round 终值
+	# · MEC_SHIELD（value=充能倍率）：秒数 = 基准/倍率（8s→5.7/4.2/3.1s）
+	# · MEC_KILL_BLAST（value=爆炸伤害比）："30%"/层2 "45%" 按终值重写
+	# · ELE_REACTION_VOID（value=反应乘数直乘）：「×1.8」→「×N.N」
+	var _r := p_rarity                                 # 预留：文案按品质措辞（当前不用）
+	var desc := p_data.description
+	if COUNT_TRAIT_IDS.has(p_data.id):
+		var n := maxi(int(round(p_data.value * p_scale)), 1)
+		return _replace_first(desc, "+1", "+%d" % n)
+	if p_data.id == &"MEC_SHIELD":
+		var s1 := float(p_data.params.get("interval_s", 8.0)) / p_scale
+		var s2 := float(p_data.params.get("interval_lv2", 5.5)) / p_scale
+		var out_s := _replace_first(desc, "8s", "%.1fs" % s1)
+		return _replace_first(out_s, "5.5s", "%.1fs" % s2)
+	if p_data.id == &"MEC_KILL_BLAST":
+		var pct := int(round(p_data.value * p_scale * 100.0))
+		var pct2 := int(round(float(p_data.params.get("atk_ratio_lv2", 0.45)) * p_scale * 100.0))
+		var out_p := _replace_first(desc, "30%", "%d%%" % pct)
+		return _replace_first(out_p, "45%", "%d%%" % pct2)
+	if p_data.id == &"ELE_REACTION_VOID":
+		return _replace_first(desc, "×1.8", "×%.1f" % (p_data.value * p_scale))
+	return ""
+
+
+static func _replace_first(p_s: String, p_what: String, p_with: String) -> String:
+	# 只替换首次出现（GDScript String.replace 无次数参数）
+	var i := p_s.find(p_what)
+	if i < 0:
+		return p_s
+	return p_s.substr(0, i) + p_with + p_s.substr(i + p_what.length())
 
 
 func _scaled_description(p_desc: String, p_scale: float, p_rarity: int) -> String:

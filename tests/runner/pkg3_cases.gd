@@ -1379,17 +1379,13 @@ func _test_orbit_weapon() -> void:
 		{"orbs": 2, "orbit_radius": 90.0, "angular_speed": 0.0, "orb_radius": 16.0,
 		"hit_cd": 0.25, "knockback": 0.0, "nullify": false})
 	var w1 := _make_weapon(GameConst.WeaponForm.MELEE, data1, Vector2(360, 640)) as OrbitWeapon
-	# 谐振轨道通道（MEC_ORBIT_LINK：ctx.weapon = OrbitWeapon 的 ON_SPAWN 派发）
-	var stack := TraitStack.new()
-	stack.attach(_make_trait_data("TRAIT_ORBIT_LINK", GameConst.PoolClass.MECH, &"",
-		&"EF_MECH", 0.0, [GameConst.TraitEvent.ON_SPAWN]))
-	var tctx := TraitContext.new()
-	tctx.event = GameConst.TraitEvent.ON_SPAWN
-	tctx.weapon = w1
-	stack.dispatch(GameConst.TraitEvent.ON_SPAWN, tctx)
-	_check("谐振轨道：MEC_ORBIT_LINK ON_SPAWN → orbs_bonus +1", w1.orbs_bonus == 1)
+	# 谐振轨道通道（R69 重做：旧 ON_SPAWN 派发在实机永不触发——环绕武器不产投射物，
+	# 生产链唯一 ON_SPAWN 派发点在 projectile_base；测试手动派发掩盖成「看似工作」。
+	# 现改参数侧聚合直读挂载表：挂上即 +刀，品质梯 白/蓝/紫/金每层 +1/+2/+3/+4）
+	w1.attach_trait(_make_trait_data("MEC_ORBIT_LINK", GameConst.PoolClass.MECH, &"",
+		&"EF_MECH", 1.45, []))
 	w1.tick(DT)                                    # try_fire → 创建常驻力场
-	_check("力场参数重写：orbs = 表值+加成 = 3 / 半径 90 / 角速度口径",
+	_check("谐振轨道：挂载即聚合直读（R69）orbs = 表值2+round(1.45)×1 = 3",
 		w1.orbit_field != null and (w1.orbit_field.orbs == 3
 			and (_approx(w1.orbit_field.orbit_radius, 90.0)
 				and _approx(w1.orbit_field.angular_speed, 0.0))))
