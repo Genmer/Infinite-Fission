@@ -146,6 +146,10 @@ func _physics_process(p_raw_delta: float) -> void:
 			frame_order.append(&"player")
 			player.tick(gd, Vector2.ZERO)
 			_tick_xp_shards(gd)               # B.1：经验碎片磁吸/吸收（拾取属玩家阶段）
+			if _combo_left > 0.0:             # E9 连杀窗口（战斗通道——暂停冻结）
+				_combo_left -= gd
+				if _combo_left <= 0.0:
+					_combo_count = 0
 			if stage_probe_enabled:
 				stage_probe_us[&"player"] = Time.get_ticks_usec() - _probe_t0
 				_probe_t0 = Time.get_ticks_usec()
@@ -528,6 +532,8 @@ func start_run(p_daily_seed: int = -1) -> bool:
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
 	_endless_mode = false                       # R62：新局非无尽态（continue_endless 置位）
+	_combo_count = 0                            # E9：连杀窗口复位
+	_combo_left = 0.0
 	_victory_settle_pending = false
 	wave_director.advance_blocked = false        # R62：收尾窗闸复位（防御）
 	wave_director.wave_table = MapTable.load_table(current_map_id, registry)
@@ -1272,6 +1278,9 @@ func _tick_projectiles(p_gd: float) -> void:
 
 
 var _enemy_bullet_buf: Array[Node2D] = []     # E7 复用缓冲（敌弹网格快照——零每帧分配）
+var _combo_count: int = 0                     # E9 连杀计数（1.2s 窗口；割草爽感跳字）
+var _combo_left: float = 0.0                  # 连杀窗口剩余
+var _combo_label: Label = null                # ×N 连杀跳字（复用单 Label 重写文本）
 
 
 func _collect_enemy_bullets() -> Array[Node2D]:
@@ -1342,6 +1351,11 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 		for shard in active_shards:
 			if is_instance_valid(shard):
 				shard.force_magnet()
+	# E9 连杀：窗口内击杀 +1；≥5 起显示 ×N 跳字（档位色阶 5/10/20——爽感可视化）
+	_combo_count += 1
+	_combo_left = 1.2
+	if _combo_count >= 5:
+		_show_combo_toast()
 	# 金币掉账（M7 战地黑市货币：gold_drop = {chance, min, max}，首次接线——此前为死数据；
 	# 词缀二期：祝福·丰饶/富矿金币倍率在掉账额入账（player.map_gold_mult，真源 map_table.gd）；
 	# R5.12-P1 AFF_GOLD 点金：掉率（钳 ≤1）与掉量两处 ×(1+gold_find_pct)）
@@ -1404,6 +1418,33 @@ class LevelBurst:
 		var gold := Color(1.0, 0.84, 0.29)
 		draw_arc(Vector2.ZERO, r, 0.0, TAU, 40, Color(gold.r, gold.g, gold.b, 0.85 * a), 4.0, true)
 		draw_arc(Vector2.ZERO, r * 0.72, 0.0, TAU, 32, Color(gold.r, gold.g, gold.b, 0.3 * a), 9.0, true)
+
+
+func _show_combo_toast() -> void:
+	# E9 ×N 连杀跳字：屏幕中带单 Label 复用（低频事件零池化压力）——
+	# 果冻弹入 + 上浮自隐；档位色阶（5 白 / 10 蓝 / 20 金）
+	if _combo_label == null or not is_instance_valid(_combo_label):
+		_combo_label = Label.new()
+		StickerTheme.label_sticker(_combo_label, 30, Color.WHITE, 10, Color(0.13, 0.15, 0.29), true)
+		_combo_label.z_index = 60
+		add_child(_combo_label)
+	var col := Color.WHITE
+	if _combo_count >= 20:
+		col = PopPalette.GOLD
+	elif _combo_count >= 10:
+		col = PopPalette.XP
+	_combo_label.add_theme_color_override("font_color", col)
+	_combo_label.text = "×%d 连杀！" % _combo_count
+	_combo_label.reset_size()
+	_combo_label.position = Vector2(360.0 - _combo_label.size.x * 0.5, 420.0)
+	_combo_label.pivot_offset = _combo_label.size * 0.5
+	_combo_label.scale = Vector2(0.3, 0.3)
+	_combo_label.modulate = Color(1, 1, 1, 1)
+	var tw := _combo_label.create_tween()
+	tw.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	tw.tween_property(_combo_label, "scale", Vector2.ONE, 0.10) 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(0.55)
+	tw.tween_property(_combo_label, "modulate:a", 0.0, 0.30)
 
 
 func _spawn_xp_shard(p_pos: Vector2, p_value: float) -> void:
@@ -1548,3 +1589,11 @@ func _clear_battlefield() -> void:
 	if popup_manager != null:
 		popup_manager.clear_all()
 	(pools[&"particle"] as ParticlePool).release_active_all()
+
+
+func _tick_combo_for_test() -> void:
+	# E9 测试观测口：手动推进连杀窗口衰减（帧序内联逻辑的测试直调副本）
+	if _combo_left > 0.0:
+		_combo_left -= 0.05
+		if _combo_left <= 0.0:
+			_combo_count = 0
