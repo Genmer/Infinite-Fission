@@ -69,6 +69,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_ev78()
 	_test_ev9_combo()
 	_test_f2_indicator()
+	_test_f3_e11()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3377,3 +3378,52 @@ func _test_f2_indicator() -> void:
 	_check("F2：0.45s 后自熄（visible=false）", not ind.visible and not ind._active)
 	_release_r72_enemy(e)
 	_gl.call(&"quit_to_menu")
+
+
+func _test_f3_e11() -> void:
+	print("── F3 成对提示 + E11 分档记录 ──")
+	# F3：成对模式卡面带 ⇄ 行内提示（普通模式无）
+	var cards6: Array[Dictionary] = []
+	for i in range(6):
+		cards6.append({"kind": CardGenerator.CardKind.TRAIT, "id": &"T%d" % i,
+			"rarity": 0, "value_scale": 1.0, "display_name": "n%d" % i, "description": "d"})
+	var ui := CardSelectUI.new()
+	_gl.add_child(ui)
+	ui.open(cards6, true)
+	var has_hint := false
+	for btn in ui._buttons:
+		if btn.visible:
+			var dl: Label = btn.get_node_or_null("CardDesc") as Label
+			if dl != null and String(dl.text).contains("同一行"):
+				has_hint = true
+	_check("F3：成对模式卡面行内提示（⇄ 同一行）", has_hint)
+	ui.close()
+	ui.open(cards6.slice(0, 3) if false else [cards6[0], cards6[1], cards6[2]], false)
+	var no_hint := true
+	for btn in ui._buttons:
+		if btn.visible:
+			var dl: Label = btn.get_node_or_null("CardDesc") as Label
+			if dl != null and String(dl.text).contains("同一行"):
+				no_hint = false
+	_check("F3：普通模式无成对提示（零噪音）", no_hint)
+	ui.close()
+	ui.free()
+	# E11：分档结算——地狱局写 "#2" 键、普通键不受扰、结晶乘区
+	var save_map_records: Dictionary = Meta.map_records.duplicate()
+	var crystals0: int = Meta.crystals
+	Meta.set_run_map(&"world_grass")
+	Meta.set_run_difficulty(GameConst.Difficulty.HELL)
+	Meta._run_max_wave = 12
+	Meta._run_kills = 0
+	Meta._run_max_level = 5
+	Meta._settle_run_result()
+	_check("E11：地狱局记录写分档键 map#2（普通键不混）",
+		Meta.map_records.has("world_grass#2")
+			and int(Meta.map_records["world_grass#2"]["best_wave"]) == 12
+			and int(Meta.map_records.get("world_grass", {}).get("best_wave", 0)) == 0)
+	_check("E11：地狱结算结晶 ×1.6（≥ 基值 18×1.6=28）",
+		Meta.crystals - crystals0 >= 28, "gain=%d" % (Meta.crystals - crystals0))
+	# 还原（测试档卫生）
+	Meta.map_records = save_map_records
+	Meta.crystals = crystals0
+	Meta.set_run_difficulty(GameConst.Difficulty.NORMAL)

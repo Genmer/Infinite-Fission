@@ -158,6 +158,10 @@ func _setup_button(p_btn: Button, p_card: Dictionary) -> void:
 	var value_scale := float(p_card.get("value_scale", 1.0))
 	if value_scale > 1.0:
 		desc_text += "\n品质加成：该词条效果 ×%.1f（已计入上行数字）" % value_scale
+	# F3 成对抉择行内提示（self-evolution）：窄卡空间小——组合语义就地说明
+	#（标题有全局说明，但首见玩家视线落在卡上）
+	if _dual:
+		desc_text += "\n⇄ 点这张会同时带走同一行另一张"
 	desc_label.text = desc_text
 	# 层级圆点（rarity+1 枚稀有度色圆珠）
 	var dots: HBoxContainer = face["dots"]

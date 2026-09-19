@@ -550,6 +550,7 @@ func start_run(p_daily_seed: int = -1) -> bool:
 	spawner.difficulty = _difficulty             # R72 敌数值乘区（出生管线单点）
 	wave_director.difficulty = _difficulty        # R72 波表织入（新形态敌伴随）
 	player.set_difficulty(_difficulty)             # R73 风险回报（经验侧乘区镜像）
+	Meta.set_run_difficulty(_difficulty)           # E11：结算分档记录 + 结晶乘区
 	player.revives_left += GameConst.difficulty_revives(_difficulty)   # R72 难度附赠复活
 	var map_def := MapTable.get_map(current_map_id)
 	_apply_map_affixes(map_def)                  # 词缀二期：双词缀注入（祝→玩家 / 诅→敌侧）
@@ -1176,6 +1177,7 @@ func continue_run() -> bool:
 	spawner.difficulty = _difficulty
 	wave_director.difficulty = _difficulty       # R72 继续局保持织入口径
 	player.set_difficulty(_difficulty)             # R73 继续局保持风险回报
+	Meta.set_run_difficulty(_difficulty)           # E11：继续局结算分档
 	Meta.set_run_map(current_map_id)
 	var is_daily := bool(data.get("daily", false))
 	Meta.set_run_daily(is_daily)

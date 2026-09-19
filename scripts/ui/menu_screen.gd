@@ -980,9 +980,18 @@ func _rebuild_records() -> void:
 		var def := MapTable.MAPS[i]
 		var mr: Dictionary = Meta.map_records.get(String(def.id), {})
 		var depth := int(mr.get("endless_depth", 0))
-		lines.append(["%s 最高波次" % String(def.name),
-			"%d%s%s" % [int(mr.get("best_wave", 0)), " ★" if Meta.is_map_cleared(def.id) else "",
-				" · 无尽 %d" % depth if depth > 0 else ""]])
+		# E11 分档战绩：困/狱任一有记录 → 三档并列展示（一眼看到难度进度差）
+		var mr_h: Dictionary = Meta.map_records.get(String(def.id) + "#1", {})
+		var mr_l: Dictionary = Meta.map_records.get(String(def.id) + "#2", {})
+		if mr_h.is_empty() and mr_l.is_empty():
+			lines.append(["%s 最高波次" % String(def.name),
+				"%d%s%s" % [int(mr.get("best_wave", 0)), " ★" if Meta.is_map_cleared(def.id) else "",
+					" · 无尽 %d" % depth if depth > 0 else ""]])
+		else:
+			lines.append(["%s 最高波次（普/困/狱）" % String(def.name),
+				"%d%s / %d / %d" % [int(mr.get("best_wave", 0)),
+					"★" if Meta.is_map_cleared(def.id) else "",
+					int(mr_h.get("best_wave", 0)), int(mr_l.get("best_wave", 0))]])
 	lines.append(["通关进度", "%d/%d 图" % [Meta.cleared_count(), MapTable.count()]])
 	for l in lines:
 		var row := Panel.new()

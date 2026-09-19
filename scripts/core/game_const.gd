@@ -31,6 +31,11 @@ static func difficulty_reward_mult(p_d: int) -> float:
 	return [1.0, 1.5, 2.5][clampi(p_d, 0, 2)]
 
 
+static func difficulty_crystal_mult(p_d: int) -> float:
+	# E11 难度结算加成：困难 ×1.3 / 地狱 ×1.6（局外养成风险回报）
+	return [1.0, 1.3, 1.6][clampi(p_d, 0, 2)]
+
+
 static func difficulty_revives(p_d: int) -> int:
 	# 开局附赠复活次数：普通 0（原口径）/ 困难 1 / 地狱 3（用户裁定）
 	return [0, 1, 3][clampi(p_d, 0, 2)]

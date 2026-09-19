@@ -57,6 +57,7 @@ var _run_weapons_drawn: int = 0
 var _run_traits_drawn: int = 0
 var _run_boss_slain: int = 0
 var _run_map: StringName = MapTable.FIRST_MAP_ID   # 当前局地图（GameLoop.start_run 注入）
+var _run_difficulty: int = 0                 # E11：本局难度档（GameLoop 注入；结算分档键）
 var _run_daily: bool = false                  # 当前局为每日挑战（结算只记 daily_best，P2）
 # 局外养成（META_ROADMAP M8 落地，用户反馈「局外养成」）：裂变结晶 + 永久升级
 var crystals: int = 0                         # 裂变结晶（每局结算产出）
@@ -314,6 +315,11 @@ func _on_wave_cleared(p_wave: int) -> void:
 
 
 # ── 地图进度（M2 多地图，用户反馈「第一大关通关后打后面的」） ──────
+func set_run_difficulty(p_d: int) -> void:
+	# E11：GameLoop 开局/续档注入（结算分档键 + 结晶乘区源）
+	_run_difficulty = clampi(p_d, 0, 2)
+
+
 func set_run_map(p_map_id: StringName) -> void:
 	_run_map = p_map_id
 
@@ -455,8 +461,9 @@ func _settle_run_result() -> void:
 	records["best_kills"] = maxi(int(records["best_kills"]), _run_kills)
 	records["best_level"] = maxi(int(records["best_level"]), _run_max_level)
 	records["total_runs"] = int(records["total_runs"]) + 1
-	crystals += int(ceil(_run_max_wave * 1.5 + _run_kills / 25.0))   # 局外养成产出（波次+击杀）
-	var mkey := String(_run_map)
+	crystals += int(ceil((_run_max_wave * 1.5 + _run_kills / 25.0)
+		* GameConst.difficulty_crystal_mult(_run_difficulty)))   # E11：难度结算加成
+	var mkey := String(_run_map) + ("" if _run_difficulty == 0 else "#%d" % _run_difficulty)
 	if not map_records.has(mkey):
 		map_records[mkey] = {"best_wave": 0, "best_kills": 0, "best_level": 1}
 	var mr: Dictionary = map_records[mkey]
