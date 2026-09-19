@@ -1972,12 +1972,17 @@ func _tick_shock_fx(p_game_delta: float, p_shocked: bool) -> void:
 	if _shock_arc_cd <= 0.0:
 		_shock_arc_cd = SHOCK_ARC_PERIOD + randf() * 0.12
 		var patterns := _get_arc_patterns()
+		# R63 去球化（四轮）：Line2D.width 随 transform 缩放——scale hitbox_r×1.35≈30 把
+		# 4px 线宽放大成 ~120px 紫色巨条，双弧随机旋转交叉糊成一团 = 用户「纯紫色圆球」
+		# 根因（前三轮修的弹体/星闪/雾点都不是它）。宽度除以缩放补偿：屏上恒 3~6px 细弧
+		var arc_scale := hitbox_r * 1.35
 		for i in range(_shock_arcs.size()):
 			var arc := _shock_arcs[i]
 			arc.points = patterns[_arc_pattern_idx % patterns.size()]
 			_arc_pattern_idx += 1
 			arc.rotation = randf() * TAU
-			arc.scale = Vector2.ONE * hitbox_r * 1.35
+			arc.scale = Vector2.ONE * arc_scale
+			arc.width = clampf(hitbox_r * 0.18, 3.0, 6.0) / arc_scale
 			arc.visible = i == 0
 		# 第二弧延迟半程点亮（错相闪烁）
 		_shock_arcs[1].visible = false
