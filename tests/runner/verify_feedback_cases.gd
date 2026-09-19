@@ -53,6 +53,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_map_affixes2()
 	_test_endless_maps()
 	_test_r62_endless_continue()
+	_test_r66_icd_and_corpse()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -1519,6 +1520,65 @@ func _test_r62_endless_continue() -> void:
 	Meta.crystals = saved_crystals
 	Meta.map_records = saved_mr
 	RunSave.clear()
+
+
+# ── R66 暴击谐振 30s 内冷 + 尸体看门狗 / 结算屏残留回收 ───────────
+func _test_r66_icd_and_corpse() -> void:
+	print("── R66 暴击谐振内冷 / 尸体收口 ──")
+	# ① 暴击谐振内冷：触发 → 30s 内不再掷 → 冷却走完可再触发
+	_gl.relic_handler.activate(&"REL_CRIT_CHAIN")
+	_gl.relic_handler._crit_chain_cd_left = 0.0
+	var r := DamageResult.new()
+	r.final_value = 20.0
+	r.is_crit = true
+	r.target_uid = 12345
+	r.pos = Vector2(360.0, 600.0)
+	r.source_uid = int(_gl.player.weapon_slots[0].get_instance_id())
+	var resets0: int = _gl.relic_handler.crit_chain_resets
+	for i in range(60):                          # 15% → 扫描保证命中
+		EventBus.emit_damage_resolved(r)
+		if _gl.relic_handler.crit_chain_resets > resets0:
+			break
+	_check("内冷：扫描命中首次触发", _gl.relic_handler.crit_chain_resets > resets0)
+	_check("内冷：触发后 30s 冷却置位",
+		absf(_gl.relic_handler._crit_chain_cd_left - 30.0) < 0.01,
+		"cd=%.1f" % _gl.relic_handler._crit_chain_cd_left)
+	var resets1: int = _gl.relic_handler.crit_chain_resets
+	for i in range(200):                         # 内冷期 200 连暴击零触发
+		EventBus.emit_damage_resolved(r)
+	_check("内冷：30s 内 200 连暴击零触发", _gl.relic_handler.crit_chain_resets == resets1)
+	_gl.relic_handler.tick(31.0)
+	var resets2: int = _gl.relic_handler.crit_chain_resets
+	for i in range(60):
+		EventBus.emit_damage_resolved(r)
+		if _gl.relic_handler.crit_chain_resets > resets2:
+			break
+	_check("内冷：冷却走完可再触发", _gl.relic_handler.crit_chain_resets > resets2)
+	_gl.relic_handler._crit_chain_cd_left = 0.0  # 复位（防污染后续）
+	_gl.player.set("skill_cd_left", 0.0)
+	# ② 尸体看门狗：dead+visible 异常态强制回收；活敌不受扰
+	var corpse := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	corpse.spawn(_fixture_enemy(&"E_CORPSE", 100.0), 1, 0)
+	_gl.spawner.active.append(corpse)
+	corpse.set("dead", true)
+	var alive := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	alive.spawn(_fixture_enemy(&"E_ALIVE", 100.0), 1, 0)
+	_gl.spawner.active.append(alive)
+	_gl._reap_corpses_soon(2.0)                  # 越过 1Hz 降频
+	_check("看门狗：异常尸体（dead+visible）强制回收", not _gl.spawner.active.has(corpse))
+	_check("看门狗：活敌不受扰", _gl.spawner.active.has(alive))
+	_gl.spawner.active.erase(alive)
+	(_gl.pools[&"enemy"] as EnemyPool).release(alive)
+	# ③ 死亡局结算屏残留：进 GAME_OVER 全场碎片立即回收
+	_gl.current_map_id = &"world_grass"
+	_gl.start_run()
+	_gl._spawn_xp_shard(Vector2(300.0, 600.0), 50.0)
+	_gl._spawn_xp_shard(Vector2(400.0, 600.0), 30.0)
+	_check("前置：在场碎片 2 枚", _gl.active_shards.size() == 2)
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_check("结算屏：进 GAME_OVER 碎片全回收（boss 尸体/掉落冻屏收口）",
+		_gl.active_shards.is_empty())
+	_gl.quit_to_menu()
 
 
 # ── P2-1 伤害数字分级（白/蓝/紫/金——大小/颜色/音效三联动） ────────

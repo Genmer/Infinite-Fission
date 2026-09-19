@@ -29,6 +29,7 @@ var pending_shop_waves: int = 0               # REL_BLACK_MARKET：商店波排�
 # ── 遥测（测试观测口） ──
 var phoenix_triggered: int = 0
 var crit_chain_resets: int = 0
+var _crit_chain_cd_left: float = 0.0            # R66 暴击谐振内部冷却剩余（30s 一触发）
 var echo_copies: int = 0
 var elite_dmg_hits: int = 0                   # pool_breakdown 含 elite_dmg 的结算数
 var momentum_hits: int = 0                    # pool_breakdown 含 bounce_dmg 的结算数
@@ -56,6 +57,7 @@ func reset_run() -> void:
 	pending_shop_waves = 0
 	phoenix_triggered = 0
 	crit_chain_resets = 0
+	_crit_chain_cd_left = 0.0                    # R66：暴击谐振内冷复位
 	echo_copies = 0
 	elite_dmg_hits = 0
 	momentum_hits = 0
@@ -288,13 +290,20 @@ func _on_player_hit(_p_damage: float, _p_source_uid: int) -> void:
 			weapon.get_current_atk() * atk_ratio, false)
 
 
+func tick(p_game_delta: float) -> void:
+	# R66 遗物内部冷却推进（GameLoop PLAYING ⑥——选卡/暂停期冻结，战斗时口径）
+	_crit_chain_cd_left = maxf(_crit_chain_cd_left - p_game_delta, 0.0)
+
+
 func _on_damage_resolved(p_result: DamageResult) -> void:
 	# REL_CRIT_CHAIN 暴击重置冷却（15%）+ TROPHY/MOMENTUM 遥测（实际乘区在命中时点注入）
+	# R66：内部冷却 30s——触发成功后 30s 内不再掷骰（用户反馈「逆天」：高暴击多段
+	# 构筑下近乎连续重置角色技能/武器冷却）
 	if p_result == null:
 		return
 	if _listens(&"REL_EF_CRIT_CHAIN", &"damage_resolved") and p_result.is_crit:
 		var chance := float(_effect_param(&"REL_EF_CRIT_CHAIN", "chance", 0.15))
-		if rng.randf() < chance:
+		if _crit_chain_cd_left <= 0.0 and rng.randf() < chance:
 			# R15b（用户裁定）：暴击谐振的重置对象 = **角色技能冷却**（120s 大招——
 			# 武器开火间隔的“冷却”玩家无感）+ 顺手重置暴击来源武器的开火冷却。
 			# 生效全屏提示
@@ -305,8 +314,9 @@ func _on_damage_resolved(p_result: DamageResult) -> void:
 				weapon.cooldown_left = 0.0
 			if player != null and is_instance_valid(player):
 				player.set("skill_cd_left", 0.0)   # skill_ready 由 cd<=0 派生
-			crit_chain_resets += 1
-			EventBus.emit_mechanics_intro("⚡ 暴击谐振：角色技能冷却已重置！")
+				crit_chain_resets += 1
+				_crit_chain_cd_left = float(_effect_param(&"REL_EF_CRIT_CHAIN", "cd", 30.0))
+				EventBus.emit_mechanics_intro("⚡ 暴击谐振：角色技能冷却已重置！")
 			DebugStats.count(&"relic_crit_chain")
 	if p_result.pool_breakdown.has(&"elite_dmg"):
 		elite_dmg_hits += 1

@@ -177,6 +177,8 @@ func _physics_process(p_raw_delta: float) -> void:
 			frame_order.append(&"wave")
 			wave_director.tick(gd)
 			_tick_boss_summons(gd)            # B4 裂变召唤（R18 P3 接线，原零消费者死数据）
+			relic_handler.tick(gd)            # R66：遗物内部冷却推进（暴击谐振 30s 内冷）
+			_reap_corpses_soon(gd)            # R66：尸体看门狗（1Hz 降频——保底 + 诊断）
 			if stage_probe_enabled:
 				stage_probe_us[&"wave"] = Time.get_ticks_usec() - _probe_t0
 				_probe_t0 = Time.get_ticks_usec()
@@ -236,6 +238,13 @@ func change_state(p_new: int) -> bool:
 				shard.force_magnet()
 	if p_new == GameConst.GameStatus.GAME_OVER:
 		time_scale = 1.0                          # 结算屏恢复常态缩放（下一局干净起步）
+		# R66 残留收口：死亡局掉落（含 Boss 大珠）不再冻屏——进结算屏立即回收全场碎片
+		#（胜利路径 R15 收尾窗本就回收，此处统一死亡路径口径——玩家被 Boss 打死同帧
+		# 其掉落冻在结算屏后不消失 =「boss 尸体依旧不消失」体感源之一）
+		for shard in active_shards.duplicate():
+			if is_instance_valid(shard):
+				(pools[&"xp"] as XPPool).release(shard)
+		active_shards.clear()
 		if not _victory_pending_active():         # 夜间R24：非通关（死亡/暂停中放弃）→ 失败音
 			sfx.play(&"defeat")
 	# BGM 环境音拨运输（P2）：战斗态播放 / 菜单暂停（简化口径——PAUSED/LEVEL_UP 沿用
@@ -394,8 +403,27 @@ func continue_endless() -> bool:
 	return true
 
 
-func _on_boss_spawned_track_summons(p_boss: Node2D) -> void:
-	# B4 裂变召唤调度注册（summons 数据此前全 Boss 零消费者——R18 P3 死数据接线）
+var _corpse_watch_left: float = 0.0            # R66 尸体看门狗降频计时（1Hz）
+
+
+func _reap_corpses_soon(p_game_delta: float) -> void:
+	# R66 尸体看门狗（用户反馈「boss尸体依旧不消失」）：正常死亡链
+	#（_on_died → enemy_killed → spawner 池归还 → 隐藏）真件复现验证无缺口，
+	# 本看门狗为保底 + 诊断——active 中出现 dead 且 visible 的敌（异常态尸体）
+	# 强制归还并告警留痕；若真实局再现，日志可定位真源
+	_corpse_watch_left -= p_game_delta
+	if _corpse_watch_left > 0.0:
+		return
+	_corpse_watch_left = 1.0
+	for e in spawner.active.duplicate():
+		if e is Enemy and (e as Enemy).dead and (e as CanvasItem).visible:
+			push_warning("[GameLoop] 尸体看门狗：死亡敌仍可见，强制归还 %s（uid=%d）"
+				% [str(e.name), int((e as Enemy).uid)])
+			spawner.active.erase(e)
+			(pools[&"enemy"] as EnemyPool).release(e)
+
+
+func _on_boss_spawned_track_summons(p_boss: Node2D) -> void:	# B4 裂变召唤调度注册（summons 数据此前全 Boss 零消费者——R18 P3 死数据接线）
 	if p_boss == null or not is_instance_valid(p_boss):
 		return
 	var bdata: Variant = p_boss.get("data")
