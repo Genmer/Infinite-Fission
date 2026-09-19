@@ -18,13 +18,19 @@ var _phase_dots: Array[TextureRect] = []      # 相位点（Boss 阶段 1/2）
 var _banner: Label = null                     # 登场预警横幅
 var _banner_left: float = 0.0                 # 横幅剩余展示（raw 通道）
 var _last_phase: int = 0                      # 相位点脏检查（避免每帧换贴图）
+# E6 打击反馈（self-evolution）：受击端闪 + 血条后缘白闪残影
+var _hurt_flash: float = 0.0                  # 受击闪光剩余（raw 通道衰减）
+var _displayed_pct: float = 1.0               # 平滑跟随的显示比例（快落后追真实值）
 var _poise_fill: Panel = null                 # 韧性条（R23 P3：受击积累→硬直打断可视化）
 var _poise_style: StyleBoxFlat = null
+var _ghost_fill: Panel = null                 # E6 白色残影段（本次掉血量速读）
+var _last_pct: float = 1.0                    # E6 上一帧 HP 比例（掉血检测）
 
 const BAR_SIZE := Vector2(560.0, 18.0)
 const BAR_POS := Vector2(80.0, 154.0)
 const BANNER_TIME := 2.2                      # 预警横幅展示时长 s
 const BANNER_FADE := 0.35                     # 末段淡出 s
+const HURT_FLASH_TIME := 0.12                 # E6 受击白闪时长 s
 
 
 func _ready() -> void:
@@ -42,7 +48,31 @@ func tick(p_raw_delta: float) -> void:
 	var max_hp: float = boss.get("max_hp")
 	var hp: float = boss.get("hp")
 	var pct := 0.0 if max_hp <= 0.0 else clampf(hp / max_hp, 0.0, 1.0)
+	# E6 掉血检测（每帧 HP 观测——打一下闪一下；回血不上闪）
+	if pct < _last_pct - 0.0005 and _hurt_flash <= 0.0:
+		_hurt_flash = HURT_FLASH_TIME
+	_last_pct = pct
+	# E6 血条打击反馈：显示比例以 12/s 追真实值——掉血瞬间「白残影段」留在原位
+	#（白条更短=本次实际打掉的量，速读 DPS；追上后残影消失）
+	if _displayed_pct < pct or _displayed_pct - pct < 0.003:
+		_displayed_pct = pct
+	else:
+		_displayed_pct = maxf(_displayed_pct - 0.4 * p_raw_delta, pct)
+	var ghost_w := BAR_SIZE.x * (_displayed_pct - pct)
 	_fill.size = Vector2(BAR_SIZE.x * pct, BAR_SIZE.y)
+	if _frame != null and _ghost_fill != null:
+		_ghost_fill.visible = ghost_w > 1.0
+		_ghost_fill.position = Vector2(BAR_POS.x + BAR_SIZE.x * pct, BAR_POS.y)
+		_ghost_fill.size = Vector2(maxf(ghost_w, 0.0), BAR_SIZE.y)
+	# 受击端闪：掉血瞬间填充条白化 0.12s（快速衰减回珊瑚色）
+	if _hurt_flash > 0.0:
+		_hurt_flash = maxf(_hurt_flash - p_raw_delta, 0.0)
+		var k := _hurt_flash / HURT_FLASH_TIME
+		_fill_style.bg_color = PopPalette.ENEMY.lerp(Color.WHITE, 0.75 * k)
+		_face_icon.modulate = Color(1.0 + 0.5 * k, 1.0 + 0.3 * k, 1.0 + 0.3 * k)
+	elif _face_icon.modulate != Color.WHITE:
+		_fill_style.bg_color = PopPalette.ENEMY
+		_face_icon.modulate = Color.WHITE
 	# R23 韧性条同步（poise_max 0 = 未启用隐藏；比例 = 积累/上限）
 	var pmax: float = float(boss.get("poise_max")) if boss.get("poise_max") != null else 0.0
 	if _poise_fill != null:
@@ -75,8 +105,10 @@ func _on_boss_spawned(p_enemy: Node2D) -> void:
 	_name_label.text = str(p_enemy.get("data").get("display_name")) if p_enemy.get("data") != null else "BOSS"
 	_root.visible = true
 	_last_phase = -1
+	_displayed_pct = 1.0
 	tick(0.0)
 	_show_banner(Lore.boss_warning(_name_label.text))
+
 
 
 func _on_enemy_killed(p_enemy: Node2D) -> void:
@@ -134,6 +166,19 @@ func _build_ui() -> void:
 	_fill.size = BAR_SIZE
 	_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_fill)
+	# E6 白色残影段（填充与描边之间——掉血瞬间的「刚打掉的量」速读）
+	_ghost_fill = Panel.new()
+	_ghost_fill.name = "GhostFill"
+	var ghost_style := StyleBoxFlat.new()
+	ghost_style.bg_color = Color(1.0, 1.0, 1.0, 0.85)
+	ghost_style.set_corner_radius_all(9)
+	_ghost_fill.add_theme_stylebox_override("panel", ghost_style)
+	_ghost_fill.position = BAR_POS
+	_ghost_fill.size = Vector2.ZERO
+	_ghost_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ghost_fill.show_behind_parent = false
+	_root.add_child(_ghost_fill)
+	_root.move_child(_ghost_fill, _root.get_children().find(_frame))
 	_frame = Panel.new()
 	_frame.name = "Frame"
 	var frame_style := StyleBoxFlat.new()

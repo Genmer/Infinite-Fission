@@ -65,6 +65,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_ev2_revive()
 	_test_ev3_burst()
 	_test_ev5_first_met()
+	_test_ev6_bossbar()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3269,3 +3270,33 @@ func _test_ev5_first_met() -> void:
 		(_gl.pools[&"enemy"] as EnemyPool).release(se)
 	sp.free()
 	Meta.codex_first_met.clear()
+
+
+func _test_ev6_bossbar() -> void:
+	print("── E6 Boss 血条打击反馈（白残影 + 受击白闪） ──")
+	var bar := _gl.hud.get_node_or_null("BossBar") as BossBar
+	if bar == null:
+		bar = BossBar.new()
+		_gl.add_child(bar)
+	var boss := _spawn_r72_enemy(&"E6_boss1", Vector2(400.0, 300.0))
+	boss.add_tag(GameConst.TAG_BOSS) if boss.has_method(&"add_tag") else null
+	boss.tags = GameConst.TAG_BOSS
+	EventBus.emit_boss_spawned(boss)
+	_check("E6 前置：血条登场", bar.boss == boss and bar._root.visible)
+	var pct0: float = bar._last_pct
+	boss.hp = boss.max_hp * 0.7                  # 打掉 30%
+	bar.tick(1.0 / 60.0)
+	_check("E6：掉血瞬间 → 受击白闪激活 + 残影段出现",
+		bar._hurt_flash > 0.0 and bar._ghost_fill.visible
+			and bar._displayed_pct > 0.69,
+		"flash=%.2f ghost_w=%.0f" % [bar._hurt_flash, bar._ghost_fill.size.x])
+	for i in range(70):
+		bar.tick(1.0 / 60.0)                     # 1.16s：白闪衰减 + 残影追平（0.4/s 追速）
+	_check("E6：0.66s 后白闪熄灭（填充回珊瑚色）",
+		bar._hurt_flash <= 0.0
+			and is_equal_approx(bar._fill_style.bg_color.r, PopPalette.ENEMY.r))
+	_check("E6：残影追平真实血量（速读归零）",
+		bar._ghost_fill.visible == false)
+	EventBus.emit_enemy_killed(boss)             # 死亡链内 spawner 归还（勿二次 release）
+	bar._root.visible = false
+	bar.boss = null
