@@ -234,8 +234,45 @@ func _test_r60_card_text() -> void:
 	_check("R60：背水协议条件阈值 HP<35% 不被缩放", fury.contains("HP<35%") and not fury.contains("49%"))
 	_check("R60：背水协议效果数字 ×1.6 → ×1.8", fury.contains("×1.8"))
 	# ④ 带符号分支回归护栏（旧路径行为不变）
-	_check("R60：+15% 金卡仍重写 +39%（带符号%分支回归）",
+	_check("R60：带符号 +15% 金卡仍重写 +39%（带符号%分支回归护栏）",
 		gen._scaled_description("攻击力 +15%，可叠 3 层", 2.6, 3).contains("+39%"))
+	# ⑤ R67 池上限随品质同缩（用户反馈「背水协议怎么什么品质都是35%」）：
+	# cap_pool_p=value 的 MULT 词条（背水 0.6/0.6、侦察 2.0/2.0）品质缩放曾被
+	# 单区钳制截回白值——卡面 ×N 与实际乘区双双失效；现上限随 scale 同缩
+	var fury_src: TraitData = _gl.registry.get_trait(&"SYN_LOWHP_FURY")
+	var fury_cards: Array[Dictionary] = [{
+		"kind": CardGenerator.CardKind.TRAIT, "id": fury_src.id, "rarity": 3,
+		"data": fury_src, "value_scale": 1.0, "display_name": "t", "description": "t",
+	}]
+	gen._apply_rarity_values(fury_cards)
+	var fury_gold: TraitData = fury_cards[0].get("data")
+	_check("R67：背水金卡 value ×2.6（0.6→1.56）且池上限同缩（cap 0.6→1.56）",
+		absf(fury_gold.value - 1.56) <= 0.001 and absf(fury_gold.cap_pool_p - 1.56) <= 0.001,
+		"v=%.3f cap=%.3f" % [fury_gold.value, fury_gold.cap_pool_p])
+	# 实际乘区：低血条件满足 → 聚合贡献 1.56 不再被截回 0.6
+	var fw: WeaponBase = _gl.player.weapon_slots[0]
+	var saved_hp: float = float(_gl.player.get("hp"))
+	var saved_max: float = float(_gl.player.get("max_hp"))
+	_gl.player.set("max_hp", 100.0)
+	_gl.player.set("hp", 20.0)                    # HP<35% 条件满足
+	fw.trait_stack.attach(fury_gold)
+	var fury_ctx := TraitContext.new()
+	fury_ctx.weapon = fw
+	fury_ctx.event = GameConst.TraitEvent.ON_HIT
+	fury_ctx.damage_ctx = DamageContext.new()
+	fury_ctx.damage_ctx.player_hp_pct = 0.2            # HP<35% 条件评估源
+	var pools: Array[Dictionary] = fw.trait_stack.collect_mult_pools(fury_ctx)
+	var fury_contrib := 0.0
+	for pe in pools:
+		if StringName(String(pe.get("pool_id"))) == &"fury_dmg":
+			fury_contrib = float(pe.get("contrib"))
+	_check("R67：背水金卡实际乘区贡献 1.56（×2.56——不再被 cap 截回 ×1.6）",
+		absf(fury_contrib - 1.56) <= 0.001, "contrib=%.3f" % fury_contrib)
+	for tb in fw.trait_stack.traits.duplicate():
+		if tb.data.id == fury_src.id:
+			fw.trait_stack.traits.erase(tb)        # 还原构筑（无 detach API——直接摘挂载表）
+	_gl.player.set("max_hp", saved_max)
+	_gl.player.set("hp", saved_hp)
 	# ⑤ 整数词条 round 对齐卡面（蓝 反弹+2 value 2.8 → +3 而非 int 截断回 2）
 	var bounce_eff: TraitEffect = load(
 		"res://scripts/combat/trait/builtin/trait_effect_bounce.gd").new()

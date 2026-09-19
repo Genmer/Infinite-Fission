@@ -143,6 +143,14 @@ func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
 				out.rarity = rarity
 				if scale > 1.0:
 					out.value = data.value * scale
+					# R66b：MULT/LOCAL 池上限随品质同缩——否则「上限=白值」的词条（背水协议
+					# cap 0.6 = value 0.6）品质缩放全被单区钳制截回白值，「什么品质都一样」
+					#（用户反馈「背水协议怎么什么品质都是35%」——35% 条件阈值本不缩放，
+					# 乘数也因上限失效）。上限语义不变：限制区内叠层总和，锚点随本卡缩放。
+					if data.pool == GameConst.PoolClass.MULT:
+						out.cap_pool_p = data.cap_pool_p * scale
+					elif data.pool == GameConst.PoolClass.LOCAL:
+						out.cap_local = data.cap_local * scale
 					out.description = _scaled_description(data.description, scale, rarity)
 					card["description"] = out.description
 				card["data"] = out
