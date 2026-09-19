@@ -1,7 +1,8 @@
 # scripts/combat/weapon/melee/arc_slash.gd
 # M-08 ArcSlash（架构 §2.8.5）：周期挥斩实体——固定角度弧形判定 + 消弹。
 # R7：击退权移交霰弹枪（本武器 180px 强击退每刀推飞全屏怪 = 用户实测「闪退」根因）；
-# 视觉重做——z_index 提层 + 双层弧面 + 0.15s 窗口内扫动 + 前缘亮线（原单层低透明楔块被怪压住不可见）。
+# R61 视觉（用户两轮反馈「怎么是个扇子」）：z_index 提层 + 实体刀形抡过（刀身/刃口/
+# 护手/柄多边形旋转扫扇角，淡刀残影 + 刀尖短弧光）——R59 弧带方案铺满扇区读感仍是扇子。
 # · 判定窗口 0.15s（窗口外无判定，AC-06.3 ±1° 扇形口径）；朝向 = 开窗时刻最近敌方向
 #   （窗口期内固定不扫摆）。
 # · 扇形判定：query_arc（中心角 facing、半角 arc_deg/2、半径 slash_radius）；
@@ -135,47 +136,72 @@ func _reset_state() -> void:
 
 
 func _draw() -> void:
-	# 挥斩视觉（夜间R59 重做——用户反馈「不是个刀吗，怎么是个扇子」：旧版铺整扇
-	# 面填充+全弧描边 = 判定范围画成扇子）。现 = 一道弯月刀光沿扇角扫过：
-	# 主体钢白弯月（窄弧带）+ 三道渐隐拖尾弧 + 亮白前缘；判定仍为 query_arc 扇形。
+	# 挥斩视觉（R61 二次重做——用户复反馈「不是个刀吗，怎么是个扇子」：R59 弯月弧带
+	# 方案中主体+三道拖尾弧相邻重叠，半透明弧带几乎铺满 120° 扇区，读感仍是扇子）。
+	# 现 = **实体刀形抡过**：刀身多边形（刀背弧线+刀刃+护手+柄，r 8→slash_radius 全长）
+	# 绕中心旋转扫过扇角，2 把淡刀残影给运动读感，刀尖拖 20° 短弧光表速度；
+	# 判定仍为 query_arc 扇形（视觉与判定口径解耦——视觉是刀在抡，判定是扇形范围）。
 	if not visible or window_left <= 0.0:
 		return
 	var half := deg_to_rad(arc_deg) * 0.5
 	var progress := clampf(1.0 - window_left / OrbitWeapon.SLASH_WINDOW, 0.0, 1.0)
 	var sweep := facing - half + 2.0 * half * clampf(progress * 1.15, 0.0, 1.0)
-	var band := deg_to_rad(34.0)                 # 刀光弧带张角（窄月）
-	var r_out := slash_radius
-	var r_in := slash_radius * 0.55
-	# 拖尾残影（3 道，位置滞后、α 递减——挥砍轨迹读感）
-	for k in range(3):
-		var tp := clampf(progress - 0.16 * float(k + 1), 0.0, 1.0)
+	# 残影：2 把淡刀（角度滞后拉开间距不叠本体、α 递减；填充+描边保证**刀形轮廓**可辨
+	# ——纯低透明填充会糊成弧形色带，正是「读感像扇子」的残影来源）
+	for k in range(2):
+		var tp := progress - 0.16 * float(k + 1)
 		if tp <= 0.0:
 			continue
-		var ts := facing - half + 2.0 * half * clampf(tp * 1.15, 0.0, 1.0)
-		var trail_a: float = [0.26, 0.14, 0.07][k]
-		_draw_moon(ts, band * 1.25, r_out * 0.98, r_in * 1.08,
-			Color(0.62, 0.85, 1.0, trail_a))
-	# 主体弯月（钢白，青蓝辉光边）
-	_draw_moon(sweep, band, r_out, r_in, Color(0.93, 0.97, 1.0, 0.8))
-	# 前缘亮线（刀刃）
-	var half_b := band * 0.5
-	var edge := PackedVector2Array()
-	for i in range(7):
-		var a := sweep - half_b + band * float(i) / 6.0
-		edge.append(Vector2(cos(a), sin(a)) * r_out)
-	draw_polyline(edge, Color(1.0, 1.0, 1.0, 0.95), 4.0, true)
+		var ta := facing - half + 2.0 * half * clampf(tp * 1.15, 0.0, 1.0)
+		draw_set_transform(Vector2(), ta, Vector2.ONE)
+		var ga: float = [0.34, 0.16][k]
+		_draw_blade(Color(0.62, 0.85, 1.0, ga), Color(0.82, 0.94, 1.0, minf(ga * 1.9, 0.7)), false)
+	# 本体刀（顶点渐变：刀背暗钢→刃口亮白，刃部突出；深色护手/柄）
+	draw_set_transform(Vector2(), sweep, Vector2.ONE)
+	_draw_blade(Color(0.93, 0.97, 1.0, 0.92), Color(1.0, 1.0, 1.0, 0.95), true)
+	draw_set_transform(Vector2(), 0.0, Vector2.ONE)
+	# 刀尖拖出的短弧光（仅 20°，跟在本体后——速度感；不再全弧描边）
+	var tip := PackedVector2Array()
+	for i in range(5):
+		var a := sweep - deg_to_rad(20.0) + deg_to_rad(20.0) * float(i) / 4.0
+		tip.append(Vector2(cos(a), sin(a)) * (slash_radius * 0.97))
+	draw_polyline(tip, Color(1.0, 1.0, 1.0, 0.4), 3.0, true)
 
 
-func _draw_moon(p_center_a: float, p_band: float, p_r_out: float, p_r_in: float,
-		p_color: Color) -> void:
-	# 弯月弧带多边形：外弧 a-band/2 → a+band/2（半径 p_r_out）+ 内弧反向（p_r_in）
-	var half_b := p_band * 0.5
-	var steps := 8
-	var pts := PackedVector2Array()
-	for i in range(steps + 1):
-		var a := p_center_a - half_b + p_band * float(i) / float(steps)
-		pts.append(Vector2(cos(a), sin(a)) * p_r_out)
-	for j in range(steps + 1):
-		var a2 := p_center_a + half_b - p_band * float(j) / float(steps)
-		pts.append(Vector2(cos(a2), sin(a2)) * p_r_in)
-	draw_colored_polygon(pts, p_color)
+func _draw_blade(p_fill: Color, p_line: Color, p_full: bool) -> void:
+	# 刀体（刀身局部系：+X = 出刃方向，刀尖在 slash_radius 端；-Y = 挥动前进侧 = 刃口）。
+	# 柄在玩家/化身近端（r≈8..34），刀身 r≈38..slash_radius——一把全长出刃的直背弯刃刀
+	var deep := Color(0.16, 0.28, 0.45, 0.95)
+	# 刀身：刀背（+Y 侧，近直带缓弧）→ 刀尖 → 刀刃（-Y 侧，弧形收锋）
+	var blade := PackedVector2Array([
+		Vector2(38.0, 6.0), Vector2(95.0, 5.0), Vector2(128.0, 0.0), Vector2(150.0, -10.0),
+		Vector2(142.0, -24.0), Vector2(100.0, -26.0), Vector2(65.0, -22.0), Vector2(38.0, -6.0),
+	])
+	if p_full:
+		# 顶点渐变（刀背暗钢 → 刃口亮白）：刀身不再是整块平色，刃/背一眼可分
+		var cols := PackedColorArray([
+			Color(0.55, 0.66, 0.84, 0.95), Color(0.62, 0.74, 0.90, 0.95),
+			Color(0.78, 0.88, 1.0, 0.95), Color(0.95, 0.98, 1.0, 0.95),
+			p_fill, Color(0.92, 0.97, 1.0, 0.95), Color(0.85, 0.93, 1.0, 0.95),
+			Color(0.70, 0.81, 0.96, 0.95),
+		])
+		draw_polygon(blade, cols)
+		# 刃口亮线（锋利读感；-Y 侧 = 旋转前进方向，刃口领先进刀）
+		draw_polyline(PackedVector2Array([
+			Vector2(142.0, -24.0), Vector2(100.0, -26.0), Vector2(65.0, -22.0), Vector2(38.0, -6.0),
+		]), p_line, 3.5, true)
+		# 刀背描线（暗色，压出背面轮廓——刀形立体感）
+		draw_polyline(PackedVector2Array([
+			Vector2(38.0, 6.0), Vector2(95.0, 5.0), Vector2(128.0, 0.0),
+		]), Color(0.25, 0.38, 0.58, 0.8), 2.0, true)
+	else:
+		# 残影：低透明填充 + 全轮廓描边——保住刀形剪影（无描边会糊成弧形色带）
+		draw_colored_polygon(blade, p_fill)
+		draw_polyline(blade, p_line, 2.0, true)
+	# 护手（径向短横档）+ 柄（近端深色握把，加粗保证可辨）
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(34.0, -10.0), Vector2(38.0, -10.0), Vector2(38.0, 10.0), Vector2(34.0, 10.0),
+	]), deep)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(6.0, -4.5), Vector2(34.0, -4.5), Vector2(34.0, 4.5), Vector2(6.0, 4.5),
+	]), deep)
