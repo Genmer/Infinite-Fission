@@ -68,6 +68,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_ev6_bossbar()
 	_test_ev78()
 	_test_ev9_combo()
+	_test_f2_indicator()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3351,4 +3352,28 @@ func _test_ev9_combo() -> void:
 	_gl._tick_combo_for_test()
 	_check("E9：窗口过期连击清零", _gl._combo_count == 0)
 	(_gl.pools[&"enemy"] as EnemyPool).release(stub)
+	_gl.call(&"quit_to_menu")
+
+
+func _test_f2_indicator() -> void:
+	print("── F2 受击方向指示（最近敌方向红弧） ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	var ind: HurtIndicator = _gl.hurt_indicator
+	ind._t = 0.0                                  # 复位（上一测试受击遗留弧光——真实时间未耗尽）
+	ind._process(0.01)
+	_check("F2 前置：指示器挂载且复位后隐藏", ind != null and not ind.visible)
+	var e := _spawn_r72_enemy(&"E1_grunt",
+		_gl.player.global_position + Vector2(120.0, 0.0))   # 正右方
+	_gl.player.invuln_left = 0.0
+	_gl.player.take_contact_damage(5.0)
+	_check("F2：受击触发指示器（可见 + 指向正右）",
+		ind.visible and ind._active
+			and absf(ind._angle - 0.0) <= 0.35, "angle=%.2f" % ind._angle)
+	var t0 := ind._t
+	ind._process(0.1)
+	_check("F2：弧光随时间衰减", ind._t < t0)
+	ind._process(1.0)
+	_check("F2：0.45s 后自熄（visible=false）", not ind.visible and not ind._active)
+	_release_r72_enemy(e)
 	_gl.call(&"quit_to_menu")

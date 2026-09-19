@@ -22,6 +22,7 @@ var difficulty: int = 0                         # R72 难度档（GameLoop 开�
 
 
 func _ready() -> void:
+	add_to_group(&"enemy_spawner")           # F2：受击方向指示查找口
 	rng.randomize()
 	EventBus.enemy_killed.connect(_on_enemy_killed)
 

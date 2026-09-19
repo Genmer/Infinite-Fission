@@ -70,6 +70,7 @@ var registry: DataRegistry = null
 var popup_manager: PopupManager = null
 var hud: HUD = null
 var boss_bar: BossBar = null
+var hurt_indicator: HurtIndicator = null      # F2 受击方向指示
 var game_over_screen: GameOverScreen = null
 var card_generator: CardGenerator = null
 var card_select_ui: CardSelectUI = null
@@ -1044,6 +1045,9 @@ func _boot_build_presentation() -> void:
 	boss_bar = BossBar.new()
 	boss_bar.name = "BossBar"
 	add_child(boss_bar)
+	hurt_indicator = HurtIndicator.new()         # F2：受击方向屏缘红弧（方向感补全）
+	hurt_indicator.name = "HurtIndicator"
+	add_child(hurt_indicator)
 	game_over_screen = GameOverScreen.new()
 	game_over_screen.name = "GameOverScreen"
 	add_child(game_over_screen)
