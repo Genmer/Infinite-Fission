@@ -57,6 +57,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r68_confetti()
 	_test_r69_rarity_ladder()
 	_test_r70_details_haste()
+	_test_r71_shop_fallback()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -2645,6 +2646,92 @@ func _test_r70_details_haste() -> void:
 	_check("R70：曳光条画布加厚 56×12（宽高比 >4 保持横条读感）",
 		img.get_width() == 56 and img.get_height() == 12,
 		"%d×%d" % [img.get_width(), img.get_height()])
+
+
+func _test_r71_shop_fallback() -> void:
+	print("── R71 黑市货架兜底 + 刷新按钮反馈 ──")
+	# 用户反馈「后期我刷新黑市，没刷出东西」：① 词条全叠满 → 四类别候选枯竭 →
+	# 货架空；② 金币不足刷新静默无效。修复：武器强化兜底货 + 按钮置灰
+	_gl.call(&"start_run")
+	var shop := _gl.shop_ui
+	# ① 枯竭复现：全部武器侧可售词条叠满 stack_max（跨武器合计口径）
+	var targets: Array[WeaponBase] = [_gl.player.weapon_slots[0]]
+	var add_ids := [&"W6_micro_missile", &"W8_orbit_field"]
+	var add_i := 0
+	var overflow := false
+	for round_i in range(60):
+		var any_left := false
+		for category in ["ADD", "MULT", "MECH", "ELEM"]:
+			var pool: Array[StringName] = _gl.card_generator._trait_candidates(
+				category, _gl.player, [])
+			var clean: Array[StringName] = []
+			for tid in pool:
+				var td: TraitData = _gl.card_generator.registry.get_trait(tid)
+				if td != null and not (td.pool_id in CardGenerator.PLAYER_SIDE_POOLS):
+					clean.append(tid)
+			if clean.is_empty():
+				continue
+			any_left = true
+			var src: TraitData = _gl.card_generator.registry.get_trait(clean[0])
+			var placed := false
+			for w in targets:
+				if w.trait_stack.attach(src):
+					placed = true
+					break
+			while not placed and add_i < add_ids.size():
+				var extra: WeaponBase = _gl.player.add_weapon(
+					_gl.registry.get_weapon(add_ids[add_i]))
+				add_i += 1
+				if extra != null:
+					targets.append(extra)
+					if extra.trait_stack.attach(src):
+						placed = true
+						break
+			if not placed:
+				overflow = true                    # 槽满也放不下（前置失败信号）
+				break
+		if overflow or not any_left:
+			break
+	_check("R71 前置：武器侧候选全部叠满（枯竭复现，无溢出）", not overflow)
+	shop.open(_gl.player, 20, false)
+	var buyable := 0
+	var weapon_up_count := 0
+	for ware in shop._wares:
+		if not ware.is_empty():
+			buyable += 1
+			if String(ware.get("kind")) == "weapon_up":
+				weapon_up_count += 1
+	_check("R71：枯竭货架仍有 ≥3 件可买（武器强化 + 治疗包兜底——不再「没刷出东西」）",
+		buyable >= 3, "buyable=%d" % buyable)
+	_check("R71：武器强化兜底货上架（词条池枯竭不断货）", weapon_up_count >= 1,
+		"up=%d" % weapon_up_count)
+	# ② 买武器强化 → 目标武器真升 1 级
+	_gl.player.set("gold", 500)
+	var up_idx := -1
+	for i in range(shop._wares.size()):
+		if not shop._wares[i].is_empty() \
+				and String(shop._wares[i].get("kind")) == "weapon_up":
+			up_idx = i
+			break
+	if up_idx >= 0:
+		var up_w: WeaponBase = shop._wares[up_idx].get("target")
+		var lv0: int = int(up_w.get("level"))
+		shop._buy(up_idx)
+		_check("R71：购买武器强化 → 目标武器 +1 级", int(up_w.get("level")) == lv0 + 1,
+			"lv %d→%d" % [lv0, int(up_w.get("level"))])
+	else:
+		_check("R71：购买武器强化（货架必有 weapon_up 索引）", false, "missing")
+	# ③ 金币不足 → 刷新按钮置灰（静默吞点击根修）+ 点了无副作用
+	_gl.player.set("gold", 0)
+	shop._refresh()
+	var refresh_btn := shop._root.get_node("ShopCard/ShopRefreshButton") as Button
+	_check("R71：金币不足刷新按钮置灰禁点", refresh_btn != null and refresh_btn.disabled)
+	var size_before: int = shop._wares.size()
+	shop._on_refresh_pressed()
+	_check("R71：金币不足点刷新无副作用（货架原样、不扣钱）",
+		shop._wares.size() == size_before and int(_gl.player.get("gold")) == 0)
+	shop.close()
+	_gl.call(&"quit_to_menu")
 
 
 func _bounce_probe(p_proj: ProjectileBase, p_bounce: TraitData, p_params: Dictionary) -> void:

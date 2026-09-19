@@ -92,6 +92,20 @@ func _reroll_wares(p_paid: bool) -> void:
 			"mult": market_mult(_wave, slot),
 		})
 		slot += 1
+	# R71 货架兜底（用户反馈「后期刷新黑市，没刷出东西」）：后期词条全叠满
+	# stack_max → 四类别候选全空 → 货架只剩治疗包。词条槽不足 4 时补「武器强化」货
+	#（未满级随机武器 level_up，Lv%d→%d）——有未满级武器则货架永远有货可刷；
+	# 全武器满级才让位给治疗包/遗物
+	while _wares.size() < 4:
+		var up_w := _random_upgradable_weapon()
+		if up_w == null:
+			break                               # 全满级（真·终局）——不再补位
+		var lv_now := int(up_w.get("level"))
+		_wares.append({
+			"kind": "weapon_up", "data": null, "rarity": 2, "target": up_w,
+			"level_from": lv_now, "level_to": mini(lv_now + 1, WeaponBase.MAX_LEVEL),
+			"base": 55.0, "mult": market_mult(_wave, 6 + _wares.size()),
+		})
 	_wares.append({
 		"kind": "heal", "data": null, "rarity": 0,
 		"base": 30.0, "mult": market_mult(_wave, 4),
@@ -107,6 +121,21 @@ func _reroll_wares(p_paid: bool) -> void:
 
 func _price(p_ware: Dictionary) -> int:
 	return int(ceil(float(p_ware["base"]) * float(p_ware["mult"])))
+
+
+func _random_upgradable_weapon() -> WeaponBase:
+	# 未满级武器随机取一（R71 货架兜底数据源；全满级返回 null）
+	if _player == null:
+		return null
+	var slots: Array = _player.get("weapon_slots")
+	var pool: Array[WeaponBase] = []
+	for w in slots:
+		if w != null and is_instance_valid(w) and (w as WeaponBase).data != null \
+				and int((w as WeaponBase).get("level")) < WeaponBase.MAX_LEVEL:
+			pool.append(w)
+	if pool.is_empty():
+		return null
+	return pool[randi() % pool.size()]
 
 
 # ── 购买 ──────────────────────────────────────────────────────────
@@ -132,6 +161,12 @@ func _buy(p_index: int) -> void:
 		"heal":
 			_player.set("hp", minf(float(_player.get("hp")) + float(_player.get("max_hp")) * 0.4,
 				float(_player.get("max_hp"))))
+		"weapon_up":
+			# R71 兜底货：直接升 1 级（WeaponBase.level_up 封顶在 MAX_LEVEL 内）
+			var up_target: Variant = ware.get("target")
+			if up_target != null and is_instance_valid(up_target) \
+					and up_target.has_method(&"level_up"):
+				up_target.call(&"level_up")
 	_wares[p_index] = {}                          # 售出下架
 	_refresh()
 
@@ -234,6 +269,11 @@ func _refresh() -> void:
 		idx += 1
 	var refresh_btn := _root.get_node("ShopCard/ShopRefreshButton") as Button
 	refresh_btn.text = "刷新货架 (%d)" % refresh_cost()
+	# R71（用户反馈「刷新黑市没刷出东西」的另一半：金币不足时按钮静默无效——点了
+	# 没有任何反馈）。与购买按钮同口径：买不起就置灰禁点（刷新价 15×1.5ⁿ 后期轻松
+	# 上百金，置灰比静默吞点击诚实）
+	refresh_btn.disabled = _player == null \
+		or int(_player.get("gold")) < refresh_cost()
 
 
 func _make_ware_row(p_index: int, p_ware: Dictionary) -> Control:
@@ -265,6 +305,13 @@ func _make_ware_row(p_index: int, p_ware: Dictionary) -> Control:
 		"heal":
 			display = "维修包"
 			desc = "回复 40% 最大生命"
+		"weapon_up":
+			# R71 兜底货：后期词条池枯竭时的常青货（武器永远可升到 MAX_LEVEL）
+			var uw := p_ware.get("target") as WeaponBase
+			var uname := card_generator._weapon_short_name(uw)
+			display = "武器强化【%s】" % uname
+			desc = "Lv%d→Lv%d：按升级表成长（攻击/弹速等）" % [
+				int(p_ware.get("level_from", 0)), int(p_ware.get("level_to", 0))]
 	var trend := "—"
 	if float(p_ware["mult"]) > 1.08:
 		trend = "▲ 行情高"
