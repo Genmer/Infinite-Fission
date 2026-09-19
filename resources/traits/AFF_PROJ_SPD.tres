@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"AFF_PROJ_SPD"
 display_name = "弹道加速"
-description = "弹速 +18%，可叠 2 层（A3 §4.2）"
+description = "弹速 +18%，可叠 2 层"
 pool = 0
 pool_id = &"add_spd"
 effect_id = &"EF_STAT"

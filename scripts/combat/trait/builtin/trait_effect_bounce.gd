@@ -14,7 +14,10 @@ func handle(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 	match p_ctx.event:
 		GameConst.TraitEvent.ON_SPAWN:
 			if p_trait.data.pool == GameConst.PoolClass.MECH:
-				p_ctx.projectile.bounces_left += int(p_trait.data.value) * p_trait.layers
+				# R60（用户反馈「侦察协议什么颜色都没区别」同族）：整数型词条品质缩放
+				# value ×1.4/1.9/2.6 → int() 截断回退白值（蓝 2.8 截回 2）；round 对齐
+				# 卡面显示（+2/+3/+4/+5）
+				p_ctx.projectile.bounces_left += int(round(p_trait.data.value)) * p_trait.layers
 				# R9c（用户裁定）：带反弹预算的子弹【射程无限】——打空的子弹必达屏幕边界
 				# 弹回，预算耗尽才在边缘回收（BOUNCE_DEPLETED 兜底）。20s 为绝对上限
 				#（2 次反弹的理论飞行时间远低于此），≥5 次仍走 TH_BOUNCE_ETERNAL 永存

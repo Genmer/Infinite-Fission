@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"MEC_KILL_BLAST"
 display_name = "死亡新星"
-description = "击杀时爆炸 30% ATK 半径 70；2 层 45%/半径 90（A3 §4.4）"
+description = "击杀时爆炸 30% ATK 半径 70；2 层 45%/半径 90"
 pool = 3
 pool_id = &""
 effect_id = &"EF_MECH"

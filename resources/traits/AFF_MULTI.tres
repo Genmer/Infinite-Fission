@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"AFF_MULTI"
 display_name = "多重装填"
-description = "弹丸数 +1（共享散射锥），可叠 2 层（A3 §4.2）"
+description = "弹丸数 +1（共享散射锥），可叠 2 层"
 pool = 0
 pool_id = &"add_pellets"
 effect_id = &"EF_STAT"

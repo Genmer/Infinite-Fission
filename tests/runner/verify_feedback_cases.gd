@@ -32,6 +32,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_weapon_card_equip_chain()
 	_test_weapon_card_slot_guard()
 	_test_rarity_value_scale()
+	_test_r60_card_text()
 	_test_mastery_double_and_wording()
 	_test_hit_burst()
 	_test_e7_ranged_fire()
@@ -199,6 +200,73 @@ func _test_rarity_value_scale() -> void:
 	var fake := TraitBase.new()
 	fake.setup(mult_gold)
 	_check("R38：data.rarity=3 → max_rarity=3（MULT 金名通道）", fake.max_rarity() == 3)
+
+
+# ── R60：卡面黑话清理 + ×N 真值重写 + 条件阈值保护 + 整数词条 round ──
+func _test_r60_card_text() -> void:
+	print("── R60 卡面文案与整数缩放 ──")
+	var gen: CardGenerator = _gl.card_generator
+	# ① § 黑话全清（用户反馈「BUFF 里的 A3 $4.3 是啥」）：注册表全量词条 + 遗物
+	for td: TraitData in _gl.registry.traits.values():
+		if String(td.description).contains("§") or String(td.description).contains("A3 "):
+			_check("R60：词条描述无内部文档编号（%s）" % String(td.id), false,
+				String(td.description))
+			return
+	for rd: RelicData in _gl.registry.relics.values():
+		if String(rd.description).contains("§") or String(rd.description).contains("A3 "):
+			_check("R60：遗物描述无内部文档编号（%s）" % String(rd.id), false,
+				String(rd.description))
+			return
+	_check("R60：全量词条/遗物描述无「A3 §x」黑话（27 处已清）", true)
+	# ② ×N 真值重写（用户反馈「侦察协议什么颜色没啥区别」）：N′ = 1+(N−1)×scale
+	_check("R60：侦察协议蓝卡 ×3.0 → ×3.8（非尾注 ×1.4 口径）",
+		gen._scaled_description("每波首次命中伤害 ×3.0，1 层", 1.4, 1).contains("×3.8"))
+	_check("R60：侦察协议金卡 ×3.0 → ×6.2",
+		gen._scaled_description("每波首次命中伤害 ×3.0，1 层", 2.6, 3).contains("×6.2"))
+	_check("R60：冰渊裁决蓝卡主数字 ×1.5 → ×1.7",
+		gen._scaled_description("对寒滞/冻结目标伤害 ×1.5，叠 2 层合并为 ×2.0", 1.4, 1).contains("×1.7"))
+	_check("R60：冰渊裁决叠层合并注释 ×2.0 → ×2.4（同式同步）",
+		gen._scaled_description("对寒滞/冻结目标伤害 ×1.5，叠 2 层合并为 ×2.0", 1.4, 1).contains("×2.4"))
+	# ③ 条件阈值保护（自查：背水协议蓝卡曾被改写成 HP<49%）
+	var fury := gen._scaled_description("自身 HP<35% 时伤害 ×1.6，1 层", 1.4, 1)
+	_check("R60：背水协议条件阈值 HP<35% 不被缩放", fury.contains("HP<35%") and not fury.contains("49%"))
+	_check("R60：背水协议效果数字 ×1.6 → ×1.8", fury.contains("×1.8"))
+	# ④ 带符号分支回归护栏（旧路径行为不变）
+	_check("R60：+15% 金卡仍重写 +39%（带符号%分支回归）",
+		gen._scaled_description("攻击力 +15%，可叠 3 层", 2.6, 3).contains("+39%"))
+	# ⑤ 整数词条 round 对齐卡面（蓝 反弹+2 value 2.8 → +3 而非 int 截断回 2）
+	var bounce_eff: TraitEffect = load(
+		"res://scripts/combat/trait/builtin/trait_effect_bounce.gd").new()
+	var bt := TraitBase.new()
+	var bd: TraitData = _gl.registry.get_trait(&"MEC_BOUNCE").duplicate()
+	bd.value = 2.8                                    # 蓝 roll 缩放后口径
+	bt.setup(bd)
+	var proj := ProjectileBase.new()
+	var bctx := TraitContext.new()
+	bctx.event = GameConst.TraitEvent.ON_SPAWN
+	bctx.projectile = proj
+	bounce_eff.handle(bt, bctx)
+	_check("R60：反弹蓝卡 value 2.8 → bounces_left=3（round 对齐卡面 +3）",
+		proj.bounces_left == 3)
+	proj.bounces_left = 0
+	bd.value = 2.0                                    # 白卡口径回归护栏
+	bounce_eff.handle(bt, bctx)
+	_check("R60：反弹白卡 value 2.0 → bounces_left=2（白行为不变）",
+		proj.bounces_left == 2)
+	# ⑥ 分裂层 2 枚数不再被写死 count_lv2 压回（升层减枚）
+	var fractal_eff: TraitEffect = load(
+		"res://scripts/combat/trait/builtin/trait_effect_fractal.gd").new()
+	var ft := TraitBase.new()
+	var fd: TraitData = _gl.registry.get_trait(&"MEC_FRACTAL").duplicate()
+	fd.value = 2.8                                    # 蓝口径
+	ft.setup(fd)
+	ft.layers = 2
+	var fctx := TraitContext.new()
+	fctx.event = GameConst.TraitEvent.ON_EXPIRE
+	fctx.projectile = proj
+	fractal_eff.handle(ft, fctx)
+	_check("R60：分裂蓝卡 2 层枚数 ≥ 层 1 枚数+1（不升层减枚）",
+		int(fctx.split_request.get("count", 0)) >= 4)
 
 
 # ── ⑤ 紫精通连升 2 级 + Lv 区间文案 ──────────────────────────────

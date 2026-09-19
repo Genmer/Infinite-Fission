@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"AFF_CRIT_DMG"
 display_name = "致命一击"
-description = "暴击伤害 +30%，可叠 2 层（A3 §4.2）"
+description = "暴击伤害 +30%，可叠 2 层"
 pool = 0
 pool_id = &"add_critdmg"
 effect_id = &"EF_STAT"

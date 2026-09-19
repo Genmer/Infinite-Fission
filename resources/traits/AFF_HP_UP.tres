@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"AFF_HP_UP"
 display_name = "生存本能"
-description = "最大生命 +25，可叠 4 层（A3 §4.2）"
+description = "最大生命 +25，可叠 4 层"
 pool = 0
 pool_id = &"add_hp"
 effect_id = &"EF_STAT"

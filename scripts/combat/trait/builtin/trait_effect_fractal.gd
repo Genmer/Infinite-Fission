@@ -11,11 +11,13 @@ extends TraitEffect
 func handle(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 	if p_ctx.event != GameConst.TraitEvent.ON_EXPIRE or p_ctx.projectile == null:
 		return
-	var count := int(p_trait.data.value)
+	var count := int(round(p_trait.data.value))
 	var spread := float(p_trait.data.params.get("spread_deg", 28.0))
 	var inherit := float(p_trait.data.value2)
 	if p_trait.layers >= 2:
-		count = int(p_trait.data.params.get("count_lv2", count))
+		# R60：层 2 枚数 = max(表值, 层 1 枚数 + 1)——品质缩放后层 1 枚数抬升时
+		#（蓝 3 / 紫 4 / 金 5），层 2 不再被写死的 count_lv2=3 反超压回（升层减枚）
+		count = maxi(int(p_trait.data.params.get("count_lv2", count)), count + 1)
 		spread = float(p_trait.data.params.get("spread_deg_lv2", spread))
 		inherit = float(p_trait.data.params.get("inherit_lv2", inherit))
 	var echo := false

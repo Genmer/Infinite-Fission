@@ -6,7 +6,7 @@
 script = ExtResource("1_rd")
 id = &"REL_HARVEST"
 display_name = "收割协议"
-description = "击杀回复 0.4% max_hp（A3 §5）"
+description = "击杀回复 0.4% max_hp"
 rarity = 3
 listen_events = [&"enemy_killed"]
 effect_id = &"REL_EF_KILL_HEAL"

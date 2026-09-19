@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"SYN_PIERCE_EVO"
 display_name = "贯穿协鸣"
-description = "每穿透 1 层 +0.2（区内累进），1 层（A3 §4.3）"
+description = "每穿透 1 层 +0.2（区内累进），1 层"
 pool = 1
 pool_id = &"pierce_dmg"
 effect_id = &"EF_STAT"

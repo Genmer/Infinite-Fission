@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"ELE_REACTION_VOID"
 display_name = "元素裂变"
-description = "全部混合反应的结算值 ×1.8（常驻；A3 §4.5）"
+description = "全部混合反应的结算值 ×1.8（常驻）"
 pool = 4
 pool_id = &""
 effect_id = &"EF_ELEMENTAL"

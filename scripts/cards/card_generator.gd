@@ -50,8 +50,9 @@ const FALLBACK_ATK_PCT := 0.05                # fallback 属性卡：攻击 +5%�
 const RARITY_VALUE_SCALE := [1.0, 1.4, 1.9, 2.6]
 const MASTERY_DOUBLE_RARITY := 2              # 紫(2)/金(3) 精通卡 → +2 级
 
-var _re_pct := RegEx.create_from_string("[+-]?\\d+(\\.\\d+)?%")   # 描述首百分比定位
+var _re_pct := RegEx.create_from_string("[+-]\\d+(\\.\\d+)?%")   # 描述首带符号百分比（R60：无符号 % 是条件阈值如 HP<35%，永不匹配）
 var _re_signed := RegEx.create_from_string("[+-]\\d+(\\.\\d+)?")   # 描述首带符号数值（平数值词条）
+var _re_mult := RegEx.create_from_string("×\\d+(\\.\\d+)?")         # ×N 乘区倍率（R60：乘区词条主数字，如「伤害 ×3.0」；后缀式「3.0×」不匹配）
 
 
 func setup(p_registry: DataRegistry) -> void:
@@ -165,12 +166,24 @@ func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
 
 
 func _scaled_description(p_desc: String, p_scale: float, p_rarity: int) -> String:
-	# 描述数值重写（用户反馈二轮「史诗强化×1.9 是什么」→ 卡面必须直接显示真实数值）：
-	# ① 首百分比 "+15%" → "+39%"；② 首带符号平数值 "+25" → "+47"（带号数字 = 效果值，
-	#   "可叠 N 层"等无号数字不误伤）；③ 两者皆无 → 追加品质倍率尾注
-	var m := _re_pct.search(p_desc)
-	if m == null:
-		m = _re_signed.search(p_desc)
+	# 描述数值重写（用户反馈二轮「史诗强化×1.9 是什么」→ 卡面必须直接显示真实数值）。
+	# R60 就近类型判优：×N / 带符号% / 带符号平数三者取**最先出现**者为效果数字——
+	# ① ×N（乘区词条主数字，如侦察协议「伤害 ×3.0」）：全部 ×N 按真值终值重写
+	#   N′ = 1 + (N−1)×scale（乘区 M = 1+Σ贡献，品质只缩放加成部分；叠层合并注释
+	#   「合并为 ×2.0」同式同步重写，白/蓝/紫/金侦察协议 = ×3.0/3.8/4.8/6.2）；
+	# ② "+15%" → "+39%"；③ "+25" → "+47"（带号数字 = 效果值；"可叠 N 层"、"HP<35%"
+	#   等无号数字永不误伤——R60 修复：背水协议蓝卡条件阈值曾被缩放成 HP<49%）；
+	# ④ 皆无 → 追加品质倍率尾注
+	var mx := _re_mult.search(p_desc)
+	var mp := _re_pct.search(p_desc)
+	var ms := _re_signed.search(p_desc)
+	const NO_MATCH: int = 1 << 30
+	var pos_mult := mx.get_start() if mx != null else NO_MATCH
+	var pos_pct := mp.get_start() if mp != null else NO_MATCH
+	var pos_sign := ms.get_start() if ms != null else NO_MATCH
+	if pos_mult < pos_pct and pos_mult <= pos_sign:
+		return _rewrite_mult_numbers(p_desc, p_scale)
+	var m: RegExMatch = mp if pos_pct <= pos_sign else ms
 	if m == null:
 		return "%s（%s品质：效果数值 ×%.1f）" % [p_desc, PopPalette.rarity_name(p_rarity), p_scale]
 	var raw := m.get_string()
@@ -184,6 +197,19 @@ func _scaled_description(p_desc: String, p_scale: float, p_rarity: int) -> Strin
 		else "%.0f" % scaled_num))
 	return p_desc.substr(0, m.get_start()) + body + ("%" if is_pct else "") \
 		+ p_desc.substr(m.get_end())
+
+
+func _rewrite_mult_numbers(p_desc: String, p_scale: float) -> String:
+	# ×N 全量重写（乘区词条）：N′ = 1 + (N−1)×scale——打印值 N = 1+Σ贡献（注册表
+	# value 即加成部分），品质缩放只作用于加成段，故 ×3.0 蓝 = ×3.8 而非 ×4.2
+	var out_text := ""
+	var last := 0
+	for mm in _re_mult.search_all(p_desc):
+		var n := mm.get_string().substr(1).to_float()
+		out_text += p_desc.substr(last, mm.get_start() - last) \
+			+ "×%.1f" % (1.0 + (n - 1.0) * p_scale)
+		last = mm.get_end()
+	return out_text + p_desc.substr(last)
 
 
 func apply_choice(p_card: Dictionary, p_player: Node) -> void:

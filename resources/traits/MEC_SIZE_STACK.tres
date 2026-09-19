@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"MEC_SIZE_STACK"
 display_name = "体积极限"
-description = "每层体积 +18%（加算叠层），总体积 ≥3.0× 触发 TH_SIZE_NOVA 冲击波（A3 §4.4）"
+description = "每层体积 +18%（加算叠层），总体积 ≥3.0× 触发 TH_SIZE_NOVA 冲击波"
 pool = 3
 pool_id = &""
 effect_id = &"EF_SIZE"

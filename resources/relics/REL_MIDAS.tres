@@ -6,7 +6,7 @@
 script = ExtResource("1_rd")
 id = &"REL_MIDAS"
 display_name = "点金手"
-description = "全部经验获取 +20%（A3 §5）"
+description = "全部经验获取 +20%"
 rarity = 3
 listen_events = [&"xp_gained"]
 effect_id = &"REL_EF_XP_MULT"

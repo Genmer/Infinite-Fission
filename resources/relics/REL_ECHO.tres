@@ -6,7 +6,7 @@
 script = ExtResource("1_rd")
 id = &"REL_ECHO"
 display_name = "回响"
-description = "选卡后 25% 概率把该卡复制到另一把随机武器（A3 §5）"
+description = "选卡后 25% 概率把该卡复制到另一把随机武器"
 rarity = 3
 listen_events = [&"card_chosen"]
 effect_id = &"REL_EF_CARD_ECHO"
