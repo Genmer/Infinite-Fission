@@ -73,6 +73,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_g1_g5()
 	_test_g4_boomerang()
 	_test_g9_combo_reward()
+	_test_g10_peak_and_banner()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3579,5 +3580,29 @@ func _test_g9_combo_reward() -> void:
 	_gl._tick_combo_for_test()
 	_check("G9：窗口过期档位复位", _gl._combo_count == 0 and _gl._combo_tier_paid == 0,
 		"count=%d paid=%d" % [_gl._combo_count, _gl._combo_tier_paid])
+	# G10：本局峰值入 HUD + 结算行带「最高连杀」
+	_check("G10：连杀峰值 ≥20 记入 HUD", _gl.hud.combo_peak >= 20,
+		"peak=%d" % _gl.hud.combo_peak)
+	_gl.change_state(GameConst.GameStatus.GAME_OVER)
+	_gl.game_over_screen.show_summary()
+	_check("G10：结算行含最高连杀", _gl.game_over_screen.summary_text().contains("最高连杀"),
+		_gl.game_over_screen.summary_text())
 	(_gl.pools[&"enemy"] as EnemyPool).release(stub)
 	_gl.call(&"quit_to_menu")
+
+
+func _test_g10_peak_and_banner() -> void:
+	print("── G10 难度开局横幅 ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.current_map_id = MapTable.FIRST_MAP_ID
+	_gl._difficulty = 1                        # 困难档（start_run 不改写——menu 入口职责）
+	var got := [""]
+	var cap := func(p_msg: String) -> void: got[0] = p_msg
+	EventBus.mechanics_intro.connect(cap)
+	_gl.call(&"start_run")
+	EventBus.mechanics_intro.disconnect(cap)
+	_check("G10：困难开局发规则横幅（数值/复活/奖励）",
+		String(got[0]).begins_with("【困难】") and String(got[0]).contains("复活 1 次"),
+		String(got[0]))
+	_gl.call(&"quit_to_menu")
+	_gl._difficulty = 0

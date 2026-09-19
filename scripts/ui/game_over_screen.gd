@@ -46,7 +46,9 @@ func show_summary() -> void:
 		var kills: int = stats_source.get("kills")
 		var wave: int = stats_source.get("wave")
 		var dmg: float = stats_source.get("total_damage")
-		_summary_label.text = "击杀 %d　波次 %d　总伤害 %d" % [kills, wave, int(dmg)]
+		var peak: int = maxi(int(stats_source.get("combo_peak") if stats_source != null and stats_source.get("combo_peak") != null else 0), 0)
+		var combo_part := "　最高连杀 ×%d" % peak if peak >= 5 else ""
+		_summary_label.text = "击杀 %d　波次 %d　总伤害 %d%s" % [kills, wave, int(dmg), combo_part]
 	else:
 		_summary_label.text = "击杀 -　波次 -　总伤害 -"
 	_quote_label.text = Lore.game_over_quote()

@@ -553,7 +553,14 @@ func start_run(p_daily_seed: int = -1) -> bool:
 	wave_director.difficulty = _difficulty        # R72 波表织入（新形态敌伴随）
 	player.set_difficulty(_difficulty)             # R73 风险回报（经验侧乘区镜像）
 	Meta.set_run_difficulty(_difficulty)           # E11：结算分档记录 + 结晶乘区
-	player.revives_left += GameConst.difficulty_revives(_difficulty)   # R72 难度附赠复活
+	player.revives_left += GameConst.difficulty_revives(_difficulty)
+	if _difficulty != GameConst.Difficulty.NORMAL:
+		EventBus.emit_mechanics_intro("【%s】敌人数值 ×%d · 复活 %d 次 · 奖励 ×%.1f%s"
+			% [GameConst.difficulty_name(_difficulty),
+			int(GameConst.difficulty_dmg_mult(_difficulty)),
+			GameConst.difficulty_revives(_difficulty),
+			GameConst.difficulty_reward_mult(_difficulty),
+			" · 每级双选" if _difficulty == GameConst.Difficulty.HELL else ""])   # R72 难度附赠复活
 	var map_def := MapTable.get_map(current_map_id)
 	_apply_map_affixes(map_def)                  # 词缀二期：双词缀注入（祝→玩家 / 诅→敌侧）
 	if p_daily_seed >= 0:
@@ -1366,6 +1373,8 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 	# E9 连杀：窗口内击杀 +1；≥5 起显示 ×N 跳字（档位色阶 5/10/20——爽感可视化）
 	_combo_count += 1
 	_combo_left = 1.2
+	if hud != null:
+		hud.combo_peak = maxi(hud.combo_peak, _combo_count)   # G10 本局峰值（结算行）
 	# G9 连杀奖励：×10/×20 档位各发一次金币滴灌（同掉账乘区口径；先于跳字结算）
 	if _combo_count >= 10 and _combo_tier_paid < 1:
 		_combo_tier_paid = 1

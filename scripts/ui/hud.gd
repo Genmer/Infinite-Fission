@@ -48,6 +48,7 @@ var _hud_root: Control = null                 # HUD 根容器（悬停检测用�
 var _pause_btn: Button = null                 # 暂停按钮（▶⏸ 图形化贴纸；仅 PLAYING 态显示）
 
 var kills: int = 0
+var combo_peak: int = 0                   # G10 本局最高连杀（结算行数据源）
 var wave: int = 0
 var run_elapsed: float = 0.0                  # 计时（raw 通道累计——含顿帧，观感口径）
 var _fallback_timer: float = 0.0              # 1Hz 兜底刷新
