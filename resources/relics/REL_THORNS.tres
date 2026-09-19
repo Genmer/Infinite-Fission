@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_THORNS"
+display_name = "荆棘王座"
+description = "受到伤害时反击周围敌人（120% 攻击力 · 半径 140 · 0.8s 内最多一次）"
+rarity = 3
+listen_events = [&"player_hit"]
+effect_id = &"REL_EF_THORNS"
+params = {"atk_ratio": 1.2, "radius": 140.0, "icd": 0.8}
+unique = true

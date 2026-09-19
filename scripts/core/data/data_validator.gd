@@ -21,6 +21,8 @@ const ADD_POOL_IDS: Array[StringName] = [
 const MULT_POOL_IDS: Array[StringName] = [
 	&"frost_dmg", &"burn_dmg", &"bounce_dmg", &"pierce_dmg",
 	&"fury_dmg", &"opening_dmg", &"elite_dmg", &"vuln",
+	# R72 新乘区（遗物注入 + 新词条）：感电特攻 / 处决线 / 壁垒线 / 狂热 / 双发 / 玻璃
+	&"shocked_dmg", &"execute_dmg", &"bulwark_dmg", &"frenzy_dmg", &"double_tap", &"glass_dmg",
 ]
 # Local 私有池 id 全集（F-15：当前唯一实例 = 光束灼焦）
 const LOCAL_POOL_IDS: Array[StringName] = [&"scorch"]

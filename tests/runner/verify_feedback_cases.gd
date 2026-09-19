@@ -60,6 +60,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r71_shop_fallback()
 	_test_r72_difficulty()
 	_test_r72_new_enemies()
+	_test_r72_content()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3005,3 +3006,127 @@ func _test_r72_new_enemies() -> void:
 func _break_fire(p_enemy: Enemy, p_player: Node2D) -> void:
 	# 射箭兵开火直调（绕过冷却推进——测试注入）
 	p_enemy._fire_at(p_player)
+
+
+func _test_r72_content() -> void:
+	print("── R72 内容扩展（遗物 6 件 + 词条 3 条） ──")
+	var rh := _gl.relic_handler
+	# ① 注册可查（DataValidator 全过——pkg0 rejected=0 另行锁定）
+	for rid in ["REL_THORNS", "REL_KILL_FRENZY", "REL_DOUBLE_TAP", "REL_GLASS_CANNON",
+			"REL_CRIT_LIFESTEAL", "REL_TIMELORD"]:
+		_check("R72：遗物 %s 注册可查" % rid, _gl.registry.get_relic(rid) != null)
+	for tid in ["MEC_OVERKILL", "SYN_BULWARK", "ELE_ARC_SURGE"]:
+		_check("R72：词条 %s 注册可查" % tid, _gl.registry.get_trait(tid) != null)
+	# ② 时之沙：技能冷却 ×0.8
+	_gl.player.set("skill_cd_base", 120.0)
+	_gl.player.set("skill_cd_left", 60.0)
+	_check("R72：时之沙激活 → 技能冷却 120→96 / 在途 60→48",
+		rh.activate(&"REL_TIMELORD")
+			and absf(float(_gl.player.get("skill_cd_base")) - 96.0) <= 0.01
+			and absf(float(_gl.player.get("skill_cd_left")) - 48.0) <= 0.01)
+	# ③ 玻璃大炮：最大生命 −25%
+	_gl.player.set("max_hp", 100.0)
+	_gl.player.set("hp", 100.0)
+	_check("R72：玻璃大炮激活 → 最大生命 100→75",
+		rh.activate(&"REL_GLASS_CANNON")
+			and absf(float(_gl.player.get("max_hp")) - 75.0) <= 0.01)
+	# ④ 连杀狂热：击杀叠层 → 伤害加成；窗口衰减清零
+	_check("R72：连杀狂热激活", rh.activate(&"REL_KILL_FRENZY"))
+	var kill_stub := _make_killed_enemy_stub(false)
+	rh._on_enemy_killed(kill_stub)
+	rh._on_enemy_killed(kill_stub)
+	rh._on_enemy_killed(kill_stub)
+	_check("R72：3 连杀 → 狂热 +24%（3 层 ×8%）",
+		absf(rh.frenzy_dmg_bonus() - 0.24) <= 0.001, "%.3f" % rh.frenzy_dmg_bonus())
+	rh.tick(3.1)
+	_check("R72：狂热窗口 3s 过后清零", rh.frenzy_dmg_bonus() <= 0.0)
+	(_gl.pools[&"enemy"] as EnemyPool).release(kill_stub)
+	# ⑤ 双重节拍：注入通道掷中时 double_tap 乘区在（rng 扫描保命中）
+	_check("R72：双重节拍激活", rh.activate(&"REL_DOUBLE_TAP"))
+	var tap_seen := false
+	var tap_ctx := DamageContext.new()
+	for i in range(200):
+		tap_ctx.mult_pools.clear()
+		rh.inject_hit_mult_pools(tap_ctx, null)
+		for pool in tap_ctx.mult_pools:
+			if StringName(String(pool.get("pool_id"))) == &"double_tap" 					and absf(float(pool.get("contrib", 0.0)) - 1.0) <= 0.001:
+				tap_seen = true
+	_check("R72：双重节拍 15% 概率注入 ×2 乘区（200 掷扫描必中）", tap_seen)
+	# ⑥ 汲血刻印：暴击回血 + 内冷
+	_gl.player.set("hp", 10.0)
+	rh._lifesteal_cd_left = 0.0
+	_check("R72：汲血刻印激活", rh.activate(&"REL_CRIT_LIFESTEAL"))
+	var ls_r := DamageResult.new()
+	ls_r.final_value = 5.0
+	ls_r.is_crit = true
+	ls_r.target_uid = 999
+	EventBus.emit_damage_resolved(ls_r)
+	_check("R72：暴击 → 回血 2% 最大生命（10→11.5）",
+		absf(float(_gl.player.get("hp")) - 11.5) <= 0.01,
+		"hp=%.1f" % float(_gl.player.get("hp")))
+	var hp_after: float = _gl.player.get("hp")
+	EventBus.emit_damage_resolved(ls_r)
+	_check("R72：汲血内冷 0.6s 内不重复回血",
+		is_equal_approx(float(_gl.player.get("hp")), hp_after))
+	# ⑦ 荆棘王座：受击反击 AoE（近旁敌掉血）
+	_check("R72：荆棘王座激活", rh.activate(&"REL_THORNS"))
+	rh._thorns_cd_left = 0.0
+	var thorn_e := _spawn_r72_enemy(&"E1_grunt",
+		_gl.player.global_position + Vector2(80.0, 0.0))
+	var thorn_hp0 := thorn_e.hp
+	_gl.player.invuln_left = 0.0
+	_gl.player.take_contact_damage(5.0)
+	_check("R72：受击反击 → 近旁敌人掉血（settle_aoe 真结算）",
+		thorn_e.hp < thorn_hp0, "%.0f→%.0f" % [thorn_hp0, thorn_e.hp])
+	_release_r72_enemy(thorn_e)
+	# ⑧ 新词条条件乘区：处决线 / 壁垒线 / 感电特攻
+	var fw3: WeaponBase = _gl.player.weapon_slots[0]
+	var saved_hp2: float = _gl.player.get("hp")
+	var saved_max2: float = _gl.player.get("max_hp")
+	var overkill: TraitData = _gl.registry.get_trait(&"MEC_OVERKILL")
+	fw3.trait_stack.attach(overkill)
+	var low_e := _spawn_r72_enemy(&"E1_grunt", Vector2(600.0, 200.0))
+	low_e.hp = low_e.max_hp * 0.2                # 处决线内
+	var ov_ctx := TraitContext.new()
+	ov_ctx.weapon = fw3
+	ov_ctx.event = GameConst.TraitEvent.ON_HIT
+	ov_ctx.target = low_e
+	ov_ctx.damage_ctx = DamageContext.new()
+	ov_ctx.damage_ctx.player_hp_pct = 0.9        # 同时给壁垒线用
+	var ov_contrib := 0.0
+	for pool in fw3.trait_stack.collect_mult_pools(ov_ctx):
+		if StringName(String(pool.get("pool_id"))) == &"execute_dmg":
+			ov_contrib = float(pool.get("contrib"))
+	_check("R72：处决协议 目标 HP<30% → ×1.5 乘区生效",
+		absf(ov_contrib - 0.5) <= 0.001, "c=%.2f" % ov_contrib)
+	var bulwark: TraitData = _gl.registry.get_trait(&"SYN_BULWARK")
+	fw3.trait_stack.attach(bulwark)
+	var bw_contrib := 0.0
+	for pool in fw3.trait_stack.collect_mult_pools(ov_ctx):
+		if StringName(String(pool.get("pool_id"))) == &"bulwark_dmg":
+			bw_contrib = float(pool.get("contrib"))
+	_check("R72：壁垒协议 玩家 HP>70% → ×1.4 乘区生效",
+		absf(bw_contrib - 0.4) <= 0.001, "c=%.2f" % bw_contrib)
+	var arc: TraitData = _gl.registry.get_trait(&"ELE_ARC_SURGE")
+	fw3.trait_stack.attach(arc)
+	if low_e.elemental == null:
+		low_e.elemental = ElementalState.new()   # 条件自评容器（elemental 系按需挂）
+	low_e.elemental.gauges[GameConst.Element.LTG] = 80.0   # 感电槽 ≥ 阈值（is_state_active 口径）
+	var arc_contrib := 0.0
+	for pool in fw3.trait_stack.collect_mult_pools(ov_ctx):
+		if StringName(String(pool.get("pool_id"))) == &"shocked_dmg":
+			arc_contrib = float(pool.get("contrib"))
+	_check("R72：链隙电弧 感电目标 → ×1.5 乘区生效",
+		absf(arc_contrib - 0.5) <= 0.001, "c=%.2f" % arc_contrib)
+	_release_r72_enemy(low_e)
+	for tb in fw3.trait_stack.traits.duplicate():
+		if tb.data.id in [overkill.id, bulwark.id, arc.id]:
+			fw3.trait_stack.traits.erase(tb)
+	_gl.player.set("max_hp", saved_max2)
+	_gl.player.set("hp", saved_hp2)
+	# ⑨ 图鉴自动跟进：词条页数据源 = 注册表扫描（新词条零接线可见）
+	_check("R72：词条注册表含新三条（图鉴扫描自动收录）",
+		_gl.registry.get_trait(&"MEC_OVERKILL") != null
+			and _gl.registry.get_trait(&"SYN_BULWARK") != null
+			and _gl.registry.get_trait(&"ELE_ARC_SURGE") != null)
+	rh.reset_run()                              # 遗物运行态清零（防污染后续）

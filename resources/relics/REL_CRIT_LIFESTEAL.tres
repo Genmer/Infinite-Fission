@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_CRIT_LIFESTEAL"
+display_name = "汲血刻印"
+description = "暴击时回复 2% 最大生命（0.6s 内最多一次）"
+rarity = 3
+listen_events = [&"damage_resolved"]
+effect_id = &"REL_EF_CRIT_LIFESTEAL"
+params = {"heal_pct_max_hp": 0.02, "icd": 0.6}
+unique = true

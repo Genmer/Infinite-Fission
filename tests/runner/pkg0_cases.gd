@@ -94,7 +94,7 @@ func _test_game_const() -> void:
 	_check("next_uid 递增且非零", u1 > 0 and u2 == u1 + 1, "u1=%d u2=%d" % [u1, u2])
 	_check("HIT_NO_CRIT 掩码 = REACTION|DOT", GameConst.HIT_NO_CRIT == (GameConst.HIT_IS_REACTION | GameConst.HIT_IS_DOT))
 	_check("UID 位宽 2^20（幂等键位拼接约束）", GameConst.UID_MAX == 0xFFFFF)
-	_check("ConditionId.NONE = 8（封闭枚举 9 值）", GameConst.ConditionId.NONE == 8)
+	_check("ConditionId.NONE = 10（封闭枚举 11 值——R72 增 TARGET_HP_BELOW/PLAYER_HP_ABOVE）", GameConst.ConditionId.NONE == 10)
 
 
 # ── 2. ModifierStack（B_spec 公式例） ─────────────────────────────

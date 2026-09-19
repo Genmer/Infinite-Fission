@@ -417,7 +417,7 @@ func _test_xp_chain() -> void:
 func _test_relic_handler() -> void:
 	print("── 遗物处理器 ──")
 	var h := _gl.relic_handler
-	_check("遗物注册表：11 件加载", _gl.registry.relics.size() == 11)
+	_check("遗物注册表：17 件加载（R72 增 6 件）", _gl.registry.relics.size() == 17)
 	# REL_MIDAS：经验倍率
 	_check("REL_MIDAS：激活 + 经验 ×1.2",
 		h.activate(&"REL_MIDAS") and is_equal_approx(h.xp_mult(), 1.2))

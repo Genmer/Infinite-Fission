@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"ELE_ARC_SURGE"
+display_name = "链隙电弧"
+description = "对感电目标伤害 ×1.5"
+pool = 1
+pool_id = &"shocked_dmg"
+effect_id = &"EF_STAT"
+value = 0.5
+value2 = 0.0
+params = {}
+event_hooks = [2]
+stack_max = 1
+decay_delta = 0.0
+cap_pool_p = 0.5
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 2
+tags = 0
+condition = {"condition_id": 2, "params": {}}

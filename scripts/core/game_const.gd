@@ -56,6 +56,7 @@ enum TargetStrategy { NEAREST, FOREMOST, LOWEST_HP, LOCKED }  # 武器目标策�
 enum ConditionId {                                        # 乘区条件封闭枚举（§三.5）
 	TARGET_FROZEN, TARGET_BURNING, TARGET_SHOCKED, AFTER_BOUNCE,
 	PIERCE_INDEX_GE, PLAYER_HP_BELOW, WAVE_FIRST_HIT, TARGET_TAG_IN,
+	TARGET_HP_BELOW, PLAYER_HP_ABOVE,               # R72：处决线 / 满血壁垒
 	NONE,
 }
 

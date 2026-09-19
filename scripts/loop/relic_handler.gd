@@ -30,6 +30,10 @@ var pending_shop_waves: int = 0               # REL_BLACK_MARKET：商店波排�
 var phoenix_triggered: int = 0
 var crit_chain_resets: int = 0
 var _crit_chain_cd_left: float = 0.0            # R66 暴击谐振内部冷却剩余（30s 一触发）
+var _frenzy_stacks: int = 0                    # R72 连杀狂热层数（击杀叠层，窗口衰减）
+var _frenzy_left: float = 0.0                  # 狂热窗口剩余
+var _thorns_cd_left: float = 0.0               # R72 荆棘王座反击内冷
+var _lifesteal_cd_left: float = 0.0            # R72 汲血刻印回复内冷
 var echo_copies: int = 0
 var elite_dmg_hits: int = 0                   # pool_breakdown 含 elite_dmg 的结算数
 var momentum_hits: int = 0                    # pool_breakdown 含 bounce_dmg 的结算数
@@ -53,6 +57,10 @@ func reset_run() -> void:
 	death_cheat_uses = 0
 	reroll_pending = false
 	rarity_floor_next = -1
+	_frenzy_stacks = 0                          # R72 新遗物运行态清零
+	_frenzy_left = 0.0
+	_thorns_cd_left = 0.0
+	_lifesteal_cd_left = 0.0
 	elite_kill_done_this_wave = false
 	pending_shop_waves = 0
 	phoenix_triggered = 0
@@ -159,6 +167,29 @@ func inject_hit_mult_pools(p_ctx: DamageContext, p_target: Node2D) -> void:
 					"cap_pool": contrib,
 					"priority": 0,
 				})
+	# R72 新乘区遗物注入（frenzy 狂热 / double_tap 双发 / glass 玻璃大炮）
+	var frenzy_data := _owned_effect(&"REL_EF_KILL_FRENZY")
+	if frenzy_data != null:
+		var f_contrib := frenzy_dmg_bonus()
+		if f_contrib > 0.0:
+			p_ctx.mult_pools.append({
+				"pool_id": &"frenzy_dmg", "source_uid": 0,
+				"contrib": f_contrib, "cap_pool": f_contrib, "priority": 0,
+			})
+	var tap_data := _owned_effect(&"REL_EF_DOUBLE_TAP")
+	if tap_data != null and rng.randf() < float(tap_data.params.get("chance", 0.15)):
+		var tap_contrib := float(tap_data.params.get("mult", 1.0))
+		p_ctx.mult_pools.append({
+			"pool_id": &"double_tap", "source_uid": 0,
+			"contrib": tap_contrib, "cap_pool": tap_contrib, "priority": 0,
+		})
+	var glass_data := _owned_effect(&"REL_EF_GLASS")
+	if glass_data != null:
+		var g_contrib := float(glass_data.params.get("bonus", 0.4))
+		p_ctx.mult_pools.append({
+			"pool_id": &"glass_dmg", "source_uid": 0,
+			"contrib": g_contrib, "cap_pool": g_contrib, "priority": 0,
+		})
 	var momentum_data := _owned_effect(&"REL_EF_BOUNCE_MOMENTUM")
 	if momentum_data != null:
 		var m_contrib := bounce_momentum_bonus(p_ctx.bounce_count)
@@ -225,6 +256,21 @@ func _apply_passive(p_data: RelicData) -> void:
 			curse_last_card = true
 		&"REL_EF_DEATH_CHEAT":
 			death_cheat_uses += maxi(int(p_data.params.get("uses", 1)), 0)
+		&"REL_EF_GLASS":
+			# R72 玻璃大炮：伤害 +40%（命中时点乘区注入），最大生命 −25%（一次性代价）
+			if player != null and is_instance_valid(player):
+				var mhp: float = player.get("max_hp")
+				player.set("max_hp", mhp * 0.75)
+				player.set("hp", minf(float(player.get("hp")), mhp * 0.75))
+		&"REL_EF_SKILL_HASTE":
+			# R72 时之沙：角色技能冷却 ×0.8（基线与在途倒计时同比缩放）
+			if player != null and is_instance_valid(player):
+				var cd_base: float = player.get("skill_cd_base")
+				var cd_left: float = player.get("skill_cd_left")
+				var mult := float(p_data.params.get("mult", 0.8))
+				player.set("skill_cd_base", cd_base * mult)
+				if cd_left > 0.0:
+					player.set("skill_cd_left", cd_left * mult)
 		_:
 			pass                                # 事件驱动型遗物无常驻位
 
@@ -258,6 +304,11 @@ func _on_enemy_killed(p_enemy: Node2D) -> void:
 		var max_hp: float = player.get("max_hp")
 		var hp: float = player.get("hp")
 		player.set("hp", minf(hp + max_hp * pct, max_hp))
+	# R72 连杀狂热：击杀 +1 层（窗口刷新；上限 param）——伤害乘区在命中时点注入
+	if _listens(&"REL_EF_KILL_FRENZY", &"enemy_killed"):
+		_frenzy_stacks = mini(_frenzy_stacks + 1,
+			int(_effect_param(&"REL_EF_KILL_FRENZY", "max_stacks", 5)))
+		_frenzy_left = float(_effect_param(&"REL_EF_KILL_FRENZY", "dur", 3.0))
 	if _listens(&"REL_EF_ELITE_KILL_LUCK", &"enemy_killed") and not elite_kill_done_this_wave:
 		if (int(p_enemy.get("tags")) & GameConst.TAG_ELITE) != 0:
 			elite_kill_done_this_wave = true
@@ -266,6 +317,19 @@ func _on_enemy_killed(p_enemy: Node2D) -> void:
 
 
 func _on_player_hit(_p_damage: float, _p_source_uid: int) -> void:
+	# R72 荆棘王座：受击反击（周围 AoE，0.8s 内冷防高频接触刷屏）——先于 PHOENIX
+	# 早退（两者可共存）
+	if _listens(&"REL_EF_THORNS", &"player_hit") and _thorns_cd_left <= 0.0 			and player != null and is_instance_valid(player):
+		var thorns := _owned_effect(&"REL_EF_THORNS")
+		if thorns != null:
+			_thorns_cd_left = float(thorns.params.get("icd", 0.8))
+			var weapon := _primary_weapon()
+			if weapon != null:
+				weapon.settle_aoe(player.global_position,
+					float(thorns.params.get("radius", 140.0)),
+					weapon.get_current_atk() * float(thorns.params.get("atk_ratio", 1.2)),
+					false)
+				DebugStats.count(&"relic_thorns")
 	# REL_PHOENIX：致死伤害保留 1 HP + 清屏冲击（300% ATK / 半径 400；A3 §5）。
 	# 时序：Player.take_contact_damage 先 emit player_hit 再判死——此处把 hp 拉回 1，
 	# 同步事件派发保证其后的致死判定自然短路（uses 耗尽则放行死亡，E-16 仲裁不受影响）。
@@ -293,6 +357,20 @@ func _on_player_hit(_p_damage: float, _p_source_uid: int) -> void:
 func tick(p_game_delta: float) -> void:
 	# R66 遗物内部冷却推进（GameLoop PLAYING ⑥——选卡/暂停期冻结，战斗时口径）
 	_crit_chain_cd_left = maxf(_crit_chain_cd_left - p_game_delta, 0.0)
+	# R72：连杀狂热窗口衰减 / 荆棘与汲血内冷
+	if _frenzy_left > 0.0:
+		_frenzy_left = maxf(_frenzy_left - p_game_delta, 0.0)
+		if _frenzy_left <= 0.0:
+			_frenzy_stacks = 0
+	_thorns_cd_left = maxf(_thorns_cd_left - p_game_delta, 0.0)
+	_lifesteal_cd_left = maxf(_lifesteal_cd_left - p_game_delta, 0.0)
+
+
+func frenzy_dmg_bonus() -> float:
+	# R72 连杀狂热当前加成（命中时点乘区注入源）
+	if _frenzy_stacks <= 0 or _frenzy_left <= 0.0:
+		return 0.0
+	return float(_effect_param(&"REL_EF_KILL_FRENZY", "per_stack", 0.08)) * float(_frenzy_stacks)
 
 
 func _on_damage_resolved(p_result: DamageResult) -> void:
@@ -318,6 +396,12 @@ func _on_damage_resolved(p_result: DamageResult) -> void:
 				_crit_chain_cd_left = float(_effect_param(&"REL_EF_CRIT_CHAIN", "cd", 30.0))
 				EventBus.emit_mechanics_intro("⚡ 暴击谐振：角色技能冷却已重置！")
 			DebugStats.count(&"relic_crit_chain")
+	# R72 汲血刻印：暴击回血（0.6s 内冷——高暴击多段构筑不无限奶）
+	if _listens(&"REL_EF_CRIT_LIFESTEAL", &"damage_resolved") and p_result.is_crit 			and _lifesteal_cd_left <= 0.0 and player != null and is_instance_valid(player):
+		_lifesteal_cd_left = float(_effect_param(&"REL_EF_CRIT_LIFESTEAL", "icd", 0.6))
+		var heal_pct := float(_effect_param(&"REL_EF_CRIT_LIFESTEAL", "heal_pct_max_hp", 0.02))
+		var mhp2: float = player.get("max_hp")
+		player.set("hp", minf(float(player.get("hp")) + mhp2 * heal_pct, mhp2))
 	if p_result.pool_breakdown.has(&"elite_dmg"):
 		elite_dmg_hits += 1
 	if p_result.pool_breakdown.has(&"bounce_dmg"):
