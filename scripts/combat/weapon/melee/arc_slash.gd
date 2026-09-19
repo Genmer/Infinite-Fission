@@ -152,7 +152,7 @@ func _draw() -> void:
 		if tp <= 0.0:
 			continue
 		var ts := facing - half + 2.0 * half * clampf(tp * 1.15, 0.0, 1.0)
-		var trail_a := [0.26, 0.14, 0.07][k]
+		var trail_a: float = [0.26, 0.14, 0.07][k]
 		_draw_moon(ts, band * 1.25, r_out * 0.98, r_in * 1.08,
 			Color(0.62, 0.85, 1.0, trail_a))
 	# 主体弯月（钢白，青蓝辉光边）

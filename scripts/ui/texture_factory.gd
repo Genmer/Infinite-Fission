@@ -1106,17 +1106,16 @@ static func weapon_icon(p_id: StringName) -> ImageTexture:
 					{"sd": _circle_at(Vector2(13.9, 8.0), 4.6), "fill": deep, "ow": 2.8},
 					{"sd": _circle_at(Vector2(0.0, 0.0), 3.0), "fill": white, "ow": 0.0},
 				]
-			"W9_arc_slash":                   # 弧斩：扇形弧刀（外弧 20 / 内弧 10，±65°）
-				var arc := PackedVector2Array()
-				for i in range(9):
-					var ang := deg_to_rad(-65.0 + 130.0 * float(i) / 8.0) - PI * 0.5
-					arc.append(Vector2(cos(ang), sin(ang)) * 20.0)
-				for j in range(9):
-					var ang_in := deg_to_rad(65.0 - 130.0 * float(j) / 8.0) - PI * 0.5
-					arc.append(Vector2(cos(ang_in), sin(ang_in)) * 10.0)
+			"W9_arc_slash":                  # 弧斩化身（R59 用户反馈「悬浮的挥砍像扇子」）：扇形弧刀改直刀——竖直长刃 + 血槽线 + 十字护手 + 缠绳柄
 				layers = [
-					{"sd": _poly_sd(arc), "fill": blue, "ow": 3.2},
-					{"sd": _circle_at(Vector2(0.0, 0.0), 2.6), "fill": white, "ow": 0.0},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(2.0, -22.0), Vector2(5.0, -18.0), Vector2(4.5, 6.0), Vector2(-0.5, 6.0), Vector2(-1.0, -18.0),
+					])), "fill": blue, "ow": 2.6},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(2.0, -22.0), Vector2(3.0, -14.0), Vector2(1.2, 2.0), Vector2(0.8, -14.0),
+					])), "fill": Color(1.0, 1.0, 1.0, 0.85), "ow": 0.0},
+					{"sd": _box_at(Vector2(0.75, 8.0), Vector2(7.0, 1.8), 1.2), "fill": deep, "ow": 2.4},
+					{"sd": _box_at(Vector2(0.75, 13.5), Vector2(1.8, 6.0), 1.2), "fill": deep, "ow": 2.4},
 				]
 			_:                                # 兜底：四角星
 				layers = [
