@@ -29,6 +29,12 @@ const SUPPLY_POPUP_PER_FRAME := 4
 const PROJ_SPEED := 320.0
 const GRUNT_ID := &"E1_grunt"
 const RUNNER_ID := &"E2_runner"
+# G7 压测覆盖扩展：R72 六新怪入列（盾面判定/反弹盾冷却/法术 telegraph/预判射击/
+# 闪现/地狱火——tick 路径比 grunt 重，性能达标口径须含新内容）
+const NEW_MIX: Array[StringName] = [
+	&"E25_phase_bomber", &"E26_shield_lancer", &"E27_warden_orb",
+	&"E28_hexcaster", &"E29_longbowhawk", &"E30_hellfire_revenant",
+]
 
 var tree: SceneTree
 var _gl: GameLoop = null
@@ -128,7 +134,12 @@ func _maintain_load() -> void:
 
 func _enqueue_enemies(p_count: int) -> void:
 	for i in range(p_count):
-		var id := GRUNT_ID if _rng.randf() < 0.8 else RUNNER_ID
+		var id: StringName = GRUNT_ID           # 混编：60% grunt / 20% runner / 20% 六新怪
+		var r := _rng.randf()
+		if r > 0.8:
+			id = RUNNER_ID
+		elif r > 0.6:
+			id = NEW_MIX[_rng.randi_range(0, NEW_MIX.size() - 1)]
 		_gl.spawner.enqueue({"data_id": id, "wave": maxi(_gl.wave_director.current_wave, 1)})
 
 
