@@ -15,6 +15,7 @@ var hp: float = 60.0
 var move_speed: float = 280.0                 # 移速（相对拖动 1:1 口径下的调试/键盘备用参数）
 var pickup_radius: float = 120.0
 var gold: int = 0                             # 金币（击杀 gold_drop 掉账；战地黑市货币，M7）
+var _difficulty: int = 0                      # R73 难度档镜像（GameLoop 开局注入；经验乘区源）
 var reroll_charges: int = 2                   # 选卡刷新次数（换一批；开局 2 + 局外养成，2026-08-31 用户反馈）
 var _last_move_dir: Vector2 = Vector2.UP      # 最近移动方向（游侠闪现取向）
 var revives_left: int = 0                     # 应急协议剩余复活（局外养成，每局重置）
@@ -695,7 +696,7 @@ func gain_xp(p_amount: float) -> void:
 	# 经验/等级：xp_gained → 升级（多级连升逐次广播，弹卡排队由 GameLoop 仲裁 E-16）
 	# 升级回满血（用户反馈 2026-08-29「升级还是回满血吧」：升级即奖励，血条拉满解压）
 	# 经验倍率合成：养成萃取 × 地图祝福 × AFF_XP_GAIN 词条池（R9：跨武器聚合，掉落吸收时实时求值）
-	var amount := maxf(p_amount, 0.0) * (1.0 + Meta.xp_pct()) * map_xp_mult 		* (1.0 + clampf(_weapon_pool_sum(&"add_xp"), 0.0, 2.0))
+	var amount := maxf(p_amount, 0.0) * (1.0 + Meta.xp_pct()) * map_xp_mult 		* (1.0 + clampf(_weapon_pool_sum(&"add_xp"), 0.0, 2.0)) 		* GameConst.difficulty_reward_mult(_difficulty)   # R73 难度风险回报（E1）
 	xp += amount
 	EventBus.emit_xp_gained(amount)
 	while xp >= xp_need:
@@ -704,6 +705,16 @@ func gain_xp(p_amount: float) -> void:
 		xp_need = _xp_need_for(level)
 		hp = max_hp
 		EventBus.emit_level_up(level)
+
+
+func set_difficulty(p_d: int) -> void:
+	# R73：GameLoop 开局/续档注入（经验合成式消费；金币乘区在 GameLoop 掉账侧用 _difficulty）
+	_difficulty = clampi(p_d, 0, 2)
+
+
+func difficulty_reward_mult() -> float:
+	# R73 详情展示口（构筑详情「经验获取」行含难度加成）
+	return GameConst.difficulty_reward_mult(_difficulty)
 
 
 func gold_find_pct() -> float:

@@ -542,6 +542,7 @@ func start_run(p_daily_seed: int = -1) -> bool:
 	player.set_character(Meta.character_id)   # 角色应用（含养成加成——M8/角色系统）
 	spawner.difficulty = _difficulty             # R72 敌数值乘区（出生管线单点）
 	wave_director.difficulty = _difficulty        # R72 波表织入（新形态敌伴随）
+	player.set_difficulty(_difficulty)             # R73 风险回报（经验侧乘区镜像）
 	player.revives_left += GameConst.difficulty_revives(_difficulty)   # R72 难度附赠复活
 	var map_def := MapTable.get_map(current_map_id)
 	_apply_map_affixes(map_def)                  # 词缀二期：双词缀注入（祝→玩家 / 诅→敌侧）
@@ -1151,6 +1152,7 @@ func continue_run() -> bool:
 	wave_director.wave_table = MapTable.load_table(current_map_id, registry)
 	spawner.difficulty = _difficulty
 	wave_director.difficulty = _difficulty       # R72 继续局保持织入口径
+	player.set_difficulty(_difficulty)             # R73 继续局保持风险回报
 	Meta.set_run_map(current_map_id)
 	var is_daily := bool(data.get("daily", false))
 	Meta.set_run_daily(is_daily)
@@ -1332,7 +1334,8 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 		var gold_find := player.gold_find_pct()
 		if randf() < minf(float(gd.get("chance", 0.0)) * (1.0 + gold_find), 1.0):
 			player.gold += int(round(randf_range(float(gd.get("min", 1)), float(gd.get("max", 1)))
-				* player.map_gold_mult * (1.0 + gold_find)))
+				* player.map_gold_mult * (1.0 + gold_find)
+				* GameConst.difficulty_reward_mult(_difficulty)))   # R73 难度风险回报
 
 
 func _early_xp_mult() -> float:

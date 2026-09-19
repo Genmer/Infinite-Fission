@@ -61,6 +61,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r72_difficulty()
 	_test_r72_new_enemies()
 	_test_r72_content()
+	_test_ev1_reward()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3130,3 +3131,45 @@ func _test_r72_content() -> void:
 			and _gl.registry.get_trait(&"SYN_BULWARK") != null
 			and _gl.registry.get_trait(&"ELE_ARC_SURGE") != null)
 	rh.reset_run()                              # 遗物运行态清零（防污染后续）
+
+
+func _test_ev1_reward() -> void:
+	print("── E1 难度风险回报（困难 ×1.5 / 地狱 ×2.5） ──")
+	# ① 静态口径
+	_check("E1：收益乘区 1/1.5/2.5",
+		GameConst.difficulty_reward_mult(0) == 1.0
+			and GameConst.difficulty_reward_mult(1) == 1.5
+			and GameConst.difficulty_reward_mult(2) == 2.5)
+	# ② 经验入账实测：同面值碎片 地狱 = 普通 ×2.5（xp_gained 信号精确捕获——
+	# xp 余量读数会被升级回路扣减污染）
+	var gained: Array = []
+	var xp_cb := func(p_amount: float) -> void: gained.append(p_amount)
+	EventBus.xp_gained.connect(xp_cb)
+	_gl.player.set_difficulty(GameConst.Difficulty.NORMAL)
+	_gl.player.gain_xp(10.0)
+	var xp_normal: float = float(gained[0])
+	_gl.player.set_difficulty(GameConst.Difficulty.HELL)
+	_gl.player.gain_xp(10.0)
+	var xp_hell: float = float(gained[1])
+	EventBus.xp_gained.disconnect(xp_cb)
+	_gl.player.set_difficulty(GameConst.Difficulty.NORMAL)
+	_check("E1：地狱同面值经验入账 = 普通 ×2.5（升级回路不受扰）",
+		xp_hell / xp_normal > 2.49 and xp_hell / xp_normal < 2.51,
+		"%.2f" % (xp_hell / xp_normal))
+	# ③ 金币掉账：难度乘区入账（构造高掉率敌 + 扫描保证命中）
+	_gl._difficulty = GameConst.Difficulty.HELL
+	_gl.player.set_difficulty(GameConst.Difficulty.HELL)
+	_gl.player.gold = 0
+	var gold_e := _make_killed_enemy_stub(false)
+	(gold_e.data as EnemyData).gold_drop = {"chance": 1.0, "min": 100, "max": 100}
+	for i in range(30):
+		_gl.player.gold = 0
+		_gl.call("_on_enemy_killed_drop_xp", gold_e)
+		if _gl.player.gold >= 240:
+			break
+	_check("E1：地狱金币掉账 ≥ 基值 ×2.4（×2.5 乘区落账）",
+		_gl.player.gold >= 240, "gold=%d" % _gl.player.gold)
+	(_gl.pools[&"enemy"] as EnemyPool).release(gold_e)
+	_gl._difficulty = GameConst.Difficulty.NORMAL
+	_gl.player.set_difficulty(GameConst.Difficulty.NORMAL)
+	_gl.call(&"quit_to_menu")
