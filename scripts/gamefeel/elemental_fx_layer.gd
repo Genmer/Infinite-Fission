@@ -271,13 +271,15 @@ func _tick_sparks(p_raw_delta: float) -> void:
 		sp.modulate.a = clampf(left / SPARK_LIFE * 1.3, 0.0, 1.0)
 
 
-# ── 碎裂橙色冲击小环（RXN_FIR_ICE 结算瞬间） ──────────────────────
+# ── 碎裂冲击小环（RXN_FIR_ICE 结算瞬间；夜间R58 主环改冰蓝——用户反馈「冰冻的
+# 爆炸波纹改成蓝色，现在是黄橙色」：碎裂主体是冰，火源读感降为窄橙内环） ──
+const SHATTER_ICE_COL := Color(0.62, 0.85, 1.0)   # 冰蓝（与 ELE 冻结/跳字冰色同源）
 func _build_rings() -> void:
 	for i in range(RING_COUNT):
 		var ring := Sprite2D.new()
 		ring.name = "ShatterRing%d" % i
 		ring.texture = TextureFactory.ring_tex(
-			PopPalette.ENEMY.lerp(PopPalette.XP, 0.55), 48, 4.0)   # 派生橙（与点燃火苗同源）
+			SHATTER_ICE_COL, 48, 4.0)      # 冰蓝主环（碎裂主体读感）
 		ring.visible = false
 		add_child(ring)
 		_rings.append({"sprite": ring, "left": 0.0})
@@ -297,6 +299,7 @@ func _on_reaction_triggered(p_rxn: int, p_pos: Vector2, _p_target_uid: int) -> v
 			sp.visible = true
 			ring["left"] = RING_LIFE
 			_layout_ring(ring, 0.0)
+			_spawn_reaction_ring(p_pos, Color(1.0, 0.55, 0.2, 1.0), 0.22, 1.3)   # 窄橙内环（火源提示）
 		GameConst.ReactionType.RXN_FIR_LTG:
 			_spawn_reaction_ring(p_pos, Color(1.0, 0.55, 0.2, 1.0), 0.38, 2.6)
 			_spawn_reaction_ring(p_pos, PopPalette.SHOCK, 0.3, 1.6)
