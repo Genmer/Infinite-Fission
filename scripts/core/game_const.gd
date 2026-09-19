@@ -46,6 +46,31 @@ static func difficulty_dual_pick(p_d: int, p_roll: float) -> bool:
 	return p_d == Difficulty.HELL or (p_d == Difficulty.HARD and p_roll < 0.05)
 
 
+static func weapon_note(p_weapon_id: String) -> String:
+	# G8 新武器首获横幅一句话（空 = 不提示）；与 enemy_attack_note 同源纪律
+	match p_weapon_id:
+		"W2_gatling":
+			return "越打越快——预热满档倾泻如雨，停火 0.8s 归零"
+		"W3_shotgun":
+			return "贴脸爆发——越近越痛，散射锥覆盖整排"
+		"W4_pulse_beam":
+			return "穿透光束——直线扫排，站位居中收益最大"
+		"W5_prism":
+			return "棱镜折射——弹道分光，走廊地形火力翻倍"
+		"W6_micro_missile":
+			return "自导微导——追踪索敌，专治蛇皮走位"
+		"W7_cluster_rocket":
+			return "集束重轰——大范围溅射，清屏级压制"
+		"W8_orbit_field":
+			return "环绕力场——贴身护盾 + 卫星珠撞击"
+		"W9_arc_slash":
+			return "弧斩化身——近身旋斩，贴脸收割"
+		"W10_boomerang":
+			return "去回双程伤害——撒出减速再返航，穿透拉满是清道夫"
+		_:
+			return ""
+
+
 static func enemy_attack_note(p_enemy_id: String) -> String:
 	# E5/R72 新形态机制一句话（图鉴行 + 首遇提示条共用；空 = 旧怪不提示）
 	match p_enemy_id:

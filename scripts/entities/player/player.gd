@@ -329,6 +329,10 @@ func add_weapon(p_data: WeaponData) -> WeaponBase:
 	weapon_slots[slot] = weapon
 	if weapon.get_parent() == null:
 		add_child(weapon)
+	# G8 新武器首获横幅：图鉴首遇同源（Meta 持久标记，一次不打扰）
+	var note := GameConst.weapon_note(String(p_data.id))
+	if not note.is_empty() and Meta.mark_first_met(StringName("W_" + String(p_data.id))):
+		EventBus.emit_mechanics_intro("【新武器】%s：%s" % [p_data.display_name, note])
 	return weapon
 
 

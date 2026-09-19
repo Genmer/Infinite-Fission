@@ -3472,6 +3472,22 @@ func _test_g4_boomerang() -> void:
 	_check("G6：W10 三条阈值质变钩子（巨刃新星/永动回旋/暴击碎屑）",
 		wdata.threshold_traits.size() == 3,
 		"n=%d" % wdata.threshold_traits.size())
+	# G8 新武器首获横幅：首装发「【新武器】回旋刃：…」，再装不打扰
+	_gl.player.set("unlocked_slots", 4)
+	Meta.get("codex_first_met").erase("W_W10_boomerang")
+	var banner := [""]                        # lambda 按值捕获——容器原位写回
+	var cap := func(p_msg: String) -> void: banner[0] = p_msg
+	EventBus.mechanics_intro.connect(cap)
+	_gl.player.add_weapon(wdata)
+	EventBus.mechanics_intro.disconnect(cap)
+	_check("G8：W10 首获发新武器横幅（含一句话）",
+		String(banner[0]).begins_with("【新武器】回旋刃：") and String(banner[0]).contains("双程"),
+		String(banner[0]))
+	banner[0] = ""
+	EventBus.mechanics_intro.connect(cap)
+	_gl.player.add_weapon(_gl.registry.get_weapon(&"W10_boomerang"))
+	EventBus.mechanics_intro.disconnect(cap)
+	_check("G8：W10 再获不发横幅（一次不打扰）", String(banner[0]) == "", String(banner[0]))
 
 	# 装备到空槽（槽 0 手枪全程不动——后续套件依赖主武器暖状态），按 weapon_ref 过滤弹体
 	_gl.player.set("unlocked_slots", 4)
