@@ -2528,11 +2528,12 @@ func _test_r68_confetti() -> void:
 	burst._celebrate(Vector2(360.0, 640.0))
 	_check("R68：彩纸爆发满编 90 枚（64 fountain + 26 rain）",
 		burst._pieces.size() == 90, "size=%d" % burst._pieces.size())
-	# 外部销毁防御分支：直接 free 一枚（模拟极端情况），泵帧后应摘除不抛错
-	(burst._pieces[13]["node"] as Sprite2D).free()
+	# E4 单节点化：纯数据结构（无 node 键）——到期摘数组断言即覆盖（下方 2.5s 全清）。
+	# 泵 2 帧推进确认逐帧推进 + 摘除纪律仍生效
 	burst._process(DT)
-	_check("R68：外销彩纸当帧摘除（数组收缩、无类型化赋值抛错）",
-		burst._pieces.size() == 89, "size=%d" % burst._pieces.size())
+	burst._process(DT)
+	_check("E4：彩纸纯数据推进（无子节点——单 draw pass）",
+		burst.get_child_count() == 1, "children=%d" % burst.get_child_count())  # 仅 ding Label
 	# 泵 2.5s（120Hz × 300 帧 > 最长寿命 1.1s）：全部到期，数组清空、_alive 复位
 	for i in range(300):
 		burst._process(DT)

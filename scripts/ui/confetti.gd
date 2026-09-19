@@ -14,7 +14,10 @@ const FADE_LAST := 0.35                       # 末段淡出
 const GRAVITY := 920.0
 const DRAG := 0.9                             # 空气阻尼（每秒保留比例）
 
-var _pieces: Array[Dictionary] = []           # {node: Sprite2D, vel: Vector2, spin: float, left: float}
+# E4 单节点化（self-evolution）：90 枚 Sprite2D 子节点 → 自身单 draw pass
+#（draw_polygon 逐枚直绘，物理推进不变）——子树遍历/每枚 transform/贴图绑定归零，
+# 节点创建 90 次/爆发 → 0 次。视觉等价（矩形彩纸 draw_polygon + 旋转 + 末段淡出）。
+var _pieces: Array[Dictionary] = []           # {pos, vel, spin, rot, left, col, size}
 var _ding: Label = null
 var _origin: Vector2 = Vector2.ZERO          # 本轮爆发爆点（Boss 死亡位置）
 var _alive: bool = false
@@ -50,41 +53,36 @@ func _celebrate(p_pos: Vector2) -> void:
 	rng.randomize()
 	var piece_count := PIECE_COUNT
 	for i in range(piece_count):
-		var sprite := _make_piece(rng, true)
 		# 全扇面上抛（-180°~0°：左右铺开为主，少量近垂直——爆点上方也有效覆盖）
 		var ang := deg_to_rad(rng.randf_range(-180.0, 0.0))
 		var speed := rng.randf_range(320.0, 780.0)
-		_pieces.append({
-			"node": sprite,
-			"vel": Vector2(cos(ang), sin(ang)) * speed,
-			"spin": rng.randf_range(-9.0, 9.0),
-			"left": LIFE_TIME * rng.randf_range(0.8, 1.0),
-		})
+		_pieces.append(_make_piece_data(rng,
+			_origin + Vector2(rng.randf_range(-14.0, 14.0), rng.randf_range(-10.0, 10.0)),
+			Vector2(cos(ang), sin(ang)) * speed,
+			LIFE_TIME * rng.randf_range(0.8, 1.0)))
 	# 顶部全宽落雨（跨屏铺开、初速向下小——保证「全屏」覆盖观感）
 	for i in range(RAIN_COUNT):
-		var sprite := _make_piece(rng, true)
-		sprite.position = Vector2(rng.randf_range(0.0, 720.0), rng.randf_range(-80.0, -10.0))
-		_pieces.append({
-			"node": sprite,
-			"vel": Vector2(rng.randf_range(-60.0, 60.0), rng.randf_range(60.0, 200.0)),
-			"spin": rng.randf_range(-9.0, 9.0),
-			"left": LIFE_TIME * rng.randf_range(0.85, 1.0),
-		})
+		_pieces.append(_make_piece_data(rng,
+			Vector2(rng.randf_range(0.0, 720.0), rng.randf_range(-80.0, -10.0)),
+			Vector2(rng.randf_range(-60.0, 60.0), rng.randf_range(60.0, 200.0)),
+			LIFE_TIME * rng.randf_range(0.85, 1.0)))
 	_spawn_ding(p_pos)
 	_alive = true
+	queue_redraw()
 
 
-func _make_piece(p_rng: RandomNumberGenerator, p_rect_only: bool = false) -> Sprite2D:
-	# 单枚彩纸（共享贴图 + 多色 + 随机缩放/旋转；爆点 = Boss 位置）
-	# R26：只出小矩形（圆点被用户认成「球」——Boss 死亡爆出的圆形物一律去除）
-	var sprite := Sprite2D.new()
-	sprite.texture = TextureFactory.confetti_piece(0 if p_rect_only else p_rng.randi_range(0, 1))
-	sprite.modulate = PopPalette.CONFETTI[p_rng.randi_range(0, PopPalette.CONFETTI.size() - 1)]
-	sprite.position = _origin + Vector2(p_rng.randf_range(-14.0, 14.0), p_rng.randf_range(-10.0, 10.0))
-	sprite.scale = Vector2.ONE * p_rng.randf_range(0.85, 1.5)
-	sprite.rotation = p_rng.randf_range(0.0, TAU)
-	add_child(sprite)
-	return sprite
+func _make_piece_data(p_rng: RandomNumberGenerator, p_pos: Vector2, p_vel: Vector2,
+		p_left: float) -> Dictionary:
+	# 单枚彩纸纯数据（R26 口径：只出矩形——圆点被认成「球」；E4 不再建节点）
+	return {
+		"pos": p_pos,
+		"vel": p_vel,
+		"spin": p_rng.randf_range(-9.0, 9.0),
+		"rot": p_rng.randf_range(0.0, TAU),
+		"left": p_left,
+		"col": PopPalette.CONFETTI[p_rng.randi_range(0, PopPalette.CONFETTI.size() - 1)],
+		"size": Vector2(p_rng.randf_range(0.85, 1.5), p_rng.randf_range(0.85, 1.5)),
+	}
 
 
 func _spawn_ding(p_pos: Vector2) -> void:
@@ -111,39 +109,50 @@ func _spawn_ding(p_pos: Vector2) -> void:
 
 
 func _process(p_delta: float) -> void:
-	# 彩纸抛体推进（视觉层；到期清理本轮节点——宿主节点存活，Boss 可再次庆祝）
-	# R68 根修：到期项**立即移出数组**（倒序遍历 remove_at）。旧版到期只 queue_free 不
-	# 摘数组，下一帧类型化赋值 `var sprite: Sprite2D = piece["node"]` 在已释放实例上
-	# 赋值本身抛错（is_instance_valid 守卫在其后执行不到）→ _process 中途中止 → 排在
-	# 其后的彩纸全部冻结半空永不清除（用户反馈「boss爆炸的色块还在」；运行日志每帧
-	# 刷 "Trying to assign invalid previously freed instance" 9.8 万行）。倒序 + 摘除后
-	# 数组内恒为存活项，`all_done` 判据即数组清空。
+	# 彩纸抛体推进（视觉层；到期摘数组——R68 冻结根修纪律保留：数组内恒为有效数据）。
+	# E4：数据推进 + queue_redraw 单点重绘（不再逐 Sprite transform）
 	if not _alive:
 		return
+	var dirty := false
 	var i := _pieces.size() - 1
 	while i >= 0:
 		var piece: Dictionary = _pieces[i]
-		var node_v: Variant = piece["node"]
-		if not is_instance_valid(node_v):
-			_pieces.remove_at(i)                     # 外部销毁的碎片（防御）——摘除不抛
-			i -= 1
-			continue
-		var sprite := node_v as Sprite2D
 		var left: float = piece["left"] - p_delta
 		if left <= 0.0:
-			sprite.queue_free()
-			_pieces.remove_at(i)
+			_pieces.remove_at(i)                     # R68 纪律：到期当帧摘出（不存死项）
 			i -= 1
+			dirty = true
 			continue
 		piece["left"] = left
 		var vel: Vector2 = piece["vel"]
 		vel.y += GRAVITY * p_delta
 		vel *= pow(DRAG, p_delta)
 		piece["vel"] = vel
-		sprite.position += vel * p_delta
-		sprite.rotation += float(piece["spin"]) * p_delta
-		if left < FADE_LAST:
-			sprite.modulate.a = clampf(left / FADE_LAST, 0.0, 1.0)
+		piece["pos"] = (piece["pos"] as Vector2) + vel * p_delta
+		piece["rot"] = float(piece["rot"]) + float(piece["spin"]) * p_delta
+		dirty = true
 		i -= 1
+	if dirty:
+		queue_redraw()
 	if _pieces.is_empty():                          # 复位待发（w10/w20/w30 每次 Boss 死亡都爆发）
 		_alive = false
+		queue_redraw()
+
+
+func _draw() -> void:
+	# E4 单 draw pass：矩形彩纸逐枚直绘（旋转 + 末段淡出与旧 Sprite 版视觉等价）
+	for piece: Dictionary in _pieces:
+		var left := float(piece["left"])
+		var a := clampf(left / FADE_LAST, 0.0, 1.0) if left < FADE_LAST else 1.0
+		var col: Color = piece["col"]
+		col.a = a
+		var rot := float(piece["rot"])
+		var sz := (piece["size"] as Vector2) * 7.0   # 旧贴图基准（随机缩放 0.85~1.5 倍矩形）
+		var c := Vector2(-sz.x * 0.5, -sz.y * 0.5)
+		var pts := PackedVector2Array([
+			c.rotated(rot),
+			Vector2(c.x + sz.x, c.y).rotated(rot),
+			Vector2(c.x + sz.x, c.y + sz.y).rotated(rot),
+			Vector2(c.x, c.y + sz.y).rotated(rot),
+		])
+		draw_polygon(pts, PackedColorArray([col, col, col, col]))
