@@ -112,19 +112,30 @@ func _spawn_ding(p_pos: Vector2) -> void:
 
 func _process(p_delta: float) -> void:
 	# 彩纸抛体推进（视觉层；到期清理本轮节点——宿主节点存活，Boss 可再次庆祝）
+	# R68 根修：到期项**立即移出数组**（倒序遍历 remove_at）。旧版到期只 queue_free 不
+	# 摘数组，下一帧类型化赋值 `var sprite: Sprite2D = piece["node"]` 在已释放实例上
+	# 赋值本身抛错（is_instance_valid 守卫在其后执行不到）→ _process 中途中止 → 排在
+	# 其后的彩纸全部冻结半空永不清除（用户反馈「boss爆炸的色块还在」；运行日志每帧
+	# 刷 "Trying to assign invalid previously freed instance" 9.8 万行）。倒序 + 摘除后
+	# 数组内恒为存活项，`all_done` 判据即数组清空。
 	if not _alive:
 		return
-	var all_done := true
-	for piece: Dictionary in _pieces:
-		var sprite: Sprite2D = piece["node"]
-		if not is_instance_valid(sprite):
+	var i := _pieces.size() - 1
+	while i >= 0:
+		var piece: Dictionary = _pieces[i]
+		var node_v: Variant = piece["node"]
+		if not is_instance_valid(node_v):
+			_pieces.remove_at(i)                     # 外部销毁的碎片（防御）——摘除不抛
+			i -= 1
 			continue
+		var sprite := node_v as Sprite2D
 		var left: float = piece["left"] - p_delta
-		piece["left"] = left
 		if left <= 0.0:
 			sprite.queue_free()
+			_pieces.remove_at(i)
+			i -= 1
 			continue
-		all_done = false
+		piece["left"] = left
 		var vel: Vector2 = piece["vel"]
 		vel.y += GRAVITY * p_delta
 		vel *= pow(DRAG, p_delta)
@@ -133,6 +144,6 @@ func _process(p_delta: float) -> void:
 		sprite.rotation += float(piece["spin"]) * p_delta
 		if left < FADE_LAST:
 			sprite.modulate.a = clampf(left / FADE_LAST, 0.0, 1.0)
-	if all_done:
-		_pieces.clear()                     # 复位待发（w10/w20/w30 每次 Boss 死亡都爆发）
+		i -= 1
+	if _pieces.is_empty():                          # 复位待发（w10/w20/w30 每次 Boss 死亡都爆发）
 		_alive = false

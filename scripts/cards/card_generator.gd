@@ -147,12 +147,30 @@ func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
 					# cap 0.6 = value 0.6）品质缩放全被单区钳制截回白值，「什么品质都一样」
 					#（用户反馈「背水协议怎么什么品质都是35%」——35% 条件阈值本不缩放，
 					# 乘数也因上限失效）。上限语义不变：限制区内叠层总和，锚点随本卡缩放。
-					if data.pool == GameConst.PoolClass.MULT:
-						out.cap_pool_p = data.cap_pool_p * scale
-					elif data.pool == GameConst.PoolClass.LOCAL:
-						out.cap_local = data.cap_local * scale
-					out.description = _scaled_description(data.description, scale, rarity)
-					card["description"] = out.description
+				if data.pool == GameConst.PoolClass.MULT:
+					out.cap_pool_p = data.cap_pool_p * scale
+				elif data.pool == GameConst.PoolClass.LOCAL:
+					out.cap_local = data.cap_local * scale
+				# R68：PLAYER_HP_BELOW 条件阈值品质化（用户反馈「低血协议……越高级越高
+				# 触发」）：每档 +7%（背水协议白/蓝/紫/金 = 35/42/49/56%）——高级卡乘数
+				# 大，触发窗口同步放宽才配得上品质。condition 深拷贝后改（duplicate() 对
+				# Dictionary 是浅拷贝，直改会写穿 .tres 注册表真源——E-08 违例）；描述中
+				# "HP<NN%" 按旧→新整词替换（_scaled_description 本身不碰无符号 %）
+				var hp_old_txt := ""
+				var hp_new_txt := ""
+				if int(data.condition.get("condition_id", GameConst.ConditionId.NONE)) \
+						== GameConst.ConditionId.PLAYER_HP_BELOW:
+					var params_in: Dictionary = data.condition.get("params", {})
+					var base_pct := clampf(float(params_in.get("pct", 0.35)), 0.05, 0.9)
+					var new_pct := clampf(base_pct + 0.07 * float(rarity), 0.05, 0.9)
+					out.condition = data.condition.duplicate(true)
+					out.condition["params"]["pct"] = new_pct
+					hp_old_txt = "HP<%d%%" % int(round(base_pct * 100.0))
+					hp_new_txt = "HP<%d%%" % int(round(new_pct * 100.0))
+				out.description = _scaled_description(data.description, scale, rarity)
+				if not hp_new_txt.is_empty() and out.description.contains(hp_old_txt):
+					out.description = out.description.replace(hp_old_txt, hp_new_txt)
+				card["description"] = out.description
 				card["data"] = out
 			CardKind.MASTERY:
 				var weapon: Object = card.get("weapon")

@@ -54,6 +54,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_endless_maps()
 	_test_r62_endless_continue()
 	_test_r66_icd_and_corpse()
+	_test_r68_confetti()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -271,6 +272,65 @@ func _test_r60_card_text() -> void:
 	for tb in fw.trait_stack.traits.duplicate():
 		if tb.data.id == fury_src.id:
 			fw.trait_stack.traits.erase(tb)        # 还原构筑（无 detach API——直接摘挂载表）
+	_gl.player.set("max_hp", saved_max)
+	_gl.player.set("hp", saved_hp)
+	# ⑥ R68 条件阈值品质化（用户反馈「低血协议难道不同品质的阈值不该不一样吗，越高级
+	# 越高触发」）：PLAYER_HP_BELOW 每档 +7%（白/蓝/紫/金 = 35/42/49/56%），深拷贝
+	# condition 不写穿 .tres 真源；行为分档：hp_pct=0.55 金卡触发、白卡不触发
+	var fury_cards2: Array[Dictionary] = [{
+		"kind": CardGenerator.CardKind.TRAIT, "id": fury_src.id, "rarity": 3,
+		"data": fury_src, "value_scale": 1.0, "display_name": "t", "description": "t",
+	}]
+	gen._apply_rarity_values(fury_cards2)
+	var fury_gold2: TraitData = fury_cards2[0].get("data")
+	var pct_gold := float((fury_gold2.condition["params"] as Dictionary).get("pct", 0.0))
+	_check("R68：背水金卡条件阈值 0.35→0.56（每档 +7%）",
+		absf(pct_gold - 0.56) <= 0.001, "pct=%.3f" % pct_gold)
+	var desc_gold := String(fury_cards2[0].get("description"))
+	_check("R68：金卡描述 HP<35% 重写为 HP<56%",
+		desc_gold.contains("HP<56%") and not desc_gold.contains("HP<35%"), desc_gold)
+	var pct_src := float((fury_src.condition["params"] as Dictionary).get("pct", 0.0))
+	_check("R68：注册表 .tres 未被写穿（真源 pct 仍 0.35——深拷贝纪律）",
+		absf(pct_src - 0.35) <= 0.001, "pct=%.3f" % pct_src)
+	# 行为分档：0.55 在旧阈值外（0.35）、新阈值内（0.56）
+	_gl.player.set("max_hp", 100.0)
+	_gl.player.set("hp", 55.0)
+	var gate_ctx := TraitContext.new()
+	gate_ctx.weapon = fw
+	gate_ctx.event = GameConst.TraitEvent.ON_HIT
+	gate_ctx.damage_ctx = DamageContext.new()
+	gate_ctx.damage_ctx.player_hp_pct = 0.55
+	fw.trait_stack.attach(fury_gold2)
+	var gate_pools: Array[Dictionary] = fw.trait_stack.collect_mult_pools(gate_ctx)
+	var gate_contrib := 0.0
+	for pe in gate_pools:
+		if StringName(String(pe.get("pool_id"))) == &"fury_dmg":
+			gate_contrib = float(pe.get("contrib"))
+	_check("R68：hp_pct=0.55 金卡触发（0.55<0.56）贡献 1.56",
+		absf(gate_contrib - 1.56) <= 0.001, "contrib=%.3f" % gate_contrib)
+	for tb in fw.trait_stack.traits.duplicate():
+		if tb.data.id == fury_src.id:
+			fw.trait_stack.traits.erase(tb)
+	var white_cards: Array[Dictionary] = [{
+		"kind": CardGenerator.CardKind.TRAIT, "id": fury_src.id, "rarity": 0,
+		"data": fury_src, "value_scale": 1.0, "display_name": "t", "description": "t",
+	}]
+	gen._apply_rarity_values(white_cards)
+	var fury_white: TraitData = white_cards[0].get("data")
+	var pct_white := float((fury_white.condition["params"] as Dictionary).get("pct", 0.0))
+	_check("R68：白卡阈值不品质化（仍 0.35——白=基准档）",
+		absf(pct_white - 0.35) <= 0.001, "pct=%.3f" % pct_white)
+	fw.trait_stack.attach(fury_white)
+	var white_pools: Array[Dictionary] = fw.trait_stack.collect_mult_pools(gate_ctx)
+	var white_contrib := 0.0
+	for pe in white_pools:
+		if StringName(String(pe.get("pool_id"))) == &"fury_dmg":
+			white_contrib = float(pe.get("contrib"))
+	_check("R68：同血量 0.55 白卡不触发（0.55>0.35——宽窗口是高级卡专属）",
+		white_contrib <= 0.001, "contrib=%.3f" % white_contrib)
+	for tb in fw.trait_stack.traits.duplicate():
+		if tb.data.id == fury_src.id:
+			fw.trait_stack.traits.erase(tb)
 	_gl.player.set("max_hp", saved_max)
 	_gl.player.set("hp", saved_hp)
 	# ⑤ 整数词条 round 对齐卡面（蓝 反弹+2 value 2.8 → +3 而非 int 截断回 2）
@@ -2446,6 +2506,35 @@ func _test_round7_audit() -> void:
 	_check("冰原通关：w15 清空 → 冰原已通关标记", Meta.is_map_cleared(&"world_frost"))
 	_check("冰原通关：魔域随之解锁", Meta.is_map_unlocked(&"world_demon"))
 	print("── 七轮反馈完 ──")
+
+
+func _test_r68_confetti() -> void:
+	print("── R68 彩纸冻结根修 ──")
+	# 用户反馈「还有boss爆炸的色块还在」+ 运行日志实证（9.8 万行 "Trying to assign
+	# invalid previously freed instance" at confetti.gd:_process）：旧版到期彩纸只
+	# queue_free 不摘数组 → 下一帧类型化赋值在已释放实例上赋值即抛错 → _process 中止
+	# → 排在其后的彩纸冻结半空永不清除。修复后到期/外销项立即摘数组，数组恒存活项。
+	var burst := ConfettiBurst.new()
+	_gl.add_child(burst)                           # 入树（_celebrate 内 ding 跳字需 create_tween）
+	burst._celebrate(Vector2(360.0, 640.0))
+	_check("R68：彩纸爆发满编 90 枚（64 fountain + 26 rain）",
+		burst._pieces.size() == 90, "size=%d" % burst._pieces.size())
+	# 外部销毁防御分支：直接 free 一枚（模拟极端情况），泵帧后应摘除不抛错
+	(burst._pieces[13]["node"] as Sprite2D).free()
+	burst._process(DT)
+	_check("R68：外销彩纸当帧摘除（数组收缩、无类型化赋值抛错）",
+		burst._pieces.size() == 89, "size=%d" % burst._pieces.size())
+	# 泵 2.5s（120Hz × 300 帧 > 最长寿命 1.1s）：全部到期，数组清空、_alive 复位
+	for i in range(300):
+		burst._process(DT)
+	_check("R68：2.5s 后彩纸全清（数组空——不再有冻结半空的残留条）",
+		burst._pieces.is_empty(), "left=%d" % burst._pieces.size())
+	_check("R68：_alive 复位待发（下次 Boss 死亡可再爆发）", not burst._alive)
+	# 再爆一轮验证复位可复用（w10/w20/w30 多次庆祝）：数组重新满编
+	burst._celebrate(Vector2(360.0, 640.0))
+	_check("R68：复位后再爆发满编 90（多 Boss 复用不残留）",
+		burst._pieces.size() == 90, "size=%d" % burst._pieces.size())
+	burst.free()                                   # 宿主自清（ding Label 等余项）
 
 
 func _bounce_probe(p_proj: ProjectileBase, p_bounce: TraitData, p_params: Dictionary) -> void:
