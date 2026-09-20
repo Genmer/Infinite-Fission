@@ -43,6 +43,8 @@ const BGM_ARP_HIGH_DB := -19.0
 const BGM_HATS_DB := -20.0
 const BGM_MENU_DB := -15.0
 const BGM_TRACK_DIR := "res://assets/music"
+const BGM_COMBAT_VARIANTS := 3                   # R79 战斗曲库（Am-F-C-G / Em-C-G-D / Dm-Bb-F-C）
+const BGM_MENU_VARIANTS := 2                     # R79 大厅曲库（Cmaj7 系 / Fmaj7 下行）
 
 var _bgm_player: AudioStreamPlayer = null      # pad 和声床宿主
 var _bgm_bass_player: AudioStreamPlayer = null # 贝斯律动宿主
@@ -57,6 +59,8 @@ var _bgm_intensity := 0                        # 战斗强度档 0/1/2（波次�
 var _bgm_menu_on := false                      # 大厅曲开关（MENU 态驱动）
 var _bgm_started := false                      # 战斗五轨首次激活起播（此后仅拨 stream_paused）
 var _bgm_menu_started := false                 # 大厅曲首次起播
+var _bgm_combat_variant := -1                  # R79 当前战斗套索引（每局随机）
+var _bgm_menu_variant := -1                    # R79 当前大厅套索引（回大厅换曲）
 
 
 func _ready() -> void:
@@ -200,23 +204,84 @@ func _synthesize(p_dur: float, p_f0: float, p_f1: float, p_kind: String,
 
 # ── BGM 环境音（P2：预生成 PCM 循环——运行期零逐帧生成） ──────────
 func _build_bgm() -> void:
-	# R75 六轨装载（烘焙 .res——曲复杂度在离线作曲期付清，启动仅 load）
-	var layers: Array = [
-		["bgm_pad", "_bgm_player", "BgmPad", BGM_PAD_DB],
-		["bgm_bass", "_bgm_bass_player", "BgmBass", BGM_BASS_DB],
-		["bgm_arp", "_bgm_arp_player", "BgmArp", BGM_ARP_DB],
+	# R75/R79 轨道装载：踩镲/战鼓固定单轨；pad/贝斯/琶音/高琶 = 战斗变体四件；
+	# 大厅曲独立变体。变体选择走 roll（随机 + 换流重启锁相）
+	var fixed: Array = [
 		["bgm_hats", "_bgm_hats_player", "BgmHats", BGM_HATS_DB],
-		["bgm_arp_high", "_bgm_arp_high_player", "BgmArpHigh", BGM_ARP_HIGH_DB],
 		["bgm_drums", "_bgm_boss_player", "BgmBoss", BGM_BOSS_DB],
-		["bgm_menu", "_bgm_menu_player", "BgmMenu", BGM_MENU_DB],
 	]
-	for entry in layers:
-		var player := AudioStreamPlayer.new()
-		player.name = String(entry[2])
-		player.stream = load("%s/%s.res" % [BGM_TRACK_DIR, String(entry[0])])
-		player.volume_db = float(entry[3])
-		add_child(player)
-		set(entry[1], player)
+	for entry in fixed:
+		var fp := AudioStreamPlayer.new()
+		fp.name = String(entry[2])
+		fp.stream = load("%s/%s.res" % [BGM_TRACK_DIR, String(entry[0])])
+		fp.volume_db = float(entry[3])
+		add_child(fp)
+		set(entry[1], fp)
+	var stems: Array = [
+		["_bgm_player", "BgmPad", BGM_PAD_DB],
+		["_bgm_bass_player", "BgmBass", BGM_BASS_DB],
+		["_bgm_arp_player", "BgmArp", BGM_ARP_DB],
+		["_bgm_arp_high_player", "BgmArpHigh", BGM_ARP_HIGH_DB],
+	]
+	for entry in stems:
+		var sp := AudioStreamPlayer.new()
+		sp.name = String(entry[1])
+		sp.volume_db = float(entry[2])
+		add_child(sp)
+		set(entry[0], sp)
+	_bgm_menu_player = AudioStreamPlayer.new()
+	_bgm_menu_player.name = "BgmMenu"
+	_bgm_menu_player.volume_db = BGM_MENU_DB
+	add_child(_bgm_menu_player)
+	bgm_roll_combat_variant()
+	bgm_roll_menu_variant()
+
+
+func bgm_apply_combat_variant(p_v: int) -> void:
+	# R79 战斗套切换（roll 的确定性入口——测试注入用）：四件换流；已起播则六轨
+	# 同步 stop+play 重锁相（等长 16s 循环，重启即对齐）
+	var v := wrapi(p_v, 0, BGM_COMBAT_VARIANTS)   # wrapi 上界排他——0..N-1
+	if v == _bgm_combat_variant:
+		return
+	_bgm_combat_variant = v
+	var players: Array = [_bgm_player, _bgm_bass_player, _bgm_arp_player, _bgm_arp_high_player]
+	var names: Array = ["bgm_pad", "bgm_bass", "bgm_arp", "bgm_arp_high"]
+	for i in range(players.size()):
+		players[i].stream = load("%s/%s_v%d.res" % [BGM_TRACK_DIR, String(names[i]), v])
+	if _bgm_started:
+		for p: AudioStreamPlayer in [_bgm_player, _bgm_bass_player, _bgm_arp_player,
+				_bgm_hats_player, _bgm_arp_high_player, _bgm_boss_player]:
+			p.stop()
+			p.play()
+
+
+func bgm_roll_combat_variant() -> int:
+	# R79 每局随机抽一套战斗曲（start_run 调用——首播前换流零重锁成本）
+	var v := randi_range(0, BGM_COMBAT_VARIANTS - 1)
+	bgm_apply_combat_variant(v)
+	return _bgm_combat_variant
+
+
+func bgm_apply_menu_variant(p_v: int) -> void:
+	var v := wrapi(p_v, 0, BGM_MENU_VARIANTS)
+	if v == _bgm_menu_variant:
+		return
+	_bgm_menu_variant = v
+	_bgm_menu_player.stream = load("%s/bgm_menu_v%d.res" % [BGM_TRACK_DIR, v])
+	if _bgm_menu_started:
+		_bgm_menu_player.stop()
+		_bgm_menu_player.play()
+
+
+func bgm_roll_menu_variant() -> int:
+	# R79 回大厅换曲（change_state MENU 驱动）
+	var v := randi_range(0, BGM_MENU_VARIANTS - 1)
+	bgm_apply_menu_variant(v)
+	return _bgm_menu_variant
+
+
+func bgm_combat_variant_index() -> int:
+	return _bgm_combat_variant
 
 
 func bgm_set_active(p_active: bool) -> void:

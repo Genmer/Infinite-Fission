@@ -263,6 +263,7 @@ func change_state(p_new: int) -> bool:
 		sfx.bgm_set_scene_menu(p_new == GameConst.GameStatus.MENU)
 		if p_new == GameConst.GameStatus.MENU:
 			sfx.bgm_set_boss_layer(false)
+			sfx.bgm_roll_menu_variant()         # R79 回大厅换曲（2 套轮换）
 	EventBus.emit_state_changed(p_new)
 	return true
 
@@ -536,6 +537,8 @@ func start_run(p_daily_seed: int = -1) -> bool:
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
 	_endless_mode = false                       # R62：新局非无尽态（continue_endless 置位）
+	if sfx != null:
+		sfx.bgm_roll_combat_variant()          # R79 每局随机战斗套（首播前换流）
 	_combo_count = 0                            # E9：连杀窗口复位
 	_combo_tier_paid = 0                        # G9：连杀档位同步复位
 	_combo_left = 0.0

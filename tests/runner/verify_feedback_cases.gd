@@ -1792,6 +1792,25 @@ func _test_p2_bgm() -> void:
 		SfxBank.I._bgm_player.stream_paused
 		and SfxBank.I._bgm_boss_player.stream_paused)
 	# R75 六轨场景音乐：轨道装载 / 强度分层 / 大厅曲 / 贝斯等长锁相
+	# R79 多套随机：战斗 3 套 + 大厅 2 套，apply 确定性换流 + 长度锁相不变
+	_check("R79：战斗 3 套变体 + 大厅 2 套装载",
+		SfxBank.I.bgm_combat_variant_index() >= 0 and SfxBank.I.bgm_combat_variant_index() <= 2, "")
+	var v0_stream: AudioStreamWAV = SfxBank.I._bgm_player.stream
+	SfxBank.I.bgm_apply_combat_variant(1)
+	_check("R79：战斗套切换换流（V0→V1 资源变更）",
+		SfxBank.I._bgm_player.stream != v0_stream
+			and String((SfxBank.I._bgm_player.stream as AudioStreamWAV).resource_path).contains("_v1"),
+		String((SfxBank.I._bgm_player.stream as AudioStreamWAV).resource_path))
+	_check("R79：换套后四件等长锁相保持（16s）",
+		absf((SfxBank.I._bgm_bass_player.stream as AudioStreamWAV).get_length()
+			- SfxBank.I.bgm_loop_seconds()) <= 0.01, "")
+	SfxBank.I.bgm_apply_combat_variant(2)
+	var pad_v2_path := String((SfxBank.I._bgm_player.stream as AudioStreamWAV).resource_path)
+	_check("R79：V2 套装载（Dm-Bb-F-C）",
+		pad_v2_path.contains("_v2")
+			and absf((SfxBank.I._bgm_player.stream as AudioStreamWAV).get_length()
+				- SfxBank.I.bgm_loop_seconds()) <= 0.01,
+		pad_v2_path)
 	_check("R75：六轨全部装载（.res 循环资源）",
 		SfxBank.I._bgm_bass_player.stream is AudioStreamWAV
 			and SfxBank.I._bgm_arp_player.stream is AudioStreamWAV

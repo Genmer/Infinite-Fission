@@ -5,7 +5,7 @@
 - 一句话：竖屏单手割草 roguelike（Godot 4.3），晴空糖果美术，难度三档 × 成对抉择构筑深度
 - 技术栈/入口：GDScript；scenes/main.tscn → GameLoop（scripts/loop/game_loop.gd 编排一切）
 - 运行：`../tools/Godot_v4.3-stable_win64_console.exe --path .`（已验证可跑）
-- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 533 断言（无 lint）
+- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 537 断言（无 lint）
 - 核心体验：割草爽感 + 局内构筑滚雪球 + 走位反制（telegraph/盾面/法术圈走位有解）
 - 红线与坑：E-04~E-08 池化清零契约；.tres 注册表禁运行期落改（深拷贝）；测试直调无 add_child
   （池化实体本就是池节点子节点）；-s 入口两文件模式；写测试输出到日志文件防管道挂死
@@ -41,3 +41,4 @@
 - R75b 2026-09-19 战斗曲重制（用户复听反馈「没变化」）：pad 换 Am-F-C-G 亮 voicing、琶音层 w1 起步、贝斯 -17→-15dB/琶音 -17.5→-16dB、新增高八度琶音轨（w10+ 强度 2）；wave_started→强度接线断言入套；verify 532/532
 - G11 2026-09-19 回旋刃穿透免疫（用户反馈「击中就消失还回旋什么」）：_submit_hit 不耗穿透、ON_PIERCE 照发；W10 L3 质变改 rof 2.8→3.1；verify 533/533
 - R78 2026-09-19 回旋模型重做（用户三轮反馈）：定距甩满（range=翻转点）+ 碰到弹开 + 同敌 0.4s 接触内冷；ballistic 子类超射程 EXPIRED 豁免回旋刃（甩满距离≠寿命）；测试顺带揪出套件残留敌污染（网格清场入测试）；verify 533/533
+- R79 2026-09-19 多套随机音乐（用户问「固定还是随机」→扩随机）：作曲器变体参数化（COMBAT_SETS×3 / MENU_SETS×2），16 轨烘焙；sfx_bank roll/apply + 换套六轨重启锁相；start_run 抽战斗套、回大厅换大厅曲；修 wrapi 排他上界坑；verify 537/537 + 全电池零错

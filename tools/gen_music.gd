@@ -107,22 +107,61 @@ func _add_kick(p_buf: PackedFloat32Array, p_start_s: float, p_vel: float) -> voi
 		p_buf[idx] += p_vel * s
 
 
+# ── 变体数据表（R79 多套随机：每局抽一套战斗曲/回大厅换大厅曲） ──────
+# combat_sets[i] = {chords(4×4), subs/roots/fifths/octaves(贝斯), arp_scale(8 音级)}
+const COMBAT_SETS: Array[Dictionary] = [
+	{   # V0「Am-F-C-G」 vi-IV-I-V（当前版）
+		"chords": [[110.00, 220.00, 261.63, 293.66], [87.31, 174.61, 220.00, 261.63],
+			[130.81, 196.00, 246.94, 293.66], [98.00, 196.00, 246.94, 293.66]],
+		"roots": [55.00, 43.65, 65.41, 49.00],
+		"fifths": [82.41, 65.41, 98.00, 73.42],
+		"octaves": [110.00, 87.31, 130.81, 98.00],
+		"arp": [523.25, 587.33, 659.26, 783.99, 880.00, 1046.50, 1174.66, 1318.51],
+	},
+	{   # V1「Em-C-G-D」小调驱动（更暗更冲）
+		"chords": [[82.41, 164.81, 246.94, 293.66], [130.81, 196.00, 261.63, 293.66],
+			[98.00, 196.00, 246.94, 293.66], [73.42, 146.83, 220.00, 293.66]],
+		"roots": [82.41, 65.41, 49.00, 73.42],
+		"fifths": [123.47, 98.00, 73.42, 110.00],
+		"octaves": [164.81, 130.81, 98.00, 146.83],
+		"arp": [659.26, 783.99, 880.00, 987.77, 1174.66, 1318.51, 1567.98, 1760.00],
+	},
+	{   # V2「Dm-Bb-F-C」多利亚色彩（爵士味走句）
+		"chords": [[73.42, 146.83, 220.00, 293.66], [116.54, 174.61, 233.08, 293.66],
+			[87.31, 174.61, 220.00, 261.63], [130.81, 196.00, 261.63, 293.66]],
+		"roots": [73.42, 58.27, 43.65, 65.41],
+		"fifths": [110.00, 87.31, 65.41, 98.00],
+		"octaves": [146.83, 116.54, 87.31, 130.81],
+		"arp": [587.33, 698.46, 783.99, 880.00, 1046.50, 1174.66, 1396.91, 1567.98],
+	},
+]
+
+const MENU_SETS: Array[Dictionary] = [
+	{   # M0「Cmaj7 系」（当前版）
+		"chords": [[130.81, 164.81, 196.00, 246.94], [110.00, 130.81, 164.81, 196.00],
+			[87.31, 110.00, 130.81, 164.81], [98.00, 123.47, 146.83, 164.81]],
+		"subs": [65.41, 55.00, 43.65, 49.00],
+		"pluck": [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.26],
+	},
+	{   # M1「Fmaj7-Em7-Dm7-Cmaj7」下行（更慵懒）
+		"chords": [[87.31, 130.81, 174.61, 220.00], [82.41, 123.47, 164.81, 196.00],
+			[73.42, 110.00, 146.83, 174.61], [130.81, 164.81, 196.00, 246.94]],
+		"subs": [43.65, 41.20, 36.71, 65.41],
+		"pluck": [349.23, 392.00, 440.00, 523.25, 587.33, 698.46, 783.99, 880.00],
+	},
+]
+
 # ── 各轨作曲 ───────────────────────────────────────────────────────
 
-func _compose_menu() -> PackedFloat32Array:
-	# 大厅曲（76BPM 体感 · 稀疏事件 + 华彩和声）：Cmaj7→Am7→Fmaj7→G6，
-	# 双失谐暖 pad（每和弦 0.8s 起/收）+ 慢五声拨弦（每和弦 5 粒，回声 0.375s）
-	# + 低八度 sub 根音。安静、开阔、无鼓。
+func _compose_menu(p_set: Dictionary) -> PackedFloat32Array:
+	# 大厅曲（76BPM 体感 · 稀疏事件 + 华彩和声）：双失谐暖 pad（每和弦 0.8s 起/收）
+	# + 慢五声拨弦（每和弦 5 粒，回声 0.375s）+ 低八度 sub 根音。安静、开阔、无鼓。
+	# R79 参数化：MENU_SETS 每套自带和声/根音/拨弦音池
 	var buf := PackedFloat32Array()
 	buf.resize(N)
-	var chords: Array[Array] = [
-		[130.81, 164.81, 196.00, 246.94],   # Cmaj7：C3 E3 G3 B3
-		[110.00, 130.81, 164.81, 196.00],   # Am7：A2 C3 E3 G3
-		[87.31, 110.00, 130.81, 164.81],    # Fmaj7：F2 A2 C3 E3
-		[98.00, 123.47, 146.83, 164.81],    # G6：G2 B2 D3 E3
-	]
-	var subs: Array[float] = [65.41, 55.00, 43.65, 49.00]
-	var pents: Array[float] = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.26]
+	var chords: Array = p_set["chords"]
+	var subs: Array = p_set["subs"]
+	var pents: Array = p_set["pluck"]
 	var pluck_steps := [[0, 6, 12, 20, 26], [2, 8, 14, 22, 28], [0, 4, 10, 18, 24, 30], [6, 12, 18, 24]]
 	for ci in range(4):
 		var c0 := float(ci) * 4.0
@@ -170,17 +209,11 @@ func _add_swell_note(p_buf: PackedFloat32Array, p_start_s: float, p_dur: float,
 		phase += inc
 
 
-func _compose_pad() -> PackedFloat32Array:
-	# 战斗和声床（R75b 换曲）：Am-F-C-G（vi-IV-I-V）——与旧版 C-G-Am-F 及大厅曲
-	# （Cmaj7 系）明确区分；亮 voicing（含九音 D 音色彩），谐波加厚 0.35→0.42
+func _compose_pad(p_set: Dictionary) -> PackedFloat32Array:
+	# 战斗和声床：亮 voicing（含九音色彩），谐波 0.42——进行由 COMBAT_SETS 变体注入
 	var buf := PackedFloat32Array()
 	buf.resize(N)
-	var chords: Array[Array] = [
-		[110.00, 220.00, 261.63, 293.66],   # Am(add9)：A2 A3 C4 D4
-		[87.31, 174.61, 220.00, 261.63],    # F：F2 F3 A3 C4
-		[130.81, 196.00, 246.94, 293.66],   # C(add9)：C3 G3 B3 D4
-		[98.00, 196.00, 246.94, 293.66],    # G：G2 G3 B3 D4
-	]
+	var chords: Array = p_set["chords"]
 	for ci in range(4):
 		var c0 := float(ci) * 4.0
 		for f in chords[ci]:
@@ -216,14 +249,14 @@ func _add_pulse_note(p_buf: PackedFloat32Array, p_start_s: float, p_dur: float,
 		phase += inc
 
 
-func _compose_bass() -> PackedFloat32Array:
+func _compose_bass(p_set: Dictionary) -> PackedFloat32Array:
 	# 战斗贝斯（8 分律动）：每和弦 16 槽（0.25s/槽）走 R-R-5-R / R-5-R-O groove，
 	# 重拍重、弱拍轻（vel 1.0/0.55 交替）——根音驱动 + 五度/八度点缀
 	var buf := PackedFloat32Array()
 	buf.resize(N)
-	var roots: Array[float] = [55.00, 43.65, 65.41, 49.00]
-	var fifths: Array[float] = [82.41, 65.41, 98.00, 73.42]
-	var octaves: Array[float] = [110.00, 87.31, 130.81, 98.00]
+	var roots: Array = p_set["roots"]
+	var fifths: Array = p_set["fifths"]
+	var octaves: Array = p_set["octaves"]
 	# [槽, 音区 0=R 1=5th 2=8ve, vel]
 	var pattern: Array[Array] = [
 		[0, 0, 1.0], [2, 0, 0.6], [4, 1, 0.8], [6, 0, 0.6],
@@ -240,12 +273,12 @@ func _compose_bass() -> PackedFloat32Array:
 	return buf
 
 
-func _compose_arp() -> PackedFloat32Array:
+func _compose_arp(p_set: Dictionary) -> PackedFloat32Array:
 	# 战斗琶音（16 分五声拨弦）：C 大调五声跨两八度，四组和弦各一条固定轮廓
 	# （旋律化而非机械上下行），偶数步为主 + 每和弦 2 处 16 分连续进；回声 0.25s
 	var buf := PackedFloat32Array()
 	buf.resize(N)
-	var scale: Array[float] = [523.25, 587.33, 659.26, 783.99, 880.00, 1046.50, 1174.66, 1318.51]
+	var scale: Array = p_set["arp"]
 	# 每和弦 32 步的音级轮廓（-1 = 休止）；accent=奇数位轻
 	var contours: Array[Array] = [
 		[0, -1, 2, -1, 4, -1, 2, 3, 5, -1, 4, -1, 2, 3, 4, -1,
@@ -271,12 +304,14 @@ func _compose_arp() -> PackedFloat32Array:
 	return buf
 
 
-func _compose_arp_high() -> PackedFloat32Array:
+func _compose_arp_high(p_set: Dictionary) -> PackedFloat32Array:
 	# R75b 高八度琶音（后期强度档）：与 bgm_arp 同轮廓 ×2 频率、更亮拨音、
 	# 回声更长——后期「升起来」的 lifted 感（hats + 本轨同档进）
 	var buf := PackedFloat32Array()
 	buf.resize(N)
-	var scale: Array[float] = [1046.50, 1174.66, 1318.51, 1567.98, 1760.00, 2093.00, 2349.32, 2637.02]
+	var scale: Array = []
+	for f in p_set["arp"]:
+		scale.append(f * 2.0)                       # 高八度轨 = 变体音阶 ×2
 	var contours: Array[Array] = [
 		[0, -1, 2, -1, 4, -1, 2, 3, 5, -1, 4, -1, 2, 3, 4, -1,
 		 5, -1, 6, -1, 5, 4, -1, 2, 4, -1, 3, -1, 2, -1, 1, -1],
@@ -395,15 +430,17 @@ func _run() -> void:
 	print("══════════ R75 音乐作曲器 · 六轨烘焙 ══════════")
 	var t0 := Time.get_ticks_usec()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
-	var tracks: Array = [
-		["bgm_menu", _compose_menu()],
-		["bgm_pad", _compose_pad()],
-		["bgm_bass", _compose_bass()],
-		["bgm_arp", _compose_arp()],
-		["bgm_hats", _compose_hats()],
-		["bgm_arp_high", _compose_arp_high()],
-		["bgm_drums", _compose_drums()],
-	]
+	var tracks: Array = []
+	for m in range(MENU_SETS.size()):
+		tracks.append(["bgm_menu_v%d" % m, _compose_menu(MENU_SETS[m])])
+	for v in range(COMBAT_SETS.size()):
+		var cs: Dictionary = COMBAT_SETS[v]
+		tracks.append(["bgm_pad_v%d" % v, _compose_pad(cs)])
+		tracks.append(["bgm_bass_v%d" % v, _compose_bass(cs)])
+		tracks.append(["bgm_arp_v%d" % v, _compose_arp(cs)])
+		tracks.append(["bgm_arp_high_v%d" % v, _compose_arp_high(cs)])
+	tracks.append(["bgm_hats", _compose_hats()])
+	tracks.append(["bgm_drums", _compose_drums()])
 	for entry in tracks:
 		var name: String = entry[0]
 		var buf: PackedFloat32Array = entry[1]
