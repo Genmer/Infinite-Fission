@@ -120,8 +120,9 @@ func _test_gold_trait() -> void:
 		int(data.pool) == GameConst.PoolClass.ADD
 		and String(data.pool_id) == "add_gold"
 		and String(data.params.get("stat", "")) == "gold_pct")
-	_check("AFF_GOLD：卡面前缀【通用】（玩家侧池前缀纪律）",
-		String(data.display_name).begins_with("【通用】"))
+	_check("AFF_GOLD：资源裸名 + 池属玩家侧（前缀由卡面运行期拼接——R81 双前缀根修）",
+		not String(data.display_name).contains("【")
+		and data.pool_id in GameConst.PLAYER_SIDE_POOLS)
 	# 消费端：挂卡（真 apply_choice 链路）→ Player.gold_find_pct() 跨武器聚合
 	var hp_keep: int = int(_gl.player.get("gold"))
 	var card := {
