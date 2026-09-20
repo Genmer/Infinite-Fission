@@ -15,6 +15,9 @@ const REFRACT_SEARCH_RADIUS := 250.0           # 折射寻的半径（§5.2-5）
 var active_beams: Array[LaserBeam] = []        # 本武器存活光束段
 var tick_accumulator: float = 0.0              # tick_rate 节拍（主束重定向缓存）
 var _main_beam: LaserBeam = null
+var _focus_uid: int = 0                        # R91 聚焦目标（W4：同目标持续照射伤害爬坡）
+var _focus_time: float = 0.0                   # 持续照射秒数（+15%/s，封顶 +100%）
+var _focus_enabled: bool = false               # 形态键 focus_ramp（W4 专属——W5 分光不变）
 
 
 func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
@@ -22,6 +25,9 @@ func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
 	active_beams.clear()
 	tick_accumulator = 0.0
 	_main_beam = null
+	_focus_enabled = bool(data.laser.get("focus_ramp", false)) if data != null else false
+	_focus_uid = 0
+	_focus_time = 0.0
 
 
 func try_fire() -> bool:
@@ -36,11 +42,26 @@ func try_fire() -> bool:
 	return true
 
 
+func focus_multiplier() -> float:
+	# R91 聚焦乘区：同目标持续照射 +15%/s，封顶 ×2（6.7s 满）——换目标归零重聚
+	return 1.0 + minf(_focus_time * 0.15, 1.0) if _focus_enabled else 1.0
+
+
 func _on_tick_post(p_game_delta: float) -> void:
 	# 主束重定向 + 存活光束推进（死亡段裁剪）
 	if _main_beam != null and _main_beam.is_live():
 		_main_beam.set_origin(muzzle_position())
 		_main_beam.set_aim(aim_direction())
+		# R91 聚焦爬坡：主束当前命中目标与上次一致 → 计时累积；换目标/脱靶归零
+		var hit_uid := _main_beam.last_hit_uid
+		if _focus_enabled:
+			if hit_uid > 0 and hit_uid == _focus_uid:
+				_focus_time += p_game_delta
+			else:
+				_focus_uid = hit_uid
+				_focus_time = 0.0
+			_main_beam.focus_mult = focus_multiplier()
+			_main_beam.apply_focus_visual(_focus_time)
 	for beam in active_beams.duplicate():
 		if beam.is_live():
 			beam.tick(p_game_delta)

@@ -79,6 +79,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r82_haste_chain()
 	_test_r86_r89_r90()
 	_test_r87_r88()
+	_test_r91_prism_laser()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3974,4 +3975,60 @@ func _test_r87_r88() -> void:
 	_gl.player.call(&"set_difficulty", 0)
 	_gl.player.set("unlocked_slots", 4)
 	_gl.player.set("slot_bonus", 0)
+	_gl.call(&"quit_to_menu")
+
+
+func _test_r91_prism_laser() -> void:
+	print("── R91 棱镜/激光差异化 ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	_gl.player.set("unlocked_slots", 4)
+	# 差异化开关：W4 聚焦爬坡 / W5 分光不变
+	var w4d: WeaponData = _gl.registry.get_weapon(&"W4_pulse_beam")
+	var w5d: WeaponData = _gl.registry.get_weapon(&"W5_prism")
+	_check("R91：W4 开聚焦（focus_ramp）/ W5 无（分光定位）",
+		bool(w4d.laser.get("focus_ramp", false)) and not bool(w5d.laser.get("focus_ramp", false)), "")
+	# 聚焦机制：同目标计时 → 乘区爬坡；换目标归零
+	var w4: LaserWeapon = _gl.player.add_weapon(w4d) as LaserWeapon
+	_check("R91：W4 装备", w4 != null, "")
+	if w4 != null:
+		w4.try_fire()
+		var beam: LaserBeam = w4.get("_main_beam")
+		_check("R91：主束生成", beam != null and beam.is_live(), "")
+		if beam != null:
+			beam.set("lifetime", 0.0)               # 测试期常驻（脉冲 0.5s 会过期跳过聚焦块）
+			beam.set("lifetime_left", 999.0)
+			beam.last_hit_uid = 777                 # 模拟命中目标 777
+			w4.call(&"_on_tick_post", 0.05)         # 首帧：锁定 777（归零起算）
+			w4.call(&"_on_tick_post", 3.0)          # 同目标照射 3s
+			_check("R91：同目标 3s → 聚焦 ×1.45",
+				absf(w4.focus_multiplier() - 1.45) < 0.01, "%f" % w4.focus_multiplier())
+			w4.call(&"_on_tick_post", 5.0)          # 累计 8s → 封顶 ×2
+			_check("R91：8s 封顶 ×2", absf(w4.focus_multiplier() - 2.0) < 0.01,
+				"%f" % w4.focus_multiplier())
+			beam.last_hit_uid = 888                 # 换目标
+			w4.call(&"_on_tick_post", 0.05)         # 首帧换锁（归零）
+			w4.call(&"_on_tick_post", 1.0)
+			_check("R91：换目标归零重聚（×1.15）",
+				absf(w4.focus_multiplier() - 1.15) < 0.01, "%f" % w4.focus_multiplier())
+	# W5 折射分色（depth 光谱）：直接验 spawn 参数消费——depth2 束 tint 为紫
+	var w5: LaserWeapon = _gl.player.add_weapon(w5d) as LaserWeapon
+	_check("R91：W5 装备", w5 != null, "")
+	if w5 != null:
+		var beam2: LaserBeam = w5.call(&"_spawn_beam",
+			Vector2(300.0, 600.0), Vector2(0.0, -1.0), 2, 0.36, 0)
+		_check("R91：W5 depth2 折射束生成（分光谱系）", beam2 != null and beam2.is_refraction, "")
+		if beam2 != null:
+			beam2.set("lifetime", 0.01)
+			beam2.call(&"tick", 0.02)
+	# 状态还原（含活束清场——常驻测试束残留会污染后续段）
+	if w4 != null and w4.get("_main_beam") != null 			and is_instance_valid(w4.get("_main_beam") as LaserBeam):
+		var kill_beam: LaserBeam = w4.get("_main_beam")
+		kill_beam.set("lifetime", 0.01)          # 到期自回收（LaserBeam 无 nullify 口）
+		kill_beam.call(&"tick", 0.02)
+	for i in range(_gl.player.weapon_slots.size()):
+		var w_v: WeaponBase = _gl.player.weapon_slots[i]
+		if w_v != null and is_instance_valid(w_v) and w_v.data != null 				and w_v.data.id != &"W1_pistol":
+			_gl.player.weapon_slots[i] = null
+			w_v.queue_free()
 	_gl.call(&"quit_to_menu")

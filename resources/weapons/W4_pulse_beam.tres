@@ -71,7 +71,7 @@ threshold_traits = [{
 "effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
 }]
 laser = {
-"beam_length": 560.0, "beam_width": 14.0, "tick_rate": 5.0,
+"beam_length": 560.0, "beam_width": 14.0, "tick_rate": 5.0, "focus_ramp": true,
 "pulse_duration": 0.5,
 "scorch_max_layers": 5, "scorch_per_layer": 0.08,
 "refract_beams": 0, "refract_ratio": 0.6, "refract_depth": 2,

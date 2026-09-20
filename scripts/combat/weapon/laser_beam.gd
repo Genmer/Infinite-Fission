@@ -21,6 +21,9 @@ var tick_atk: float = 6.0                      # 每跳基础 ATK（L 表 tick_a
 var tick_rate: float = 8.0                     # 跳/s
 var beam_length: float = 560.0
 var is_refraction: bool = false              # 折射副束标识（R26：紫色细束视觉区分主束）
+var last_hit_uid: int = 0                     # R91 最近结算目标（武器侧聚焦爬坡判据）
+var focus_mult: float = 1.0                   # R91 聚焦乘区（武器侧每帧注入——W4 专属）
+var _focus_visual := 0.0                      # R91 聚焦视觉量 0~1（束变粗变白热）
 var beam_width: float = 14.0
 var lifetime: float = 0.0     # 脉冲寿命 s（0=常驻，>0=脉冲收束，用户反馈「激光常驻」）
 var scorch_max_layers: int = 5                 # ≤8（schema 上限；W4 L5 = 8）
@@ -86,9 +89,14 @@ func spawn(p_params: Dictionary) -> void:
 	beam_width = maxf(float(p_params.get("beam_width", 14.0)), 1.0)
 	# R26：折射束专属紫罗兰色 + 细束（池化节点颜色按次设置——「棱镜和激光一样」观感根源修复）
 	is_refraction = bool(p_params.get("is_refraction", false))
-	var tint := Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g, PopPalette.SHOCK.b, 0.85) 		if is_refraction else Color(PopPalette.PLAYER.r, PopPalette.PLAYER.g, PopPalette.PLAYER.b, 0.85)
+	# R91 折射光谱（W5 分光读感）：depth1 = 光谱橙 / depth2 = 光谱紫——主束保持玩家蓝，
+	# 分光束逐级换色且更细（「棱镜把光拆开」的视觉语言）
+	var depth_i := int(p_params.get("depth", 0))
+	var tint := Color(PopPalette.PLAYER.r, PopPalette.PLAYER.g, PopPalette.PLAYER.b, 0.85)
 	if is_refraction:
 		beam_width *= 0.7
+		tint = Color(PopPalette.ENEMY.r, PopPalette.ENEMY.g, PopPalette.ENEMY.b, 0.85).lerp(
+			Color(PopPalette.XP.r, PopPalette.XP.g, PopPalette.XP.b, 0.85), 0.55) 			if depth_i <= 1 else Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g, PopPalette.SHOCK.b, 0.85)
 	if _line != null:
 		_line.default_color = tint
 	if _core != null:
@@ -197,6 +205,9 @@ func _reset_state() -> void:
 	# 归还清零契约（E-04/E-05：层数表/节流表/词条/订阅/计时）
 	depth = 0
 	dmg_mult = 1.0
+	last_hit_uid = 0                          # R91 聚焦态随归还清零
+	focus_mult = 1.0
+	_focus_visual = 0.0
 	tick_atk = 6.0
 	tick_rate = 8.0
 	beam_length = 560.0
@@ -305,6 +316,17 @@ func _tick_settle(p_hit: Node2D, p_game_delta: float) -> void:
 		_tick_left = 0.0
 
 
+func apply_focus_visual(p_focus_time: float) -> void:
+	# R91 聚焦视觉：束宽 +50%、芯线趋白热（cap 1.0）——持续照射「越来越烫」的读感
+	_focus_visual = clampf(p_focus_time / 6.7, 0.0, 1.0)
+	if _line != null:
+		_line.width = beam_width * (1.0 + 0.5 * _focus_visual)
+	if _core != null:
+		_core.width = beam_width * 0.42 * (1.0 + 0.6 * _focus_visual)
+		_core.default_color = Color(1.0, 1.0, 1.0, 0.95).lerp(
+			Color(1.0, 0.95, 0.75, 1.0), _focus_visual)
+
+
 func _settle_one_tick(p_hit: Node2D) -> void:
 	if damage_pipeline == null:
 		return
@@ -312,8 +334,9 @@ func _settle_one_tick(p_hit: Node2D) -> void:
 	ctx.source_uid = uid
 	ctx.target = p_hit
 	ctx.target_uid = int(p_hit.get("uid"))
+	last_hit_uid = ctx.target_uid               # R91 聚焦判据（武器侧消费）
 	ctx.frame_stamp = GameConfig.frame_stamp
-	ctx.base_atk = tick_atk * dmg_mult
+	ctx.base_atk = tick_atk * dmg_mult * focus_mult   # R91 W4 聚焦爬坡（同目标持续照射）
 	ctx.flat_bonus = float(panel_snapshot.get("flat_bonus", 0.0))
 	ctx.crit_chance = float(panel_snapshot.get("crit_rate", 0.0))
 	ctx.crit_mult = float(panel_snapshot.get("crit_mult", 2.0))
