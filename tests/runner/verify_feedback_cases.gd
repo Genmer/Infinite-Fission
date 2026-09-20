@@ -76,6 +76,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_g10_peak_and_banner()
 	_test_r80_fixes()
 	_test_r81_name_hygiene()
+	_test_r82_haste_chain()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3795,3 +3796,42 @@ func _test_r81_name_hygiene() -> void:
 	_check("R81：点金裸名（卡面前缀运行期拼接）",
 		gold != null and String(gold.display_name) == "点金",
 		gold.display_name if gold != null else "null")
+
+
+func _test_r82_haste_chain() -> void:
+	print("── R82 技能急速真实链 ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	_gl.player.set("unlocked_slots", 4)
+	# 干净态：剥全部武器上的技能急速层（前序用例共享 player——层残留污染基线断言）
+	for w: WeaponBase in _gl.player.weapon_slots:
+		if w == null or not is_instance_valid(w) or w.trait_stack == null:
+			continue
+		w.trait_stack.traits = w.trait_stack.traits.filter(func(tb: Variant) -> bool:
+			return StringName(str(tb.get("data").get("id"))) != &"AFF_SKILL_HASTE")
+	_gl.player.skill_cd_relic_mult = 1.0
+	_gl.player.refresh_skill_cd()
+	var base0: float = float(_gl.player.get("skill_cd_base"))
+	var card: Dictionary = _gl.card_generator._make_trait_card(&"AFF_SKILL_HASTE", 3, null)
+	_check("R82 前置：卡生成（通用前缀 + TRAIT 类）",
+		String(card["display_name"]).begins_with("【通用】技能急速"), String(card["display_name"]))
+	var toast := [""]
+	var cap := func(p_msg: String) -> void: toast[0] = p_msg
+	EventBus.mechanics_intro.connect(cap)
+	_gl.card_generator.apply_choice(card, _gl.player)
+	EventBus.mechanics_intro.disconnect(cap)
+	var base1: float = float(_gl.player.get("skill_cd_base"))
+	_check("R82：挂卡后技能冷却基线 ×0.88（-12% 相对口径）",
+		absf(base1 - base0 * 0.88) < 0.05, "%.1f→%.1f" % [base0, base1])
+	_check("R82：skill_haste_pct 口径一致", absf(_gl.player.skill_haste_pct() - 0.12) < 0.005,
+		"%f" % _gl.player.skill_haste_pct())
+	_check("R82：生效显形横幅（前后值直给）",
+		String(toast[0]).contains("冷却加速生效") and String(toast[0]).contains("→"),
+		String(toast[0]))
+	# 施放 → 倒计时按新基线起跳（HUD 数字源）
+	_gl.player.set("skill_cd_left", 0.0)
+	_gl.player.call(&"activate_skill")
+	_check("R82：施放后倒计时 = 新基线（HUD 数字源）",
+		absf(float(_gl.player.get("skill_cd_left")) - base0 * 0.88) < 0.05,
+		"%.1f" % float(_gl.player.get("skill_cd_left")))
+	_gl.call(&"quit_to_menu")

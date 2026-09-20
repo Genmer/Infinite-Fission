@@ -1049,7 +1049,14 @@ func _boot_build_presentation() -> void:
 	EventBus.card_chosen.connect(func(_i: StringName, _k: int) -> void:
 		if player != null and is_instance_valid(player):
 			player.refresh_pickup_radius()
-			player.refresh_skill_cd())
+			var cd_before: float = float(player.get("skill_cd_base"))
+			player.refresh_skill_cd()
+			var cd_after: float = float(player.get("skill_cd_base"))
+			# R82 生效显形：技能急速/时之沙改动基线 → 横幅直给前后值（-12% 在 120s
+			# 上要等下次施放才可见——用户实测「选了好像没用」，缺的是即时确认）
+			if cd_before - cd_after >= 1.0:
+				var toast_txt := "⚡ 冷却加速生效：%.0fs → %.0fs（技能急速/时之沙）" % [cd_before, cd_after]
+				EventBus.emit_mechanics_intro(toast_txt))
 	EventBus.shield_blocked.connect(func(_p: Vector2) -> void: sfx.play(&"shield"))
 	# R80 导弹爆反馈：低音轰 + 轻震屏（体感强化——导弹命中/空爆都走这里）
 	EventBus.missile_blast.connect(func(_p_pos: Vector2, _p_r: float) -> void:
