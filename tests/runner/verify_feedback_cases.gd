@@ -81,6 +81,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r87_r88()
 	_test_r91_prism_laser()
 	_test_r92_fast_clear()
+	_test_r94_star_chain()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -2599,7 +2600,7 @@ func _test_round7_audit() -> void:
 		homing_w.try_fire()
 		var bounced := false
 		var homing_live := 0
-		for c in (_gl.pools[&"projectile"] as Node).get_children():
+		for c in (_gl.pools[&"homing"] as Node).get_children():   # R94：导弹入 homing 池
 			var pr2: Variant = c
 			if pr2 != null and is_instance_valid(pr2) and bool(pr2.get("_live")) 					and int(pr2.get("weapon_uid")) == homing_w.uid:
 				homing_live += 1
@@ -4082,4 +4083,50 @@ func _test_r92_fast_clear() -> void:
 			break
 	_check("R92：快清后 ~2.8s 内开下一波（不再干等整窗）",
 		wd.current_wave == w0 + 1, "w %d→%d" % [w0, wd.current_wave])
+	_gl.call(&"quit_to_menu")
+
+
+func _test_r94_star_chain() -> void:
+	print("── R94 金边五角星爆链 ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	_gl.player.set("unlocked_slots", 4)
+	# 贴图本体：金边/白体/衬边三结构齐备（导出像素实测 98.7% 覆盖）
+	var tex: ImageTexture = TextureFactory.blast_star()
+	_check("R94：五角星贴图生成（110px）", tex != null and tex.get_size() == Vector2(110, 110), "")
+	# 端到端：W6 真发射 → 命中 → missile_blast 信号 → BlastStarFx 顶层节点生成
+	var w6: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W6_micro_missile"))
+	var tgt := _spawn_r72_enemy(&"E1_grunt", _gl.player.global_position + Vector2(150.0, -80.0))
+	_gl.player.call(&"tick", 0.016, Vector2.ZERO)          # 武器开火调度
+	var blasts := [0]
+	var cap := func(_p: Vector2, _r: float) -> void: blasts[0] += 1
+	EventBus.missile_blast.connect(cap)
+	var star_nodes := 0
+	GameConfig.advance_frame()
+	for i in range(240):                                   # 4s：飞行 + 命中窗口
+		GameConfig.advance_frame()
+		_gl.player.call(&"tick", 0.016, Vector2.ZERO)
+		_gl.spawner.tick(0.016, _gl.enemy_grid)
+		_gl.enemy_grid.rebuild(_gl.spawner.active)
+		for e: Node in _gl.spawner.active:
+			if is_instance_valid(e):
+				e.call(&"tick", 0.016)
+		_gl._tick_projectiles(0.016)                    # 投射物运动/碰撞/结算（帧序④）
+	EventBus.missile_blast.disconnect(cap)
+	for kid: Node in _gl.get_children():
+		if kid is Node2D and int(kid.get("z_index")) == 100 and kid.get_child_count() >= 2:
+			star_nodes += 1
+	var homing_live: int = int((_gl.pools[&"homing"] as ProjectilePool).stats()["live"])
+	_check("R94：homing 池接线（W6 导弹为真 HomingProjectile）",
+		(_gl.pools[&"homing"] as ProjectilePool) != null, "")
+	_check("R94：W6 命中 → missile_blast 信号 ≥1（真链）", blasts[0] >= 1, "blasts=%d" % blasts[0])
+	_check("R94：顶层 BlastStarFx 生成（z100 + 双子节点）", star_nodes >= 1, "n=%d" % star_nodes)
+	# 清场
+	for i in range(_gl.player.weapon_slots.size()):
+		var w_v: WeaponBase = _gl.player.weapon_slots[i]
+		if w_v != null and is_instance_valid(w_v) and w_v.data != null 				and w_v.data.id != &"W1_pistol":
+			_gl.player.weapon_slots[i] = null
+			w_v.queue_free()
+	_gl.spawner.active.erase(tgt)
+	(_gl.pools[&"enemy"] as EnemyPool).release(tgt)
 	_gl.call(&"quit_to_menu")

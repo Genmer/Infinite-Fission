@@ -16,6 +16,7 @@ extends Node2D
 
 const SCENE_PLAYER := "res://scenes/combat/player/player.tscn"
 const SCENE_PROJECTILE := "res://scenes/combat/projectiles/ballistic_projectile.tscn"
+const SCENE_HOMING := "res://scenes/combat/projectiles/homing_projectile.tscn"
 const SCENE_ENEMY := "res://scenes/combat/enemies/enemy.tscn"
 const SCENE_POPUP := "res://scenes/ui/damage_popup.tscn"
 const SCENE_PARTICLE := "res://scenes/fx/burst_emitter.tscn"
@@ -98,6 +99,7 @@ var stage_probe_enabled: bool = false         # 分阶段采样开关（架构 �
 var stage_probe_us: Dictionary = {}           # {StringName 阶段: 累计 usec}（仅 PLAYING 帧，逐帧重建）
 
 var _projectile_pool: ProjectilePool = null
+var _homing_pool: ProjectilePool = null           # R94：homing 场景池（此前从未接线——HomingProjectile 全程死代码，导弹实为直飞基础弹无爆炸无追踪）
 var _boot_elapsed_ms: float = 0.0             # Boot 耗时（AC：<3s 预算遥测）
 var _separation_left: float = SEPARATION_INTERVAL   # E-10 分离力 10Hz 相位
 var _free_reroll_used: bool = false            # 本局首次「换一批」免费位（一次性刷新方向）
@@ -854,6 +856,13 @@ func _boot_build_pools() -> void:
 		GameConfig.get_pool_capacity(&"projectile"))
 	_projectile_pool.soft_limit = int(GameConfig.balance.projectile_soft_limit)
 	_projectile_pool.hard_limit = int(GameConfig.balance.projectile_hard_limit)
+	# R94 homing 池（追踪/爆炸/AoE 真件）：容量与软硬限沿 projectile 同源（导弹量级小）
+	_homing_pool = ProjectilePool.new()
+	_homing_pool.name = "HomingPool"
+	add_child(_homing_pool)
+	_homing_pool.setup(&"homing", load(SCENE_HOMING), 24)   # 容量=预热数（AC-14.2 对账口径）
+	_homing_pool.soft_limit = 64
+	_homing_pool.hard_limit = 96
 	var enemy_pool := EnemyPool.new()
 	enemy_pool.name = "EnemyPool"
 	add_child(enemy_pool)
@@ -876,6 +885,7 @@ func _boot_build_pools() -> void:
 	xp_pool.setup(&"xp", load(SCENE_XP_SHARD), GameConfig.get_pool_capacity(&"xp"))
 	pools = {
 		&"projectile": _projectile_pool,
+		&"homing": _homing_pool,
 		&"enemy": enemy_pool,
 		&"popup": popup_pool,
 		&"particle": particle_pool,
@@ -884,6 +894,7 @@ func _boot_build_pools() -> void:
 	}
 	# 预热（AC-14.2，Boot 期完成）
 	_projectile_pool.prewarm(GameConfig.get_pool_capacity(&"projectile"))
+	_homing_pool.prewarm(24)                    # R94：导弹并发小，24 预热足够
 	enemy_pool.prewarm(GameConfig.get_pool_capacity(&"enemy"))
 	popup_pool.prewarm(GameConfig.get_pool_capacity(&"popup"))
 	particle_pool.prewarm(GameConfig.get_pool_capacity(&"particle"))
@@ -964,6 +975,7 @@ func _boot_build_actors() -> void:
 	player.setup({
 		"pipeline": pipeline,
 		"projectile_pool": _projectile_pool,
+		"homing_pool": _homing_pool,             # R94：homing 真件池（W6/W7/子弹头）
 		"enemy_grid": enemy_grid,
 		"enemy_bullet_grid": enemy_bullet_grid,
 		"laser_pool": pools[&"laser"],
@@ -1060,9 +1072,14 @@ func _boot_build_presentation() -> void:
 	EventBus.shield_blocked.connect(func(_p: Vector2) -> void: sfx.play(&"shield"))
 	# R83 导弹爆反馈：低音轰 + CRIT 级震屏（专用爆炸件配套——比普命中重一档；
 	# 大范围爆（Boss 级 blast_r）低沉变调）
-	EventBus.missile_blast.connect(func(_p_pos: Vector2, p_r: float) -> void:
+	# R94：星爆走 GameLoop 顶层（E3 升级波纹同通道，已验证可见）——不依赖特效层
+	EventBus.missile_blast.connect(func(p_pos: Vector2, p_r: float) -> void:
 		sfx.play(&"boom", 0.8 if p_r >= 100.0 else 1.0)
-		game_feel.add_trauma_for_level(GameConst.FeelLevel.CRIT))
+		game_feel.add_trauma_for_level(GameConst.FeelLevel.CRIT)
+		var star_fx := BlastStarFx.new()
+		star_fx.position = p_pos
+		star_fx.radius = maxf(p_r, 60.0)
+		add_child(star_fx))
 	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
 	# 夜间R15：元素反应音（按反应类型分音色——碎裂/过载/超导）
 	EventBus.reaction_triggered.connect(_play_reaction_sfx)
@@ -1305,7 +1322,13 @@ func _on_boss_killed_bgm(p_enemy: Node2D) -> void:
 
 func _tick_projectiles(p_gd: float) -> void:
 	# 投射物逐弹 tick（倒序遍历：tick 内可能回收自身 → release 擦除当前/更早索引安全）
-	var actives := _projectile_pool.active_projectiles()
+	_tick_one_pool(_projectile_pool, p_gd)
+	_tick_one_pool(_homing_pool, p_gd)
+
+
+func _tick_one_pool(p_pool: ProjectilePool, p_gd: float) -> void:
+	# R94：投射物逐弹 tick 抽出（弹道/追踪双池同驱动；倒序遍历防回收重入）
+	var actives := p_pool.active_projectiles()
 	var idx := actives.size() - 1
 	while idx >= 0:
 		var proj := actives[idx]
@@ -1437,6 +1460,49 @@ func _spawn_level_burst(p_pos: Vector2, p_delay: float = 0.0) -> void:
 	burst.position = p_pos
 	burst.delay = p_delay
 	add_child(burst)
+
+
+func spawn_probe_star() -> Node:
+	# R94 渲染冒烟探针口（probe_star.gd 用——无游戏内消费者）
+	var fx := BlastStarFx.new()
+	add_child(fx)
+	return fx
+
+
+class BlastStarFx:
+	# R94 导弹爆金边五角星：顶层一次性星爆（弹入放大 + 白闪 + 快速淡出 0.5s）
+	# ——用户三轮点名「明显的金边五角星」，此件不依赖任何特效层/质量档
+	extends Node2D
+
+	const LIFE := 0.5
+	var radius := 90.0
+	var _t := 0.0
+	var _sprite: Sprite2D = null
+	var _flash: Sprite2D = null
+
+	func _ready() -> void:
+		z_index = 100                            # 顶层（覆盖敌我所有实体）
+		_sprite = Sprite2D.new()
+		_sprite.texture = TextureFactory.blast_star()
+		add_child(_sprite)
+		_flash = Sprite2D.new()
+		_flash.texture = TextureFactory.soft_dot(64)
+		_flash.modulate = Color(1.0, 0.95, 0.7, 0.55)
+		add_child(_flash)
+
+	func _process(p_delta: float) -> void:
+		_t += p_delta
+		if _t >= LIFE:
+			queue_free()
+			return
+		var k := _t / LIFE
+		var pop := 1.0 - pow(1.0 - minf(k * 2.2, 1.0), 3.0)   # easeOut 弹入
+		var s := (radius * 2.0 / 110.0) * (0.35 + 0.85 * pop)
+		_sprite.scale = Vector2(s, s)
+		_sprite.rotation = k * 0.9                             # 微旋（星爆动感）
+		_sprite.modulate.a = 1.0 - pow(k, 2.0)
+		_flash.scale = Vector2.ONE * (radius * 1.2 / 64.0) * (1.0 - k)
+		_flash.modulate.a = 0.55 * (1.0 - k * 1.6)
 
 
 class LevelBurst:

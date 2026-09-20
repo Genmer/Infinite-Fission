@@ -935,6 +935,21 @@ static func star(p_size: int = 44, p_fill: Color = PopPalette.XP) -> ImageTextur
 		])))
 
 
+static func blast_star() -> ImageTexture:
+	# R94 导弹爆五角星（用户点名「明显的金边五角星」）：白热星体 + 粗金边（oc=金）+
+	# 外圈深色衬边（亮底暗底都可读）——110px 大口径，GameLoop 顶层渲染
+	var key := "blast_star"
+	return _cached(key, func() -> ImageTexture:
+		var gold := PopPalette.GOLD
+		return _render(110, 110, _shade([
+			{"sd": _poly_sd(_star_pts(51.0, 23.0)), "fill": PopPalette.INK,
+				"ow": 3.0, "oc": PopPalette.INK},
+			{"sd": _poly_sd(_star_pts(47.0, 20.5)), "fill": Color(1.0, 0.97, 0.86, 1.0),
+				"ow": 9.0, "oc": gold},
+			{"sd": _poly_sd(_star_pts(24.0, 10.0)), "fill": Color.WHITE, "ow": 0.0},
+		])))
+
+
 static func spark4(p_size: int = 48, p_fill: Color = Color.WHITE) -> ImageTexture:
 	# 四芒细星（夜间R57：感电落雷命中点专用——五角星粗描边圆角化+高速自旋读作「紫球」；
 	# 内径 0.16 尖芒 + 细描边保锐利）

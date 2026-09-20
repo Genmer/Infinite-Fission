@@ -72,7 +72,7 @@ func _boot_game_loop() -> void:
 		and _gl.popup_manager != null and _gl.card_generator != null and _gl.card_select_ui != null)
 	_check("Boot：双网格持有（§1.3-6）", _gl.enemy_grid != null and _gl.enemy_bullet_grid != null)
 	# 集成包 xp 池挂载（B.1）授权更新：池×5 → 池×6（唯一改动的 pkg4 断言，其余语义不变）
-	_check("Boot：池×6 就绪（含 xp——集成包经验链路挂载）", _gl.pools.size() == 6
+	_check("Boot：池×7 就绪（xp + homing——R94 导弹真件池挂载）", _gl.pools.size() == 7
 		and _gl.pools[&"projectile"] != null and _gl.pools[&"enemy"] != null
 		and _gl.pools[&"popup"] != null and _gl.pools[&"particle"] != null
 		and _gl.pools[&"laser"] != null and _gl.pools[&"xp"] != null)

@@ -90,8 +90,8 @@ func _test_main_scene_assembly() -> void:
 		and inst_ms < 3000.0, "boot=%s ms" % str(_gl._boot_elapsed_ms))
 	_check("切真管线：get_pipeline() 工厂默认真件（九步）",
 		_gl.pipeline is DamagePipeline and not (_gl.pipeline is DamagePipelineStub))
-	_check("组装：池×6 / 遗物处理器 / 菜单屏 / 相机就绪",
-		_gl.pools.size() == 6 and _gl.relic_handler != null
+	_check("组装：池×7 / 遗物处理器 / 菜单屏 / 相机就绪（R94 +homing）",
+		_gl.pools.size() == 7 and _gl.relic_handler != null
 		and _gl.menu_screen != null and _gl.camera != null)
 	_check("组装：MenuScreen 仅 MENU 态可见", _gl.menu_screen.is_menu_visible())
 	_check("冻结契约：Engine.time_scale 未被改写（§8.7）", Engine.time_scale == 1.0)
@@ -101,7 +101,7 @@ func _test_main_scene_assembly() -> void:
 		var pool: ObjectPool = _gl.pools[pool_id]
 		if int(pool.stats()["free"]) != int(pool.stats()["capacity"]):
 			prewarmed = false
-	_check("AC-14.2：六池 Boot 期全量预热（live=0 / free=capacity）", prewarmed)
+	_check("AC-14.2：七池 Boot 期全量预热（live=0 / free=capacity）", prewarmed)
 
 
 # ── AC-16.1 全链冒烟 ──────────────────────────────────────────────
@@ -1032,6 +1032,13 @@ func _test_aff_hp_up_wiring() -> void:
 	# 基线锚定 cfg 真源 60（等价 fresh run：满血、单起始武器在槽 0）
 	_gl.player.max_hp = float(GameConfig.get_constant(&"player_base_hp", 60.0))
 	_gl.player.hp = _gl.player.max_hp
+	# R94 隔离宿主：新装一把干净手枪专测（前序用例可能已把槽 0 词条挂满 12 帽——
+	# attach 拒绝与 HP 池无关；增量口径同 R9b 但宿主零污染）
+	var host_w: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W1_pistol"))
+	if host_w == null:
+		_check("AFF_HP_UP 接线：+2 层（基线 0）→ max_hp = 60+25×2 = 110 且 hp 等量回补",
+			false, "隔离宿主装配失败（无空槽）")
+		return
 	var card := {
 		"kind": CardGenerator.CardKind.TRAIT,
 		"id": &"AFF_HP_UP",
@@ -1039,17 +1046,13 @@ func _test_aff_hp_up_wiring() -> void:
 		"data": t,
 		"display_name": String(t.display_name),
 		"description": String(t.description),
-		"target_weapon": _gl.player.weapon_slots[0],   # R18 挂载侧适配门：显式锁定宿主（双层断言口径）
+		"target_weapon": host_w,   # R18 挂载侧适配门：显式锁定宿主（双层断言口径）
 	}
-	# 基线层数（槽内可能已有先前用例挂载的同 ID 词条——卡池随机序列敏感，R9b 改增量口径）
 	var base_layers := 0
-	for tb: TraitBase in _gl.player.weapon_slots[0].trait_stack.traits:
-		if tb.data.id == &"AFF_HP_UP":
-			base_layers = tb.layers
 	_gl.card_generator.apply_choice(card, _gl.player)   # 第 1 层（选卡应用）
 	_gl.card_generator.apply_choice(card, _gl.player)   # 第 2 层（同 ID 叠层）
 	var layers := 0
-	for tb: TraitBase in _gl.player.weapon_slots[0].trait_stack.traits:
+	for tb: TraitBase in host_w.trait_stack.traits:
 		if tb.data.id == &"AFF_HP_UP":
 			layers = tb.layers
 	_check("AFF_HP_UP 接线：+2 层（基线 %d）→ max_hp = 60+25×2 = 110 且 hp 等量回补" % base_layers,

@@ -5,7 +5,7 @@
 - 一句话：竖屏单手割草 roguelike（Godot 4.3），晴空糖果美术，难度三档 × 成对抉择构筑深度
 - 技术栈/入口：GDScript；scenes/main.tscn → GameLoop（scripts/loop/game_loop.gd 编排一切）
 - 运行：`../tools/Godot_v4.3-stable_win64_console.exe --path .`（已验证可跑）
-- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 579 断言（无 lint）
+- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 583 断言（无 lint）
 - 核心体验：割草爽感 + 局内构筑滚雪球 + 走位反制（telegraph/盾面/法术圈走位有解）
 - 红线与坑：E-04~E-08 池化清零契约；.tres 注册表禁运行期落改（深拷贝）；测试直调无 add_child
   （池化实体本就是池节点子节点）；-s 入口两文件模式；写测试输出到日志文件防管道挂死
@@ -52,3 +52,4 @@
 - R91 2026-09-19 棱镜/激光差异化（用户「没做出差距」）：W4 聚焦爬坡（同目标 +15%/s 封顶 ×2、换目标归零、束变粗白热视觉）/ W5 分光光谱（折射束 depth1 橙 depth2 紫 + 主束保持蓝——分光视觉语言）；focus_ramp 形态键分置；verify 575/575 + 激光系套件回归绿
 - R92 2026-09-19 快清快开（用户「打太快怪卡挺久才出来」）：清空检测原要等整个刷怪窗走完——窗口内全清（非 Boss 波）剩窗截断 0.8s，快清总等待 ~2.6s（旧=整窗+1.8s）；Boss 波保留流水语义不截断；verify 577/577
 - R93 2026-09-19 僚机重做（用户「所谓僚机就是临时环绕力场？」）：真护航机——舰形剪影金色染色、侧翼编队 ±74px 平滑跟随（非环绕）、0.55s 主动开火真弹（12% 主武器 ATK，弹道池+管线直连）、到期 1.5s 闪烁预警自回收；verify 579/579
+- R94 2026-09-19 导弹爆炸三轮终局（用户「为什么说那么多遍还没有」）：根因=HomingProjectile 全程死代码——homing_projectile.tscn 存在但 homing 池从未接线，W6/W7 实为直飞基础弹（无追踪/无爆炸结算/无 AoE，R80/R83 全部白改）；修复=独立 homing 池（boot 建池+deps 注入+双池 tick）+ BlastStarFx 金边五角星顶层爆闪（贴图像素实测金 3322/白 2696/衬边 5922）；截图验证法证伪（哨兵也不显示）弃用；池×6→×7 断言更新；verify 583/583 + 全电池绿
