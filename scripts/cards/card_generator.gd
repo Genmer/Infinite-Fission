@@ -89,8 +89,8 @@ func generate_candidates(p_context: Dictionary) -> Array[Dictionary]:
 			card = _fallback_stat_card()
 		# R88 金卡「武器槽+1」替换式：正常发牌后低概率（4%，独立 RNG）顶替为扩容卡——
 		# 主随机序列消耗量与既有一致（发牌确定性/测试锚零扰动）；仅当还有扩容空间
-		if int(player.get("unlocked_slots")) < 5 and card.get("kind") != CardKind.SLOT_BONUS 				and _slot_rng.randf() < 0.04:
-			card = _make_slot_bonus_card()
+		if int(player.get("unlocked_slots")) < 5 and card.get("kind") != CardKind.SLOT_BONUS 				and int(card.get("kind", -1)) != CardKind.FALLBACK 				and _slot_rng.randf() < 0.04:
+			card = _make_slot_bonus_card()      # 保底卡神圣不可替换（AC-16.4 界面永不空语义）
 		if card["kind"] != CardKind.FALLBACK:
 			picked_ids.append(card["id"])
 		out.append(card)
