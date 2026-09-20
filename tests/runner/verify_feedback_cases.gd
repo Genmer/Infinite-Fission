@@ -3766,6 +3766,22 @@ func _test_r80_fixes() -> void:
 				break
 		_check("R80：导弹寿命尽 → 原地空爆（missile_blast 信号）",
 			boom[0] >= 1 and not bool(proj.get("_live")), "blasts=%d live=%s" % [boom[0], str(bool(proj.get("_live")))])
+	# R83 专用爆炸件：信号 → 独立 MissileBlastFx 节点（不占击杀爆共享槽）+ 寿命自清
+	var fx_layer: Node = _gl.elemental_fx
+	if fx_layer != null:
+		var n0 := fx_layer.get_child_count()
+		fx_layer.call(&"_on_missile_blast", Vector2(360.0, 640.0), 85.0)
+		var spawned: int = fx_layer.get_child_count() - n0
+		var fx_node: Node = fx_layer.get_child(fx_layer.get_child_count() - 1) if spawned > 0 else null
+		_check("R83：导弹爆生成专用件（radius 注入 + 自绘协议）",
+			spawned >= 1 and fx_node != null and float(fx_node.get("radius")) >= 95.0
+				and fx_node.has_method(&"_draw"),
+			"spawned=%d radius=%s" % [spawned, str(fx_node.get("radius")) if fx_node != null else "-"])
+		if fx_node != null:
+			for i in range(50):
+				fx_node.call(&"_process", 0.016)
+			_check("R83：爆炸件 0.72s 寿命自清（queue_free 排队）",
+				fx_node.is_queued_for_deletion(), "still alive")
 	else:
 		_check("R80：导弹寿命尽 → 原地空爆（missile_blast 信号）", false,
 			("弹体池取空" if proj == null else "W6 未装备"))

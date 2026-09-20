@@ -1058,10 +1058,11 @@ func _boot_build_presentation() -> void:
 				var toast_txt := "⚡ 冷却加速生效：%.0fs → %.0fs（技能急速/时之沙）" % [cd_before, cd_after]
 				EventBus.emit_mechanics_intro(toast_txt))
 	EventBus.shield_blocked.connect(func(_p: Vector2) -> void: sfx.play(&"shield"))
-	# R80 导弹爆反馈：低音轰 + 轻震屏（体感强化——导弹命中/空爆都走这里）
-	EventBus.missile_blast.connect(func(_p_pos: Vector2, _p_r: float) -> void:
-		sfx.play(&"boom")
-		game_feel.add_trauma_for_level(GameConst.FeelLevel.HIT))
+	# R83 导弹爆反馈：低音轰 + CRIT 级震屏（专用爆炸件配套——比普命中重一档；
+	# 大范围爆（Boss 级 blast_r）低沉变调）
+	EventBus.missile_blast.connect(func(_p_pos: Vector2, p_r: float) -> void:
+		sfx.play(&"boom", 0.8 if p_r >= 100.0 else 1.0)
+		game_feel.add_trauma_for_level(GameConst.FeelLevel.CRIT))
 	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
 	# 夜间R15：元素反应音（按反应类型分音色——碎裂/过载/超导）
 	EventBus.reaction_triggered.connect(_play_reaction_sfx)

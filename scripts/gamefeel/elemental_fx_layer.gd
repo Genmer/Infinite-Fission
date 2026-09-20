@@ -779,9 +779,17 @@ func _on_skill_cast(p_pos: Vector2, _p_character_id: String) -> void:
 
 
 func _on_missile_blast(p_pos: Vector2, p_radius: float) -> void:
-	# R80 导弹专用强化爆：复用 kill_blast 四层槽位（白核/火球/双环/烟尘），半径 ×1.6、
-	# 寿命 0.5→0.65s——比通用击杀爆显著更重（体感用户点名「要强一点」）
-	_on_kill_blast(p_pos, maxf(p_radius, 50.0) * 1.6, 0.65)
+	# R83 导弹专用爆炸件：独立 MissileBlastFx（白核闪光→火球→双冲击环→碎片→烟柱，
+	# 0.72s 全程动画）——不再复用 kill_blast 六槽（Boss 战击杀爆密集时立刻冲掉，
+	# 用户实测「还是一样」的根因之一）。震屏 CRIT 级 + 低音在 GameLoop 侧接线
+	var fx := MissileBlastFx.new()
+	fx.position = p_pos
+	fx.radius = maxf(p_radius, 70.0) * 1.35
+	var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
+	fx.quality = q
+	if p_radius >= 100.0:
+		fx.radius *= 1.2                     # 大范围爆（Boss 级目标/满级 blast_r）再加码
+	add_child(fx)
 
 
 func _on_kill_blast(p_pos: Vector2, p_radius: float, p_life := 0.5) -> void:
@@ -887,3 +895,83 @@ func _tick_blasts(p_raw_delta: float) -> void:
 			smoke.modulate.a = 0.5 * (1.0 - st)
 		else:
 			smoke.modulate.a = 0.0
+
+
+class MissileBlastFx:
+	# R83 导弹爆炸专用件（一次性自清，Node2D 程序化绘制——零贴图零共享槽）：
+	# 五层时序——白核闪光(0~0.13s) → 橙红火球扩散(0~0.32s) → 双冲击环(全程) →
+	# 12 枚旋转碎片(重力抛物线 0.6s) → 3 团烟柱上浮(0.72s 全程)。
+	# quality 0（低特效档）= 只留双环（读感保底）；1/2 全量。
+	extends Node2D
+
+	const LIFE := 0.72
+	var radius := 120.0
+	var quality := 2
+	var _t := 0.0
+	var _debris: Array = []                      # {ang, spd, spin, rot, size}
+	var _smoke: Array = []                       # {off, r}
+
+	func _init() -> void:
+		z_index = 40
+		for i in range(12):
+			_debris.append({
+				"ang": TAU * float(i) / 12.0 + randf() * 0.35,
+				"spd": randf_range(240.0, 430.0),
+				"spin": randf_range(-14.0, 14.0),
+				"rot": randf() * TAU,
+				"size": randf_range(4.0, 8.0),
+			})
+		for i in range(3):
+			_smoke.append({"off": Vector2(randf_range(-0.3, 0.3), randf_range(-0.1, 0.15)) * 1.0,
+				"r": randf_range(0.18, 0.30)})
+
+	func _process(p_delta: float) -> void:
+		_t += p_delta
+		if _t >= LIFE:
+			queue_free()
+			return
+		queue_redraw()
+
+	func _draw() -> void:
+		var k := clampf(_t / LIFE, 0.0, 1.0)
+		var fire := Color(1.0, 0.55, 0.18)
+		var ember := Color(0.95, 0.30, 0.15)
+		# ① 白核闪光（前 18% 寿命）
+		if k < 0.18:
+			var fk := k / 0.18
+			draw_circle(Vector2.ZERO, radius * 0.55 * (1.0 - fk * 0.5),
+				Color(1.0, 0.97, 0.88, (1.0 - fk)))
+		# ② 火球（前 45% 寿命）：easeOut 扩散 + 内芯更亮
+		if k < 0.45:
+			var bk := k / 0.45
+			var br := radius * (1.0 - pow(1.0 - bk, 3.0))
+			draw_circle(Vector2.ZERO, br, Color(fire.r, fire.g, fire.b, 0.75 * (1.0 - bk)))
+			draw_circle(Vector2.ZERO, br * 0.6, Color(1.0, 0.85, 0.4, 0.55 * (1.0 - bk)))
+		# ③ 双冲击环（全程；第二环延迟 12% 起）
+		var e1 := 1.0 - pow(1.0 - k, 3.0)
+		draw_arc(Vector2.ZERO, radius * (0.3 + 1.15 * e1), 0.0, TAU, 40,
+			Color(1.0, 0.82, 0.5, pow(1.0 - k, 1.5)), lerpf(7.0, 1.5, k), true)
+		if k > 0.12:
+			var e2 := 1.0 - pow(1.0 - (k - 0.12) / 0.88, 3.0)
+			draw_arc(Vector2.ZERO, radius * (0.2 + 0.9 * e2), 0.0, TAU, 32,
+				Color(fire.r, fire.g, fire.b, 0.6 * pow(1.0 - k, 2.0)), lerpf(4.0, 1.0, k), true)
+		if quality <= 0:
+			return                              # 低特效档：双环即止（碎片/烟柱砍掉）
+		# ④ 碎片：抛物线飞散（初速沿 ang + 重力 620），旋转矩形渐隐
+		var dk := clampf(_t / 0.6, 0.0, 1.0)
+		for d in _debris:
+			var flight := _t * float(d["spd"]) - 310.0 * _t * _t
+			var pos := Vector2.from_angle(float(d["ang"])) * flight
+			pos.y += 620.0 * _t * _t * 0.5
+			var rot := float(d["rot"]) + float(d["spin"]) * _t
+			var s := float(d["size"]) * (1.0 - dk * 0.6)
+			var col := fire.lerp(ember, dk)
+			draw_set_transform(pos, rot, Vector2.ONE)
+			draw_rect(Rect2(-s * 0.5, -s * 0.22, s, s * 0.44),
+				Color(col.r, col.g, col.b, 1.0 - dk), true)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		# ⑤ 烟柱：三团灰烟上浮涨大渐隐（全程）
+		for sm in _smoke:
+			var sp := Vector2(float(sm["off"].x), float(sm["off"].y)) * radius 				+ Vector2(0.0, -46.0 * k)
+			draw_circle(sp, radius * float(sm["r"]) * (0.6 + 0.6 * k),
+				Color(0.45, 0.40, 0.38, 0.30 * (1.0 - k)))
