@@ -50,6 +50,7 @@ var invuln_left: float = 0.0                  # 受击无敌帧（contact_tick=0
 var weapon_slots: Array[WeaponBase] = []      # ≤5（集成包 B.8 第二批收紧：pkg2 用例已迁移 WeaponBase 真件）
 var orbit_avatars: WeaponOrbitAvatars = null  # 武器悬浮层（R25：发射口对齐化身）
 var unlocked_slots: int = 1                   # w3→2 / w7→3 / Boss1→4 / Boss2 或 w21→5（F-19）
+var slot_bonus: int = 0                       # R88 金卡扩容（越过难度帽，绝对上限 MAX_SLOTS）
 var level: int = 1
 var xp: float = 0.0
 var xp_need: float = 14.0                     # 14 × lv^1.4
@@ -363,12 +364,27 @@ func _instantiate_weapon(p_data: WeaponData) -> WeaponBase:
 	return null                              # 未知形态（WeaponData 校验已封 {0,1,2,3}）
 
 
+func slot_cap_total() -> int:
+	# R88 有效槽位帽 = 难度帽（3/4/5）+ 金卡扩容，绝对上限 MAX_SLOTS
+	return mini(GameConst.difficulty_slot_cap(_difficulty) + slot_bonus, MAX_SLOTS)
+
+
 func unlock_slot(p_slot: int) -> bool:
-	# 槽位解锁（幂等；事件由 WaveDirector/集成侧派发）
-	if p_slot > unlocked_slots and p_slot <= MAX_SLOTS:
+	# 槽位解锁（幂等；事件由 WaveDirector/集成侧派发）。
+	# R88：波浪里程碑解锁被难度帽截断——普通只到 3（后续要金卡扩容或更高难度）
+	if p_slot > unlocked_slots and p_slot <= slot_cap_total():
 		unlocked_slots = p_slot
 		return true
 	return false
+
+
+func grant_slot_bonus() -> bool:
+	# R88 金卡「武器槽+1」：越过难度帽 +1（绝对上限 MAX_SLOTS）
+	if unlocked_slots >= MAX_SLOTS:
+		return false
+	slot_bonus += 1
+	unlocked_slots = mini(unlocked_slots + 1, MAX_SLOTS)
+	return true
 
 
 func set_character(p_id: StringName) -> void:
@@ -765,6 +781,7 @@ func respawn() -> void:
 	xp = 0.0
 	xp_need = _xp_need_for(1)
 	unlocked_slots = 1
+	slot_bonus = 0                              # R88 金卡扩容随局清零
 	invuln_left = RESPAWN_INVULN_S
 	# 格挡力场复位（词条随武器重建重挂；interval 清零防上局残留——挂载时再置位）
 	shield_interval = 0.0

@@ -20,7 +20,7 @@ var _title: Label = null
 var _card_faces: Array[Dictionary] = []       # 卡面子件 {band, stamp, kind, name, desc, dots}
 var _reroll_btn: Button = null                # 换一批按钮（刷新机制；次数由 GameLoop 注入）
 
-const KIND_NAMES: Array[String] = ["精通", "词条", "遗物", "保底", "新武器"]
+const KIND_NAMES: Array[String] = ["精通", "词条", "遗物", "保底", "新武器", "扩容"]
 const CARD_SIZE := Vector2(600.0, 180.0)
 const CARD_X := 60.0
 const CARD_TOP := 264.0                       # 首卡 y（错峰果冻出场基准）

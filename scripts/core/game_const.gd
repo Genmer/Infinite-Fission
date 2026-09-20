@@ -46,6 +46,12 @@ static func difficulty_dual_pick(p_d: int, p_roll: float) -> bool:
 	return p_d == Difficulty.HELL or (p_d == Difficulty.HARD and p_roll < 0.05)
 
 
+static func difficulty_slot_cap(p_d: int) -> int:
+	# R88 分难度武器栏上限：普通 3 / 困难 4 / 地狱 5（金卡「武器槽+1」可越过帽，
+	# 绝对上限仍 MAX_SLOTS=5——普通 3+2 金卡 / 困难 4+1 / 地狱 5 满）
+	return [3, 4, 5][clampi(p_d, 0, 2)]
+
+
 const PLAYER_SIDE_POOLS: Array[StringName] = [&"add_hp", &"add_xp", &"add_pickup",
 	&"add_skillcdr", &"add_gold"]   # 玩家侧词条池（全局生效）：卡面【通用】前缀 + 构筑详情
 	                                # 「通用词条」段的归类真源（R80：此前错挂武器段误导归因）

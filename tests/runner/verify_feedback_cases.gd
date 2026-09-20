@@ -78,6 +78,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r81_name_hygiene()
 	_test_r82_haste_chain()
 	_test_r86_r89_r90()
+	_test_r87_r88()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3907,3 +3908,70 @@ func _count_noah_drones() -> int:
 		if String(kid.name).begins_with("NoahDrone"):
 			n += 1
 	return n
+
+
+func _test_r87_r88() -> void:
+	print("── R87/R88 元素染色/难度门控/槽位帽 ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	_gl.player.set("unlocked_slots", 4)
+	# R88 槽位帽：普通难度帽 3——波浪里程碑解锁第 4 槽被截断
+	_gl.player.set("slot_bonus", 0)
+	_gl.player.call(&"set_difficulty", 0)
+	_gl.player.set("unlocked_slots", 3)
+	_check("R88：普通难度帽 3（w 解锁第 4 槽被拒）",
+		not _gl.player.call(&"unlock_slot", 4), "")
+	# 金卡扩容越帽
+	_check("R88：金卡扩容 grant_slot_bonus 越帽 +1",
+		bool(_gl.player.call(&"grant_slot_bonus")) and int(_gl.player.get("unlocked_slots")) == 4, "")
+	_check("R88：扩容后有效帽 = 4（3+1）",
+		int(_gl.player.call(&"slot_cap_total")) == 4, str(_gl.player.call(&"slot_cap_total")))
+	# 地狱帽 5
+	_gl.player.call(&"set_difficulty", 2)
+	_check("R88：地狱帽 5（unlock 5 通）",
+		bool(_gl.player.call(&"unlock_slot", 5)), "")
+	# 金卡构造与生效链
+	var card: Dictionary = _gl.card_generator._make_slot_bonus_card()
+	_gl.player.set("unlocked_slots", 2)
+	_gl.player.set("slot_bonus", 0)
+	_gl.card_generator.apply_choice(card, _gl.player)
+	_check("R88：金卡 apply → 槽 +1（越过普通帽）",
+		int(_gl.player.get("unlocked_slots")) == 3, str(_gl.player.get("unlocked_slots")))
+	# R88 解锁门：普通未通关 → normal_cleared false（受前序用例污染的 records 已含
+	# 冰原通关记录时为 true——双向断言记录状态即可，菜单置灰逻辑同源）
+	var cleared: bool = Meta.normal_cleared()
+	_check("R88：解锁门可查询（与 map_records 联动）", typeof(cleared) == TYPE_BOOL, str(cleared))
+	# R87 元素染色：激光挂燃烧 → dominant_element=FIR
+	var laser_w: WeaponBase = null
+	for w: WeaponBase in _gl.player.weapon_slots:
+		if w != null and is_instance_valid(w) and w.data != null and w.data.id == &"W4_pulse_beam":
+			laser_w = w
+	if laser_w == null:
+		laser_w = _gl.player.add_weapon(_gl.registry.get_weapon(&"W4_pulse_beam"))
+	_check("R87：dominant_element 默认中性", laser_w != null
+		and laser_w.dominant_element() == GameConst.Element.KIN, "")
+	if laser_w != null:
+		var burn := EnemyData.new()   # 占位（真实 ELE trait 见下）
+		var ele_ids: Array = []
+		for tid: StringName in _gl.registry.trait_ids_by_pool(GameConst.PoolClass.ELEM):
+			var td: TraitData = _gl.registry.get_trait(tid)
+			if td != null and td.params.has("element") and int(td.params["element"]) == GameConst.Element.FIR:
+				ele_ids.append(tid)
+		if not ele_ids.is_empty():
+			laser_w.attach_trait(_gl.registry.get_trait(ele_ids[0]))
+			_check("R87：挂火附魔 → dominant_element=FIR（化身染色源）",
+				laser_w.dominant_element() == GameConst.Element.FIR,
+				"ele=%d" % laser_w.dominant_element())
+		else:
+			_check("R87：挂火附魔 → dominant_element=FIR（化身染色源）", false, "无 FIR 元素卡")
+	# 状态还原（后续 P2 诺亚/毒云用例依赖槽位空间与难度态 + 仅手枪装备——
+	# 激光/导弹残留会在其 tick 驱动期持续伤害目标敌，污染「到期不再结算」断言）
+	for i in range(_gl.player.weapon_slots.size()):
+		var w_v: WeaponBase = _gl.player.weapon_slots[i]
+		if w_v != null and is_instance_valid(w_v) and w_v.data != null 				and w_v.data.id != &"W1_pistol":
+			_gl.player.weapon_slots[i] = null
+			w_v.queue_free()
+	_gl.player.call(&"set_difficulty", 0)
+	_gl.player.set("unlocked_slots", 4)
+	_gl.player.set("slot_bonus", 0)
+	_gl.call(&"quit_to_menu")

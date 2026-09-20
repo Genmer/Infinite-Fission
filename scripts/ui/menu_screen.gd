@@ -361,16 +361,25 @@ func _on_difficulty_pick(p_d: int) -> void:
 
 
 func _refresh_difficulty_row() -> void:
-	# 选中态：选中档高亮描边 + 描述行同步（图鉴口径文案）
+	# 选中态：选中档高亮描边 + 描述行同步（图鉴口径文案）。
+	# R88 解锁门：困难/地狱需普通通关（任意图）——未解锁置灰禁用
+	var unlocked_hard := Meta.normal_cleared()
 	for d in range(_diff_btns.size()):
 		var btn := _diff_btns[d]
-		btn.modulate = Color.WHITE if d == _sel_difficulty else Color(0.62, 0.62, 0.66)
+		var locked := d >= 1 and not unlocked_hard
+		btn.disabled = locked
+		if locked and _sel_difficulty >= 1:
+			_sel_difficulty = 0              # 当前选中档被锁 → 回落普通
+		btn.modulate = Color(0.45, 0.45, 0.5) if locked 			else (Color.WHITE if d == _sel_difficulty else Color(0.62, 0.62, 0.66))
 	var desc_l := _panel_list.get_node_or_null("DifficultyRow/DiffDesc") as Label
 	if desc_l == null and not _diff_btns.is_empty():
 		# 行名为默认 Panel（无 name 时按子树找）——直接从按钮父级取
 		desc_l = _diff_btns[0].get_parent().get_node_or_null("DiffDesc") as Label
 	if desc_l != null:
 		desc_l.text = GameConst.difficulty_desc(_sel_difficulty)
+		if not unlocked_hard:
+			desc_l.text = "普通通关后解锁困难 / 地狱（当前：普通）
+" + desc_l.text
 
 
 func _on_map_pick(p_map_id: StringName) -> void:

@@ -70,6 +70,18 @@ func _process(p_delta: float) -> void:
 		#（与挥斩姿态同式，悬浮待机 = 指向最近敌人的持刀姿态）
 		var aim: Vector2 = (w as WeaponBase).aim_direction()
 		avatar.rotation = aim.angle() + (PI * 0.5 if is_blade else 0.0)
+		# R87 元素共鸣染色（用户反馈「激光获取燃烧没变红」）：化身随附魔元素着色——
+		# 火=橙红 / 冰=淡冰蓝 / 电=葡萄紫（与弹体元素配色同源）；中性=白。
+		# 平滑过渡（lerp 10/s）挂卡瞬间柔和变色不跳变
+		var tint := Color.WHITE
+		match (w as WeaponBase).dominant_element():
+			GameConst.Element.FIR:
+				tint = PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)
+			GameConst.Element.ICE:
+				tint = PopPalette.PLAYER.lerp(Color.WHITE, 0.5)
+			GameConst.Element.LTG:
+				tint = PopPalette.SHOCK
+		avatar.modulate = avatar.modulate.lerp(tint, minf(p_delta * 10.0, 1.0))
 
 
 func avatar_global(p_weapon: WeaponBase) -> Variant:

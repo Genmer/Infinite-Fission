@@ -718,6 +718,7 @@ func _test_player() -> void:
 		weapons.append(w)
 	_check("武器槽：槽 1 可装备", player2.equip_weapon(weapons[0]))
 	_check("武器槽：槽 2 未解锁拒绝", not player2.equip_weapon(weapons[1]))
+	player2.call(&"set_difficulty", 2)   # R88 地狱帽 5（普通帽 3 会截断后续 4/5 断言）
 	player2.unlock_slot(3)
 	_check("武器槽：解锁至 3 后可装 2 把", player2.equip_weapon(weapons[1]) and player2.equip_weapon(weapons[2]))
 	player2.tick(DT, Vector2.ZERO)

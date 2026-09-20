@@ -11,9 +11,10 @@
 class_name CardGenerator
 extends RefCounted
 
-enum CardKind { MASTERY, TRAIT, RELIC, FALLBACK, WEAPON }
+enum CardKind { MASTERY, TRAIT, RELIC, FALLBACK, WEAPON, SLOT_BONUS }
 
 var registry: DataRegistry = null             # M-14 注入
+var _slot_rng := RandomNumberGenerator.new()   # R88 扩容金卡独立随机（种子固定可复现）
 var rarity_weights: Dictionary = {}           # {rarity(int) -> weight(float)}（按波次折算）
 var category_weights: Dictionary = {}         # {category(String) -> weight(float)}（A3 §6.3 静态表）
 var owned_relics: Array[StringName] = []      # 每场已获遗物（unique 每场唯一，A3 §5）
@@ -80,10 +81,16 @@ func generate_candidates(p_context: Dictionary) -> Array[Dictionary]:
 	var fixed_rarities: Variant = p_context.get("fixed_rarities", [])
 	var out: Array[Dictionary] = []
 	var picked_ids: Array[StringName] = []       # 同批去重（同 ID 不重复上货架）
+	if _slot_rng.seed == 0:
+		_slot_rng.seed = 20260919                # R88 扩容 roll 独立种子（懒初始化）
 	for i in range(deal):
 		var card := _roll_one(player, wave, picked_ids)
 		if card.is_empty():
 			card = _fallback_stat_card()
+		# R88 金卡「武器槽+1」替换式：正常发牌后低概率（4%，独立 RNG）顶替为扩容卡——
+		# 主随机序列消耗量与既有一致（发牌确定性/测试锚零扰动）；仅当还有扩容空间
+		if int(player.get("unlocked_slots")) < 5 and card.get("kind") != CardKind.SLOT_BONUS 				and _slot_rng.randf() < 0.04:
+			card = _make_slot_bonus_card()
 		if card["kind"] != CardKind.FALLBACK:
 			picked_ids.append(card["id"])
 		out.append(card)
@@ -326,6 +333,10 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 			var rid := StringName(String(p_card.get("id", "")))
 			if rid != &"" and not owned_relics.has(rid):
 				owned_relics.append(rid)
+		CardKind.SLOT_BONUS:
+			# R88 金卡扩容：+1 栏位（幂等失败=已满不动）
+			if p_player != null and p_player.has_method(&"grant_slot_bonus"):
+				p_player.call(&"grant_slot_bonus")
 	if kind == CardKind.FALLBACK:
 		fallback_uses += 1
 	# REL_GAMBLER 诅咒卡（第 4 张）：附加 ATK −10% 诅咒词条（运行期构造 TraitData，
@@ -339,6 +350,8 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 
 # ── 内部：roll 链 ─────────────────────────────────────────────────
 func _roll_one(p_player: Node, p_wave: int, p_picked: Array[StringName]) -> Dictionary:
+	if _slot_rng.seed == 0:
+		_slot_rng.seed = 20260919            # R88 扩容 roll 种子（固定——非 0 判已初始化）
 	# 单张：类别 roll（池空重 roll）→ 稀有度 roll → 候选过滤 → 随机抽 1
 	# 遗物类目门控（MechanicGate）：第 1 关不上架遗物——重 roll 为乘区（同抽空口径）
 	var relic_available := MechanicGate.relics_unlocked() and _unowned_relic_ids().size() > 0
@@ -604,6 +617,19 @@ func _make_mastery_card(p_weapon: Object) -> Dictionary:
 		"weapon": p_weapon,
 		"display_name": "精通：%s +%d" % [data.display_name if data != null else "?", int(p_weapon.get("level")) + 1],
 		"description": "武器等级 +1（终值表口径）",
+	}
+
+
+func _make_slot_bonus_card() -> Dictionary:
+	# R88 金色扩容卡：武器栏位 +1（越过难度帽——普通 3 帽下最想要的卡）
+	return {
+		"kind": CardKind.SLOT_BONUS,
+		"id": &"SLOT_BONUS",
+		"rarity": 3,
+		"value_scale": 1.0,
+		"display_name": "武器槽 +1",
+		"description": "武器栏位永久 +1（本局，可越过难度上限）",
+		"milestone": false,
 	}
 
 

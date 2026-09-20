@@ -378,6 +378,18 @@ func codex_kill_count(p_enemy_id: StringName) -> int:
 	return int(codex_kills.get(String(p_enemy_id), 0))
 
 
+func normal_cleared() -> bool:
+	# R88 高难度解锁门：任意地图普通难度通关（best_wave ≥ final_wave，键无 # 后缀）
+	for key: Variant in map_records.keys():
+		var ks := String(key)
+		if ks.contains("#"):
+			continue                          # 困难/地狱分档记录不算
+		var final_wave := int(MapTable.get_map(ks).get("final_wave", 1 << 30))
+		if int(map_records[key].get("best_wave", 0)) >= final_wave:
+			return true
+	return false
+
+
 func mark_first_met(p_enemy_id: StringName) -> bool:
 	# E5 首遇提示：第一次实际刷出 → true（调用方发机制提示条）；此后 false 不再打扰
 	var key := String(p_enemy_id)

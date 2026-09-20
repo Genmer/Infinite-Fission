@@ -188,6 +188,7 @@ func _test_full_chain_smoke() -> void:
 		boss_on_field and _gl.boss_bar.is_visible_bar())
 	# F-19：Boss 击杀 → 槽位解锁（EventBus 真实派发序回归——wave_director 读 tags
 	# 必须先于 spawner 归还清零，集成包修复的接线验证；w10 Boss1 → 槽 4）
+	_gl.player.call(&"set_difficulty", 2)   # R88 地狱帽 5（普通帽 3 截断槽 4 解锁）
 	var slots_before: int = _gl.player.unlocked_slots
 	var bosses: Array[Enemy] = []
 	for e in _gl.spawner.active:

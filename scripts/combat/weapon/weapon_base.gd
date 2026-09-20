@@ -294,6 +294,18 @@ func _shot_element() -> int:
 	return elems[randi() % elems.size()]
 
 
+func dominant_element() -> int:
+	# R87 元素共鸣染色源：首个非中性附魔元素（单元素=该色；多元素=主色稳定显示，
+	# 弹体仍逐发随机——染色与弹道口径解耦，避免化身每帧闪色）
+	if trait_stack == null:
+		return GameConst.Element.KIN
+	for tb in trait_stack.traits:
+		var td: Variant = tb.get("data")
+		if td != null and int(td.pool) == GameConst.PoolClass.ELEM 				and (td as TraitData).params.has("element") 				and int((td as TraitData).params["element"]) != GameConst.Element.KIN:
+			return int((td as TraitData).params["element"])
+	return GameConst.Element.KIN
+
+
 func _avatar_muzzle() -> Vector2:
 	# 悬浮化身出膛口（R25 发射口对齐）：子弹从对应武器化身位置出膛——
 	# 「发射口和武器对不上」禁令；化身不可用回退本体位
