@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_td")
 id = &"AFF_GOLD"
-display_name = "【通用】点金"
+display_name = "点金"
 description = "金币掉率与掉量 +20%，可叠 2 层（与地图祝福·丰饶叠乘）"
 pool = 0
 pool_id = &"add_gold"

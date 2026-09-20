@@ -5,7 +5,7 @@
 - 一句话：竖屏单手割草 roguelike（Godot 4.3），晴空糖果美术，难度三档 × 成对抉择构筑深度
 - 技术栈/入口：GDScript；scenes/main.tscn → GameLoop（scripts/loop/game_loop.gd 编排一切）
 - 运行：`../tools/Godot_v4.3-stable_win64_console.exe --path .`（已验证可跑）
-- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 546 断言（无 lint）
+- 检查：24 套件 headless（tests/runner/test_*.gd）+ verify_feedback 548 断言（无 lint）
 - 核心体验：割草爽感 + 局内构筑滚雪球 + 走位反制（telegraph/盾面/法术圈走位有解）
 - 红线与坑：E-04~E-08 池化清零契约；.tres 注册表禁运行期落改（深拷贝）；测试直调无 add_child
   （池化实体本就是池节点子节点）；-s 入口两文件模式；写测试输出到日志文件防管道挂死
@@ -43,3 +43,4 @@
 - R78 2026-09-19 回旋模型重做（用户三轮反馈）：定距甩满（range=翻转点）+ 碰到弹开 + 同敌 0.4s 接触内冷；ballistic 子类超射程 EXPIRED 豁免回旋刃（甩满距离≠寿命）；测试顺带揪出套件残留敌污染（网格清场入测试）；verify 533/533
 - R79 2026-09-19 多套随机音乐（用户问「固定还是随机」→扩随机）：作曲器变体参数化（COMBAT_SETS×3 / MENU_SETS×2），16 轨烘焙；sfx_bank roll/apply + 换套六轨重启锁相；start_run 抽战斗套、回大厅换大厅曲；修 wrapi 排他上界坑；verify 537/537 + 全电池零错
 - R80 2026-09-19 四连修：①详情「通用词条」独立段（玩家侧池真源上移 GameConst，卡面/黑市/详情三处共用）②时之沙改常驻乘区 skill_cd_relic_mult（refresh 重算不再覆盖回 120s）③射速归因护栏测试（急速/时之沙不动武器节拍）④导弹专用强化爆 missile_blast（半径×1.6 + 0.65s + 低音 boom + HIT 级震屏）+ 寿命尽空爆（导弹总会炸）；verify 546/546 + 全电池零错
+- R81 2026-09-19 双前缀根修（用户「通用-通用怎么来回出现」）：AFF_GOLD.tres 资源本体带旧手写【通用】，卡面生成期再叠 → 全资源扫描仅此一处；去前缀 + 全池词条/遗物名零【】防回归断言；verify 548/548

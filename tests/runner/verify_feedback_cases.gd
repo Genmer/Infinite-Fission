@@ -75,6 +75,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_g9_combo_reward()
 	_test_g10_peak_and_banner()
 	_test_r80_fixes()
+	_test_r81_name_hygiene()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3769,3 +3770,28 @@ func _test_r80_fixes() -> void:
 			("弹体池取空" if proj == null else "W6 未装备"))
 	EventBus.missile_blast.disconnect(cap)
 	_gl.call(&"quit_to_menu")
+
+
+func _test_r81_name_hygiene() -> void:
+	print("── R81 名称卫生 ──")
+	# 根因：AFF_GOLD.tres 资源本体带【通用】前缀，卡面生成期再叠 → 双前缀。
+	# 契约：资源 display_name 必须是裸名（前缀仅由 _make_trait_card / 详情段运行期拼接）
+	var bad: Array[String] = []
+	var trait_ids: Array = []
+	for pool_i in range(5):                       # ADD/MULT/LOCAL/MECH/ELEM 全池枚举
+		trait_ids.append_array(_gl.registry.trait_ids_by_pool(pool_i))
+	for tid: StringName in trait_ids:
+		var td: TraitData = _gl.registry.get_trait(tid)
+		if td != null and String(td.display_name).contains("【"):
+			bad.append("%s=%s" % [String(tid), td.display_name])
+	var relic_names: Array[StringName] = [&"REL_TIMELORD", &"REL_THORNS", &"REL_KILL_FRENZY",
+		&"REL_DOUBLE_TAP", &"REL_GLASS_CANNON", &"REL_CRIT_LIFESTEAL"]
+	for rid: StringName in relic_names:
+		var rd: RelicData = _gl.registry.get_relic(rid)
+		if rd != null and String(rd.display_name).contains("【"):
+			bad.append("%s=%s" % [String(rid), rd.display_name])
+	_check("R81：词条/遗物资源名零【】前缀（防双前缀回归）", bad.is_empty(), ", ".join(bad))
+	var gold: TraitData = _gl.registry.get_trait(&"AFF_GOLD")
+	_check("R81：点金裸名（卡面前缀运行期拼接）",
+		gold != null and String(gold.display_name) == "点金",
+		gold.display_name if gold != null else "null")
