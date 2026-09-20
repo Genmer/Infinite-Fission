@@ -396,6 +396,7 @@ func _test_mastery_double_and_wording() -> void:
 	var gen: CardGenerator = _gl.card_generator
 	var p: Node = _gl.player
 	var w: WeaponBase = (p.get("weapon_slots") as Array)[0]
+	w.level = 3                                   # R85 紫门合法位（L1-2 强制紫会被门控钳回）
 	var lv0: int = int(w.get("level"))
 	var cands := gen.generate_candidates({"player": p, "wave": 1, "fixed_rarities": [2, -1, -1]})
 	var mastery: Dictionary = {}
@@ -413,6 +414,25 @@ func _test_mastery_double_and_wording() -> void:
 	gen.apply_choice(mastery, p)
 	_check("应用后连升 2 级（lv +%d）" % int(mastery.get("level_boosts", 0)),
 		int(w.get("level")) == mini(lv0 + 2, WeaponBase.MAX_LEVEL))
+	# R85 低级门控：L1 武器强制金 roll → 钳回蓝（+1）——「1 级升 2 级就金色」根修
+	var w10: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W10_boomerang"))
+	if w10 != null:
+		w10.level = 1
+		var forced: Dictionary = gen._make_mastery_card(w10)
+		forced["rarity"] = 3                       # 模拟金 roll / 遗物保底金
+		gen._apply_rarity_values([forced])
+		_check("R85：L1 精通强制金 → 钳回蓝（+1 不连升）",
+			int(forced.get("rarity", 0)) <= 1 and int(forced.get("level_boosts", 0)) == 1,
+			"rarity=%d boosts=%d" % [int(forced.get("rarity", 0)), int(forced.get("level_boosts", 0))])
+		w10.level = 4
+		var forced4: Dictionary = gen._make_mastery_card(w10)
+		forced4["rarity"] = 3
+		gen._apply_rarity_values([forced4])
+		_check("R85：精通卡无金档（L4 强制金 → 钳紫连升）",
+			int(forced4.get("rarity", 0)) == 2 and int(forced4.get("level_boosts", 0)) == 2,
+			"rarity=%d boosts=%d" % [int(forced4.get("rarity", 0)), int(forced4.get("level_boosts", 0))])
+		_gl.player.weapon_slots[_gl.player.weapon_slots.find(w10)] = null
+		w10.queue_free()
 
 
 # ── ⑥ MEC_HIT_BURST 命中迸裂 ─────────────────────────────────────

@@ -183,6 +183,14 @@ func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
 				var weapon: Object = card.get("weapon")
 				if weapon == null or not is_instance_valid(weapon):
 					continue
+				# R85 精通卡去金档（用户「金色直接干掉，到处金色」）：品质只有白/蓝/紫——
+				# L1-2 白蓝（+1）/ L3 起可紫（连升 ×2）；金 roll/遗物保底金在此钳落。
+				# 金色语义留给词条卡与 5 级金质变——升级卡不再抢金色读感
+				var lv_pre := int(weapon.get("level"))
+				var rarity_cap := 1 if lv_pre < 3 else 2
+				if rarity > rarity_cap:
+					rarity = rarity_cap
+					card["rarity"] = rarity
 				var boosts := 2 if rarity >= MASTERY_DOUBLE_RARITY else 1
 				card["level_boosts"] = boosts
 				var lv := int(weapon.get("level"))
