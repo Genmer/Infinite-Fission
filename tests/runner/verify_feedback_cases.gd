@@ -1804,15 +1804,28 @@ func _test_p2_bgm() -> void:
 				- SfxBank.I.bgm_loop_seconds()) <= 0.01, "")
 	SfxBank.I.bgm_set_active(true)
 	SfxBank.I.bgm_set_intensity(0)
-	_check("R75：强度 0（前期）= pad+贝斯，琶音/踩镲收起",
-		SfxBank.I._bgm_arp_player.stream_paused
-			and SfxBank.I._bgm_hats_player.stream_paused, "")
+	_check("R75b：强度 0（前期）= pad+贝斯+琶音，踩镲/高琶收起",
+		not SfxBank.I._bgm_arp_player.stream_paused
+			and SfxBank.I._bgm_hats_player.stream_paused
+			and SfxBank.I._bgm_arp_high_player.stream_paused, "")
 	SfxBank.I.bgm_set_intensity(1)
-	_check("R75：强度 1（中期）琶音层进",
-		not SfxBank.I._bgm_arp_player.stream_paused, "")
+	_check("R75b：强度 1（中期）踩镲层进",
+		not SfxBank.I._bgm_hats_player.stream_paused
+			and SfxBank.I._bgm_arp_high_player.stream_paused, "")
 	SfxBank.I.bgm_set_intensity(2)
-	_check("R75：强度 2（后期）踩镲层进",
-		not SfxBank.I._bgm_hats_player.stream_paused, "")
+	_check("R75b：强度 2（后期）高八度琶音进",
+		not SfxBank.I._bgm_arp_high_player.stream_paused, "")
+	# R75b 波次→强度接线（wave_started 真实信号路径）
+	EventBus.emit_wave_started(1)
+	_check("R75b：w1 → 强度 0", SfxBank.I.bgm_intensity_level() == 0,
+		"lv=%d" % SfxBank.I.bgm_intensity_level())
+	EventBus.emit_wave_started(7)
+	_check("R75b：w7 → 强度 1", SfxBank.I.bgm_intensity_level() == 1,
+		"lv=%d" % SfxBank.I.bgm_intensity_level())
+	EventBus.emit_wave_started(15)
+	_check("R75b：w15 → 强度 2", SfxBank.I.bgm_intensity_level() == 2,
+		"lv=%d" % SfxBank.I.bgm_intensity_level())
+	SfxBank.I.bgm_set_intensity(0)
 	SfxBank.I.bgm_set_scene_menu(true)
 	SfxBank.I.bgm_set_active(false)
 	_check("R75：大厅曲播放 + 战斗五轨收起",
@@ -1822,8 +1835,6 @@ func _test_p2_bgm() -> void:
 	SfxBank.I.bgm_set_scene_menu(false)
 	_check("R75：离菜单大厅曲停（结算/暂停静默口径）",
 		SfxBank.I._bgm_menu_player.stream_paused, "")
-	SfxBank.I.bgm_set_intensity(1)
-	SfxBank.I.bgm_set_boss_layer(false)
 	SfxBank.I.bgm_set_boss_layer(false)
 
 

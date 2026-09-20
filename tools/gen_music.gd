@@ -171,19 +171,23 @@ func _add_swell_note(p_buf: PackedFloat32Array, p_start_s: float, p_dur: float,
 
 
 func _compose_pad() -> PackedFloat32Array:
-	# 战斗和声床（P2 pad 升级）：C-G-Am-F 暖 pad（原配方）+ 8 分轻脉冲（呼吸律动）
+	# 战斗和声床（R75b 换曲）：Am-F-C-G（vi-IV-I-V）——与旧版 C-G-Am-F 及大厅曲
+	# （Cmaj7 系）明确区分；亮 voicing（含九音 D 音色彩），谐波加厚 0.35→0.42
 	var buf := PackedFloat32Array()
 	buf.resize(N)
 	var chords: Array[Array] = [
-		[130.81, 196.00, 261.63, 329.63],
-		[98.00, 196.00, 246.94, 293.66],
-		[110.00, 220.00, 261.63, 329.63],
-		[87.31, 174.61, 220.00, 261.63],
+		[110.00, 220.00, 261.63, 293.66],   # Am(add9)：A2 A3 C4 D4
+		[87.31, 174.61, 220.00, 261.63],    # F：F2 F3 A3 C4
+		[130.81, 196.00, 246.94, 293.66],   # C(add9)：C3 G3 B3 D4
+		[98.00, 196.00, 246.94, 293.66],    # G：G2 G3 B3 D4
 	]
 	for ci in range(4):
 		var c0 := float(ci) * 4.0
 		for f in chords[ci]:
-			_add_pulse_note(buf, c0, 4.0, f, 0.10, _warm, 0.5, 0.06)
+			_add_pulse_note(buf, c0, 4.0, f, 0.10,
+				func(ph: float) -> float:
+					return sin(ph) + 0.42 * sin(2.0 * ph) + 0.12 * sin(3.0 * ph),
+				0.5, 0.07)
 	return buf
 
 
@@ -217,13 +221,13 @@ func _compose_bass() -> PackedFloat32Array:
 	# 重拍重、弱拍轻（vel 1.0/0.55 交替）——根音驱动 + 五度/八度点缀
 	var buf := PackedFloat32Array()
 	buf.resize(N)
-	var roots: Array[float] = [65.41, 49.00, 55.00, 43.65]
-	var fifths: Array[float] = [98.00, 73.42, 82.41, 65.41]
-	var octaves: Array[float] = [130.81, 98.00, 110.00, 87.31]
+	var roots: Array[float] = [55.00, 43.65, 65.41, 49.00]
+	var fifths: Array[float] = [82.41, 65.41, 98.00, 73.42]
+	var octaves: Array[float] = [110.00, 87.31, 130.81, 98.00]
 	# [槽, 音区 0=R 1=5th 2=8ve, vel]
 	var pattern: Array[Array] = [
-		[0, 0, 1.0], [2, 0, 0.55], [4, 1, 0.75], [6, 0, 0.55],
-		[8, 0, 1.0], [10, 0, 0.55], [12, 1, 0.75], [13, 2, 0.6], [14, 0, 0.8],
+		[0, 0, 1.0], [2, 0, 0.6], [4, 1, 0.8], [6, 0, 0.6],
+		[8, 0, 1.0], [10, 0, 0.6], [12, 1, 0.8], [13, 2, 0.65], [14, 0, 0.85],
 	]
 	for ci in range(4):
 		var c0 := float(ci) * 4.0
@@ -264,6 +268,36 @@ func _compose_arp() -> PackedFloat32Array:
 			var vel := 0.26 + (0.07 if s % 8 == 0 else 0.0) - (0.06 if s % 4 == 2 else 0.0)
 			_add_note(buf, c0 + float(s) * STEP, 0.30, f, vel, _tri,
 				0.11, 0.004, [0.25, 0.30])
+	return buf
+
+
+func _compose_arp_high() -> PackedFloat32Array:
+	# R75b 高八度琶音（后期强度档）：与 bgm_arp 同轮廓 ×2 频率、更亮拨音、
+	# 回声更长——后期「升起来」的 lifted 感（hats + 本轨同档进）
+	var buf := PackedFloat32Array()
+	buf.resize(N)
+	var scale: Array[float] = [1046.50, 1174.66, 1318.51, 1567.98, 1760.00, 2093.00, 2349.32, 2637.02]
+	var contours: Array[Array] = [
+		[0, -1, 2, -1, 4, -1, 2, 3, 5, -1, 4, -1, 2, 3, 4, -1,
+		 5, -1, 6, -1, 5, 4, -1, 2, 4, -1, 3, -1, 2, -1, 1, -1],
+		[2, -1, 4, -1, 5, -1, 6, -1, 5, 4, -1, 2, 4, -1, 5, -1,
+		 6, -1, 5, -1, 4, -1, 2, 1, 2, -1, 4, -1, 5, -1, 6, -1],
+		[4, -1, 3, -1, 2, -1, 4, -1, 5, -1, 4, 2, 3, -1, 2, -1,
+		 1, -1, 2, -1, 4, -1, 5, 6, 5, -1, 4, -1, 2, 3, 4, -1],
+		[5, 4, -1, 2, 4, -1, 5, -1, 7, -1, 6, -1, 5, -1, 4, 5,
+		 6, -1, 5, -1, 4, -1, 2, -1, 4, 5, 6, -1, 7, -1, 5, -1],
+	]
+	for ci in range(4):
+		var c0 := float(ci) * 4.0
+		var contour: Array = contours[ci]
+		for s in range(32):
+			var deg: int = contour[s]
+			if deg < 0:
+				continue
+			var f: float = scale[clampi(deg, 0, scale.size() - 1)]
+			var vel := 0.15 + (0.04 if s % 8 == 0 else 0.0)
+			_add_note(buf, c0 + float(s) * STEP, 0.26, f, vel, _pluck,
+				0.09, 0.003, [0.375, 0.32])
 	return buf
 
 
@@ -367,6 +401,7 @@ func _run() -> void:
 		["bgm_bass", _compose_bass()],
 		["bgm_arp", _compose_arp()],
 		["bgm_hats", _compose_hats()],
+		["bgm_arp_high", _compose_arp_high()],
 		["bgm_drums", _compose_drums()],
 	]
 	for entry in tracks:

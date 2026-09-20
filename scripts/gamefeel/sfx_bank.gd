@@ -37,21 +37,23 @@ const SFX_BASE_DB := -14.0                     # 音效基准音量（既有 -14
 # R75 场景自适应音乐：六轨等长 16s 烘焙循环（tools/gen_music.gd 作曲，boot 零合成）。
 # 分层运输：大厅曲（MENU 独占）| 战斗 pad+贝斯（基底）→ +琶音（强度1）→ +踩镲（强度2）
 # → Boss 战鼓（存活期叠加）。战斗五轨同长锁相（同帧起播自然对齐）；音量档全部环境级。
-const BGM_BASS_DB := -17.0
-const BGM_ARP_DB := -17.5
-const BGM_HATS_DB := -21.0
+const BGM_BASS_DB := -15.0                      # R75b：-17→-15（存在感——用户反馈战斗听感没变）
+const BGM_ARP_DB := -16.0                       # R75b：-17.5→-16（琶音 w1 起即战斗主体之一）
+const BGM_ARP_HIGH_DB := -19.0
+const BGM_HATS_DB := -20.0
 const BGM_MENU_DB := -15.0
 const BGM_TRACK_DIR := "res://assets/music"
 
 var _bgm_player: AudioStreamPlayer = null      # pad 和声床宿主
 var _bgm_bass_player: AudioStreamPlayer = null # 贝斯律动宿主
 var _bgm_arp_player: AudioStreamPlayer = null  # 琶音拨弦宿主（强度 ≥1）
-var _bgm_hats_player: AudioStreamPlayer = null # 踩镲宿主（强度 ≥2）
+var _bgm_hats_player: AudioStreamPlayer = null # 踩镲宿主（强度 ≥1）
+var _bgm_arp_high_player: AudioStreamPlayer = null # 高八度琶音宿主（强度 2）
 var _bgm_boss_player: AudioStreamPlayer = null # Boss 战鼓宿主（存活期）
 var _bgm_menu_player: AudioStreamPlayer = null # 大厅曲宿主（MENU 独占）
 var _bgm_active := false                       # 战斗态播放 / 菜单暂停
 var _bgm_boss_on := false                      # Boss 存活期战鼓层
-var _bgm_intensity := 1                        # 战斗强度档 0/1/2（波次推进驱动）
+var _bgm_intensity := 0                        # 战斗强度档 0/1/2（波次推进驱动；0 已含琶音）
 var _bgm_menu_on := false                      # 大厅曲开关（MENU 态驱动）
 var _bgm_started := false                      # 战斗五轨首次激活起播（此后仅拨 stream_paused）
 var _bgm_menu_started := false                 # 大厅曲首次起播
@@ -92,6 +94,8 @@ func apply_settings_volumes() -> void:
 		_bgm_arp_player.volume_db = BGM_ARP_DB + bgm_db
 	if _bgm_hats_player != null:
 		_bgm_hats_player.volume_db = BGM_HATS_DB + bgm_db
+	if _bgm_arp_high_player != null:
+		_bgm_arp_high_player.volume_db = BGM_ARP_HIGH_DB + bgm_db
 	if _bgm_boss_player != null:
 		_bgm_boss_player.volume_db = BGM_BOSS_DB + bgm_db
 	if _bgm_menu_player != null:
@@ -202,6 +206,7 @@ func _build_bgm() -> void:
 		["bgm_bass", "_bgm_bass_player", "BgmBass", BGM_BASS_DB],
 		["bgm_arp", "_bgm_arp_player", "BgmArp", BGM_ARP_DB],
 		["bgm_hats", "_bgm_hats_player", "BgmHats", BGM_HATS_DB],
+		["bgm_arp_high", "_bgm_arp_high_player", "BgmArpHigh", BGM_ARP_HIGH_DB],
 		["bgm_drums", "_bgm_boss_player", "BgmBoss", BGM_BOSS_DB],
 		["bgm_menu", "_bgm_menu_player", "BgmMenu", BGM_MENU_DB],
 	]
@@ -278,14 +283,16 @@ func _bgm_transport() -> void:
 		_bgm_bass_player.play()
 		_bgm_arp_player.play()
 		_bgm_hats_player.play()
+		_bgm_arp_high_player.play()
 		_bgm_boss_player.play()
 	if _bgm_menu_on and not _bgm_menu_started:
 		_bgm_menu_started = true
 		_bgm_menu_player.play()
 	_bgm_player.stream_paused = not _bgm_active
 	_bgm_bass_player.stream_paused = not _bgm_active
-	_bgm_arp_player.stream_paused = not (_bgm_active and _bgm_intensity >= 1)
-	_bgm_hats_player.stream_paused = not (_bgm_active and _bgm_intensity >= 2)
+	_bgm_arp_player.stream_paused = not _bgm_active
+	_bgm_hats_player.stream_paused = not (_bgm_active and _bgm_intensity >= 1)
+	_bgm_arp_high_player.stream_paused = not (_bgm_active and _bgm_intensity >= 2)
 	_bgm_boss_player.stream_paused = not (_bgm_active and _bgm_boss_on)
 	_bgm_menu_player.stream_paused = not _bgm_menu_on
 
