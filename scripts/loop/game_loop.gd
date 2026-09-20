@@ -1051,6 +1051,10 @@ func _boot_build_presentation() -> void:
 			player.refresh_pickup_radius()
 			player.refresh_skill_cd())
 	EventBus.shield_blocked.connect(func(_p: Vector2) -> void: sfx.play(&"shield"))
+	# R80 导弹爆反馈：低音轰 + 轻震屏（体感强化——导弹命中/空爆都走这里）
+	EventBus.missile_blast.connect(func(_p_pos: Vector2, _p_r: float) -> void:
+		sfx.play(&"boom")
+		game_feel.add_trauma_for_level(GameConst.FeelLevel.HIT))
 	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
 	# 夜间R15：元素反应音（按反应类型分音色——碎裂/过载/超导）
 	EventBus.reaction_triggered.connect(_play_reaction_sfx)

@@ -29,6 +29,7 @@ var map_wave_heal_pct: float = 0.0            # 地图祝福·每波回血比 ma
 var character_id: StringName = &"sentinel"
 var character_atk_pct: float = 0.0            # 角色攻击修正（武器面板经 meta_atk_pct 合成）
 var rof_mult: float = 1.0                     # 过载咆哮射速倍率（WeaponBase._fire_interval 消费）
+var skill_cd_relic_mult := 1.0                   # R80 遗物技能冷却乘区（时之沙 ×0.8；refresh 常驻消费）
 var skill_cd_base: float = 30.0
 var skill_cd_left: float = 0.0
 var skill_active_left: float = 0.0            # 增益型技能剩余时长（过载）
@@ -449,7 +450,7 @@ func refresh_skill_cd() -> void:
 	# 立刻缩短——不再等本次冷却自然走完；基线变长不回罚（同武器侧口径）。
 	var base := float(CharacterTable.get_character(character_id).get("cd", 120.0))
 	var new_base := base * (1.0 - Meta.skill_cdr_pct()) \
-		* (1.0 - clampf(_weapon_pool_sum(&"add_skillcdr"), 0.0, 0.6))
+		* (1.0 - clampf(_weapon_pool_sum(&"add_skillcdr"), 0.0, 0.6)) * skill_cd_relic_mult
 	if skill_cd_base > 0.0 and new_base > 0.0 and skill_cd_left > 0.0 \
 			and new_base < skill_cd_base and not is_equal_approx(new_base, skill_cd_base):
 		skill_cd_left = clampf(skill_cd_left * new_base / skill_cd_base, 0.0, new_base)

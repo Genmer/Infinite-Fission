@@ -146,10 +146,19 @@ func _on_settled(p_target: Node2D, p_result: DamageResult, p_tctx: TraitContext 
 		last_hit_pos = global_position
 	if impact_hook.is_valid():
 		impact_hook.call(global_position, blast_radius)
-	EventBus.emit_kill_blast(global_position, blast_radius)   # R26 爆炸环特效（火箭命中=看得见的爆炸）
+	EventBus.emit_missile_blast(global_position, blast_radius)   # R80 强化版爆炸（四层爆+震屏+低音）
 	_blast_secondaries(p_target)
 	_apply_elemental(p_target, p_result, p_tctx)
 	_recycle(GameConst.RecycleReason.PIERCE_DEPLETED)
+
+
+func _recycle(p_reason: int, p_released_by_pool: bool = false) -> void:
+	# R80 过期空爆：寿命尽（arm 后）原地起爆——导弹总会炸（用户反馈「没有命中范围爆炸」：
+	# 目标中途死亡/脱锁的导弹此前直飞到过期消失，视觉上等于没有 AoE）
+	if p_reason == GameConst.RecycleReason.EXPIRED and _live and blast_radius > 0.0 			and _arm_left <= 0.0:
+		EventBus.emit_missile_blast(global_position, blast_radius)
+		_blast_secondaries(null)
+	super(p_reason, p_released_by_pool)
 
 
 func _blast_secondaries(p_primary: Node2D) -> void:

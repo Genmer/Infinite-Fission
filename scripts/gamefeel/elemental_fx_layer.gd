@@ -87,6 +87,7 @@ func _ready() -> void:
 	EventBus.poison_cloud_cast.connect(_on_poison_cloud_cast)
 	EventBus.poison_cloud_tick.connect(_on_poison_cloud_tick)
 	EventBus.kill_blast.connect(_on_kill_blast)
+	EventBus.missile_blast.connect(_on_missile_blast)
 	EventBus.skill_cast.connect(_on_skill_cast)   # R19：角色技能施放金环
 	EventBus.elemental_dot_fired.connect(_on_dot_fired)
 	EventBus.reaction_triggered.connect(_on_reaction_triggered)
@@ -777,7 +778,13 @@ func _on_skill_cast(p_pos: Vector2, _p_character_id: String) -> void:
 	slot2["left"] = 0.4
 
 
-func _on_kill_blast(p_pos: Vector2, p_radius: float) -> void:
+func _on_missile_blast(p_pos: Vector2, p_radius: float) -> void:
+	# R80 导弹专用强化爆：复用 kill_blast 四层槽位（白核/火球/双环/烟尘），半径 ×1.6、
+	# 寿命 0.5→0.65s——比通用击杀爆显著更重（体感用户点名「要强一点」）
+	_on_kill_blast(p_pos, maxf(p_radius, 50.0) * 1.6, 0.65)
+
+
+func _on_kill_blast(p_pos: Vector2, p_radius: float, p_life := 0.5) -> void:
 	# R35 火箭筒级四层爆（用户反馈「没有那种用火箭筒的效果」）：白核闪光 + 橙红火球
 	# + 双重冲击波环 + 烟尘余辉；复用通道（死亡新星/Blink/击杀迸裂）同享升级
 	if _blasts.is_empty():
@@ -807,7 +814,7 @@ func _on_kill_blast(p_pos: Vector2, p_radius: float) -> void:
 	var slot: Dictionary = _blasts[_blast_idx % _blasts.size()]
 	_blast_idx += 1
 	var r1: float = maxf(p_radius, 40.0) * 1.25
-	slot["left"] = 0.5
+	slot["left"] = p_life
 	slot["r1"] = r1
 	for key: String in ["flash", "fire", "ring", "smoke"]:
 		var sp: Sprite2D = slot[key]

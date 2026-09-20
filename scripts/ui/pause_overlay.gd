@@ -321,13 +321,43 @@ func _rebuild_details() -> void:
 	pnote.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pstats.add_child(pnote)
 	_details_list.add_child(pstats)
+	# R80 通用词条段：玩家侧池词条全局生效——独立成段，不再散挂武器段
+	var universal: Array = []
 	var slots: Array = _player_ref.get("weapon_slots")
 	var any := false
 	for w in slots:
 		if w == null or not is_instance_valid(w):
 			continue
 		any = true
-		_details_list.add_child(_make_weapon_section(w))
+		_details_list.add_child(_make_weapon_section(w, universal))
+	if not universal.is_empty():
+		var usec := Panel.new()
+		usec.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 3, false))
+		usec.custom_minimum_size = Vector2(576.0, 34.0 + 46.0 * universal.size())
+		usec.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		usec.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var utitle := Label.new()
+		StickerTheme.label_sticker(utitle, 15, PopPalette.GOLD, 0, Color.WHITE, true)
+		utitle.text = "◈ 通用词条 ×%d（全局生效——不归属任何武器）" % universal.size()
+		utitle.position = Vector2(12.0, 6.0)
+		utitle.size = Vector2(552.0, 20.0)
+		utitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		usec.add_child(utitle)
+		for ui: int in range(universal.size()):
+			var ut: Variant = universal[ui]
+			var utd: Variant = ut.get("data")
+			var ulabel := RichTextLabel.new()
+			ulabel.bbcode_enabled = true
+			ulabel.fit_content = true
+			ulabel.add_theme_font_size_override("normal_font_size", 13)
+			ulabel.add_theme_color_override("default_color", PopPalette.INK_SOFT)
+			ulabel.text = "　◆ [b]%s[/b] ×%d 层　└ %s" % [String(utd.get("display_name")),
+				int(ut.get("layers")), _trait_desc_bbcode(ut)]
+			ulabel.position = Vector2(12.0, 30.0 + 46.0 * ui)
+			ulabel.size = Vector2(552.0, 44.0)
+			ulabel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			usec.add_child(ulabel)
+		_details_list.add_child(usec)
 	if not any:
 		var empty := Label.new()
 		StickerTheme.label_sticker(empty, 18, PopPalette.INK_SOFT)
@@ -337,7 +367,7 @@ func _rebuild_details() -> void:
 		_details_list.add_child(empty)
 
 
-func _make_weapon_section(p_w: Node) -> Control:
+func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
 	# 单武器区块：图标 + 名称 Lv 头行 + 词条行 ×N（章形 + 名 ×层 + 描述实际值）
 	var wdata: Variant = p_w.get("data")
 	var section := VBoxContainer.new()
@@ -413,6 +443,16 @@ func _make_weapon_section(p_w: Node) -> Control:
 	var stack: Variant = p_w.get("trait_stack")
 	var traits: Array = (stack.get("traits") as Array) if stack != null \
 		and stack.get("traits") != null else []
+		# R80 玩家侧词条（技能急速/生命/磁吸/经验/点金——全局生效）不在武器段渲染：
+	# 收集进 p_universal 由「通用词条」段统一展示（此前错挂武器段误导归因）
+	var filtered: Array = []
+	for t_v: Variant in traits:
+		var td0: Variant = t_v.get("data")
+		if td0 != null and not (StringName(String(td0.get("pool_id"))) in GameConst.PLAYER_SIDE_POOLS):
+			filtered.append(t_v)
+		elif td0 != null:
+			p_universal.append(t_v)
+	traits = filtered
 	if traits.is_empty():
 		var none := Label.new()
 		StickerTheme.label_sticker(none, 14, PopPalette.INK_SOFT)

@@ -102,7 +102,7 @@ func _test_pre_boss_shop() -> void:
 				if String(ware.get("kind", "")) != "trait":
 					continue
 				var td: TraitData = ware.get("data")
-				if td != null and td.pool_id in CardGenerator.PLAYER_SIDE_POOLS:
+				if td != null and td.pool_id in GameConst.PLAYER_SIDE_POOLS:
 					junk_seen = true
 		_check("黑市：货架无玩家侧池词条（12 轮重抽纯净）", not junk_seen)
 		_gl.shop_ui.close()

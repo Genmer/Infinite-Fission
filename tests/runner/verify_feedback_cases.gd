@@ -74,6 +74,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_g4_boomerang()
 	_test_g9_combo_reward()
 	_test_g10_peak_and_banner()
+	_test_r80_fixes()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -1795,19 +1796,20 @@ func _test_p2_bgm() -> void:
 	# R79 多套随机：战斗 3 套 + 大厅 2 套，apply 确定性换流 + 长度锁相不变
 	_check("R79：战斗 3 套变体 + 大厅 2 套装载",
 		SfxBank.I.bgm_combat_variant_index() >= 0 and SfxBank.I.bgm_combat_variant_index() <= 2, "")
-	var v0_stream: AudioStreamWAV = SfxBank.I._bgm_player.stream
-	SfxBank.I.bgm_apply_combat_variant(1)
-	_check("R79：战斗套切换换流（V0→V1 资源变更）",
-		SfxBank.I._bgm_player.stream != v0_stream
-			and String((SfxBank.I._bgm_player.stream as AudioStreamWAV).resource_path).contains("_v1"),
-		String((SfxBank.I._bgm_player.stream as AudioStreamWAV).resource_path))
+	# 确定性错开（boot 随机初选可能已在本套——apply 同套为无操作）
+	var v0_path := String((SfxBank.I._bgm_player.stream as AudioStreamWAV).resource_path)
+	var v0_idx := SfxBank.I.bgm_combat_variant_index()
+	SfxBank.I.bgm_apply_combat_variant((v0_idx + 1) % 3)
+	var v1_path := String((SfxBank.I._bgm_player.stream as AudioStreamWAV).resource_path)
+	_check("R79：战斗套切换换流（资源变更）",
+		v1_path != v0_path and v1_path.contains("_v%d" % ((v0_idx + 1) % 3)), "%s → %s" % [v0_path, v1_path])
 	_check("R79：换套后四件等长锁相保持（16s）",
 		absf((SfxBank.I._bgm_bass_player.stream as AudioStreamWAV).get_length()
 			- SfxBank.I.bgm_loop_seconds()) <= 0.01, "")
-	SfxBank.I.bgm_apply_combat_variant(2)
+	SfxBank.I.bgm_apply_combat_variant((v0_idx + 2) % 3)
 	var pad_v2_path := String((SfxBank.I._bgm_player.stream as AudioStreamWAV).resource_path)
-	_check("R79：V2 套装载（Dm-Bb-F-C）",
-		pad_v2_path.contains("_v2")
+	_check("R79：第三套装载（循环索引可达）",
+		pad_v2_path.contains("_v%d" % ((v0_idx + 2) % 3))
 			and absf((SfxBank.I._bgm_player.stream as AudioStreamWAV).get_length()
 				- SfxBank.I.bgm_loop_seconds()) <= 0.01,
 		pad_v2_path)
@@ -2747,7 +2749,7 @@ func _test_r71_shop_fallback() -> void:
 			var clean: Array[StringName] = []
 			for tid in pool:
 				var td: TraitData = _gl.card_generator.registry.get_trait(tid)
-				if td != null and not (td.pool_id in CardGenerator.PLAYER_SIDE_POOLS):
+				if td != null and not (td.pool_id in GameConst.PLAYER_SIDE_POOLS):
 					clean.append(tid)
 			if clean.is_empty():
 				continue
@@ -3700,3 +3702,70 @@ func _test_g10_peak_and_banner() -> void:
 		String(got[0]))
 	_gl.call(&"quit_to_menu")
 	_gl._difficulty = 0
+
+
+func _test_r80_fixes() -> void:
+	print("── R80 时之砂/详情归段/导弹空爆 ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	# ② 时之砂：遗物乘区常驻——挂卡重算不再覆盖回 120s
+	var cd0: float = float(_gl.player.get("skill_cd_base"))
+	_check("R80 前置：无遗物技能冷却 = 角色基线（120s）", absf(cd0 - 120.0) < 0.01, str(cd0))
+	_check("R80 前置：时之砂激活", _gl.relic_handler.activate(&"REL_TIMELORD"), "")
+	var cd1: float = float(_gl.player.get("skill_cd_base"))
+	_check("R80：时之沙激活 → 冷却 ×0.8（96s）", absf(cd1 - 96.0) < 0.01, str(cd1))
+	EventBus.emit_card_chosen(&"AFF_DUMMY", 0)      # 挂卡重算（旧 bug：此处覆盖回 120）
+	var cd2: float = float(_gl.player.get("skill_cd_base"))
+	_check("R80：挂卡重算后时之沙仍生效（不再回 120s）", absf(cd2 - 96.0) < 0.01, str(cd2))
+	# ③ 射速归因护栏：时之沙 + 技能急速 不影响武器节拍
+	_gl.player.set("unlocked_slots", 4)
+	var w6: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W6_micro_missile"))
+	_check("R80 前置：W6 装备", w6 != null, "")
+	if w6 != null:
+		var interval0: float = w6.call(&"_fire_interval")
+		var haste_t: TraitData = _gl.registry.get_trait(&"AFF_SKILL_HASTE")
+		(w6 as WeaponBase).attach_trait(haste_t)
+		(w6 as WeaponBase).attach_trait(haste_t)
+		_gl.player.refresh_skill_cd()
+		var interval1: float = w6.call(&"_fire_interval")
+		_check("R80：技能急速/时之沙不动武器节拍（射速归因澄清）",
+			absf(interval1 - interval0) < 0.0001, "%.4f→%.4f" % [interval0, interval1])
+	# ① 详情归段：技能急速出现在「通用词条」段而非 W6 武器段
+	_gl.hud.build_details_requested.emit()
+	var texts: Array[String] = []
+	_collect_rtl(_gl.pause_overlay._details_list, texts)
+	var joined := " ".join(texts)
+	_check("R80：详情含「通用词条」独立段", joined.contains("通用词条"), "")
+	_check("R80：通用段含技能急速（全局生效标注）",
+		joined.contains("技能急速") and joined.contains("全局生效"), "")
+	_gl.pause_overlay._on_resume_pressed()
+	# ④ 导弹过期空爆：寿命尽 → missile_blast 信号（armed 后）
+	var boom := [0]
+	var cap := func(_p: Vector2, _r: float) -> void: boom[0] += 1
+	EventBus.missile_blast.connect(cap)
+	# 独立实例（池被前序用例占满——逻辑测试无需池通道；pool=null 时 _recycle 跳过归还）
+	var proj := HomingProjectile.new()
+	_gl.add_child(proj)
+	if w6 != null:
+		proj.spawn({
+			"position": Vector2(300.0, 800.0), "velocity": Vector2(0.0, -200.0),
+			"lifetime": 0.6, "range": 0.0, "pierce": 1, "bounces": 0,
+			"hitbox_radius": 8.0, "element": 0, "attach_value": 0.0, "generation": 0,
+			"weapon_uid": 1, "panel_snapshot": {}, "trait_stack": null, "team": 0,
+			"target_uid": 0, "turn_rate": 200.0, "speed_init": 200.0, "speed_max": 400.0,
+			"accel": 300.0, "arm_delay": 0.15,
+			"blast_radius": 85.0, "blast_falloff": 0.6,
+		})
+		(w6 as Node).call(&"_inject_projectile_deps", proj)   # 武器侧依赖注入（grid/pipeline/pool）
+		_gl.enemy_grid.rebuild([])
+		for i in range(60):
+			proj.tick(0.016)
+			if not bool(proj.get("_live")):
+				break
+		_check("R80：导弹寿命尽 → 原地空爆（missile_blast 信号）",
+			boom[0] >= 1 and not bool(proj.get("_live")), "blasts=%d live=%s" % [boom[0], str(bool(proj.get("_live")))])
+	else:
+		_check("R80：导弹寿命尽 → 原地空爆（missile_blast 信号）", false,
+			("弹体池取空" if proj == null else "W6 未装备"))
+	EventBus.missile_blast.disconnect(cap)
+	_gl.call(&"quit_to_menu")

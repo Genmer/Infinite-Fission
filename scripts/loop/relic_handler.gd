@@ -59,6 +59,8 @@ func reset_run() -> void:
 	rarity_floor_next = -1
 	_frenzy_stacks = 0                          # R72 新遗物运行态清零
 	_frenzy_left = 0.0
+	if player != null and is_instance_valid(player):
+		player.set("skill_cd_relic_mult", 1.0)  # R80 时之沙乘区随局清零
 	_thorns_cd_left = 0.0
 	_lifesteal_cd_left = 0.0
 	elite_kill_done_this_wave = false
@@ -263,14 +265,13 @@ func _apply_passive(p_data: RelicData) -> void:
 				player.set("max_hp", mhp * 0.75)
 				player.set("hp", minf(float(player.get("hp")), mhp * 0.75))
 		&"REL_EF_SKILL_HASTE":
-			# R72 时之沙：角色技能冷却 ×0.8（基线与在途倒计时同比缩放）
+			# R72 时之沙：角色技能冷却 ×0.8。R80 改写常驻乘区（skill_cd_relic_mult）
+			# 并走 refresh——直写 skill_cd_base 会被挂卡重算覆盖（用户实测「有遗物仍 120s」）
 			if player != null and is_instance_valid(player):
-				var cd_base: float = player.get("skill_cd_base")
-				var cd_left: float = player.get("skill_cd_left")
 				var mult := float(p_data.params.get("mult", 0.8))
-				player.set("skill_cd_base", cd_base * mult)
-				if cd_left > 0.0:
-					player.set("skill_cd_left", cd_left * mult)
+				player.set("skill_cd_relic_mult", mult)
+				if player.has_method(&"refresh_skill_cd"):
+					player.call(&"refresh_skill_cd")
 		_:
 			pass                                # 事件驱动型遗物无常驻位
 

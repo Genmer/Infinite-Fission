@@ -46,6 +46,11 @@ static func difficulty_dual_pick(p_d: int, p_roll: float) -> bool:
 	return p_d == Difficulty.HELL or (p_d == Difficulty.HARD and p_roll < 0.05)
 
 
+const PLAYER_SIDE_POOLS: Array[StringName] = [&"add_hp", &"add_xp", &"add_pickup",
+	&"add_skillcdr", &"add_gold"]   # 玩家侧词条池（全局生效）：卡面【通用】前缀 + 构筑详情
+	                                # 「通用词条」段的归类真源（R80：此前错挂武器段误导归因）
+
+
 static func weapon_note(p_weapon_id: String) -> String:
 	# G8 新武器首获横幅一句话（空 = 不提示）；与 enemy_attack_note 同源纪律
 	match p_weapon_id:

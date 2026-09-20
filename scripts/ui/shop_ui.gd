@@ -70,7 +70,7 @@ func _reroll_wares(p_paid: bool) -> void:
 		var clean: Array[StringName] = []
 		for tid in pool:
 			var td: TraitData = card_generator.registry.get_trait(tid)
-			if td != null and not (td.pool_id in CardGenerator.PLAYER_SIDE_POOLS):
+			if td != null and not (td.pool_id in GameConst.PLAYER_SIDE_POOLS):
 				clean.append(tid)
 		if clean.is_empty():
 			continue
