@@ -940,59 +940,83 @@ func _spawn_fallback_drones() -> void:
 	for i in range(SUMMON_ORBS):
 		var drone := SummonDrone.new()
 		drone.name = "NoahDrone%d" % i
-		drone.orbit_angle = PI * float(i)
+		drone.side = 1 if i % 2 == 0 else -1
 		add_child(drone)
 		_summon_drones.append(drone)
 
 
 class SummonDrone:
-	# R90 诺亚兜底僚机：环绕玩家 + 接触伤害（直结算——毒云同口径）
+	# R93 真护航僚机（用户「所谓僚机就是临时环绕力场？」）：舰形贴图编队侧翼跟随
+	# + 主动开火（弹道池真弹，伤害 12% 主武器 ATK）——不再是环绕接触珠。
+	# 到期前 1.5s 闪烁预警，寿命尽自回收。
 	extends Node2D
 
-	var orbit_angle := 0.0
-	var _tick_left := 0.0
+	var side := 1                                # 编队侧（1 右 / -1 左）
+	var _fire_left := 0.0
+	var _life_left := 10.0
 	var _sprite: Sprite2D = null
 
 	func _ready() -> void:
 		z_index = 20
 		_sprite = Sprite2D.new()
-		_sprite.texture = TextureFactory.bead(PopPalette.GOLD, 32, true)
-		_sprite.scale = Vector2(0.9, 0.9)
+		_sprite.texture = TextureFactory.ship(true)   # 剪影舰体（金色染色=僚机识别）
+		_sprite.modulate = PopPalette.GOLD
+		_sprite.scale = Vector2(0.4, 0.4)
 		add_child(_sprite)
 
 	func _process(p_delta: float) -> void:
 		var host := get_parent()
 		if host == null or not is_instance_valid(host):
 			return
-		orbit_angle += 2.6 * p_delta                 # 环绕角速度（与力场卫星同量级）
-		position = Vector2.from_angle(orbit_angle) * 86.0
-		_sprite.rotation += 12.0 * p_delta
-		_tick_left -= p_delta
-		if _tick_left > 0.0:
+		_life_left -= p_delta
+		if _life_left <= 0.0:
+			queue_free()
 			return
-		_tick_left = 0.4
-		var deps: Variant = host.get("_deps")
+		# 编队位：侧翼 ±74px / 前突 44px + 微浮动——平滑跟随（非环绕）
+		var t_now := Time.get_ticks_msec() * 0.001
+		var target: Vector2 = Vector2(side * 74.0, -44.0 + sin(t_now * 2.2 + side) * 7.0)
+		position = position.lerp(target, minf(p_delta * 6.0, 1.0))
+		# 到期预警闪烁（末 1.5s）
+		if _life_left < 1.5:
+			_sprite.modulate.a = 0.4 + 0.6 * absf(sin(_life_left * 14.0))
+		# 开火：0.55s 一发，最近敌 ≤340px
+		_fire_left -= p_delta
+		if _fire_left > 0.0:
+			return
+		_fire_left = 0.55
+		_fire_at_nearest(host)
+
+	func _fire_at_nearest(p_host: Node2D) -> void:
+		var deps: Variant = p_host.get("_deps")
 		var grid: Variant = deps.get("enemy_grid") if deps is Dictionary else null
+		var pool: Variant = deps.get("projectile_pool") if deps is Dictionary else null
 		var pipeline: Variant = deps.get("pipeline") if deps is Dictionary else null
-		if grid == null or pipeline == null:
+		if grid == null or pool == null or pipeline == null:
 			return
-		var w0: Variant = (host.get("weapon_slots") as Array)[0] 			if (host.get("weapon_slots") as Array).size() > 0 else null
-		var base := 0.0
+		var world_pos: Vector2 = p_host.global_position + position
+		var target: Node2D = grid.call(&"query_nearest", world_pos, 340.0, null)
+		if target == null or bool(target.get("dead")):
+			return
+		# 弹伤 = 12% 主武器 ATK（僚机定位=伴随输出，不抢主武器戏）
+		var slots: Array = p_host.get("weapon_slots")
+		var w0: Variant = slots[0] if slots.size() > 0 else null
+		var base := 10.0
 		if w0 != null and w0 is WeaponBase and is_instance_valid(w0):
-			base = float((w0 as WeaponBase).build_panel_snapshot().get("base_atk", 0.0))
-		if base <= 0.0:
+			base = float((w0 as WeaponBase).build_panel_snapshot().get("base_atk", 10.0))
+		var dir := (target.global_position - world_pos).normalized()
+		var proj: ProjectileBase = pool.call(&"acquire")
+		if proj == null:
 			return
-		var world_pos: Vector2 = host.global_position + position
-		for e in (grid as SpaceGrid).query_circle(world_pos, 30.0):
-			if e == null or bool(e.get("dead")):
-				continue
-			var ctx := DamageContext.make()
-			ctx.source_uid = int(host.get_instance_id())
-			ctx.target = e
-			ctx.target_uid = int(e.get("uid"))
-			ctx.frame_stamp = GameConfig.frame_stamp
-			ctx.base_atk = base * 0.10
-			ctx.hit_flags |= GameConst.HIT_IS_AOE_SECONDARY
-			ctx.crit_chance = 0.0
-			ctx.pos = (e as Node2D).global_position
-			pipeline.call(&"resolve", ctx)
+		proj.spawn({
+			"position": world_pos, "velocity": dir * 560.0,
+			"lifetime": 1.2, "range": 400.0, "pierce": 1, "bounces": 0,
+			"hitbox_radius": 7.0, "element": GameConst.Element.KIN, "attach_value": 0.0,
+			"generation": 0, "weapon_uid": int(p_host.get_instance_id()),
+			"panel_snapshot": {"base_atk": base * 0.12},
+			"trait_stack": null, "team": 0,
+		})
+		proj.damage_pipeline = pipeline                  # 武器侧 _inject_projectile_deps 同口径
+		proj.enemy_grid = grid
+		proj.pool = pool
+		# 朝向敌向（剪影画布朝上）
+		_sprite.rotation = dir.angle() + PI * 0.5

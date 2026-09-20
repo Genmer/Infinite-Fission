@@ -3902,6 +3902,30 @@ func _test_r86_r89_r90() -> void:
 	var drones_after: int = _count_noah_drones()
 	_check("R90：诺亚技能生成僚机", drones_after > drones_before,
 		"%d→%d" % [drones_before, drones_after])
+	# R93 真护航机：敌在场 → 僚机开火（弹道池出现我方弹）；到期自回收
+	var tgt := _spawn_r72_enemy(&"E1_grunt", _gl.player.global_position + Vector2(200.0, 0.0))
+	var live_before: int = int((_gl.pools[&"projectile"] as ProjectilePool).stats()["live"])
+	for i in range(60):                          # 1s @60fps（0.55s 一发 → ≥1 发）
+		for d: Node in _gl.player.get_children():
+			if String(d.name).begins_with("NoahDrone") and is_instance_valid(d):
+				d.call(&"_process", 0.016)
+	var live_after: int = int((_gl.pools[&"projectile"] as ProjectilePool).stats()["live"])
+	_check("R93：僚机主动开火（真弹入池）", live_after > live_before,
+		"%d→%d" % [live_before, live_after])
+	var drone0: Node = null
+	for d: Node in _gl.player.get_children():
+		if String(d.name).begins_with("NoahDrone") and is_instance_valid(d):
+			drone0 = d
+			break
+	if drone0 != null:
+		for i in range(10 * 60):
+			drone0.call(&"_process", 0.016)
+			if not is_instance_valid(drone0):
+				break
+		_check("R93：僚机 10s 寿命自回收（闪烁预警后离场）",
+			not is_instance_valid(drone0) or drone0.is_queued_for_deletion(), "alive")
+	_gl.spawner.active.erase(tgt)
+	(_gl.pools[&"enemy"] as EnemyPool).release(tgt)
 	_gl.call(&"quit_to_menu")
 
 func _count_noah_drones() -> int:
