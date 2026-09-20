@@ -80,6 +80,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r86_r89_r90()
 	_test_r87_r88()
 	_test_r91_prism_laser()
+	_test_r92_fast_clear()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -4031,4 +4032,30 @@ func _test_r91_prism_laser() -> void:
 		if w_v != null and is_instance_valid(w_v) and w_v.data != null 				and w_v.data.id != &"W1_pistol":
 			_gl.player.weapon_slots[i] = null
 			w_v.queue_free()
+	_gl.call(&"quit_to_menu")
+
+
+func _test_r92_fast_clear() -> void:
+	print("── R92 快清快开 ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	var wd = _gl.wave_director
+	# 模拟「秒清」：清队列 + 释放全部在场敌（波 1 非 Boss）
+	(_gl.spawner.get("spawn_queue") as Array).clear()
+	for e: Node in _gl.spawner.active.duplicate():
+		if e != null and is_instance_valid(e):
+			_gl.spawner.active.erase(e)
+			(_gl.pools[&"enemy"] as EnemyPool).release(e)
+	var w0: int = wd.current_wave
+	wd.tick(0.1)
+	_check("R92：窗口内全清 → 剩窗截断 ≤0.8s（SPAWNING 期）",
+		float(wd.get("window_left")) <= 0.8, "%.2f" % float(wd.get("window_left")))
+	# 推进 0.8+1.8+0.2s → 应已开下一波（旧口径需整窗 18.4s）
+	for i in range(30):
+		wd.tick(0.1)
+		_gl.spawner.tick(0.1, _gl.enemy_grid)
+		if wd.current_wave > w0:
+			break
+	_check("R92：快清后 ~2.8s 内开下一波（不再干等整窗）",
+		wd.current_wave == w0 + 1, "w %d→%d" % [w0, wd.current_wave])
 	_gl.call(&"quit_to_menu")

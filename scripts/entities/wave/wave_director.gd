@@ -45,6 +45,7 @@ var _escort_cursor: int = 0                           # 混合轮转游标（确
 const HARD_CAP_BONUS := 8.0                   # wave_hard_cap = spawn_window + 8s（A3 §1.3）
 const INTER_WAVE_BUFFER := 0.6                # 波间缓冲（R26：1.0→0.6——「打完很久没怪」）
 const LOOT_BUFFER := 1.2                       # 全清后拾取缓冲（R26：3.0→1.2——碎片磁吸秒收不再需要长窗）
+const EARLY_CLEAR_WINDOW := 0.8                # R92 快清截断窗（窗口内全清→剩窗钳到 0.8s）
 const BOSS_TRICKLE_INTERVAL := 2.5             # Boss 伴随怪节奏 fallback（A3 §2.4 w10 行：×1/2.5s 场上≤12）
 const BOSS_TRICKLE_CAP := 12
 # Boss 波伴随怪分波节奏（包 4 遗留项；真源 A3 §2.4 波表行原文：w10「Boss1+G×1/2.5s（场上≤12）」、
@@ -121,6 +122,10 @@ func tick(p_game_delta: float) -> void:
 			_hard_cap_left -= p_game_delta
 			spawner.tick(p_game_delta, enemy_grid)
 			window_left -= p_game_delta
+			# R92 快清快开（用户反馈「打太快怪卡挺久才出来」）：窗口内已全清（非 Boss 波
+			# ——Boss 波有伴随怪流水语义）→ 剩余窗口截断到 0.8s，不再干等整个刷怪窗
+			if _phase == WavePhase.SPAWNING and not _boss_wave 					and spawner.queue_empty() and spawner.active_count() == 0:
+				window_left = minf(window_left, EARLY_CLEAR_WINDOW)
 			if window_left <= 0.0:
 				window_left = 0.0
 				_phase = WavePhase.CLEARING
