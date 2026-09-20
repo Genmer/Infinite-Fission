@@ -279,6 +279,8 @@ func _on_trait_milestone_toast(_p_trait_id: StringName, p_name: String, p_mult: 
 		else "◆ %s —— 终极形态达成" % p_name
 	var toast := StickerTheme.label_sticker(Label.new(), 22, PopPalette.GOLD, 5, Color.WHITE, true)
 	toast.text = text
+	toast.reset_size()
+	_fit_font_size(toast, text, 520.0)
 	toast.position = Vector2(90.0, 360.0)
 	toast.size = Vector2(540.0, 34.0)
 	toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -819,9 +821,27 @@ func _sticker_panel(p_parent: Control, p_pos: Vector2, p_size: Vector2, p_radius
 	return panel
 
 
+static func _fit_font_size(p_label: Label, p_text: String, p_max_w: float,
+		p_size_floor := 16) -> void:
+	# R86 屏中大字自适应：按字体实测宽度缩字号到容器内（长横幅不再溢出裁切）
+	var font := p_label.get_theme_font("font")
+	if font == null:
+		return
+	var fs: int = p_label.get_theme_font_size("font")
+	while fs > p_size_floor 			and font.get_string_size(p_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > p_max_w:
+		fs -= 2
+	if fs != p_label.get_theme_font_size("font"):
+		p_label.add_theme_font_size_override("font_size", fs)
+
+
 func _show_toast(p_text: String, p_time: float = TOAST_TIME) -> void:
 	# 波次 toast：果冻 squash & stretch 出现（重要 UI 元素全局动效口径）
 	_toast_label.text = p_text
+	_toast_label.remove_theme_font_size_override("font_size")     # R86：重置后按本文缩放
+	_toast_label.add_theme_font_size_override("font_size", 34)
+	_fit_font_size(_toast_label, p_text, 700.0)
+	_toast_label.reset_size()
+	_toast_label.size = Vector2(720.0, 44.0)
 	_toast_label.visible = true
 	_toast_label.modulate.a = 1.0
 	_toast_left = p_time

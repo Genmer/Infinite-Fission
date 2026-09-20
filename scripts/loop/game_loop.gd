@@ -1492,6 +1492,8 @@ func _show_combo_toast() -> void:
 	_combo_label.add_theme_color_override("font_color", col)
 	_combo_label.text = "×%d 连杀！%s" % [_combo_count, _combo_reward_line]
 	_combo_reward_line = ""                     # 消费即清（下一跳不残留）
+	if hud != null:
+		hud._fit_font_size(_combo_label, _combo_label.text, 690.0)   # R86 奖励行加长不溢出
 	_combo_label.reset_size()
 	_combo_label.position = Vector2(360.0 - _combo_label.size.x * 0.5, 420.0)
 	_combo_label.pivot_offset = _combo_label.size * 0.5

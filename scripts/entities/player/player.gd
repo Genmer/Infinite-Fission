@@ -44,6 +44,7 @@ var _poison_cloud_tick_left: float = 0.0      # 下一跳倒计时
 # 召唤僚机（召唤师·诺亚，P2 数值真源）：主武器 orbs_bonus +2 持续 10s 后还原
 #（复用 OrbitWeapon orbs 机制，不新建实体；到期/换角色即还原）
 var _summon_left: float = 0.0                 # 僚机剩余（game_delta 通道）
+var _summon_drones: Array[Node2D] = []        # R90 实体僚机（无环绕武器构筑的兜底）
 var _summon_applied: Array[OrbitWeapon] = []  # 已加成的武器（到期逐一还原）
 var invuln_left: float = 0.0                  # 受击无敌帧（contact_tick=0.6s 口径）
 var weapon_slots: Array[WeaponBase] = []      # ≤5（集成包 B.8 第二批收紧：pkg2 用例已迁移 WeaponBase 真件）
@@ -646,6 +647,9 @@ func _skill_summon_orbs() -> void:
 	# 复用 OrbitWeapon orbs 机制（力场重铺即时生效），零新建实体。
 	var target := _summon_target()
 	if target == null:
+		_spawn_fallback_drones()              # R90：无环绕武器构筑的兜底——实体僚机
+		_summon_left = SUMMON_DURATION
+		DebugStats.count(&"summon_drones_fallback")
 		return
 	target.orbs_bonus += SUMMON_ORBS
 	target.refresh_orbit_field()
@@ -668,6 +672,10 @@ func _summon_target() -> OrbitWeapon:
 func _summon_restore() -> void:
 	# 僚机到期还原：orbs_bonus 撤销（钳 0）+ 力场重铺；武器已回收（重开清场）则跳过
 	_summon_left = 0.0
+	for drone in _summon_drones:               # R90 实体僚机到期回收
+		if drone != null and is_instance_valid(drone):
+			drone.queue_free()
+	_summon_drones.clear()
 	for w in _summon_applied:
 		if w == null or not is_instance_valid(w):
 			continue
@@ -907,3 +915,67 @@ func _tick_visual(p_game_delta: float, p_move: Vector2) -> void:
 			_shield_ring.modulate.a = 0.5 + 0.14 * sin(_anim_t * 5.2)
 		else:
 			_shield_ring.visible = false
+
+
+func _spawn_fallback_drones() -> void:
+	# R90 实体僚机：两架环绕无人机（半径 86px、相位对开），接触伤害走管线直结算
+	#（毒云同通道：10% 主武器 ATK、每敌 0.4s 一跳、不暴击）——无环绕武器也有可见可感技能
+	for i in range(SUMMON_ORBS):
+		var drone := SummonDrone.new()
+		drone.name = "NoahDrone%d" % i
+		drone.orbit_angle = PI * float(i)
+		add_child(drone)
+		_summon_drones.append(drone)
+
+
+class SummonDrone:
+	# R90 诺亚兜底僚机：环绕玩家 + 接触伤害（直结算——毒云同口径）
+	extends Node2D
+
+	var orbit_angle := 0.0
+	var _tick_left := 0.0
+	var _sprite: Sprite2D = null
+
+	func _ready() -> void:
+		z_index = 20
+		_sprite = Sprite2D.new()
+		_sprite.texture = TextureFactory.bead(PopPalette.GOLD, 32, true)
+		_sprite.scale = Vector2(0.9, 0.9)
+		add_child(_sprite)
+
+	func _process(p_delta: float) -> void:
+		var host := get_parent()
+		if host == null or not is_instance_valid(host):
+			return
+		orbit_angle += 2.6 * p_delta                 # 环绕角速度（与力场卫星同量级）
+		position = Vector2.from_angle(orbit_angle) * 86.0
+		_sprite.rotation += 12.0 * p_delta
+		_tick_left -= p_delta
+		if _tick_left > 0.0:
+			return
+		_tick_left = 0.4
+		var deps: Variant = host.get("_deps")
+		var grid: Variant = deps.get("enemy_grid") if deps is Dictionary else null
+		var pipeline: Variant = deps.get("pipeline") if deps is Dictionary else null
+		if grid == null or pipeline == null:
+			return
+		var w0: Variant = (host.get("weapon_slots") as Array)[0] 			if (host.get("weapon_slots") as Array).size() > 0 else null
+		var base := 0.0
+		if w0 != null and w0 is WeaponBase and is_instance_valid(w0):
+			base = float((w0 as WeaponBase).build_panel_snapshot().get("base_atk", 0.0))
+		if base <= 0.0:
+			return
+		var world_pos: Vector2 = host.global_position + position
+		for e in (grid as SpaceGrid).query_circle(world_pos, 30.0):
+			if e == null or bool(e.get("dead")):
+				continue
+			var ctx := DamageContext.make()
+			ctx.source_uid = int(host.get_instance_id())
+			ctx.target = e
+			ctx.target_uid = int(e.get("uid"))
+			ctx.frame_stamp = GameConfig.frame_stamp
+			ctx.base_atk = base * 0.10
+			ctx.hit_flags |= GameConst.HIT_IS_AOE_SECONDARY
+			ctx.crit_chance = 0.0
+			ctx.pos = (e as Node2D).global_position
+			pipeline.call(&"resolve", ctx)

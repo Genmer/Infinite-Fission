@@ -77,6 +77,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r80_fixes()
 	_test_r81_name_hygiene()
 	_test_r82_haste_chain()
+	_test_r86_r89_r90()
 	_test_p2_damage_tiers()
 	_test_p2_bgm()
 	_test_p2_daily()
@@ -3871,3 +3872,38 @@ func _test_r82_haste_chain() -> void:
 		absf(float(_gl.player.get("skill_cd_left")) - base0 * 0.88) < 0.05,
 		"%.1f" % float(_gl.player.get("skill_cd_left")))
 	_gl.call(&"quit_to_menu")
+
+
+func _test_r86_r89_r90() -> void:
+	print("── R86/R89/R90 大字/法术伤害/僚机 ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run")
+	_gl.player.set("unlocked_slots", 4)
+	# R89 法术圈伤害：E28 引爆圈内玩家必掉血（无盾/无无敌干扰）
+	var caster := _spawn_r72_enemy(&"E28_hexcaster", Vector2(360.0, 640.0))
+	_gl.player.global_position = Vector2(360.0, 640.0)
+	_gl.player.set("shield_ready", false)
+	_gl.player.set("invuln_left", 0.0)
+	var hp0: float = float(_gl.player.get("hp"))
+	caster.call(&"_detonate_spell", Vector2(360.0, 640.0), 95.0)
+	var hp1: float = float(_gl.player.get("hp"))
+	_check("R89：法术圈圈内引爆掉血（contact×ratio 直落）", hp1 < hp0,
+		"%.0f→%.0f" % [hp0, hp1])
+	_release_r72_enemy(caster)
+	# R90 诺亚僚机：施放技能 → 僚机场生成
+	Meta.character_id = &"noah"
+	_gl.player.call(&"set_character", &"noah")
+	_gl.player.set("skill_cd_left", 0.0)
+	var drones_before: int = _count_noah_drones()
+	_gl.player.call(&"activate_skill")
+	var drones_after: int = _count_noah_drones()
+	_check("R90：诺亚技能生成僚机", drones_after > drones_before,
+		"%d→%d" % [drones_before, drones_after])
+	_gl.call(&"quit_to_menu")
+
+func _count_noah_drones() -> int:
+	var n := 0
+	for kid: Node in _gl.player.get_children():
+		if String(kid.name).begins_with("NoahDrone"):
+			n += 1
+	return n
