@@ -377,8 +377,11 @@ func _on_settled(p_target: Node2D, p_result: DamageResult, p_tctx: TraitContext 
 		killed_target = killed_target or p_result.killed
 		last_hit_pos = global_position
 	_apply_elemental(p_target, p_result, p_tctx)
-	pierce_left -= 1
-	if pierce_left > 0:
+	# G11 回旋刃：命中不耗穿透——去回双程皆贯穿（用户反馈「击中就消失还回旋什么」）；
+	# 回收只由返航到手 / 寿命兜底。ON_PIERCE 词条钩子照常逐跳派发（构筑不受损）
+	if not _boomerang:
+		pierce_left -= 1
+	if pierce_left > 0 or _boomerang:
 		_dispatch_event(GameConst.TraitEvent.ON_PIERCE, {"target": p_target})
 	else:
 		_recycle(GameConst.RecycleReason.PIERCE_DEPLETED)

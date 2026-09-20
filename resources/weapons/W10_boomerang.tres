@@ -8,45 +8,45 @@ script = ExtResource("2_wls")
 base_atk = 13.0
 rof = 2.6
 cd = 0.0
-pierce = 3
+pierce = 1
 pellets = 1
-note = "G4 回旋刃 L1：出手减速撒出 → 低速翻转 → 加速返航，去回双程各结算一次；面板 DPS 34（双程×2≈68）"
+note = "G4 回旋刃 L1：出手减速撒出 → 低速翻转 → 加速返航；命中不耗穿透——去回双程皆贯穿，回收只在返航到手"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
 base_atk = 15.0
 rof = 2.6
 cd = 0.0
-pierce = 3
+pierce = 1
 pellets = 1
 note = "L2：面板 DPS 39（双程≈78）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
-base_atk = 16.0
-rof = 2.8
+base_atk = 17.0
+rof = 3.1
 cd = 0.0
-pierce = 5
+pierce = 1
 pellets = 1
-note = "L3 小质变：穿透 3→5（去回可扫 10 段）；面板 DPS 45（双程≈89）"
+note = "L3 小质变：投掷节奏加快（rof 2.8→3.1）——回旋刃命中不耗穿透，出刀密度即清场密度"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
 base_atk = 18.0
-rof = 2.8
+rof = 3.1
 cd = 0.0
-pierce = 5
+pierce = 1
 pellets = 1
-note = "L4：面板 DPS 50（双程≈100）"
+note = "L4：面板 DPS 56（双程贯穿实际更高）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
 base_atk = 14.0
-rof = 2.8
+rof = 3.1
 cd = 0.0
-pierce = 5
+pierce = 1
 pellets = 2
-note = "L5 大质变：双刃齐掷（14×2，两条独立回旋轨迹）；面板 DPS ≈78（双程×2≈157）"
+note = "L5 大质变：双刃齐掷（14×2，两条独立回旋轨迹，全程贯穿）"
 
 [resource]
 script = ExtResource("1_wd")
@@ -69,7 +69,7 @@ threshold_traits = [{
 }]
 ballistic = {
 "proj_speed": 520.0, "range": 380.0, "spread_deg": 3.0,
-"pierce": 3, "pellets": 1, "spin_up_time": 0.0, "rof_hot": 0.0,
+"pierce": 1, "pellets": 1, "spin_up_time": 0.0, "rof_hot": 0.0,
 "boomerang": true
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

@@ -3585,6 +3585,29 @@ func _test_g4_boomerang() -> void:
 	var recycled_ok := not is_instance_valid(proj) or not bool(proj.get("_live"))
 	_check("G4：回程返航到手自回收", recycled_ok,
 		"j=%d pos=%s" % [j, str(proj.global_position) if is_instance_valid(proj) else "-"])
+	# G11 穿透免疫：命中不耗穿透（用户反馈「击中就消失还回旋什么」）
+	var target2 := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	target2.spawn(_fixture_enemy(&"E_G11BOOM", 100000.0), 3, 0)
+	target2.global_position = _gl.player.global_position + Vector2(150.0, 0.0)
+	_gl.elemental.register_host(target2)
+	_gl.enemy_grid.rebuild([target2])
+	boom.call("try_fire")
+	var proj2: ProjectileBase = null
+	for p in (_gl.pools[&"projectile"] as ProjectilePool).active_projectiles():
+		if p is ProjectileBase and (p as ProjectileBase).team == 0 				and p.get("weapon_ref") == boom and bool(p.get("_live")):
+			proj2 = p
+	if proj2 != null:
+		var hp0 := float(target2.get("hp"))
+		for hit_i in range(3):
+			proj2.call(&"_submit_hit", target2)             # 连击 3 次（旧逻辑 pierce 1 早已回收）
+		var hp1 := float(target2.get("hp"))
+		_check("G11：回旋刃 3 连击不回收（穿透免疫）",
+			bool(proj2.get("_live")) and hp1 < hp0,
+			"live=%s hp %.0f→%.0f" % [str(bool(proj2.get("_live"))), hp0, hp1])
+		proj2.call(&"nullify")
+	else:
+		_check("G11：回旋刃 3 连击不回收（穿透免疫）", false, "未捕获第二发弹体")
+	(_gl.pools[&"enemy"] as EnemyPool).release(target2)
 	# 状态恢复（后续套件假定槽 0 = 手枪、原玩家位）：只摘 W10
 	for k in range(_gl.player.weapon_slots.size()):
 		var w: WeaponBase = _gl.player.weapon_slots[k]

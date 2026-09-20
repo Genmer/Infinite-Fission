@@ -66,7 +66,7 @@ static func weapon_note(p_weapon_id: String) -> String:
 		"W9_arc_slash":
 			return "弧斩化身——近身旋斩，贴脸收割"
 		"W10_boomerang":
-			return "去回双程伤害——撒出减速再返航，穿透拉满是清道夫"
+			return "去回双程贯穿——命中不耗穿透，撒出减速再返航收割"
 		_:
 			return ""
 
