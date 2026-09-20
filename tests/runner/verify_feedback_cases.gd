@@ -3548,6 +3548,7 @@ func _test_g4_boomerang() -> void:
 		return
 	var pos0: Vector2 = _gl.player.global_position
 	_gl.player.global_position = Vector2(360.0, 640.0)
+	_gl.enemy_grid.rebuild([])                    # 清前一节残留敌（否则陈敌反弹弹体→污染出程轨迹）
 	for _k in range(3):
 		_gl.player.call(&"tick", 0.016, Vector2.ZERO)   # 真实驱动入口（player 无 _process）
 	boom.call("try_fire")
@@ -3571,12 +3572,13 @@ func _test_g4_boomerang() -> void:
 		if int(proj.get("_boom_phase")) == 1:
 			break
 	var dist_mid: float = proj.global_position.distance_to(_gl.player.global_position)
-	_check("G4：出程减速翻转（phase 0→1，速度掉档）",
+	var boom_range := float(proj.get("_boom_range"))
+	var dist_flown := proj.global_position.distance_to(proj.get("_boom_origin"))
+	_check("R78：出程定距甩满才翻转（固定距离，phase 0→1）",
 		i < 120 and int(proj.get("_boom_phase")) == 1
-			and proj.velocity.length() < speed0 * 0.32
-			and dist_mid > dist0,
-		"i=%d speed=%.0f<%.0f dist %.0f>%.0f" % [i, proj.velocity.length(), speed0 * 0.32,
-			dist_mid, dist0])
+			and dist_flown >= boom_range - 12.0 and dist_flown <= boom_range + 40.0,
+		"i=%d flown=%.0f range=%.0f phase=%d live=%s" % [i, dist_flown, boom_range,
+			int(proj.get("_boom_phase")), str(bool(proj.get("_live")))])
 	# 回程：返航到手回收（FORCED）
 	var j := 0
 	while is_instance_valid(proj) and bool(proj.get("_live")) and j < 400:
@@ -3598,12 +3600,18 @@ func _test_g4_boomerang() -> void:
 			proj2 = p
 	if proj2 != null:
 		var hp0 := float(target2.get("hp"))
-		for hit_i in range(3):
-			proj2.call(&"_submit_hit", target2)             # 连击 3 次（旧逻辑 pierce 1 早已回收）
+		proj2.call(&"_submit_hit", target2)                 # 首触结算
+		proj2.call(&"_submit_hit", target2)                 # 内冷期内快连——不结算
+		proj2.call(&"_submit_hit", target2)
 		var hp1 := float(target2.get("hp"))
-		_check("G11：回旋刃 3 连击不回收（穿透免疫）",
-			bool(proj2.get("_live")) and hp1 < hp0,
-			"live=%s hp %.0f→%.0f" % [str(bool(proj2.get("_live"))), hp0, hp1])
+		(proj2.get("_boom_icd") as Dictionary).clear()      # 内冷过期模拟
+		(proj2.get("hits_this_frame") as Dictionary).clear()  # 帧去重模拟（直调无 tick 清帧）
+		GameConfig.advance_frame()                          # 管线帧级聚合换帧（毒云测试同法）
+		proj2.call(&"_submit_hit", target2)                 # 再触——再结算
+		var hp2 := float(target2.get("hp"))
+		_check("R78：回旋刃穿透免疫 + 接触节拍（内冷 0.4s 一跳）",
+			bool(proj2.get("_live")) and hp1 < hp0 and hp2 < hp1,
+			"live=%s hp %.0f→%.0f→%.0f" % [str(bool(proj2.get("_live"))), hp0, hp1, hp2])
 		proj2.call(&"nullify")
 	else:
 		_check("G11：回旋刃 3 连击不回收（穿透免疫）", false, "未捕获第二发弹体")

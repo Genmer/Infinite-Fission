@@ -10,7 +10,7 @@ rof = 2.6
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "G4 回旋刃 L1：出手减速撒出 → 低速翻转 → 加速返航；命中不耗穿透——去回双程皆贯穿，回收只在返航到手"
+note = "R78 回旋刃 L1：定距甩满 → 翻转加速返航；碰到弹开不消失，同敌 0.4s 一跳——双程贯穿收割"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")

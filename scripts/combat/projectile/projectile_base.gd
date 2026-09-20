@@ -22,6 +22,10 @@ var _boomerang: bool = false
 var _boom_phase: int = 0                       # 0=出程减速 1=回程返航
 var _boom_speed_init: float = 0.0
 var _boom_return_speed: float = 0.0              # 回程返航速度（加速爬升）
+var _boom_origin: Vector2 = Vector2.ZERO         # R78 出手点（定距甩满的丈量原点）
+var _boom_range: float = 340.0                   # R78 甩满距离（spawn range 注入）
+var _boom_icd: Dictionary = {}                   # R78 同敌接触内冷 {uid: 剩余秒}
+const BOOM_HIT_ICD := 0.4                        # R78 多次接触结算间隔（平衡值）
 var generation: int = 0                       # 分裂代数（≤3，E-01）
 var hitbox_radius: float = 6.0
 var element: int = GameConst.Element.KIN
@@ -87,6 +91,9 @@ func spawn(p_params: Dictionary) -> void:
 	_boomerang = bool(p_params.get("boomerang", false))   # G4 回旋刃标记
 	_boom_phase = 0
 	_boom_speed_init = velocity.length()
+	_boom_origin = global_position                    # R78 定距甩满原点
+	_boom_range = maxf(float(p_params.get("range", 340.0)), 120.0)
+	_boom_icd.clear()
 	_had_bounces = bounces_left > 0
 	hitbox_radius = maxf(float(p_params.get("hitbox_radius", 6.0)), 0.0)
 	element = int(p_params.get("element", GameConst.Element.KIN))
@@ -112,6 +119,7 @@ func spawn(p_params: Dictionary) -> void:
 		_traits_cache = direct
 	if p_params.has("position"):
 		position = p_params["position"]
+		_boom_origin = global_position                # R78 出膛后取原点（position 落位在快照段之后）
 	_read_form_params(p_params)
 	hits_this_frame.clear()
 	_bounces_done = 0
@@ -137,8 +145,13 @@ func tick(p_game_delta: float) -> void:
 	if lifetime_left <= 0.0:
 		_recycle(GameConst.RecycleReason.EXPIRED)
 		return
-	if _boomerang and _boom_step(p_game_delta):
-		return                                # G4 回旋运动接管；收回即回收本帧不再落位
+	if _boomerang:
+		for uid in _boom_icd.keys():
+			_boom_icd[uid] = float(_boom_icd[uid]) - p_game_delta
+			if float(_boom_icd[uid]) <= 0.0:
+				_boom_icd.erase(uid)
+		if _boom_step(p_game_delta):
+			return                            # G4 回旋运动接管；收回即回收本帧不再落位
 	_move(p_game_delta)
 	if not _live:
 		return
@@ -168,8 +181,9 @@ func _boom_step(p_game_delta: float) -> bool:
 	# G4 回旋刃运动接管：出程指数减速（撒出）→ 低速翻转 → 回程向玩家加速返航（收线）。
 	# 只改写 velocity，落位仍由 _move 完成；返回 true = 已回收（tick 跳过本帧 _move）。
 	if _boom_phase == 0:
-		velocity *= pow(0.20, p_game_delta)      # 每秒保留 20%——约 0.7s 后掉到初速三成
-		if velocity.length() <= _boom_speed_init * 0.3:
+		# R78 定距甩满：轻衰减（0.55/秒——手感保留），到位即翻（固定距离，不随命中/速度变化）
+		velocity *= pow(0.55, p_game_delta)
+		if global_position.distance_to(_boom_origin) >= _boom_range:
 			_boom_phase = 1
 			_boom_return_speed = velocity.length()
 	else:
@@ -263,6 +277,15 @@ func _submit_hit(p_target: Node2D) -> void:
 	# 反弹后的弹 team=1，后续走敌弹通道，不再与发射者友军判定）
 	if p_target.has_method(&"try_reflect_projectile") 			and bool(p_target.call(&"try_reflect_projectile", self)):
 		return
+	# R78 回旋刃接触节拍：同敌内冷（0.4s）内不结算——多次接触按间隔成伤；
+	# 命中轻弹开（碰到回弹的物理读感；返航归位不受影响）
+	if _boomerang:
+		if float(_boom_icd.get(t_uid, 0.0)) > 0.0:
+			return
+		_boom_icd[t_uid] = BOOM_HIT_ICD
+		var away: Vector2 = global_position - p_target.global_position
+		if away.length_squared() > 0.001 and velocity.length() > 1.0:
+			velocity = velocity.normalized().lerp(away.normalized(), 0.30) 				* velocity.length()
 	_pierce_hits += 1                        # 命中序数（HIT_AFTER_PIERCE 条件）
 	var ctx := _build_damage_ctx(p_target)
 	# 包 3 收口（§4.4 ②）：TraitStack 真件乘区预聚合 + 目标易伤乘区注入（A2 §1.8）
@@ -622,6 +645,7 @@ func _reset_state() -> void:
 	_boom_phase = 0
 	_boom_speed_init = 0.0
 	_boom_return_speed = 0.0
+	_boom_icd.clear()                            # R78 接触内冷表清零
 	_pierce_hits = 0
 	generation = 0
 	hitbox_radius = 6.0

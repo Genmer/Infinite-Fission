@@ -33,7 +33,8 @@ func _move(p_game_delta: float) -> void:
 	_traveled += velocity.length() * p_game_delta
 	# R15：带反弹预算 = 射程无限（用户裁定「打空必达边界」）——跳过射程回收，
 	# 生命周期由边界反弹次数接管（预算耗尽 → 边缘 BOUNCE_DEPLETED 回收）
-	if range_left > 0.0 and _traveled >= range_left and bounces_left <= 0:
+	# R78：回旋刃同样豁免——range 语义 = 甩满距离（翻转点），寿命由返航/3.2s 兜底
+	if range_left > 0.0 and _traveled >= range_left and bounces_left <= 0 and not _boomerang:
 		_recycle(GameConst.RecycleReason.EXPIRED)   # 超射程（range 快照）→ EXPIRED
 		return
 	_check_edge_bounce()
