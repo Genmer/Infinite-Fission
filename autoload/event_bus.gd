@@ -58,6 +58,11 @@ var _dispatch_count: Dictionary = {}        # StringName(事件) -> int(本帧�
 const STORM_WARN_THRESHOLD := 128           # 同事件同帧派发上限（§六.4）
 const STORM_WARN_DAMAGE_RESOLVED := 600     # damage_resolved 专项告警线（§六.4：结算条目过多定位）
 
+# R188 档0：E-12 订阅纪律断言开关（默认关——end_frame 每帧全信号×连接扫描是均帧级常量税，
+# ≈21% 均帧；风暴计数 _track_dispatch 与 assert_subscription_baseline 不受本开关影响）。
+# pkg0 等开发期测试自行打开（tests/runner/test_pkg0.gd），release/压测路径零开销。
+var dev_assertions: bool = false
+
 # 遥测观测口（DebugStats/测试读取；正常游戏代码不写）
 var storm_warnings: int = 0                 # 风暴告警累计次数
 var subscription_leak_errors: int = 0       # 订阅回落断言违例累计（E-12）
@@ -295,8 +300,10 @@ func _track_dispatch(event: StringName) -> void:
 
 
 func end_frame() -> void:
-	# GameLoop 帧末调用：清零计数 + 订阅纪律开发期断言（E-12）
-	_check_node_subscribers()
+	# GameLoop 帧末调用：清零计数（风暴计数保留）+ 订阅纪律开发期断言（E-12，挂 dev 开关——
+	# R188 档0：全信号×连接扫描每帧分配与遍历为常量税，默认关；pkg0 等测试内显式开启）。
+	if dev_assertions:
+		_check_node_subscribers()
 	_dispatch_count.clear()
 
 

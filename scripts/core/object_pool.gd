@@ -95,6 +95,12 @@ func stats() -> Dictionary:
 	}
 
 
+func miss_count() -> int:
+	# R188 档0：miss 计数直读（ParticleDirector.burst 热路径遥测判定用——
+	# 替代 stats() 字典构建，burst 每次调用省两次 Dictionary 分配）
+	return _misses
+
+
 func _assert_clean(node: Node) -> void:
 	# 开发期池污染断言（AC-14.3：取出/归还双向）；release 构建剥离（§1.3-7）
 	if OS.has_feature("release"):

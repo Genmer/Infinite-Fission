@@ -29,6 +29,14 @@ var _chromatic_material: ShaderMaterial = null
 # 粒子场景 id（池模板统一 burst emitter；场景 id 仅作 meta 遥测键）
 const EMITTER_SCENE_ID := &"burst_default"
 
+# ── R188 档2 表现收口（fx_quality 档内开关；档位数值/缺省 fx_quality=2 不动） ──
+const CA_QUALITY_INTENSITY := [0.0, 0.5, 1.0]  # 色差强度档乘数：低档关 / 中档半强 / 高档保持
+const CA_QUALITY_WINDOW := [1.0, 0.5, 1.0]     # 色差衰减窗口档缩放：中档缩窗（衰减更快）
+const CRIT_STOP_DENSE_WINDOW := 1.0            # CRIT 顿帧密集场判定窗口 s（raw 通道时钟）
+const CRIT_STOP_DENSE_LIMIT := 6               # 窗口内 CRIT 顿帧申请达限 → 自动关（密集场近连续顿帧）
+
+var _crit_stop_times: Array[float] = []        # CRIT 顿帧申请时刻滚动窗（raw elapsed；密集场判据）
+
 
 func _ready() -> void:
 	add_to_group(&"game_feel")                  # R74：复活演出等跨系统查找口
@@ -68,11 +76,16 @@ var _thin_burst_tick: int = 0                 # 中档隔次粒子计数器（R1
 
 func on_damage_resolved(p_result: DamageResult) -> void:
 	# feel_level 分级入口（0/30/50ms 顿帧 + trauma + 色差；粒子按 CRIT/HIT 优先级）。
-	# R19 特效质量档位：低=仅暴击粒子 / 中=隔次粒子（高频命中减负——buff 叠多层卡顿主源之一）
+	# R19 特效质量档位：低=仅暴击粒子 / 中=隔次粒子（高频命中减负——buff 叠多层卡顿主源之一）。
+	# R188 档2：CRIT 顿帧密集场自动关（滚动窗内申请达限即停发——密集场 30ms 顿帧近连续
+	# 拖慢游戏时钟；Boss/精英路径走 on_enemy_killed 直发不经此处，保留不受影响）
 	var level := p_result.feel_level
 	var stop_ms := _hit_stop_ms_for(level)
 	if stop_ms > 0.0:
-		request_hit_stop(stop_ms)
+		if level == GameConst.FeelLevel.CRIT and _crit_stop_dense():
+			DebugStats.count(&"crit_stop_dense_skipped")
+		else:
+			request_hit_stop(stop_ms)
 	add_trauma_for_level(level)
 	_apply_chromatic(_ca_intensity_for(level))
 	if particles != null:
@@ -185,20 +198,26 @@ func _hit_stop_ms_for(p_level: int) -> float:
 
 
 func _ca_intensity_for(p_level: int) -> float:
-	# 色差强度：base × level_mult（0.004 起跳分级放大，AC-15.4）
+	# 色差强度：base × level_mult（0.004 起跳分级放大，AC-15.4）。
+	# R188 档2：fx_quality 档内乘数——低档全关（0.0）/ 中档半强（0.5）/ 高档保持（1.0）；
+	# 缺省档 2 口径逐位不变（pkg4 色差起跳 0.004×2 断言锚定）。
 	if feel_config == null:
 		return 0.0
 	var idx := clampi(p_level, 0, feel_config.ca_level_mult.size() - 1)
-	return feel_config.ca_base_intensity * feel_config.ca_level_mult[idx]
+	var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
+	return feel_config.ca_base_intensity * feel_config.ca_level_mult[idx] \
+		* float(CA_QUALITY_INTENSITY[q])
 
 
 func _apply_chromatic(p_intensity: float) -> void:
-	# 触发色差段（同档更强覆盖；剩余时长重置为本段衰减窗口）
+	# 触发色差段（同档更强覆盖；剩余时长重置为本段衰减窗口）。
+	# R188 档2：衰减窗口按 fx_quality 缩放（中档缩窗——衰减更快，高档全窗口）
 	if p_intensity <= 0.0 or feel_config == null:
 		return
 	if p_intensity >= _ca_peak:
 		_ca_peak = p_intensity
-	_ca_left = feel_config.ca_decay_s
+	var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
+	_ca_left = feel_config.ca_decay_s * float(CA_QUALITY_WINDOW[q])
 	current_ca_intensity = _ca_peak * (_ca_left / _ca_decay_s_safe())
 
 
@@ -207,13 +226,27 @@ func _ca_decay_s_safe() -> float:
 
 
 func _push_chromatic_uniform() -> void:
-	# shader uniform 同步 + 零强度隐藏（无开销路径）
+	# shader uniform 同步 + 零强度隐藏（无开销路径）。
+	# R188 档2：低档（fx_quality=0）全屏色差整体关（ca_enabled 缺省 true 不动——档内开关）
 	if chromatic_rect == null:
 		return
-	var enabled := feel_config == null or feel_config.ca_enabled
+	var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
+	var enabled := (feel_config == null or feel_config.ca_enabled) and q > 0
 	chromatic_rect.visible = enabled and current_ca_intensity > 0.0001
 	if _chromatic_material != null:
 		_chromatic_material.set_shader_parameter(&"intensity", current_ca_intensity)
+
+
+func _crit_stop_dense() -> bool:
+	# R188 档2：CRIT 顿帧密集场判定（滚动窗内申请达限 → 自动关；申请记录仍入列——
+	# 密集场持续期间恒 true，窗口滑出后自动恢复）。Boss/精英/反应路径不经此处。
+	while not _crit_stop_times.is_empty() \
+			and _raw_elapsed - float(_crit_stop_times[0]) > CRIT_STOP_DENSE_WINDOW:
+		_crit_stop_times.pop_front()
+	var dense := _crit_stop_times.size() >= CRIT_STOP_DENSE_LIMIT
+	if not dense:
+		_crit_stop_times.append(_raw_elapsed)
+	return dense
 
 
 func _setup_chromatic_rect(p_host: Node) -> void:

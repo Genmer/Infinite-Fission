@@ -14,7 +14,10 @@ var _cols: int = 0                            # 列数（含出屏余量；720 �
 var _rows: int = 0                            # 行数（1280 高 + ±192px 余量 → 13 行）
 var _buckets: Array[Array] = []               # 固定桶数组（_cols×_rows，预分配空 Array）
 var _occupied: Array[int] = []                # 本帧被写过的桶索引（O(used) 清空）
+var _occupied_stamp: Array[int] = []          # R188 档0：桶索引 → 最近写入纪戳（insert 成员判定 O(1)，替代 O(n) has 扫描）
+var _stamp: int = 0                           # 纪戳计数（rebuild 递增；与 _occupied_stamp 配套）
 var _query_buffer: Array[Node2D] = []         # 复用查询缓冲（零 GC 分配；嵌套查询需调用方自行复制）
+var _cells_buffer: Array[int] = []            # R188 档0：复用覆盖格索引缓冲（零分配；调用方不得跨查询持有）
 
 var _origin := Vector2.ZERO                   # 网格左上角世界坐标（configure 时 = (−margin, −margin)）
 var _max_entity_radius: float = 64.0          # 覆盖扩展半径（hitbox_r 上界，§三.2）
@@ -32,8 +35,13 @@ func configure(world_size: Vector2, margin: float, p_max_entity_radius: float = 
 	for i in range(_buckets.size()):
 		_buckets[i] = []
 	_occupied.clear()
+	_occupied_stamp.clear()
+	_occupied_stamp.resize(_cols * _rows)
+	_occupied_stamp.fill(0)
+	_stamp = 0
 	_radii.clear()
 	_query_buffer.clear()
+	_cells_buffer.clear()
 
 
 func rebuild(p_items: Array[Node2D]) -> void:
@@ -42,6 +50,7 @@ func rebuild(p_items: Array[Node2D]) -> void:
 	for idx in _occupied:
 		_buckets[idx].clear()
 	_occupied.clear()
+	_stamp += 1                      # R188 档0：纪戳递增（insert 的占用判定 O(1)）
 	_radii.clear()
 	for item in p_items:
 		insert(item, _max_entity_radius)
@@ -55,21 +64,23 @@ func insert(item: Node2D, radius: float) -> void:
 	var idx := _cell_index(_pos_of(item))
 	_buckets[idx].append(item)
 	_radii[item] = maxf(radius, 0.0)
-	if not _occupied.has(idx):
+	# R188 档0：纪戳化占用判定（原 _occupied.has 为 O(n)，满载百敌重建时 O(n²)）
+	if _occupied_stamp[idx] != _stamp:
+		_occupied_stamp[idx] = _stamp
 		_occupied.append(idx)
 
 
 func query_circle(pos: Vector2, radius: float) -> Array[Node2D]:
-	# 覆盖格扫描 + 距离精判（复用缓冲；返回值为内部缓冲引用，跨查询持有需调用方复制）
+	# 覆盖格扫描 + 距离精判（复用缓冲；返回值为内部缓冲引用，跨查询持有需调用方复制）。
+	# R188 档0：去 lambda（每调用一次闭包分配）→ 直排双循环；覆盖格走共享 _cells_buffer。
 	_query_buffer.clear()
-	_for_each_cell_in_range(pos, radius, func(cell: Array) -> void:
-		for cand in cell:
+	for idx in _cells_in_range(pos, radius):
+		for cand in _buckets[idx]:
 			var c: Node2D = cand
 			var rc := float(_radii.get(c, 0.0))
 			var reach := radius + rc
 			if _pos_of(c).distance_squared_to(pos) <= reach * reach:
 				_query_buffer.append(c)
-	)
 	return _query_buffer
 
 
@@ -118,24 +129,20 @@ func _cell_index(pos: Vector2) -> int:
 	return row * _cols + col
 
 
-func _for_each_cell_in_range(pos: Vector2, radius: float, cb: Callable) -> void:
-	# 遍历覆盖格：查询圆 + 实体最大半径扩展出的外接方格所覆盖的全部桶
-	for idx in _cells_in_range(pos, radius):
-		cb.call(_buckets[idx])
-
-
 func _cells_in_range(pos: Vector2, radius: float) -> Array[int]:
-	# 覆盖格索引列表（钳制到网格边界；查询点远出网格时收缩到边缘桶）
+	# 覆盖格索引列表（钳制到网格边界；查询点远出网格时收缩到边缘桶）。
+	# R188 档0：写共享 _cells_buffer（零分配）；契约同 _query_buffer——不得跨查询持有。
+	_cells_buffer.clear()
 	var reach := maxf(radius, 0.0) + _max_entity_radius
 	var c0 := clampi(int((pos.x - reach - _origin.x) / float(CELL_SIZE)), 0, _cols - 1)
 	var c1 := clampi(int((pos.x + reach - _origin.x) / float(CELL_SIZE)), 0, _cols - 1)
 	var r0 := clampi(int((pos.y - reach - _origin.y) / float(CELL_SIZE)), 0, _rows - 1)
 	var r1 := clampi(int((pos.y + reach - _origin.y) / float(CELL_SIZE)), 0, _rows - 1)
-	var out: Array[int] = []
 	for row in range(r0, r1 + 1):
+		var row_base := row * _cols
 		for col in range(c0, c1 + 1):
-			out.append(row * _cols + col)
-	return out
+			_cells_buffer.append(row_base + col)
+	return _cells_buffer
 
 
 func _pos_of(node: Node2D) -> Vector2:

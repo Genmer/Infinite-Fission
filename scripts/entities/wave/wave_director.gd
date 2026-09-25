@@ -37,6 +37,7 @@ var difficulty: int = 0                         # R72 难度档（GameLoop 开�
 var _boss_ref: Node2D = null                  # 本波 Boss 实例（boss_spawned 记录；死亡即停伴随流水）
 var _boss_seen: bool = false                  # 本波 Boss 是否实际登场（false = Boss 数据缺失降级波）
 var _trickle_left: float = 0.0
+var _clamp_warned: bool = false               # R188 档3：钳制一次告警闸（后续仅 DebugStats 计数）
 var _escort_interval: float = BOSS_TRICKLE_INTERVAL   # 本波伴随怪节奏（start_wave 解析）
 var _escort_cap: int = BOSS_TRICKLE_CAP
 var _escort_mix: Array[EnemyData] = []                # 本波伴随敌池（空 = 最便宜敌 fallback）
@@ -46,6 +47,9 @@ const HARD_CAP_BONUS := 8.0                   # wave_hard_cap = spawn_window + 8
 const INTER_WAVE_BUFFER := 0.6                # 波间缓冲（R26：1.0→0.6——「打完很久没怪」）
 const LOOT_BUFFER := 1.2                       # 全清后拾取缓冲（R26：3.0→1.2——碎片磁吸秒收不再需要长窗）
 const EARLY_CLEAR_WINDOW := 0.8                # R92 快清截断窗（窗口内全清→剩窗钳到 0.8s）
+const WAVE_COUNT_CLAMP := 200                 # R188 档3：单波生成请求数钳制（深层无尽结构性失控——
+                                              # 公式回退 count=TP/最便宜成本无钳，w233 建波单帧 41ms/
+                                              # w293 221.7ms + RSS +165MB 根源；变强不变多）
 const BOSS_TRICKLE_INTERVAL := 2.5             # Boss 伴随怪节奏 fallback（A3 §2.4 w10 行：×1/2.5s 场上≤12）
 const BOSS_TRICKLE_CAP := 12
 # Boss 波伴随怪分波节奏（包 4 遗留项；真源 A3 §2.4 波表行原文：w10「Boss1+G×1/2.5s（场上≤12）」、
@@ -202,7 +206,8 @@ func _escort_gate_open() -> bool:
 
 
 func _roll_composition(p_wave: int) -> Array[Dictionary]:
-	# 表驱动优先，表缺失回退公式（TP 逐类扣减）；返回逐敌生成请求数组
+	# 表驱动优先，表缺失回退公式（TP 逐类扣减）；返回逐敌生成请求数组。
+	# R188 档3：两路径出口统一过 _clamp_wave_count（单波请求 ≤200，溢出转 HP/攻乘区）
 	var out: Array[Dictionary] = []
 	var entry := _table_entry(p_wave)
 	if entry != null:
@@ -213,21 +218,48 @@ func _roll_composition(p_wave: int) -> Array[Dictionary]:
 			for i in range(count):
 				out.append({"data_id": id, "wave": p_wave, "tags": tags})
 		_apply_difficulty_weave(out, p_wave)   # R72 难度织入（普通零改动）
+		_clamp_wave_count(out, p_wave)
 		return out
 	# —— 公式 fallback：最便宜敌填满 TP 预算（floor 扣减）；Boss 波伴随怪由 tick 流水补 ——
+	# R188 档3：钳制在构环前（O(count) 建波结构性消除——w293 曾 ~44k 请求单帧 221.7ms，
+	# 事后 resize 仍是 O(count)，必须在 append 环前收口）
 	if _boss_wave:
 		return out
 	var cheapest := _cheapest_enemy()
 	if cheapest == null:
 		push_warning("[WaveDirector] 注册表无敌人数据，波 %d 公式构成为空（降级不崩溃）" % p_wave)
 		return out
-	var count := int(tp_budget / maxf(cheapest.tp_cost, 0.01))
+	var raw_count := int(tp_budget / maxf(cheapest.tp_cost, 0.01))
+	var count := mini(raw_count, WAVE_COUNT_CLAMP)
 	for i in range(count):
 		out.append({"data_id": cheapest.id, "wave": p_wave, "tags": 0})
 	# 精英散布（fallback 按 A3 §2.4 常量集；精英模板乘区在 Enemy.spawn 生效）
 	if _is_elite_wave(p_wave):
 		out.append({"data_id": cheapest.id, "wave": p_wave, "tags": GameConst.TAG_ELITE})
+	if raw_count > count:
+		_apply_wave_pressure(out, float(raw_count) / float(WAVE_COUNT_CLAMP), p_wave)
 	return out
+
+
+func _apply_wave_pressure(p_out: Array[Dictionary], p_pressure: float, p_wave: int) -> void:
+	# R188 档3：钳后波内全体挂 HP/攻乘区（「变强不变多」——乘区经请求字典 "pressure" 键
+	# 下发，EnemySpawner 出生管线单次应用；总血量预算守恒、攻击 √p 折算防单触秒杀）
+	for entry in p_out:
+		entry["pressure"] = p_pressure
+	DebugStats.count(&"wave_count_clamped")
+	if not _clamp_warned:                     # 一次告警（深层无尽段每波钳制不刷屏；计数持续可拉）
+		_clamp_warned = true
+		push_warning("[WaveDirector] 波 %d 生成请求钳制 →%d（溢出转 HP×%.2f/攻×%.2f）——后续钳制仅计数" % [
+			p_wave, WAVE_COUNT_CLAMP, p_pressure, sqrt(p_pressure)])
+
+
+func _clamp_wave_count(p_out: Array[Dictionary], p_wave: int) -> void:
+	# R188 档3 深层无尽结构钳制（表驱动路径出口）：authored composition 超帽 → 收缩到
+	# ≤200 + 溢出转 HP/攻乘区（公式路径已在构环前钳制，不经此处——O(count) 建波消除）
+	if p_out.size() <= WAVE_COUNT_CLAMP:
+		return
+	_apply_wave_pressure(p_out, float(p_out.size()) / float(WAVE_COUNT_CLAMP), p_wave)
+	p_out.resize(WAVE_COUNT_CLAMP)
 
 
 func _apply_difficulty_weave(p_out: Array[Dictionary], p_wave: int) -> void:

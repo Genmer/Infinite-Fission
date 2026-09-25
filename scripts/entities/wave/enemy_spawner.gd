@@ -8,6 +8,9 @@ extends Node
 const SPAWN_PER_FRAME: int = 8                # 单帧生成节流（B_spec M-04）
 const MAX_ONSCREEN: int = 120                # 同屏敌人上限（超出排队，波次不卡死）
 const SPAWN_OFFSCREEN := 40.0                # 出生点屏外余量（配合入场渐显）
+const SPAWN_QUEUE_HIGH_WATER := 600          # R188 档3：spawn_queue 高水位（深层无尽投放无界——
+                                            # w233+ 建波 O(count) 结构性失控配套钳；正常局峰值远低）
+const QUEUE_WARN_REARM := 300                # 告警重臂水位（队列回落至半水位重臂——每饱和段一次告警）
 
 var pool: EnemyPool = null                    # 注入
 var registry: DataRegistry = null             # 注入（data_id → EnemyData 解析）
@@ -19,6 +22,8 @@ var spawn_queue: Array[Dictionary] = []      # 待生成队列 {data_id, wave, t
 var active: Array[Node2D] = []                # 活跃敌列表（GameLoop ④ enemy_grid.rebuild 数据源）
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var difficulty: int = 0                         # R72 难度档（GameLoop 开局注入；0=普通）
+var queue_rejected: int = 0                    # R188 档3：高水位拒收累计（DebugStats 同步计数）
+var _queue_warned: bool = false                # R188 档3：高水位一次告警闸（回落重臂，不刷屏）
 
 
 func _ready() -> void:
@@ -34,13 +39,25 @@ func prewarm() -> void:
 
 
 func enqueue(p_entry: Dictionary) -> void:
-	# WaveDirector 投放生成请求：{data_id, wave, tags, pos}（pos 可缺省→出生点抽样）
+	# WaveDirector 投放生成请求：{data_id, wave, tags, pos}（pos 可缺省→出生点抽样）。
+	# R188 档3：高水位 600 拒收（深层无尽建波投放无界——队列积压 = 帧尖峰与 RSS 缓升
+	# 根源之一；拒收请求直接丢弃，WaveDirector 侧已按 ≤200/波钳制，正常局不触线）
+	if spawn_queue.size() >= SPAWN_QUEUE_HIGH_WATER:
+		queue_rejected += 1
+		DebugStats.count(&"spawn_queue_rejected")
+		if not _queue_warned:
+			_queue_warned = true
+			push_warning("[EnemySpawner] spawn_queue 达高水位 %d：拒收后续投放请求（一次告警）"
+				% SPAWN_QUEUE_HIGH_WATER)
+		return
 	spawn_queue.append(p_entry)
 
 
 func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 	# 节流出队 → pool.acquire → enemy.spawn → 挂活跃表（p_game_delta 为帧节奏锚，出队节流按帧计）
 	enemy_grid = p_grid
+	if _queue_warned and spawn_queue.size() < QUEUE_WARN_REARM:
+		_queue_warned = false                    # R188 档3：队列回落半水位 → 重臂告警（每饱和段一次）
 	var spawned := 0
 	while spawned < SPAWN_PER_FRAME and not spawn_queue.is_empty():
 		if active.size() >= MAX_ONSCREEN:
@@ -70,6 +87,15 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		enemy.max_hp = enemy.max_hp * 1.2 * GameConst.difficulty_hp_mult(difficulty)
 		enemy.hp = enemy.max_hp
 		enemy.contact_dmg = enemy.contact_dmg * 1.2 * GameConst.difficulty_dmg_mult(difficulty)
+		# R188 档3：深层无尽「变强不变多」乘区（WaveDirector count 钳 ≤200 溢出转乘区，
+		# "pressure" 键随生成请求下发；总血量预算守恒、攻击 √p 折算防单触秒杀）。
+		# 召唤请求（enemy 侧 enqueue）不携带该键 → 天然不受影响
+		var pressure: Variant = entry.get("pressure", null)
+		if pressure != null and float(pressure) > 1.0:
+			var p := float(pressure)
+			enemy.max_hp = enemy.max_hp * p
+			enemy.hp = enemy.max_hp
+			enemy.contact_dmg = enemy.contact_dmg * sqrt(p)
 		# 召唤物面值折算（B4 裂变召唤 hp_ratio 0.08/0.5——ENEMY_BOSS_TELEGRAPH §2）
 		var hp_ratio: Variant = entry.get("hp_ratio", null)
 		if hp_ratio != null:

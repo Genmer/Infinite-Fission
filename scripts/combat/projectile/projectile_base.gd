@@ -67,6 +67,22 @@ var _pierce_hits: int = 0                     # 已命中序数（HIT_AFTER_PIER
 var _player_cache: Node2D = null              # 敌弹/条件求值用玩家引用（组查找缓存）
 var _screen := Vector2(720.0, 1280.0)        # 逻辑分辨率缓存（spawn 期从 GameConfig 刷新）
 var _sprite: Sprite2D = null                  # 占位渲染子节点（美术后续替换）
+# R188 档0 分配清扫：
+var _candidates: Array[Node2D] = []           # 碰撞候选成员缓冲（替代每弹每帧新建数组；复制语义不变——
+                                              # query_circle 返回内部复用缓冲，提交链路内的 AOE/重索敌会复用同一缓冲）
+var _vis_variant: int = -1                    # 贴图变体缓存（-1 未初始化；spawn/reset/反弹失效）
+var _vis_scale_q: float = -1.0                # 量化缩放缓存（1/32 级——肉眼不可辨阈值内跳过重设）
+var _vis_rot_tracked: bool = false            # 当前变体是否逐帧跟踪速度朝向（曳光/导弹）
+
+const _VIS_ENEMY := 0                         # 敌方弹（珊瑚珠）
+const _VIS_BOOM := 1                          # 回旋刃（金新月）
+const _VIS_MISSILE_W6 := 2                    # W6 微导
+const _VIS_MISSILE_W7 := 3                    # W7 集束火箭
+const _VIS_TRACER := 4                        # W2 曳光条
+const _VIS_MIRROR := 5                        # R187 镜面珠
+const _VIS_GOLD := 6                          # R187 黄金弹（TH_BANK_SHOT 达线）
+const _VIS_LTG_STAR := 7                      # 电花四角星
+const _VIS_PLAIN := 8                         # 普通珠（KIN/FIR/ICE 着色在 apply 期按 element 取）
 
 const OFFSCREEN_MARGIN := 96.0                # 出界回收余量（半径 + 边距）
 const TEX_SIZE := 64                          # 弹珠贴图画布边长（逻辑半径 32，TextureFactory 口径）
@@ -153,6 +169,7 @@ func spawn(p_params: Dictionary) -> void:
 	if GameConfig.balance != null:
 		_screen = Vector2(GameConfig.balance.res_logic)
 	visible = true
+	_vis_variant = -1                           # R188 档0：贴图变体缓存失效（team/武器/元素已换）
 	_sync_visual()
 	_dispatch_event(GameConst.TraitEvent.ON_SPAWN)
 
@@ -189,8 +206,11 @@ func tick(p_game_delta: float) -> void:
 	if _boomerang and _sprite != null:
 		_sprite.rotation += p_game_delta * 16.0   # G4 旋刃高速自旋
 		queue_redraw()                            # G6 拖尾弧重绘
-	_dispatch_event(GameConst.TraitEvent.ON_TICK,
-		{"game_delta": p_game_delta})
+	if _has_any_trait():
+		# R188 档0：空词条直通——跳过 payload 字典与 TraitContext 构造（每弹每帧分配清零）。
+		# 消费点审计：ON_TICK 返回值无消费点；_dispatch_event 返回 null 仅 _recycle 消费且判空在前。
+		_dispatch_event(GameConst.TraitEvent.ON_TICK,
+			{"game_delta": p_game_delta})
 	_check_collision()
 
 
@@ -271,23 +291,27 @@ func _check_collision() -> void:
 	if enemy_grid == null:
 		return
 	# 候选复制（query_circle 返回内部复用缓冲；提交链路内的 AOE/重索敌查询会复用同一缓冲）
-	# + 窄相判定（§4.4 候选语义：网格保守半径超集 → 实际 hitbox_r 收窄）
-	var candidates: Array[Node2D] = []
-	candidates.append_array(enemy_grid.query_circle(global_position, effective_radius()))
-	for target in candidates:
+	# + 窄相判定（§4.4 候选语义：网格保守半径超集 → 实际 hitbox_r 收窄）。
+	# R188 档0：复制进成员缓冲（原每弹每帧新建数组；复制语义承重墙保留不动）
+	_candidates.clear()
+	_candidates.append_array(enemy_grid.query_circle(global_position, effective_radius()))
+	var reach := effective_radius()
+	for target in _candidates:
 		if not _live:
 			break
-		if _in_reach(target, effective_radius()):
+		if _in_reach(target, reach):
 			_submit_hit(target)
 
 
 func _in_reach(p_target: Node2D, p_radius: float) -> bool:
-	# 窄相判定：圆距 ≤ 自身查询半径 + 目标实际 hitbox_r（Enemy.hitbox_r 快照）
+	# 窄相判定：圆距 ≤ 自身查询半径 + 目标实际 hitbox_r（Enemy.hitbox_r 快照）。
+	# R188 档0：平方距离比较（去 sqrt）
 	if p_target == null:
 		return false
 	var r: Variant = p_target.get("hitbox_r")
 	var tr := float(r) if r != null else 0.0
-	return global_position.distance_to(p_target.global_position) <= p_radius + tr
+	var reach := p_radius + tr
+	return global_position.distance_squared_to(p_target.global_position) <= reach * reach
 
 
 func _check_player_hit() -> void:
@@ -523,10 +547,25 @@ func _apply_result_to(p_target: Node2D, p_result: DamageResult) -> void:
 
 
 # ── 六大生命周期事件唯一派发点 ──────────────────────────────────
+func _has_any_trait() -> bool:
+	# R188 档0：空词条判定（栈空/无宿主 且 直挂数组空 → 派发零分配直通）。
+	# _traits_cache 在 spawn 期已抓取 trait_stack.traits 引用——非空即有词条；
+	# 直挂数组通道（"traits" 便捷键）也落入 _traits_cache，此处双查兜底。
+	if not _traits_cache.is_empty():
+		return true
+	return trait_stack is TraitStack and not (trait_stack as TraitStack).traits.is_empty()
+
+
 func _dispatch_event(p_event: int, p_extra: Dictionary = {}) -> TraitContext:
-	# ★ M-09 契约：派发顺序 = 挂载顺序（确定性）；无词条零开销直通（载荷惰性构造）。
+	# ★ M-09 契约：派发顺序 = 挂载顺序（确定性）；无词条零开销直通（R188 档0 兑现：
+	# 空词条 → 不构造 payload 字典与 TraitContext，返回 null）。
+	# 返回值消费点审计（R188）：_recycle(ON_EXPIRE) 消费 tctx.split_request 且判空在前
+	# （tctx != null 先于 is_empty）——null 安全；spawn/tick/_apply_bounce/_on_settled
+	# 忽略返回值；ON_HIT 结算链走 _build_trait_ctx 直构不经本捷径。
 	# 包 3 收口：TraitStack 真件派发通道（链式深度 3 熔断 + 同事件重入保护，M-10）；
 	# 直挂数组通道（spawn 参数字典 "traits" 便捷键）保留为测试/过渡期兼容路径。
+	if not _has_any_trait():
+		return null
 	var ctx := _build_trait_ctx(p_event, p_extra)
 	if trait_stack is TraitStack:
 		(trait_stack as TraitStack).dispatch(p_event, ctx)
@@ -623,6 +662,7 @@ func _apply_bounce(p_normal: Vector2) -> void:
 		global_position.y = _screen.y - r
 	bounces_left -= 1
 	_bounces_done += 1
+	_vis_variant = -1                           # R188 档0：反弹达线 bank 升格重判（TH_BANK_SHOT）
 	# R187 MEC_RICOCHET_HALL「回廊弹幕」（§2.4.4 消费口，武器侧 corridor 标记 +
 	# lateral_offset 基准）：反弹后 lane offset 镜像——弹位按当前飞行垂直轴翻到镜像侧
 	#（位移 = +perp×2×gap，与收束 steer 同符号约定），编队镜像保持回场（散弹变回廊弹幕）
@@ -752,6 +792,7 @@ func _reset_state() -> void:
 	hits_this_frame.clear()
 	_reset_form_state()
 	is_clean = true
+	_vis_variant = -1                           # R188 档0：缓存失效（池复用清零口径）
 	_sync_visual()
 
 
@@ -759,73 +800,118 @@ func _reset_state() -> void:
 func _sync_visual() -> void:
 	# 方向 C 渲染同步：半径等比缩放 + 阵营贴图（我方=蓝亮圆珠白高光 / 敌方=珊瑚圆珠白高光，
 	# 描边+高光烘焙——亮底敌我辨识核心）。元素差异着色（2026-08-31 用户反馈「火焰没啥特效」：
-	# 火弹=橙 / 冰弹=淡冰蓝 / 电弹=葡萄紫——抽到元素卡后弹幕颜色即时反馈构筑）
+	# 火弹=橙 / 冰弹=淡冰蓝 / 电弹=葡萄紫——抽到元素卡后弹幕颜色即时反馈构筑）。
+	# R188 档0：脏标记 + 阈值缓存——贴图变体在 spawn 期解析一次（反弹达线 bank 升格会失效
+	# 重判），量化缩放（1/32 级，肉眼不可辨）变化才重设贴图/缩放；朝向跟踪变体（曳光/导弹）
+	# 缓存命中时仅刷新 rotation。视觉口径与直排版逐位一致。
 	if _sprite == null:
 		return
-	var scale_f := effective_radius() / (TEX_SIZE * 0.5)
-	_sprite.scale = Vector2(scale_f, scale_f)
-	var fill := PopPalette.PLAYER
+	var scale_f := effective_radius() / (float(TEX_SIZE) * 0.5)
+	var scale_q := floorf(scale_f * 32.0)
+	if _vis_variant < 0 or scale_q != _vis_scale_q:
+		_vis_variant = _resolve_visual_variant()
+		_vis_scale_q = scale_q
+		_vis_rot_tracked = _vis_variant == _VIS_TRACER \
+			or _vis_variant == _VIS_MISSILE_W6 or _vis_variant == _VIS_MISSILE_W7
+		_apply_visual_variant(_vis_variant, scale_f)
+	elif _vis_rot_tracked:
+		_apply_visual_rotation()
+
+
+func _resolve_visual_variant() -> int:
+	# 贴图变体纯判定（分支顺序与 R188 前直排版一致；apply 侧据此取贴图/缩放/朝向）
 	if team == 1:
-		fill = PopPalette.ENEMY
-		_sprite.rotation = 0.0
-	else:
-		# 导弹建模（R13 用户反馈「微型导弹给个导弹建模」）：W6/W7 弹体换导弹贴图并按
-		# 速度方向旋转（贴图朝上 = angle + PI/2）；贴图指向右，故 +PI/2 后机头对齐航向
-		var wid := &""
-		if weapon_ref != null and is_instance_valid(weapon_ref) 				and weapon_ref.data != null:
-			wid = weapon_ref.data.id
-		if _boomerang:
+		return _VIS_ENEMY
+	if _boomerang:
+		return _VIS_BOOM
+	var wid := &""
+	if weapon_ref != null and is_instance_valid(weapon_ref) and weapon_ref.data != null:
+		wid = weapon_ref.data.id
+	if wid == &"W6_micro_missile":
+		return _VIS_MISSILE_W6
+	if wid == &"W7_cluster_rocket":
+		return _VIS_MISSILE_W7
+	if wid == &"W2_gatling":
+		return _VIS_TRACER
+	if weapon_ref != null and is_instance_valid(weapon_ref) \
+			and bool(weapon_ref.get("is_mirror_image")):
+		return _VIS_MIRROR
+	# R187 W1 黄金弹（TH_BANK_SHOT 阈值驱动通用视觉）：宿主声明该质变且本弹
+	# 累计反弹达线 → 金染升格（必暴/弹片结算归 W1 组 EF_BANK 处理器）
+	if weapon_ref != null and is_instance_valid(weapon_ref):
+		var bank_th: Dictionary = weapon_ref.get_threshold(&"TH_BANK_SHOT")
+		if not bank_th.is_empty() \
+				and float(_bounces_done) >= float(bank_th.get("threshold", 12.0)):
+			return _VIS_GOLD
+	if element == GameConst.Element.LTG:
+		return _VIS_LTG_STAR
+	return _VIS_PLAIN
+
+
+func _plain_fill() -> Color:
+	# 元素差异着色（火=派生橙 / 冰=淡冰蓝 / 其余=玩家蓝）——命中盒无关，纯表现
+	match element:
+		GameConst.Element.FIR:
+			return PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)      # 派生橙（点燃火苗同源）
+		GameConst.Element.ICE:
+			return PopPalette.PLAYER.lerp(Color.WHITE, 0.5)        # 淡冰蓝
+		_:
+			return PopPalette.PLAYER
+
+
+func _apply_visual_variant(p_variant: int, p_scale_f: float) -> void:
+	# 变体落地（贴图/缩放/朝向一次设齐；判定顺序=R188 前直排版逐支对应）
+	match p_variant:
+		_VIS_ENEMY:
+			_sprite.texture = TextureFactory.bead(PopPalette.ENEMY, TEX_SIZE)
+			_sprite.rotation = 0.0
+			_sprite.scale = Vector2(p_scale_f, p_scale_f)
+		_VIS_BOOM:
 			# G4 回旋刃：金色新月刃 ×3.4 表现层放大（命中盒不变），自旋见 tick
 			_sprite.texture = TextureFactory.boomerang_tex()
-			_sprite.scale = Vector2(scale_f * 3.4, scale_f * 3.4)
-			return
-		if wid == &"W6_micro_missile" or wid == &"W7_cluster_rocket":
-			_sprite.texture = TextureFactory.missile_tex()
-			_sprite.rotation = velocity.angle() + PI * 0.5 if velocity.length() > 1.0 				else _sprite.rotation
-			# R26/R35 弹体放大（用户点名「看不见火箭」→「还是太小」）：W7 集束主火箭
-			# ×4.6 / W6 微导 ×3.2（命中盒不变——纯表现层放大）
-			var missile_mult := 4.6 if wid == &"W7_cluster_rocket" else 3.2
-			_sprite.scale = Vector2(scale_f * missile_mult, scale_f * missile_mult)
-			return
-		if wid == &"W2_gatling":
-			# 加特林曳光弹（R19 用户反馈「手枪和加特林表现没啥不一样」）：圆珠换
-			# 横向曳光条——高射速下一条条线束扫射，读感与手枪彻底区分
-			# R69 加粗 Y2.2→4.5；R70 深色重做+再加厚 Y5.5；R72 回调（用户「变细一点」）：
-			# 深色弹体保留（亮底可读），Y 5.5→4.0（原生可视 ~7.5px 厚——R69~R70 之间）
-			_sprite.texture = TextureFactory.tracer_tex()
-			if velocity.length() > 1.0:
-				_sprite.rotation = velocity.angle()
-			_sprite.scale = Vector2(scale_f * 7.5, scale_f * 4.0)
-			return
-		# R187 镜面弹体（W5 万镜回廊）：来源武器 = 镜面（鸭子标记 is_mirror_image）
-		# → 镜像描边珠（银白/冰青，禁金染——与 R183 复制体金染读感分界）
-		if weapon_ref != null and is_instance_valid(weapon_ref) \
-				and bool(weapon_ref.get("is_mirror_image")):
-			_sprite.texture = TextureFactory.mirror_bead(fill, TEX_SIZE)
 			_sprite.rotation = 0.0
-			return
-		# R187 W1 黄金弹（TH_BANK_SHOT 阈值驱动通用视觉）：宿主声明该质变且本弹
-		# 累计反弹达线 → 金染升格（必暴/弹片结算归 W1 组 EF_BANK 处理器）
-		if weapon_ref != null and is_instance_valid(weapon_ref):
-			var bank_th: Dictionary = weapon_ref.get_threshold(&"TH_BANK_SHOT")
-			if not bank_th.is_empty() \
-					and float(_bounces_done) >= float(bank_th.get("threshold", 12.0)):
-				_sprite.texture = TextureFactory.gold_bead(TEX_SIZE)
-				_sprite.rotation = 0.0
-				return
-		match element:
-			GameConst.Element.FIR:
-				fill = PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)      # 派生橙（点燃火苗同源）
-			GameConst.Element.ICE:
-				fill = PopPalette.PLAYER.lerp(Color.WHITE, 0.5)        # 淡冰蓝
-			GameConst.Element.LTG:
-				# 电花四角星（2026-09-13 用户反馈「感电还有紫色圆球」：电弹去球化——
-				# 星形电花 + tick 自旋，与连锁锯齿闪电同族；白芯提亮保辨识）
-				_sprite.texture = TextureFactory.star(TEX_SIZE,
-					PopPalette.SHOCK.lerp(Color.WHITE, 0.25))
-				return
-	_sprite.texture = TextureFactory.bead(fill, TEX_SIZE)
-	_sprite.rotation = 0.0
+			_sprite.scale = Vector2(p_scale_f * 3.4, p_scale_f * 3.4)
+		_VIS_MISSILE_W6, _VIS_MISSILE_W7:
+			_sprite.texture = TextureFactory.missile_tex()
+			# R26/R35 弹体放大：W7 集束主火箭 ×4.6 / W6 微导 ×3.2（命中盒不变）
+			var missile_mult := 4.6 if p_variant == _VIS_MISSILE_W7 else 3.2
+			_sprite.scale = Vector2(p_scale_f * missile_mult, p_scale_f * missile_mult)
+			_apply_visual_rotation()
+		_VIS_TRACER:
+			# 加特林曳光条（R72 口径 Y4.0）
+			_sprite.texture = TextureFactory.tracer_tex()
+			_sprite.scale = Vector2(p_scale_f * 7.5, p_scale_f * 4.0)
+			_apply_visual_rotation()
+		_VIS_MIRROR:
+			# R187 镜面珠（银白/冰青，禁金染）；fill 口径=直排版（PLAYER——元素着色段
+			# 在直排版中位于镜面判定之后，故镜面珠不染元素色）
+			_sprite.texture = TextureFactory.mirror_bead(PopPalette.PLAYER, TEX_SIZE)
+			_sprite.rotation = 0.0
+			_sprite.scale = Vector2(p_scale_f, p_scale_f)
+		_VIS_GOLD:
+			_sprite.texture = TextureFactory.gold_bead(TEX_SIZE)
+			_sprite.rotation = 0.0
+			_sprite.scale = Vector2(p_scale_f, p_scale_f)
+		_VIS_LTG_STAR:
+			# 电花四角星（白芯提亮保辨识）+ tick 自旋
+			_sprite.texture = TextureFactory.star(TEX_SIZE,
+				PopPalette.SHOCK.lerp(Color.WHITE, 0.25))
+			_sprite.scale = Vector2(p_scale_f, p_scale_f)
+		_:
+			_sprite.texture = TextureFactory.bead(_plain_fill(), TEX_SIZE)
+			_sprite.rotation = 0.0
+			_sprite.scale = Vector2(p_scale_f, p_scale_f)
+
+
+func _apply_visual_rotation() -> void:
+	# 朝向跟踪（导弹：贴图朝上 = angle + PI/2，机头对齐航向；曳光：贴图指向右 = angle）。
+	# 低速保持既有 rotation（直排版口径不变）。
+	if velocity.length_squared() <= 1.0:
+		return
+	if _vis_variant == _VIS_TRACER:
+		_sprite.rotation = velocity.angle()
+	else:
+		_sprite.rotation = velocity.angle() + PI * 0.5
 
 
 func _find_player() -> Node2D:

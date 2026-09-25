@@ -65,6 +65,8 @@ var slot_bonus: int = 0                       # R185 金卡解锁计数（帽内
 var level: int = 1
 var xp: float = 0.0
 var xp_need: float = 14.0                     # 14 × lv^1.4
+var level_burst_last: int = 0                 # R188 档3 遥测：最近一次 gain_xp 连升级数（连升探针观测口）
+var level_burst_max: int = 0                  # R188 档3 遥测：历史最大单次连升级数
 var hitbox_radius: float = 16.0               # 命中盒半径（敌弹距离判定口径）
 
 var _dead: bool = false
@@ -961,15 +963,23 @@ func gain_xp(p_amount: float) -> void:
 	# 经验/等级：xp_gained → 升级（多级连升逐次广播，弹卡排队由 GameLoop 仲裁 E-16）
 	# 升级回满血（用户反馈 2026-08-29「升级还是回满血吧」：升级即奖励，血条拉满解压）
 	# 经验倍率合成：养成萃取 × 地图祝福 × AFF_XP_GAIN 词条池（R9：跨武器聚合，掉落吸收时实时求值）
+	# R188 档3 连升合并（player 侧）：逐级广播语义保持（GameLoop 排队帽 ≤3 + 溢出批
+	# 同分布自动抽卡的计数真源 = 本侧每次 emit_level_up）；回满血从逐级重复赋值收敛为
+	# 单次应用（终态逐位一致），连升级数落遥测供探针断言。
 	var amount := maxf(p_amount, 0.0) * (1.0 + Meta.xp_pct()) * map_xp_mult 		* (1.0 + clampf(_weapon_pool_sum(&"add_xp"), 0.0, 2.0)) 		* GameConst.difficulty_reward_mult(_difficulty)   # R73 难度风险回报（E1）
 	xp += amount
 	EventBus.emit_xp_gained(amount)
+	var levels := 0
 	while xp >= xp_need:
 		xp -= xp_need
 		level += 1
 		xp_need = _xp_need_for(level)
-		hp = max_hp
+		levels += 1
 		EventBus.emit_level_up(level)
+	if levels > 0:
+		hp = max_hp
+		level_burst_last = levels
+		level_burst_max = maxi(level_burst_max, levels)
 
 
 func set_difficulty(p_d: int) -> void:

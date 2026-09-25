@@ -92,6 +92,14 @@ var _knife_pos: Array[Vector2] = []            # R65 逐刀位置（局部坐标
 var _knife_face: Array[float] = []             # R65 逐刀朝向（rad；追击=行进方向 / 环绕=切向）
 var _knife_target: Array[Node2D] = []          # R65 逐刀当前目标（null = 无目标回轨）
 var _last_center: Vector2 = Vector2.ZERO       # R65 最近宿主世界位（strike/脉冲世界位换算基准）
+# R188 档0 治理件：
+var _gain_cd_expired: Array[int] = []          # _gain_cd 零值即擦的两相擦除 scratch（成员复用零分配）
+var _judge_scratch: Array[Node2D] = []         # _judge_orb 候选成员缓冲（复制语义保留；嵌套网格查询
+                                               # 走网格内部缓冲，不改写本 scratch——同实例重入无通道）
+var _redraw_ctr: int = 0                       # 重绘节流计数（120Hz tick → 60Hz queue_redraw）
+var _label_ctr: int = 0                        # 蓄能读数节流计数（60Hz 重绘 → 15Hz 网格查询）
+var _label_cache: Array[Dictionary] = []       # 蓄能档位读数缓存 [{lp, text, col}]（查询帧重建）
+var _label_atk_text: String = ""               # 底缘数值标注缓存（build_panel_snapshot 每 12 重绘刷一次）
 
 
 func _init() -> void:
@@ -125,6 +133,8 @@ func spawn(p_params: Dictionary) -> void:
 	angle = deg_to_rad(float(p_params.get("angle_deg", 0.0)))
 	_gain_cd.clear()                              # 重铺即清蓄能闸（新词条构成重计）
 	_blade_hits.clear()
+	_label_atk_text = ""                          # R188 档0：重铺即刷数值标注缓存（形态/参数可能已变）
+	_label_cache.clear()
 	charged_hits = 0
 	detonation_count = 0
 	visible = true
@@ -198,14 +208,23 @@ func tick(p_game_delta: float, p_center: Vector2) -> void:
 	angle = wrapf(angle + deg_to_rad(angular_speed) * p_game_delta, 0.0, TAU)
 	if angle < prev_angle:
 		_blade_hits.clear()                       # 刀数帽按公转周重置（每转重新计闸）
+	# R188 档0：_gain_cd 零值即擦（两相擦除——先收集到期键再统一 erase；原实现零值残留
+	# 随敌流持续累积，长局键数无界）
+	_gain_cd_expired.clear()
 	for key in _gain_cd:
-		_gain_cd[key] = maxf(float(_gain_cd[key]) - p_game_delta, 0.0)
+		var left := float(_gain_cd[key]) - p_game_delta
+		if left <= 0.0:
+			_gain_cd_expired.append(int(key))
+		else:
+			_gain_cd[key] = left
+	for key in _gain_cd_expired:
+		_gain_cd.erase(key)
 	if leash_radius > 0.0:
 		# R65 W9 追击模式：逐刀索敌追击/回轨（无接触判定——伤害全部走挥砍弧；
 		# 蓄能/脉冲/引爆为 W8 环绕模式独占，W9 零波及）
 		_tick_chase(p_game_delta, p_center)
 		_update_orb_sprites(p_game_delta)
-		queue_redraw()
+		_request_redraw()
 		return
 	# W8 环绕模式（口径不变）：刀位 = 轨道槽 + 逐球周期接触蓄能判定
 	_sync_knife_arrays()
@@ -214,21 +233,31 @@ func tick(p_game_delta: float, p_center: Vector2) -> void:
 		_knife_face[i] = _knife_pos[i].angle() + PI * 0.5
 	if weapon == null or weapon.enemy_grid == null:
 		_update_orb_sprites(p_game_delta)
-		queue_redraw()
+		_request_redraw()
 		return
 	for i in range(orbs):
 		var orb_pos := _orb_position(i, p_center)
 		_judge_orb(i, orb_pos, p_center)
 	_update_orb_sprites(p_game_delta)
-	queue_redraw()
+	_request_redraw()
+
+
+func _request_redraw() -> void:
+	# R188 档0：重绘节流（120Hz tick → 60Hz 重绘；公转/自旋视觉平滑度不变级，
+	# headless 渲染无关——真机渲染面收益；蓄能读数走 _label_cache 独立节拍）
+	_redraw_ctr += 1
+	if _redraw_ctr % 2 == 0:
+		queue_redraw()
 
 
 func _judge_orb(p_orb_index: int, p_orb_pos: Vector2, p_center: Vector2) -> void:
-	# 单球周期判定：圆查询 → 接触目标 → 蓄能命中登记（接触伤 + 蓄能 +1）
-	var candidates: Array[Node2D] = []
-	candidates.append_array(weapon.enemy_grid.query_circle(p_orb_pos, orb_radius))
+	# 单球周期判定：圆查询 → 接触目标 → 蓄能命中登记（接触伤 + 蓄能 +1）。
+	# R188 档0：候选复制进成员 scratch（原每球每帧新建数组；query_circle 返回内部
+	# 复用缓冲，复制语义承重墙保留——嵌套网格查询走网格内部缓冲，不改写本 scratch）
+	_judge_scratch.clear()
+	_judge_scratch.append_array(weapon.enemy_grid.query_circle(p_orb_pos, orb_radius))
 	var tan := _orb_tangent(p_orb_pos, p_center)
-	for target in candidates:
+	for target in _judge_scratch:
 		if target == null or bool(target.get("dead")):
 			continue
 		var dist := p_orb_pos.distance_to((target as Node2D).global_position)
@@ -404,7 +433,11 @@ func _chain_transfer(p_detonated: Node2D) -> void:
 	var pos := (p_detonated as Node2D).global_position
 	var best: Node2D = null
 	var best_d := CHAIN_TRANSFER_RADIUS
-	var candidates: Array[Node2D] = weapon.enemy_grid.query_circle(pos, CHAIN_TRANSFER_RADIUS)
+	# R188 别名审计：此处原直接引用网格内部缓冲（query_circle 返回值零复制别名）——
+	# 本环内虽无嵌套网格查询（现行为安全），但本函数由 _judge_orb 候选迭代中途触发，
+	# 复用成员 scratch 会外层踩踏；引爆 Rare 路径维持局部复制（语义等价、防脆弱）
+	var candidates: Array[Node2D] = []
+	candidates.append_array(weapon.enemy_grid.query_circle(pos, CHAIN_TRANSFER_RADIUS))
 	for cand in candidates:
 		if cand == null or cand == p_detonated or bool(cand.get("dead")):
 			continue
@@ -881,33 +914,45 @@ func _draw() -> void:
 		_draw_styled_orbs()
 	else:
 		_draw_flying_knives()
-	# 数值标注（力场下缘：环绕 ×N · 单击伤害 · 满档引爆当量；半透明贴纸风小字）
-	var atk := 0.0
-	if weapon != null and is_instance_valid(weapon):
-		atk = float(weapon.build_panel_snapshot().get("base_atk", 0.0))
-	var fmt := "环绕 ×%d · %.0f/击 · 引爆 %d×@%d"
-	if leash_radius > 0.0:
-		fmt = "追击 ×%d · %.0f/斩"
-	var txt := fmt % [orbs, atk, int(round(detonate_mult)), int(round(detonate_radius))]
+	# 数值标注（力场下缘：环绕 ×N · 单击伤害 · 满档引爆当量；半透明贴纸风小字）。
+	# R188 档0：build_panel_snapshot 每 12 次重绘刷一次（原每次重绘全量重建面板快照）
+	_label_ctr += 1
+	if _label_atk_text.is_empty() or _label_ctr % 12 == 0:
+		var atk := 0.0
+		if weapon != null and is_instance_valid(weapon):
+			atk = float(weapon.build_panel_snapshot().get("base_atk", 0.0))
+		var fmt := "环绕 ×%d · %.0f/击 · 引爆 %d×@%d"
+		if leash_radius > 0.0:
+			fmt = "追击 ×%d · %.0f/斩"
+		_label_atk_text = fmt % [orbs, atk, int(round(detonate_mult)), int(round(detonate_radius))]
 	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(-60.0, orbit_radius + 22.0), txt,
+	draw_string(font, Vector2(-60.0, orbit_radius + 22.0), _label_atk_text,
 		HORIZONTAL_ALIGNMENT_CENTER, 160.0, 13, Color(mint.r, mint.g, mint.b, 0.85))
 	# §2.5.10 蓄能档位读数（表现验收项，非打磨项）：已蓄能目标头顶「蓄能 x/5」小字——
-	# 亮度随档位爬升、满档亮红（即将引爆）；W8 环绕模式专属（W9 追击无蓄能语义不画）
+	# 亮度随档位爬升、满档亮红（即将引爆）；W8 环绕模式专属（W9 追击无蓄能语义不画）。
+	# R188 档0：网格查询 60Hz→15Hz（每 4 次重绘重建缓存，非查询帧画缓存——读数连续不闪）
 	if leash_radius <= 0.0 and weapon != null and is_instance_valid(weapon) \
 			and weapon.enemy_grid != null:
-		var reach := orbit_radius + orb_radius
-		for t in weapon.enemy_grid.query_circle(_last_center, reach):
-			if t == null or bool(t.get("dead")):
-				continue
-			var ch := charge_of(t)
-			if ch <= 0:
-				continue
-			var hr: Variant = t.get("hitbox_r")
-			var lp := to_local((t as Node2D).global_position) \
-				+ Vector2(-34.0, (-float(hr) if hr != null else -12.0) - 10.0)
-			var full := ch >= int(round(charge_max))
-			var col := Color(1.0, 0.42, 0.36, 0.95) if full \
-				else Color(mint.r, mint.g, mint.b, 0.5 + 0.42 * float(ch) / maxf(charge_max, 1.0))
-			draw_string(font, lp, "蓄能 %d/%d" % [ch, int(round(charge_max))],
-				HORIZONTAL_ALIGNMENT_CENTER, 68.0, 11, col)
+		if _label_ctr % 4 == 1 or _label_cache.is_empty():
+			_label_cache.clear()
+			var reach := orbit_radius + orb_radius
+			for t in weapon.enemy_grid.query_circle(_last_center, reach):
+				if t == null or bool(t.get("dead")):
+					continue
+				var ch := charge_of(t)
+				if ch <= 0:
+					continue
+				var hr: Variant = t.get("hitbox_r")
+				var lp := to_local((t as Node2D).global_position) \
+					+ Vector2(-34.0, (-float(hr) if hr != null else -12.0) - 10.0)
+				var full := ch >= int(round(charge_max))
+				var col := Color(1.0, 0.42, 0.36, 0.95) if full \
+					else Color(mint.r, mint.g, mint.b, 0.5 + 0.42 * float(ch) / maxf(charge_max, 1.0))
+				_label_cache.append({
+					"lp": lp,
+					"text": "蓄能 %d/%d" % [ch, int(round(charge_max))],
+					"col": col,
+				})
+		for entry in _label_cache:
+			draw_string(font, entry["lp"], entry["text"],
+				HORIZONTAL_ALIGNMENT_CENTER, 68.0, 11, entry["col"])

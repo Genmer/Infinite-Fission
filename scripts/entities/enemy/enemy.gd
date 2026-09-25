@@ -723,12 +723,9 @@ func _on_died() -> void:
 	_reset_marks()                              # R187 敌亡回收：引信/蓄能随死亡清零
 	                                            #（蓄能池以 uid 单例——亡敌残留档位会污染复用实例）
 	# R19 打击质感：死亡弹爆（白环扩散 + 四向碎屑，0.2s 自清——击杀瞬间重量感）
+	# R188 档0：入池复用（DeathPop.pop——原每杀 instantiate+自毁）
 	if get_parent() != null and clampi(int(Meta.settings("fx_quality")), 0, 2) > 0:
-		var pop := DeathPop.new()
-		pop.name = "DeathPop"
-		pop.position = global_position
-		pop.tint = _death_element_tint()            # G5：死因元素迸色
-		get_parent().add_child(pop)
+		DeathPop.pop(get_parent(), global_position, _death_element_tint())   # G5：死因元素迸色
 	_death_poison_splash()
 	_death_element_discharge()
 	EventBus.emit_enemy_killed(self)
@@ -766,10 +763,8 @@ func _death_poison_splash() -> void:
 	if player != null and is_instance_valid(player) \
 			and global_position.distance_to(player.global_position) <= BOG_SPLASH_RADIUS:
 		(player as Player).take_contact_damage(contact_dmg * BOG_SPLASH_RATIO)
-	var splash := PoisonSplash.new()
-	splash.position = global_position
-	splash.radius = BOG_SPLASH_RADIUS * 0.7
-	get_parent().add_child(splash)
+	# R188 档0：毒环残效入池复用（PoisonSplash.pop——原每杀 instantiate+自毁）
+	PoisonSplash.pop(get_parent(), global_position, BOG_SPLASH_RADIUS * 0.7)
 
 
 func _death_element_discharge() -> void:
@@ -2461,16 +2456,65 @@ func _tick_status_tint(p_burning: bool, p_chilled: bool, p_frozen: bool, p_shock
 
 
 # ── 毒爆残效（E12 死亡毒环；一次性自消表现件——警示圈同款程序化绘制） ──
+# R188 档0：入池复用（协议同 DeathPop——原每杀 new+queue_free 自毁）
 class PoisonSplash:
 	extends Node2D
 
+	const LIFE := 0.38
+	const POOL_MAX := 8                            # 池上限（E12 并发毒爆余量）
+
+	static var _free: Array = []                   # 空闲件栈（LIFO）
+	static var _active: int = 0                   # 在外活跃数（acquire/release 双向记账）
+	static var _pool_news: int = 0
+	static var _pool_hits: int = 0
+
 	var radius: float = 77.0
-	var _life: float = 0.38
+	var _life: float = LIFE
+
+	# R188 档0 池化发射口（替代 add_child(new)）
+	static func pop(p_parent: Node, p_pos: Vector2, p_radius: float) -> void:
+		if p_parent == null:
+			return
+		var item = _acquire(p_parent)
+		item.position = p_pos
+		item.radius = p_radius
+		item._life = LIFE
+		item.visible = true
+		item.set_process(true)
+		item.queue_redraw()
+
+	static func _acquire(p_parent: Node) -> Object:
+		while not _free.is_empty():
+			var cand = _free.pop_back()
+			if cand != null and is_instance_valid(cand):
+				_pool_hits += 1
+				_active += 1
+				return cand
+		_pool_news += 1
+		var item = PoisonSplash.new()
+		p_parent.add_child(item)
+		_active += 1
+		return item
+
+	static func _release(p_item) -> void:
+		if p_item == null or not is_instance_valid(p_item):
+			return
+		_active -= 1
+		if _free.size() < POOL_MAX and not _free.has(p_item):
+			p_item.visible = false
+			p_item.set_process(false)
+			_free.append(p_item)
+		else:
+			p_item.queue_free()
+
+	static func fx_pool_stats() -> Dictionary:
+		# 基准池对账口径扩展（R188 档0）：{live, free, news, hits}——live 双向记账（在 ReleaseDiscard 场景下仍准确）
+		return {"live": _active, "free": _free.size(), "news": _pool_news, "hits": _pool_hits}
 
 	func _process(p_delta: float) -> void:
 		_life -= p_delta
 		if _life <= 0.0:
-			queue_free()
+			_release(self)
 			return
 		queue_redraw()
 
@@ -2723,19 +2767,68 @@ class HazardPool:
 
 # ── 死亡弹爆（R19 打击质感；一次性自清表现件——毒爆残效同款模式） ──
 # 白环收缩扩散 + 四向碎屑飞散 0.2s；宿主敌已归还，本件挂世界层自清。
+# R188 档0：入池复用（原每杀 new+queue_free——高频击杀期节点 churn/尖峰根源；
+# 复用协议 = 归还时 visible=false+停处理，跨场景重开悬挂引用由 is_instance_valid 剔除）。
 class DeathPop:
 	extends Node2D
 
 	const LIFE := 0.2
+	const POOL_MAX := 96                           # 池上限（风暴档实测并发 ~80；超池直接弃用不缓存）
+
+	static var _free: Array = []                   # 空闲件栈（LIFO）
+	static var _active: int = 0                    # 在外活跃数（acquire/release 双向记账）
+	static var _pool_news: int = 0                 # 遥测：新建累计
+	static var _pool_hits: int = 0                 # 遥测：复用累计
 
 	var tint := Color.WHITE                        # G5 元素染色（死因元素迸色——构筑可读性）
 
 	var _t: float = LIFE
 
+	# R188 档0 池化发射口（替代 add_child(new)；发射 = 复用/新建 + 复位 + 挂层 + 激活）
+	static func pop(p_parent: Node, p_pos: Vector2, p_tint: Color) -> void:
+		if p_parent == null:
+			return
+		var item = _acquire(p_parent)
+		item.tint = p_tint
+		item.position = p_pos
+		item._t = LIFE
+		item.visible = true
+		item.set_process(true)
+		item.queue_redraw()
+
+	static func _acquire(p_parent: Node) -> Object:
+		while not _free.is_empty():
+			var cand = _free.pop_back()
+			if cand != null and is_instance_valid(cand):
+				_pool_hits += 1
+				_active += 1
+				return cand
+		_pool_news += 1
+		var item = DeathPop.new()
+		p_parent.add_child(item)
+		_active += 1
+		return item
+
+	static func _release(p_item) -> void:
+		# 归还（到期自清路径）：池未满入栈复用，超池弃用（七池 _prepare_for_pool 同款机械清理）
+		if p_item == null or not is_instance_valid(p_item):
+			return
+		_active -= 1
+		if _free.size() < POOL_MAX and not _free.has(p_item):
+			p_item.visible = false
+			p_item.set_process(false)
+			_free.append(p_item)
+		else:
+			p_item.queue_free()
+
+	static func fx_pool_stats() -> Dictionary:
+		# 基准池对账口径扩展（R188 档0）：{live, free, news, hits}——live 双向记账（在 ReleaseDiscard 场景下仍准确）
+		return {"live": _active, "free": _free.size(), "news": _pool_news, "hits": _pool_hits}
+
 	func _process(p_delta: float) -> void:
 		_t -= p_delta
 		if _t <= 0.0:
-			queue_free()
+			_release(self)
 			return
 		queue_redraw()
 

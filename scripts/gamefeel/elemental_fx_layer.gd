@@ -38,6 +38,17 @@ const KNOCKTEXT_COUNT := 8                    # 击退小字并发池（R7：强
 const KNOCKTEXT_LIFE := 0.55                  # 击退小字时长 s
 const KNOCKTEXT_CD := 0.12                    # 击退小字全局节流（多目标同帧去 spam）
 
+# ── R188 档2 表现收口（fx_quality 档内预算开关，照 DOT 火苗 [0,2,4] 预算先例——
+#    低档关 / 中档减量 / 高档全量；高档口径逐位不变，档位数值与缺省 fx_quality=2 不动） ──
+const DOT_SPARK_BUDGET := [0, 2, 4]           # 每跳点燃火星数（高档 = 原 4 粒口径）
+const BOLT_ZAP_BUDGET := [0, 1, 3]            # 每道连锁闪电落点电花数（0 = 整体关；高档 = 原 3）
+const KILLBLAST_QUALITY_MIN := 1              # kill_blast 低档关（中/高档四层爆口径不变）
+
+
+func _fx_quality() -> int:
+	# 特效质量档读取（钳制 [0,2]；Meta 单一真源）
+	return clampi(int(Meta.settings("fx_quality")), 0, 2)
+
 var _bolts: Array[Dictionary] = []            # [{root, core, glow, flash, left}]（池条目）
 var _bolt_idx: int = 0
 var _bolt_patterns: Array[PackedFloat32Array] = []   # 预生成垂直抖动系数池（轮换）
@@ -149,7 +160,11 @@ func _build_bolts() -> void:
 
 func _on_chain_lightning(p_from: Vector2, p_to: Vector2) -> void:
 	# 取池内下一道闪电（轮换）：定位源敌 → 重铺双层折线 + 中点星闪 + 落点电花迸溅；
-	# 终点存 meta（生命期逐帧重铺折线复用，零额外分配）
+	# 终点存 meta（生命期逐帧重铺折线复用，零额外分配）。
+	# R188 档2：电花数接 fx_quality 档预算 [0,1,3]（0 = 闪电整体关；高档口径不变 3）
+	var zap_budget: int = BOLT_ZAP_BUDGET[_fx_quality()]
+	if zap_budget <= 0:
+		return
 	var bolt: Dictionary = _bolts[_bolt_idx % BOLT_COUNT]
 	_bolt_idx += 1
 	var root: Node2D = bolt["root"]
@@ -161,7 +176,7 @@ func _on_chain_lightning(p_from: Vector2, p_to: Vector2) -> void:
 	root.modulate.a = 1.0
 	_layout_bolt(bolt, local_to, 1.0)
 	bolt["left"] = BOLT_LIFE
-	for i in range(3):
+	for i in range(zap_budget):
 		_fire_zap(p_to)
 
 
@@ -234,7 +249,11 @@ func _build_sparks() -> void:
 
 
 func _on_dot_fired(p_pos: Vector2) -> void:
-	# 跳伤瞬间：橙光晕一闪 + 4 粒放大火星上飘（用户反馈「燃烧特效没看见」→ 加量）
+	# 跳伤瞬间：橙光晕一闪 + 火星上飘（用户反馈「燃烧特效没看见」→ 加量）。
+	# R188 档2：火星数接 fx_quality 档预算 [0,2,4]（低档全关；高档口径不变 4 粒）
+	var budget: int = DOT_SPARK_BUDGET[_fx_quality()]
+	if budget <= 0:
+		return
 	var glow: Dictionary = _glows[_glow_idx % GLOW_COUNT]
 	_glow_idx += 1
 	var gs: Sprite2D = glow["sprite"]
@@ -243,7 +262,7 @@ func _on_dot_fired(p_pos: Vector2) -> void:
 	glow["left"] = GLOW_LIFE
 	gs.scale = Vector2.ONE * 0.5
 	gs.modulate.a = 0.5
-	for i in range(4):
+	for i in range(budget):
 		var spark: Dictionary = _sparks[_spark_idx % SPARK_COUNT]
 		_spark_idx += 1
 		var sp: Sprite2D = spark["sprite"]
@@ -781,20 +800,20 @@ func _on_skill_cast(p_pos: Vector2, _p_character_id: String) -> void:
 func _on_missile_blast(p_pos: Vector2, p_radius: float) -> void:
 	# R83 导弹专用爆炸件：独立 MissileBlastFx（白核闪光→火球→双冲击环→碎片→烟柱，
 	# 0.72s 全程动画）——不再复用 kill_blast 六槽（Boss 战击杀爆密集时立刻冲掉，
-	# 用户实测「还是一样」的根因之一）。震屏 CRIT 级 + 低音在 GameLoop 侧接线
-	var fx := MissileBlastFx.new()
-	fx.position = p_pos
-	fx.radius = maxf(p_radius, 70.0) * 1.35
-	var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
-	fx.quality = q
-	if p_radius >= 100.0:
-		fx.radius *= 1.2                     # 大范围爆（Boss 级目标/满级 blast_r）再加码
-	add_child(fx)
+	# 用户实测「还是一样」的根因之一）。震屏 CRIT 级 + 低音在 GameLoop 侧接线。
+	# R188 档0：入池复用（MissileBlastFx.spawn——原每次爆 new+queue_free 自毁，
+	# 碎片/烟柱随机参数随发射重掷，读感与新建逐帧一致）
+	var fx = MissileBlastFx.spawn(self, p_pos, maxf(p_radius, 70.0) * 1.35,
+		clampi(int(Meta.settings("fx_quality")), 0, 2),
+		1.2 if p_radius >= 100.0 else 1.0)       # 大范围爆（Boss 级目标/满级 blast_r）再加码
 
 
 func _on_kill_blast(p_pos: Vector2, p_radius: float, p_life := 0.5) -> void:
 	# R35 火箭筒级四层爆（用户反馈「没有那种用火箭筒的效果」）：白核闪光 + 橙红火球
-	# + 双重冲击波环 + 烟尘余辉；复用通道（死亡新星/Blink/击杀迸裂）同享升级
+	# + 双重冲击波环 + 烟尘余辉；复用通道（死亡新星/Blink/击杀迸裂）同享升级。
+	# R188 档2：低档（fx_quality=0）整体关（中/高档四层爆口径不变）
+	if _fx_quality() < KILLBLAST_QUALITY_MIN:
+		return
 	if _blasts.is_empty():
 		for i in range(6):
 			var flash := Sprite2D.new()
@@ -902,17 +921,78 @@ class MissileBlastFx:
 	# 五层时序——白核闪光(0~0.13s) → 橙红火球扩散(0~0.32s) → 双冲击环(全程) →
 	# 12 枚旋转碎片(重力抛物线 0.6s) → 3 团烟柱上浮(0.72s 全程)。
 	# quality 0（低特效档）= 只留双环（读感保底）；1/2 全量。
+	# R188 档0：入池复用（静态池协议同 enemy.gd DeathPop——发射期碎片/烟柱随机参数重掷，
+	# 读感与新建一致；归还时 visible=false+停处理，悬挂引用 is_instance_valid 剔除）。
 	extends Node2D
 
 	const LIFE := 0.72
+	const POOL_MAX := 8                          # 池上限（导弹爆并发峰值余量）
+
+	static var _free: Array = []                 # 空闲件栈（LIFO）
+	static var _active: int = 0                   # 在外活跃数（acquire/release 双向记账）
+	static var _pool_news: int = 0
+	static var _pool_hits: int = 0
+
 	var radius := 120.0
 	var quality := 2
 	var _t := 0.0
 	var _debris: Array = []                      # {ang, spd, spin, rot, size}
 	var _smoke: Array = []                       # {off, r}
 
+	# R188 档0 池化发射口（替代 add_child(new)；p_extra_radius_mult = 大范围爆加码系数）
+	static func spawn(p_layer: Node, p_pos: Vector2, p_radius: float,
+			p_quality: int, p_extra_radius_mult: float) -> Object:
+		if p_layer == null:
+			return null
+		var item = _acquire(p_layer)
+		item.position = p_pos
+		item.radius = p_radius * p_extra_radius_mult
+		item.quality = p_quality
+		item._t = 0.0
+		item._reroll()
+		item.visible = true
+		item.set_process(true)
+		item.queue_redraw()
+		return item
+
+	static func _acquire(p_layer: Node) -> Object:
+		while not _free.is_empty():
+			var cand = _free.pop_back()
+			if cand != null and is_instance_valid(cand):
+				_pool_hits += 1
+				if cand.get_parent() != p_layer:
+					cand.get_parent().remove_child(cand)
+					p_layer.add_child(cand)
+				return cand
+		_pool_news += 1
+		var item = MissileBlastFx.new()
+		p_layer.add_child(item)
+		_active += 1
+		return item
+
+	static func _release(p_item) -> void:
+		if p_item == null or not is_instance_valid(p_item):
+			return
+		_active -= 1
+		if _free.size() < POOL_MAX and not _free.has(p_item):
+			p_item.visible = false
+			p_item.set_process(false)
+			_free.append(p_item)
+		else:
+			p_item.queue_free()
+
+	static func fx_pool_stats() -> Dictionary:
+		# 基准池对账口径扩展（R188 档0）：{live, free, news, hits}——live 双向记账（在 ReleaseDiscard 场景下仍准确）
+		return {"live": _active, "free": _free.size(), "news": _pool_news, "hits": _pool_hits}
+
 	func _init() -> void:
 		z_index = 40
+		_reroll()
+
+	func _reroll() -> void:
+		# 碎片/烟柱随机参数（原 _init 体；复用发射期重掷保持读感）
+		_debris.clear()
+		_smoke.clear()
 		for i in range(12):
 			_debris.append({
 				"ang": TAU * float(i) / 12.0 + randf() * 0.35,
@@ -928,7 +1008,7 @@ class MissileBlastFx:
 	func _process(p_delta: float) -> void:
 		_t += p_delta
 		if _t >= LIFE:
-			queue_free()
+			_release(self)
 			return
 		queue_redraw()
 

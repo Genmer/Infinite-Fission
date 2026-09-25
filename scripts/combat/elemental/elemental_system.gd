@@ -9,6 +9,13 @@
 class_name ElementalSystem
 extends Node
 
+# R188 档0：反应检测优先级表外提（原每帧每宿主重建数组；const 静态零分配）
+const RXN_ORDER: Array[int] = [
+	GameConst.ReactionType.RXN_FIR_ICE,
+	GameConst.ReactionType.RXN_FIR_LTG,
+	GameConst.ReactionType.RXN_ICE_LTG,
+]
+
 var pipeline: RefCounted = null                # 注入（DamagePipeline 或桩；独立结算通道）
 var enemy_grid: SpaceGrid = null               # 注入（连锁传导/范围扩散目标查询）
 var _hosts: Array[Node2D] = []                 # 已挂载状态容器的敌人（§1.3-3 白名单：状态宿主）
@@ -101,6 +108,9 @@ func apply_attach(p_enemy: Node2D, p_element: int, p_value: float,
 
 func tick(p_game_delta: float) -> void:
 	# 全敌：λ 比例衰减（F19/F-22）→ 状态计时 → DOT 跳伤调度 → 超导到期恢复
+	# R188 档0：空宿主早退（无敌人帧零分配零遍历）
+	if _hosts.is_empty():
+		return
 	var lambdas: Array[float] = [0.35, 0.30, 0.40]
 	if GameConfig.balance != null:
 		lambdas = GameConfig.balance.element_decay_lambda
@@ -118,7 +128,10 @@ func tick(p_game_delta: float) -> void:
 
 
 func detect_reactions() -> void:
-	# ★ 帧末统一检测（敌人阶段末调用，E-07）：优先级 碎裂>过载>超导；一帧一反应（每敌）
+	# ★ 帧末统一检测（敌人阶段末调用，E-07）：优先级 碎裂>过载>超导；一帧一反应（每敌）。
+	# R188 档0：空宿主早退（无附着容器帧零开销）；优先级表走 const RXN_ORDER 外提
+	if _hosts.is_empty():
+		return
 	var cd_rxn := 2.0
 	if GameConfig.balance != null:
 		cd_rxn = GameConfig.balance.cd_rxn
@@ -129,12 +142,7 @@ func detect_reactions() -> void:
 		if not (state is ElementalState):
 			continue
 		var st := state as ElementalState
-		var order: Array[int] = [
-			GameConst.ReactionType.RXN_FIR_ICE,
-			GameConst.ReactionType.RXN_FIR_LTG,
-			GameConst.ReactionType.RXN_ICE_LTG,
-		]
-		for rxn in order:
+		for rxn in RXN_ORDER:
 			if float(st.reaction_cd.get(rxn, 0.0)) > 0.0:
 				continue
 			if not _reaction_condition(st, rxn):

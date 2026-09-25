@@ -38,7 +38,10 @@ func burst(scene_id: StringName, pos: Vector2, priority: int) -> void:
 	emitter.one_shot = true
 	emitter.emitting = true
 	_burst_left[emitter] = float(emitter.lifetime) * 1.3 + 0.25
-	if not emitter.finished.is_connected(_on_emitter_finished):
+	# R188 档0（风暴档裁定授权）：finished 挂钩检查改 meta 旗标——原每 burst 构造
+	# bound Callable 做 is_connected 比较（GDScript 慢路径，风暴帧每结算一次）
+	if not emitter.has_meta(&"_finished_hooked"):
+		emitter.set_meta(&"_finished_hooked", true)
 		emitter.finished.connect(_on_emitter_finished.bind(emitter))
 
 
@@ -57,6 +60,7 @@ func reap_expired(p_delta: float) -> void:
 			var bound: Callable = _on_emitter_finished.bind(emitter)
 			if emitter.finished.is_connected(bound):
 				emitter.finished.disconnect(bound)
+			emitter.remove_meta(&"_finished_hooked")
 			release(emitter)
 		else:
 			_burst_left[e] = left
@@ -82,6 +86,7 @@ func release_active_all() -> void:
 			var bound: Callable = _on_emitter_finished.bind(emitter)
 			if emitter.finished.is_connected(bound):
 				emitter.finished.disconnect(bound)
+			emitter.remove_meta(&"_finished_hooked")
 			release(emitter)
 
 

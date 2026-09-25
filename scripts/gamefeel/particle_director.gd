@@ -46,13 +46,14 @@ func setup(p_pool: ParticlePool) -> void:
 func burst(p_scene_id: StringName, p_pos: Vector2, p_priority: int) -> void:
 	# 优先级裁剪（击杀 > 暴击 > 普命中 > 环境），≤64 由池承担（AC-15.5）。
 	# 丢弃判定（遥测）：池 misses 增加且 preempted_count 未变（抢占成功路径 misses 同样 +1）。
+	# R188 档0：双 stats() 字典构建改 miss_count() 计数器直读（热路径零分配）
 	if particle_pool == null:
 		return
-	var miss_before: int = int(particle_pool.stats()["misses"])
+	var miss_before: int = particle_pool.miss_count()
 	var preempt_before: int = particle_pool.preempted_count
 	particle_pool.burst(p_scene_id, p_pos, p_priority)
 	burst_requests += 1
-	if int(particle_pool.stats()["misses"]) > miss_before and particle_pool.preempted_count == preempt_before:
+	if particle_pool.miss_count() > miss_before and particle_pool.preempted_count == preempt_before:
 		dropped_requests += 1
 
 

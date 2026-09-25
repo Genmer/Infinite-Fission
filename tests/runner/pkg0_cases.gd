@@ -283,7 +283,7 @@ func _test_game_config() -> void:
 	_check("cfg 常量：hp_growth_per_wave = 1.12", is_equal_approx(GameConfig.get_constant(&"hp_growth_per_wave", 0.0), 1.12))
 	_check("cfg 常量：player_pickup_radius = 120（B_spec Q-13）", is_equal_approx(GameConfig.get_constant(&"player_pickup_radius", 0.0), 120.0))
 	_check("cfg 常量：缺键回退默认值", is_equal_approx(GameConfig.get_constant(&"nonexistent_key", 42.0), 42.0))
-	_check("池容量：projectile = 640（架构 §5.1）", GameConfig.get_pool_capacity(&"projectile") == 640)
+	_check("池容量：projectile = 820（R188 档0 800 弹锚扩容——640→820，软/硬上限不动）", GameConfig.get_pool_capacity(&"projectile") == 820)
 	_check("池容量：enemy = 128", GameConfig.get_pool_capacity(&"enemy") == 128)
 	_check("池容量：popup = 80", GameConfig.get_pool_capacity(&"popup") == 80)
 	_check("池容量：particle = 64", GameConfig.get_pool_capacity(&"particle") == 64)
