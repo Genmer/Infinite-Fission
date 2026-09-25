@@ -67,7 +67,7 @@ threshold_traits = [{
 "threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
 "effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
 }, {
-"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.35,
 "effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
 }]
 melee = {

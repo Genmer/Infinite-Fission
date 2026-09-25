@@ -1,13 +1,24 @@
 # scripts/combat/weapon/melee/orbit_weapon.gd
 # M-08 OrbitWeapon（架构 §2.8.5，形态 D）：环绕力场 W8 / 周期挥斩 W9 同构。
-# · 环绕模式（nullify=false，W8）：浮游球绕本体公转（angular_speed °/s）；每球对同一
-#   目标判定冷却 hit_cd（OrbitField 周期范围判定 + 击退，可打断自爆引导）。
+# · 环绕模式（nullify=false，W8）：浮游球绕本体公转（angular_speed °/s）；接触 = 蓄能
+#   命中（接触伤 + 蓄能 +1，OrbitField 蓄能状态机），满档敌侧引爆——try_fire 恒 false
+#   契约不变（力场常驻非射击，pkg3 断言锁定）。
+# · 引力脉冲：melee.cd 占位死键改义 = pulse_cd 节拍——本侧自持计时器消费 weapon_base
+#   ._fire_interval 的 cd×(1−ΣCDR)/rof_mult 通道（AFF_CDR 对 W8 首次生效），每拍驱动
+#   OrbitField.gravity_pulse（环内已蓄能目标 +1）。
 # · 挥斩模式（nullify=true，W9，R65 追击者重做——用户重定义）：飞刀在活动范围
 #   （slash_radius×2.5）内自主索敌追击（OrbitField 追击 AI），贴身（engage_r）即开砍；
 #   冷却就绪时有任一刀贴身 → 该刀位开弧（中心=刀、朝向=目标——判定 query_arc 半径/
 #   弧角/消弹口径与旧版完全一致，仅中心从玩家移到刀位）；刀未贴身不消耗节拍（cd 保持
 #   就绪等刀追上）；无敌时段回归环绕玩家。多刀 = 每拍各自开弧（刀数量 buff 轴）。
 # · orbs_bonus：MEC_ORBIT_LINK（谐振轨道）环绕体加成通道（W8 浮游球 / W9 追击刀）。
+# · R186 拆除声明：_orbit_params 不再注入 attach_gate/attach_mult（附着三件套随蓄能
+#   改版整体退役——OrbitField 侧 apply_attach 零消费点，test_w8_charge 锁死不复潮）。
+#   蓄能键组（charge_max/charge_gain_cd/detonate_mult/detonate_radius/effective_blade_cap/
+#   detonate_global_icd）全落 .tres melee 段，此处仅注入。形态卡改义：剑 = hit_cd×0.75
+#   死数值保留（gatling 契约观测口）+ 活闸 charge_gain_cd×0.7；斧/巨刃 = 引爆半径
+#   +15%/层；BOLT 转速×1.5 维持。击退终值仍 = 形态乘区后平加 Σadd_knock（MEC_KNOCK
+#   required_forms 解锁 [3] 后 W8 首次吃到动能冲击池）。
 class_name OrbitWeapon
 extends WeaponBase
 
@@ -15,11 +26,14 @@ const SLASH_WINDOW := 0.34                    # 挥斩判定窗口（R65：0.15�
 const SLASH_LEASH_MULT := 2.5                 # R65：活动范围 = 挥砍半径 ×250%（用户定义）
 const ENGAGE_R := 46.0                        # R65：贴身开砍距离（刀心-目标心）
 const CHASE_SPEED := 420.0                    # R65：追击移速 px/s
+const PULSE_MIN_INTERVAL := 0.05              # 引力脉冲节拍下限（CDR 钳制后防 0 除）
+const COPY_PHASE_OFFSET_DEG := 45.0           # R183 W8 复制体阵相位偏移（BASE 单环阵 + 45°）
 
 var orbit_field: OrbitField = null            # 环绕力场实体（单武器常驻单例）
 var arc_slash: ArcSlash = null                # 周期挥斩实体槽 0（兼容观测口；多刀 = _slash_pool）
 var _slash_pool: Array[ArcSlash] = []         # R65：多刀各自开弧的挥斩实例池
 var orbs_bonus: int = 0                       # 谐振轨道词条加成（MEC_ORBIT_LINK）
+var _pulse_left: float = 0.0                  # 引力脉冲倒计时（消费 _fire_interval 通道）
 
 
 var _enemy_bullet_grid: SpaceGrid = null      # 敌弹网格（消弹查询——R7 接线，此前从未注入）
@@ -32,6 +46,7 @@ func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
 	orbit_field = null
 	arc_slash = null
 	_slash_pool.clear()
+	_pulse_left = 0.0
 
 
 func has_target_now() -> bool:
@@ -98,6 +113,14 @@ func _on_tick_post(p_game_delta: float) -> void:
 	# R65：W9 常驻刀体（无敌人也可见——环绕待机）；挥斩窗口自持中心（刀位），不再随宿主
 	if orbit_field != null and is_instance_valid(orbit_field):
 		orbit_field.tick(p_game_delta, muzzle_position())
+		# W8 引力脉冲（pulse_cd 节拍）：自持计时器消费 weapon_base._fire_interval 的
+		# cd×(1−ΣCDR)/rof_mult 通道（AFF_CDR 对 W8 首次生效——此前 add_cdr 仅 W9 在吃）；
+		# try_fire 恒 false 契约不变（力场常驻非射击），脉冲不占开火节拍。
+		if not _is_slash_mode():
+			_pulse_left -= p_game_delta
+			if _pulse_left <= 0.0:
+				orbit_field.gravity_pulse()
+				_pulse_left += maxf(_fire_interval(), PULSE_MIN_INTERVAL)
 	for slash in _slash_pool:
 		if is_instance_valid(slash):
 			slash.tick(p_game_delta, muzzle_position())
@@ -157,22 +180,47 @@ func _ensure_orbit_field() -> void:
 	add_child(orbit_field)
 	orbit_field.weapon = self                   # 结算宿主注入（缺失 → OrbitField.tick 判定早退）
 	orbit_field.spawn(_orbit_params())
+	_pulse_left = maxf(_fire_interval(), PULSE_MIN_INTERVAL)   # 脉冲节拍与力场同步起表
 
 
 func _orbit_params() -> Dictionary:
 	# 力场参数集（orbs 含 orbs_bonus 加成——诺亚僚机召唤通道，P2）。
-	# R19 形态乘区——sword 再命中节奏 +25% / axe 范围+25% 击退+60% 转速-15% /
-	# bolt 转速+50% 体积-10%（用户点名「剑/斧/闪电自己扩展」）
+	# R19 形态乘区——sword 再命中节奏 +25%（hit_cd 死数值保留，gatling 契约观测口）/
+	# axe 范围+25% 击退+60% 转速-15% / bolt 转速+50% 体积-10%（用户点名「剑/斧/闪电自己扩展」）
 	# R65 W9 追击参数：活动范围 = 挥砍半径 ×250% / 追击移速 / 贴身距离 / 巨刃视觉缩放
+	# W8 蓄能改版：charge_gain_cd 活闸（数据键真源 melee 段；缺省回落 hit_cd 旧通道——
+	# 旧数据/桩夹具零声明也成立）；剑形态改义 = charge_gain_cd×0.7（蓄能速率语义迁入）；
+	# 斧/巨刃改义 = 引爆半径 +15%/层。
 	var style := _orbit_style()
+	var copy := _is_summon_copy()
 	var orbit_radius := _leveled_param("orbit_radius", float(data.melee.get("orbit_radius", 90.0)))
 	var angular := _leveled_param("angular_speed", float(data.melee.get("angular_speed", 240.0)))
 	var orb_r := _leveled_param("orb_r", float(data.melee.get("orb_r", data.melee.get("orb_radius", 16.0))))
+	var orbs_n := _leveled_param("orbs", float(data.melee.get("orbs", 2)))
+	var phase_offset_deg := 0.0
+	if copy:
+		# R183 W8 复制体裁定（§一 统一表）：固定 BASE 单环阵（等级成长不带入——
+		# melee 段基线值直读，不走 _leveled_param）+ 相位偏移 45°（与本体错位公转）
+		orbit_radius = float(data.melee.get("orbit_radius", 90.0))
+		angular = float(data.melee.get("angular_speed", 240.0))
+		orb_r = float(data.melee.get("orb_r", data.melee.get("orb_radius", 16.0)))
+		orbs_n = float(data.melee.get("orbs", 2))
+		phase_offset_deg = COPY_PHASE_OFFSET_DEG
 	var hit_cd := float(data.melee.get("hit_cd", 0.5))
 	var knockback := float(data.melee.get("knockback", 40.0))
+	# 蓄能闸终值：melee.charge_gain_cd(_levels) 优先，未声明回落 hit_cd（旧数据兼容）
+	var gain_cd: float
+	if data.melee.has("charge_gain_cd"):
+		gain_cd = _leveled_param("charge_gain_cd", float(data.melee.get("charge_gain_cd", 0.5)))
+	else:
+		gain_cd = hit_cd
+	# 引爆半径改义乘区：巨刃 +15%/层（R65 视觉轴追加引爆当量轴）+ 斧形态 +15%/层
+	var radius_bonus := 1.0 + OrbitField.DETONATE_RADIUS_PER_LAYER \
+		* float(_giant_blade_layers() + _trait_layers(&"MEC_ORBIT_AXE"))
 	match style:
 		&"sword":
 			hit_cd *= 0.75
+			gain_cd *= 0.7
 		&"axe":
 			orbit_radius *= 1.25
 			orb_r *= 1.15
@@ -182,13 +230,32 @@ func _orbit_params() -> Dictionary:
 			orb_r *= 0.9
 			angular *= 1.5
 			hit_cd *= 1.15
+	# R186 M5 击退终值钉死（继承）：终值 = data.melee.knockback × 形态乘区（上方 match 原样）
+	# + Σadd_knock（乘区之后平加，不进乘区——knockback_force() 先例 weapon_base.gd:349-357：
+	# data 值后平加池）。MEC_KNOCK required_forms 解锁 [3] 后 W8 首次吃到动能冲击池。
+	# W9 零波及：ArcSlash 直读 data.melee.knockback（_ensure_slash_instance），
+	# 本值仅 OrbitField 环绕模式击退消费。
+	if trait_stack != null:
+		knockback += float(trait_stack.aggregate_panel().get("add_knock", 0.0))
 	var out := {
-		"orbs": _leveled_param("orbs", float(data.melee.get("orbs", 2))) + orbs_bonus + _orbit_link_knives(),
+		"orbs": int(orbs_n) + orbs_bonus + _orbit_link_knives(),
 		"orbit_radius": orbit_radius,
 		"angular_speed": angular,
 		"orb_radius": orb_r,
 		"hit_cd": hit_cd,
 		"knockback": knockback,
+		# R183 W8 复制体相位偏移（OrbitField.spawn 起表角；本体 0）
+		"angle_deg": phase_offset_deg,
+		# ── W8 蓄能引爆键组（数据键全落 .tres melee 段）──
+		# MEC_CRITICAL_MASS 消费口（R187 §2.5.6 当量轴）：每层 +value 引爆倍率
+		# （value=1.0，stack_max=2 → 5×→7×；数据声明驱动，直读挂载表——_orbit_link_knives 先例）
+		"charge_max": float(data.melee.get("charge_max", 5.0)),
+		"charge_gain_cd": maxf(gain_cd, 0.05),
+		"detonate_mult": float(data.melee.get("detonate_mult", 5.0))
+			+ _crit_mass_mult_bonus(),
+		"detonate_radius": maxf(float(data.melee.get("detonate_radius", 90.0)) * radius_bonus, 1.0),
+		"effective_blade_cap": int(data.melee.get("effective_blade_cap", 8)),
+		"detonate_global_icd": float(data.melee.get("detonate_global_icd", 0.5)),
 		"style": String(style) if style != &"" else "orb",
 		"knife_scale": 1.0 + 0.25 * float(_giant_blade_layers()),   # R65 巨刃：刀体视觉 +25%/层
 	}
@@ -197,6 +264,40 @@ func _orbit_params() -> Dictionary:
 		out["chase_speed"] = CHASE_SPEED
 		out["engage_r"] = ENGAGE_R
 	return out
+
+
+func _trait_layers(p_id: StringName) -> int:
+	# 指定词条挂载层数（形态卡改义乘区消费——axe 引爆半径轴）
+	if trait_stack == null:
+		return 0
+	for tb in trait_stack.traits:
+		if tb.data != null and tb.data.id == p_id:
+			return int(tb.get("layers"))
+	return 0
+
+
+func _is_summon_copy() -> bool:
+	# R183 副本身份判定（player.gd _summon_copies 独立数组通道——homing_weapon 同款）
+	if player == null or not is_instance_valid(player):
+		return false
+	var copies: Variant = player.get("_summon_copies")
+	if copies is Array:
+		for c in (copies as Array):
+			if c == self:
+				return true
+	return false
+
+
+func _crit_mass_mult_bonus() -> float:
+	# MEC_CRITICAL_MASS「临界质量」引爆倍率加算（每层 +data.value；缺省 0——卡未挂/桩
+	# 夹具零声明不失能）。消费点在 _orbit_params detonate_mult 键——refresh_orbit_field
+	# 重铺即生效（挂卡即时口径，同 MEC_KNOCK add_knock 平加池先例）。
+	if trait_stack == null:
+		return 0.0
+	for tb in trait_stack.traits:
+		if tb.data != null and tb.data.id == &"MEC_CRITICAL_MASS":
+			return float(tb.data.value) * float(tb.get("layers"))
+	return 0.0
 
 
 func _orbit_link_knives() -> int:

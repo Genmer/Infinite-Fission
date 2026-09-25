@@ -17,6 +17,16 @@ var _stage_starts: Dictionary = {}           # 阶段名 -> begin 时刻（usec�
 var _counters: Dictionary = {}               # 全部计数器（池/管线/总线共用）
 var _frame_count: int = 0                    # 帧计数（报表聚合节拍）
 
+# R187 共享组新计数登记表（DebugStats.count 通用字典的键名审计清单——防拼写漂移；
+# 消费/写入点：W8 蓄能引爆 / W4 副束叠层超帽 / W5 镜数超帽 / W6 齐射余弹弃发 / W1 弹幕态激活）
+const R187_COUNTER_KEYS: Array[StringName] = [
+	&"w8_detonations",            # W8 满档引爆次数（验收「逐一吻合」断言源）
+	&"laser_subbeam_rejected",    # W4 副激光叠层超 stack_max/帽被拒次数
+	&"mirror_rejected",           # W5 镜面数超绝对帽 5 被拒次数
+	&"homing_volley_dropped",     # W6 齐射目标不足/池满余弹弃发次数
+	&"volley_state_active",       # W1 弹幕态（TH_VOLLEY_STATE）激活次数
+]
+
 
 func _ready() -> void:
 	# release 构建剥离（A1 §3 口径：仅开发/验收构建启用断言与采样）

@@ -22,6 +22,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_death_pop()
 	_test_muzzle_flash()
 	_test_sfx_pitch()
+	_test_sfx_boom_bounce()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -179,3 +180,58 @@ func _test_sfx_pitch() -> void:
 	_check("打击质感：命中音调微随机（±6% 内）",
 		p1.pitch_scale >= 0.93 and p1.pitch_scale <= 1.07,
 		"%.3f" % p1.pitch_scale)
+
+
+func _test_sfx_boom_bounce() -> void:
+	print("── R184 音效重做（boom 干脆爆破 / bounce 反弹 tick） ──")
+	# ① boom 流存在且时长 ≤0.25s（16bit 单声道：data 字节 ÷2 ÷mix_rate；
+	#    _synthesize_boom 与 _synthesize 同容器口径 FORMAT_16_BITS）
+	var boom: AudioStreamWAV = SfxBank.I._streams.get(&"boom") as AudioStreamWAV
+	if boom == null:
+		_check("音效重做：boom 流存在且时长 ≤0.25s", false, "boom 流缺失")
+	else:
+		var boom_dur := float(boom.data.size()) / 2.0 / float(boom.mix_rate)
+		_check("音效重做：boom 流存在且时长 ≤0.25s",
+			boom.format == AudioStreamWAV.FORMAT_16_BITS and boom_dur > 0.0
+				and boom_dur <= 0.25,
+			"%.3fs format=%d" % [boom_dur, boom.format])
+	# ② bounce 流存在（0.04~0.06s 短 tick，与 hit 低频噪声为不同流——可辨性口径）
+	var hit_stream: AudioStreamWAV = SfxBank.I._streams.get(&"hit") as AudioStreamWAV
+	var bounce: AudioStreamWAV = SfxBank.I._streams.get(&"bounce") as AudioStreamWAV
+	if bounce == null:
+		_check("音效重做：bounce 流存在（0.04~0.06s 短 tick）", false, "bounce 流缺失")
+	else:
+		var bounce_dur := float(bounce.data.size()) / 2.0 / float(bounce.mix_rate)
+		_check("音效重做：bounce 流存在（0.04~0.06s 短 tick）",
+			bounce_dur >= 0.04 and bounce_dur <= 0.06 and bounce != hit_stream,
+			"%.3fs" % bounce_dur)
+	# ③ 构造一次 _apply_bounce → bullet_bounced 探针计数 +1（弹体从池取出即挂池节点下，
+	#    本测试不 add_child 池化对象；走 nullify 统一回收路径归还）
+	var bounced := [0]
+	var probe := func(_p: Vector2) -> void: bounced[0] += 1
+	EventBus.bullet_bounced.connect(probe)
+	var proj: ProjectileBase = (_gl.pools[&"projectile"] as ProjectilePool).acquire()
+	if proj != null:
+		proj.spawn({
+			"velocity": Vector2(400.0, 0.0),
+			"lifetime": 1.0,
+			"pierce": 1,
+			"bounces": 2,
+		})
+		proj._apply_bounce(Vector2(1.0, 0.0))
+		_check("音效重做：_apply_bounce 派发 bullet_bounced（探针 +1）",
+			bounced[0] == 1 and proj.bounces_left == 1,
+			"n=%d left=%d" % [bounced[0], proj.bounces_left])
+		proj.nullify()
+	else:
+		_check("音效重做：_apply_bounce 派发 bullet_bounced（探针 +1）", false,
+			"弹池 acquire 为 null")
+	EventBus.bullet_bounced.disconnect(probe)
+	# ④ 节流生效：极短间隔内重复 play bounce，第二次被吞（_last_ms 不推进）
+	SfxBank.I._last_ms.erase(&"bounce")
+	SfxBank.I.play(&"bounce")
+	var t1: int = int(SfxBank.I._last_ms.get(&"bounce", -1))
+	SfxBank.I.play(&"bounce")
+	var t2: int = int(SfxBank.I._last_ms.get(&"bounce", -1))
+	_check("音效重做：bounce 节流生效（THROTTLE_MS 内第二次被吞）",
+		t1 >= 0 and t2 == t1, "t1=%d t2=%d" % [t1, t2])

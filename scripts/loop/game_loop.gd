@@ -103,6 +103,9 @@ var _homing_pool: ProjectilePool = null           # R94：homing 场景池（此
 var _boot_elapsed_ms: float = 0.0             # Boot 耗时（AC：<3s 预算遥测）
 var _separation_left: float = SEPARATION_INTERVAL   # E-10 分离力 10Hz 相位
 var _free_reroll_used: bool = false            # 本局首次「换一批」免费位（一次性刷新方向）
+var _active_daily_seed: int = -1               # R186：本局每日种子留存（echo 重开重 roll 的确定性源）
+var _run_intro_lines: PackedStringArray = []   # R186：开场横幅唯一收口（难度/大关/随机武装/fission 宣告
+                                               # 三源合并为至多一条 toast——消费点 emit 后立即清空）
 
 
 func _ready() -> void:
@@ -532,6 +535,85 @@ func request_resume() -> bool:
 	return resumed
 
 
+# ── R186 新角色首发（改造者自定义首发 / 回响随机双武装） ────────────
+func _starting_weapon_id(p_char: StringName) -> StringName:
+	# 首发仲裁：非 fission 恒手枪（角色门——防 custom 键泄漏给旧角色）；fission → 存档
+	# 自定义（脏 id registry 查 null → 兜底手枪，Meta 侧无 registry 引用）
+	if p_char != &"fission":
+		return STARTING_WEAPON_ID
+	var saved := Meta.custom_weapon()
+	if saved != &"" and registry.get_weapon(saved) != null:
+		return saved
+	return STARTING_WEAPON_ID
+
+
+func _equip_starting_weapon(p_char: StringName) -> void:
+	# 装备首发 + 注入即计图鉴（幂等；W1 入图鉴 = 修「手枪永不解锁」旧缺，军火大亨
+	# 抽卡口径不受扰）。首获横幅走 add_weapon 既有 mark_first_met 链。
+	var wid := _starting_weapon_id(p_char)
+	player.add_weapon(registry.get_weapon(wid))
+	Meta.mark_weapon_codex(wid)
+
+
+func _reconcile_starting_weapon(p_char: StringName) -> void:
+	# 开局对账（MF1 双保险）：slot0 ≠ 应配首发 → 清全部槽重装。装备时点 ≠ 选角时点
+	#（set_character 不清槽 + boot 期选角未定），必须双保险。仅 start_run 调用——
+	# 对账禁放 player.set_character（_reset_run_state 序：respawn 先于清槽/重装，会双装）。
+	var expected := _starting_weapon_id(p_char)
+	var s0: WeaponBase = player.weapon_slots[0] if player.weapon_slots.size() > 0 else null
+	if s0 != null and is_instance_valid(s0) and s0.data != null \
+			and StringName(String(s0.data.id)) == expected:
+		return
+	for i in range(player.weapon_slots.size()):   # 开局期构筑应为空，防御性全清
+		var w: WeaponBase = player.weapon_slots[i] if i < player.weapon_slots.size() else null
+		if w != null and is_instance_valid(w):
+			w.queue_free()
+		player.weapon_slots[i] = null
+	_equip_starting_weapon(p_char)
+
+
+func _grant_random_dual_loadout(p_seed: int = -1) -> void:
+	# R186 回响·伊可（random_dual）：开局随机双武器，9 把（全池排除 W1——基线手枪
+	# weapon_note 空）× 2 次独立有放回抽取（P(同款)=1/9）。局部 RNG：每日局 hash 确定性
+	#（同日同配置含双武器），常规局 randomize；不触碰 card_generator/spawner RNG 流。
+	# 序：①角色门 → ②清全部槽（顺带清 boot 期预发手枪）→ ③预吞首遇横幅 + 计图鉴 + 装备
+	# → ④追加【随机武装】行（开场 toast 唯一收口，不直接 emit）。
+	if not bool(CharacterTable.get_character(player.character_id).get("random_dual", false)):
+		_run_intro_lines.clear()              # ★R2①：非双武装角色入口清残留（防换角色误播）
+		return
+	for i in range(player.weapon_slots.size()):
+		var w: WeaponBase = player.weapon_slots[i] if i < player.weapon_slots.size() else null
+		if w != null and is_instance_valid(w):
+			w.queue_free()
+		player.weapon_slots[i] = null
+	var pool: Array[StringName] = []
+	for wid_v: Variant in registry.weapons.keys():
+		var sid := StringName(String(wid_v))
+		if sid != STARTING_WEAPON_ID:
+			pool.append(sid)
+	if pool.is_empty():
+		return                                # 注册表空（致命配置已拦）防御
+	var rng := RandomNumberGenerator.new()
+	if p_seed >= 0:
+		rng.seed = hash("dual|%d" % p_seed)   # 每日：同日同双武器（零全局 RNG 副作用）
+	else:
+		rng.randomize()
+	var names: Array[String] = []
+	for _k in range(2):
+		var pick: StringName = pool[rng.randi_range(0, pool.size() - 1)]
+		Meta.mark_first_met(StringName("W_" + String(pick)))   # 预吞 G8 首遇横幅
+		Meta.mark_weapon_codex(pick)                           # 白拿计图鉴（不增抽卡计数）
+		var wdata := registry.get_weapon(pick)
+		player.add_weapon(wdata)                               # 无去重——同 id 可双持
+		names.append(String(wdata.display_name) if wdata != null else String(pick))
+	var line: String
+	if names[0] == names[1]:
+		line = "【随机武装】%s ×2" % names[0]
+	else:
+		line = "【随机武装】%s + %s" % [names[0], names[1]]
+	_run_intro_lines.append(line)
+
+
 func start_run(p_daily_seed: int = -1) -> bool:
 	# MENU → PLAYING：波次 1 开局（当前地图波表 + 主题色 + Meta 记图——M2 多地图）。
 	# p_daily_seed ≥ 0 = 每日挑战（P2）：当日固定种子局部注入卡池+出生流（不改 RNG 全局
@@ -539,6 +621,8 @@ func start_run(p_daily_seed: int = -1) -> bool:
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
 	_endless_mode = false                       # R62：新局非无尽态（continue_endless 置位）
+	_active_daily_seed = p_daily_seed           # R186：每日种子留存（echo 重开重 roll 确定性源）
+	_run_intro_lines.clear()                    # R186：开场横幅收口复位（消费点外残留防御）
 	if sfx != null:
 		sfx.bgm_roll_combat_variant()          # R79 每局随机战斗套（首播前换流）
 	_combo_count = 0                            # E9：连杀窗口复位
@@ -556,18 +640,34 @@ func start_run(p_daily_seed: int = -1) -> bool:
 		Meta.set_run_daily(false)
 		card_generator.rng.randomize()            # 卡池每局随机（固定种子=「选项写死」观感根因；pkg 测试自行定种子）
 	player.set_character(Meta.character_id)   # 角色应用（含养成加成——M8/角色系统）
+	_reconcile_starting_weapon(Meta.character_id)   # R186 MF1：开局首发对账（boot/换角装错纠正）
 	spawner.difficulty = _difficulty             # R72 敌数值乘区（出生管线单点）
 	wave_director.difficulty = _difficulty        # R72 波表织入（新形态敌伴随）
 	player.set_difficulty(_difficulty)             # R73 风险回报（经验侧乘区镜像）
+	player.unlocked_slots = GameConst.difficulty_slot_default(_difficulty)   # R183 开局默认 2/3/3
+	elemental.clear_reaction_mults()             # R183 反应乘区局清空（武器全量重建 uid 全换，旧注册作废——根治既有跨局慢性泄漏）
 	Meta.set_run_difficulty(_difficulty)           # E11：结算分档记录 + 结晶乘区
 	player.revives_left += GameConst.difficulty_revives(_difficulty)
+	_grant_random_dual_loadout(_active_daily_seed)   # R186：echo 随机双武装（非 echo 入口清残留行）
 	if _difficulty != GameConst.Difficulty.NORMAL:
-		EventBus.emit_mechanics_intro("【%s】敌人数值 ×%d · 复活 %d 次 · 奖励 ×%.1f%s"
+		# R72 难度横幅（R186 起改收口追加：与随机武装/大关段合并为至多一条开场 toast，
+		# 消费点 = _on_menu_start / _on_menu_start_daily / restart_run——单 Label toast
+		# 后到覆写，直发多条会互相吞）
+		_run_intro_lines.append("【%s】敌人数值 ×%d · 复活 %d 次 · 奖励 ×%.1f%s"
 			% [GameConst.difficulty_name(_difficulty),
 			int(GameConst.difficulty_dmg_mult(_difficulty)),
 			GameConst.difficulty_revives(_difficulty),
 			GameConst.difficulty_reward_mult(_difficulty),
 			" · 每级双选" if _difficulty == GameConst.Difficulty.HELL else ""])   # R72 难度附赠复活
+	if Meta.character_id == &"fission":
+		# R186：改造者宣告（对账后追加——与实装一致；仅自定义非手枪时播）
+		var swid := _starting_weapon_id(Meta.character_id)
+		if swid != STARTING_WEAPON_ID:
+			var swdata := registry.get_weapon(swid)
+			_run_intro_lines.append("【%s】初始武器：%s（本局固定）" % [
+				String(CharacterTable.get_character(Meta.character_id).get("name", "改造者·枢")),
+				String(swdata.display_name) if swdata != null else String(swid)])
+	hud.refresh_stats()                          # R186 MF2：角色/首发就位后显式刷（技能键可见性单写口，1Hz 兜底外的即时自愈）
 	var map_def := MapTable.get_map(current_map_id)
 	_apply_map_affixes(map_def)                  # 词缀二期：双词缀注入（祝→玩家 / 诅→敌侧）
 	if p_daily_seed >= 0:
@@ -599,6 +699,9 @@ func _on_menu_start_daily() -> void:
 		return
 	current_map_id = MapTable.FIRST_MAP_ID
 	start_run(Meta.daily_seed(Meta.daily_date_key()))
+	if not _run_intro_lines.is_empty():       # R186：每日局开场横幅消费（无大关段）
+		EventBus.emit_mechanics_intro("\n".join(_run_intro_lines))
+		_run_intro_lines.clear()
 
 
 func _apply_map_affixes(p_map_def: Dictionary) -> void:
@@ -672,11 +775,15 @@ func _on_menu_start(p_map_id: StringName, p_difficulty: int = 0) -> void:
 	start_run()
 	# 大关新机制横幅（2026-09-13 解锁节奏表：每张大关一个新体验主题，开局宣告。
 	# 第 1 关为起点口径不上横幅；continue_run 不重复宣告——选关面板行已常驻展示）
+	# R186：改收口追加，与难度/随机武装段合并为至多一条开场 toast 后统一消费
 	var m_idx := MapTable.get_map_index(p_map_id)
 	var intro := MechanicGate.intro_for_map(m_idx)
 	if m_idx >= 1 and not intro.is_empty():
-		EventBus.emit_mechanics_intro("【%s】新解锁：%s"
+		_run_intro_lines.append("【%s】新解锁：%s"
 			% [String(MapTable.get_map(p_map_id).get("name", "")), intro])
+	if not _run_intro_lines.is_empty():
+		EventBus.emit_mechanics_intro("\n".join(_run_intro_lines))
+		_run_intro_lines.clear()              # 消费即清（防下一局残留误播）
 
 
 func restart_run() -> bool:
@@ -693,6 +800,9 @@ func restart_run() -> bool:
 		return false
 	RunSave.clear()
 	_reset_run_state()
+	if not _run_intro_lines.is_empty():       # R186：重开消费开场横幅（普通角色数组空不 emit——现版零回归）
+		EventBus.emit_mechanics_intro("\n".join(_run_intro_lines))
+		_run_intro_lines.clear()
 	wave_director.start_wave(1)
 	return true
 
@@ -713,6 +823,7 @@ func quit_to_menu() -> bool:
 	if was_paused:
 		RunSave.save_run(serialize_run())
 	_reset_run_state()
+	_run_intro_lines.clear()                  # R186 ★R2⑥：回菜单路径无 emit 点——清残留防误播
 	return true
 
 
@@ -984,8 +1095,9 @@ func _boot_build_actors() -> void:
 		"wave_director": wave_director,           # B.4：SYN_FIRST_STRIKE 波首命中位
 	})
 	relic_handler.setup({"registry": registry, "player": player})
-	# Q-4：首发手枪（形态工厂 add_weapon）
-	player.add_weapon(registry.get_weapon(STARTING_WEAPON_ID))
+	# Q-4：首发手枪（R186：改走首发仲裁——fission 存档自定义首发；boot 期选角未定，
+	# 装错由 start_run 对账纠正）
+	_equip_starting_weapon(Meta.character_id)
 
 
 func _boot_build_presentation() -> void:
@@ -1073,13 +1185,18 @@ func _boot_build_presentation() -> void:
 	# R83 导弹爆反馈：低音轰 + CRIT 级震屏（专用爆炸件配套——比普命中重一档；
 	# 大范围爆（Boss 级 blast_r）低沉变调）
 	# R94：星爆走 GameLoop 顶层（E3 升级波纹同通道，已验证可见）——不依赖特效层
+	# R187 表现分档：小爆（blast_r<50，W6 L1 档）走 HIT 档震屏，≥50 保持 CRIT 档
 	EventBus.missile_blast.connect(func(p_pos: Vector2, p_r: float) -> void:
 		sfx.play(&"boom", 0.8 if p_r >= 100.0 else 1.0)
-		game_feel.add_trauma_for_level(GameConst.FeelLevel.CRIT)
+		game_feel.add_trauma_for_level(
+			GameConst.FeelLevel.HIT if p_r < 50.0 else GameConst.FeelLevel.CRIT)
 		var star_fx := BlastStarFx.new()
 		star_fx.position = p_pos
 		star_fx.radius = maxf(p_r, 60.0)
 		add_child(star_fx))
+	# R184 反弹音：子弹边界弹开清脆 tick（加特林+反弹词条下高频触发——节流走
+	# SfxBank 既有 THROTTLE_MS，事件侧不自造节流）
+	EventBus.bullet_bounced.connect(func(_p: Vector2) -> void: sfx.play(&"bounce"))
 	EventBus.boss_spawned.connect(func(_b: Node2D) -> void: sfx.play(&"boss"))
 	# 夜间R15：元素反应音（按反应类型分音色——碎裂/过载/超导）
 	EventBus.reaction_triggered.connect(_play_reaction_sfx)
@@ -1199,8 +1316,10 @@ func serialize_run() -> Dictionary:
 		"max_hp": player.max_hp,
 		"gold": player.gold,
 		"rerolls": player.reroll_charges,
+		"revives": maxi(player.revives_left, 0),   # 需求④：复活次数随档（快照值已含难度附赠）
 		"free_reroll": not _free_reroll_used,
 		"unlocked_slots": player.unlocked_slots,
+		"slot_bonus": player.slot_bonus,          # R185 金卡解锁计数落档（不再参与有效帽）
 		"weapons": weapons,
 	}
 
@@ -1225,6 +1344,7 @@ func continue_run() -> bool:
 	spawner.difficulty = _difficulty
 	wave_director.difficulty = _difficulty       # R72 继续局保持织入口径
 	player.set_difficulty(_difficulty)             # R73 继续局保持风险回报
+	elemental.clear_reaction_mults()             # R183 反应乘区局清空（恢复流程武器重建 uid 全换，重挂卡自然重注册）
 	Meta.set_run_difficulty(_difficulty)           # E11：继续局结算分档
 	Meta.set_run_map(current_map_id)
 	var is_daily := bool(data.get("daily", false))
@@ -1242,7 +1362,12 @@ func continue_run() -> bool:
 		+ ("" if _difficulty == GameConst.Difficulty.NORMAL
 			else " · %s" % GameConst.difficulty_name(_difficulty)))
 	_restore_run_state(data)
-	player.revives_left += GameConst.difficulty_revives(_difficulty)   # R72 难度复活随恢复补齐
+	if data.has("revives"):
+		# 需求④：复活次数随档恢复（快照值已含难度附赠——set_character 已重置为养成
+		# 应急协议口径，此处整值覆写；防「用掉→暂停→继续」无刷回满的复活套利）
+		player.revives_left = maxi(int(data.get("revives", 0)), 0)
+	else:
+		player.revives_left += GameConst.difficulty_revives(_difficulty)   # R72 旧档无键：难度复活随恢复补齐（兼容口径）
 	# R62：恢复档波次已过 final_wave → 无尽局续打（波次徽标切无尽口径）
 	var final_wave := int(MapTable.get_map(map_id).get("final_wave", 1 << 30))
 	var resume_wave := maxi(int(data.get("wave", 1)), 1)
@@ -1265,11 +1390,17 @@ func _restore_run_state(p_data: Dictionary) -> void:
 		if w != null and is_instance_valid(w):
 			w.queue_free()
 		player.weapon_slots[i] = null
-	player.unlocked_slots = maxi(int(p_data.get("unlocked_slots", 1)), 1)
-	# 武器重建（空表 → 手枪兜底，恒有槽 0 武器）
+	# R185：slot_bonus 恢复（仅计数，不参与有效帽）；旧档 unlocked（=1 时代）抬到当前难度默认
+	#（否则第 2 把武器重建被「槽未解锁」拒绝后 break 静默丢构筑——QA BUG-3）
+	player.slot_bonus = clampi(int(p_data.get("slot_bonus", 0)), 0, 99)
+	player.unlocked_slots = clampi(
+		maxi(int(p_data.get("unlocked_slots", 1)), GameConst.difficulty_slot_default(_difficulty)),
+		1, player.slot_cap_total())
+	# 武器重建（空表 → 首发仲裁兜底，恒有槽 0 武器；R186：必须传快照角色——
+	# :1305 才恢复角色，读 Meta.character_id 会装错）
 	var weapons: Array = p_data.get("weapons", [])
 	if weapons.is_empty():
-		player.add_weapon(registry.get_weapon(STARTING_WEAPON_ID))
+		_equip_starting_weapon(StringName(String(p_data.get("character", "sentinel"))))
 	else:
 		for entry_v: Variant in weapons:
 			var entry: Dictionary = entry_v if entry_v is Dictionary else {}
@@ -1311,11 +1442,15 @@ func _restore_run_state(p_data: Dictionary) -> void:
 
 func _on_boss_killed_bgm(p_enemy: Node2D) -> void:
 	# Boss 击杀 → BGM 战鼓层收起（tags 判定；连接序先于 spawner 归还清零——2026-08-31
-	# 修复：连接已前置至 actors 段）+ 刷新次数 +1（选卡刷新机制的「获取」来源之一）
-	if sfx != null and (int(p_enemy.get("tags")) if p_enemy.get("tags") != null else 0 & GameConst.TAG_BOSS) != 0:
+	# 修复：连接已前置至 actors 段）+ 刷新次数 +1（选卡刷新机制的「获取」来源之一）。
+	# 位运算次序：先归一取值再 & TAG_BOSS——旧写法把 `& TAG_BOSS` 挂在三元 else 分支的
+	# 字面量 0 上（优先级陷阱），真实 tags 整值放行：精英击杀被当 Boss，刷新次数经济被
+	# 系统性灌水 + 战鼓层误收
+	var tags: int = int(p_enemy.get("tags")) if p_enemy.get("tags") != null else 0
+	var is_boss := (tags & GameConst.TAG_BOSS) != 0
+	if sfx != null and is_boss:
 		sfx.bgm_set_boss_layer(false)
-	if (int(p_enemy.get("tags")) if p_enemy.get("tags") != null else 0 & GameConst.TAG_BOSS) != 0 and player != null \
-			and is_instance_valid(player):
+	if is_boss and player != null and is_instance_valid(player):
 		player.reroll_charges += 1
 		EventBus.emit_reroll_granted(1)
 
@@ -1665,7 +1800,13 @@ func _reset_run_state() -> void:
 		if w != null and is_instance_valid(w):
 			w.queue_free()
 		player.weapon_slots[i] = null
-	player.add_weapon(registry.get_weapon(STARTING_WEAPON_ID))
+	# R186：首发分支——random_dual 重开 = 新局重 roll（每日传留存种子保确定）；其余按角色首发
+	#（门读 player.character_id：set_character 锁定回落 sentinel 后两处口径一致）
+	if bool(CharacterTable.get_character(player.character_id).get("random_dual", false)):
+		_grant_random_dual_loadout(_active_daily_seed)
+	else:
+		_equip_starting_weapon(Meta.character_id)
+	hud.refresh_stats()                           # R186 MF2：respawn（→set_character）+ 首发就位后显式刷（换角首波技能键可见性即时自愈）
 	hud.kills = 0
 	hud.wave = 0
 	hud.total_damage = 0.0

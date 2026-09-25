@@ -10,7 +10,7 @@ rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L1：tick_atk 7 × 5 跳/s；单体 DPS 35；三目标群 DPS 102（R10 前期降温：L5 后期强度保留）"
+note = "A3 §3.5 L1：校准锚束 tick_atk 7 × 5 跳/s（单体 DPS 35 不动）；镜面 1 面 × mirror_ratio 0.40（R187 退役折射——锚束+万镜回廊）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,7 +19,7 @@ rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L2：tick_atk 9 × 5 跳/s；单体 DPS 45；三目标群 DPS 131（R10 前期降温）"
+note = "A3 §3.5 L2：锚束 tick_atk 9 × 5 跳/s；镜面 1 面 × 0.45（R187 万镜回廊逐级表）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
@@ -28,7 +28,7 @@ rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L3：tick_atk 11 × 5 跳/s；折射束 2→3；三目标群 DPS 198（R10 前期降温）"
+note = "A3 §3.5 L3：锚束 tick_atk 11 × 5 跳/s；镜面 2 面 × 0.50（镜数等级曲线 [1,1,2,2,3]）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -37,7 +37,7 @@ rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L4：tick_atk 14 × 5 跳/s；单体 DPS 70；三目标群 DPS 252（R10 前期降温）"
+note = "A3 §3.5 L4：锚束 tick_atk 14 × 5 跳/s；镜面 2 面 × 0.55（R187）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
@@ -46,35 +46,30 @@ rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L5：tick_atk 15 × 5 跳/s；refract_ratio 0.6→0.75；三目标群 DPS 358"
+note = "A3 §3.5 L5：锚束 tick_atk 15 × 5 跳/s；镜面 3 面 × 0.60（TH_MIRROR_CHOIR ≥3 面 +0.1，有效帽 0.7）"
 
 [resource]
 script = ExtResource("1_wd")
 id = &"W5_prism"
-display_name = "折射棱镜"
+display_name = "万镜棱镜"
 form = 1
 crit_rate = 0.05
 crit_dmg = 2.0
 hitbox_r = 6.0
 unlock_rarity = 1
 threshold_traits = [{
-"threshold_id": &"TH_SIZE_NOVA", "metric": "size_mult", "threshold": 3.0,
-"effect_id": &"EF_SIZE", "params": {"radius_mult": 1.5, "atk_ratio": 0.4}
+"threshold_id": &"TH_MIRROR_CHOIR", "metric": "mirror_count", "threshold": 3.0,
+"effect_id": &"EF_CHOIR", "params": {"ratio_bonus": 0.1}
 }, {
-"threshold_id": &"TH_FRACTAL_ECHO", "metric": "split_depth", "threshold": 3.0,
-"effect_id": &"EF_FRACTAL", "params": {"inherit_ratio": 0.6}
-}, {
-"threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
-"effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
-}, {
-"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.35,
 "effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
 }]
 laser = {
 "beam_length": 520.0, "beam_width": 14.0, "tick_rate": 5.0,
 "scorch_max_layers": 5, "scorch_per_layer": 0.08,
-"refract_beams": 2, "refract_ratio": 0.6, "refract_depth": 2,
-"refract_beams_levels": [2.0, 2.0, 3.0, 3.0, 3.0],
-"refract_ratio_levels": [0.6, 0.6, 0.6, 0.6, 0.75]
+"mirrors_count_levels": [1.0, 1.0, 2.0, 2.0, 3.0],
+"mirror_ratio_levels": [0.4, 0.45, 0.5, 0.55, 0.6],
+"mirror_budget_per_s": 600.0,
+"mirror_laser_cap": 2
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

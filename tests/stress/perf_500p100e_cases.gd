@@ -15,7 +15,10 @@ const DT := 1.0 / 120.0                          # 120Hz 物理帧
 const ORBIT_RADIUS := 260.0                      # 自动移动：屏心绕圈半径 px（敌群拖尾分散口径）
 const ORBIT_SPEED := 1.1                         # 绕圈角速度 rad/s（≈300px/s 切向速度）
 const MAIN_SCENE := "res://scenes/main.tscn"
-const TARGET_PROJ := 500                         # AC-01.2 负载锚
+const TARGET_PROJ := 500                         # AC-01.2 负载锚（缺省档）
+# R187：弹幕化前置性能锚参数化——800 弹档（W1 弹幕态/W6 齐射满配依赖此门）
+# 子类（perf_800p100e_cases）覆写 _target_proj 即可，既有 500 档口径零改动
+var _target_proj: int = TARGET_PROJ
 const TARGET_ENEMIES := 100
 const TARGET_POPUPS := 40
 const TARGET_PARTICLES := 60
@@ -93,7 +96,7 @@ func _prime_load() -> void:
 func _maintain_load() -> void:
 	# 弹：缺额补给（屏内随机出生 + 随机方向飞行——掠过敌群产生网格碰撞/结算负载）
 	var proj_pool := _gl.pools[&"projectile"] as ProjectilePool
-	var deficit := TARGET_PROJ - _proj_active()
+	var deficit := _target_proj - _proj_active()
 	for i in range(mini(deficit, SUPPLY_PROJ_PER_FRAME)):
 		var proj := proj_pool.acquire()
 		if proj == null:

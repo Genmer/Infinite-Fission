@@ -84,6 +84,19 @@ func copy_runtime() -> TraitStack:
 	return out
 
 
+func copy_full() -> TraitStack:
+	# 武器主栈 → 僚机复制武器栈（R183）：copy_full 比 copy_runtime 多拷
+	# layer_values/layer_rarities（逐层品级数值——_clone_trait 不带，R12c 混合品级
+	# ADD 池会回落「基准值×层数」口径，复制武器伤害对不上原武器）
+	var out := TraitStack.new()
+	for mounted in traits:
+		var c := _clone_trait(mounted)
+		c.layer_values.assign(mounted.layer_values)   # assign：保类型数组安全搬运（duplicate 回落非类型化）
+		c.layer_rarities.assign(mounted.layer_rarities)
+		out.traits.append(c)
+	return out
+
+
 func copy_for_split(p_generation: int, p_echo: bool = false) -> TraitStack:
 	# F-13：inheritable 定义复制 + 运行时状态重置（引用复制非深拷贝，E-13）。
 	# 分裂词条自身默认 false（E-01——否则指数裂变）；p_echo（TH_FRACTAL_ECHO，深度 ≥3）

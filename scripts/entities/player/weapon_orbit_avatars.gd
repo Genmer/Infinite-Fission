@@ -33,14 +33,12 @@ func _process(p_delta: float) -> void:
 	var slots: Array = player.get("weapon_slots")
 	if slots == null:
 		return
-	var live: Array = []
-	for w in slots:
-		if w != null and is_instance_valid(w):
-			live.append(w)
-	var n := maxi(live.size(), 1)
-	_ensure_avatars(slots.size())
+	# R183 展示序列 = 真实武器（槽序）+ 僚机复制武器（追加环尾，金色染色区分）
+	var entries := _entries_of(player)
+	var n := maxi(entries.size(), 1)
+	_ensure_avatars(entries.size())
 	for i in range(_avatars.size()):
-		var w: Variant = slots[i] if i < slots.size() else null
+		var w: Variant = entries[i] if i < entries.size() else null
 		var avatar := _avatars[i]
 		# R30 防御：无数据的槽位武器（测试桩/装配中途）跳过取贴图——data.id 空引用
 		if w == null or not is_instance_valid(w) or (w as WeaponBase).data == null:
@@ -54,15 +52,14 @@ func _process(p_delta: float) -> void:
 		if avatar.texture != icon:
 			avatar.texture = icon
 		# 均匀分布：按在场武器数重排（动态绕主角排列——R25）
-		var slot_in_live := live.find(w)
-		var ang := _spin + TAU * float(slot_in_live) / float(n)
+		var ang := _spin + TAU * float(i) / float(n)
 		var bob := sin(_t * BOB_FREQ + float(i) * 1.7) * BOB_AMP
 		var r := RING_R
 		# W9 化身 = 真刀：挥斩窗口贴弧扫动（返回 true = 刀已贴弧定位，跳过默认环绕位）
 		var w9_data: Variant = (w as WeaponBase).data
 		var is_blade: bool = w9_data != null and String(w9_data.id).begins_with("W9")
 		if is_blade and _tick_blade(w, avatar, r + 26.0):
-			continue                             # 刀已贴弧（挥斩中）
+			continue                             # 刀已贴弧（挥砍中）
 		avatar.position = Vector2.from_angle(ang) * (r + bob)
 		# R30（用户反馈「转圈子弹从屁股出来，枪口要始终向发射的方向」）：化身朝向跟随
 		# 真实开火指向——aim_direction 与实弹出膛方向同源（无目标=UP 回退一致）。
@@ -72,44 +69,97 @@ func _process(p_delta: float) -> void:
 		avatar.rotation = aim.angle() + (PI * 0.5 if is_blade else 0.0)
 		# R87 元素共鸣染色（用户反馈「激光获取燃烧没变红」）：化身随附魔元素着色——
 		# 火=橙红 / 冰=淡冰蓝 / 电=葡萄紫（与弹体元素配色同源）；中性=白。
-		# 平滑过渡（lerp 10/s）挂卡瞬间柔和变色不跳变
+		# 平滑过渡（lerp 10/s）挂卡瞬间柔和变色不跳变。
+		# R183 僚机副本：金色染色（与护航舰同源——「僚机在场」一眼可辨，元素色让位）
+		# R187 折减裁定表染色（按源武器 id 分派——副本身份由 _summon_copies 数组权威判定）：
+		# W1 金 / W4 灰 / W6 钢蓝 / W7 橙红；镜面 = 银白/冰青（禁金——读感分界裁定）
+		var is_copy := _is_summon_copy(player, w)
+		var is_mirror := _is_mirror_image(player, w)
 		var tint := Color.WHITE
-		match (w as WeaponBase).dominant_element():
-			GameConst.Element.FIR:
-				tint = PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)
-			GameConst.Element.ICE:
-				tint = PopPalette.PLAYER.lerp(Color.WHITE, 0.5)
-			GameConst.Element.LTG:
-				tint = PopPalette.SHOCK
+		if is_mirror:
+			tint = PopPalette.PLAYER.lerp(Color.WHITE, 0.62)
+		elif is_copy:
+			var src_id := String((w as WeaponBase).data.id)
+			if src_id == "W4_pulse_beam":
+				tint = Color(0.62, 0.64, 0.68)                 # 灰染
+			elif src_id == "W6_micro_missile":
+				tint = Color(0.55, 0.68, 0.86)                 # 钢蓝
+			elif src_id == "W7_cluster_rocket":
+				tint = Color(1.0, 0.55, 0.35)                  # 橙红
+			else:
+				tint = PopPalette.GOLD                         # R183 既有金染兜底（W1 等）
+		else:
+			match (w as WeaponBase).dominant_element():
+				GameConst.Element.FIR:
+					tint = PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)
+				GameConst.Element.ICE:
+					tint = PopPalette.PLAYER.lerp(Color.WHITE, 0.5)
+				GameConst.Element.LTG:
+					tint = PopPalette.SHOCK
 		avatar.modulate = avatar.modulate.lerp(tint, minf(p_delta * 10.0, 1.0))
+
+
+func _is_summon_copy(p_player: Node2D, p_weapon: Variant) -> bool:
+	# R183 副本判定：是否在玩家 _summon_copies 数组（僚机复制武器）
+	var copies: Variant = p_player.get("_summon_copies")
+	if copies is Array:
+		return (copies as Array).has(p_weapon)
+	return false
+
+
+func _is_mirror_image(p_player: Node2D, p_weapon: Variant) -> bool:
+	# R187 W5 镜面判定：是否在玩家 _mirror_images 数组（万镜回廊——银白/冰青染色）
+	var mirrors: Variant = p_player.get("_mirror_images")
+	if mirrors is Array:
+		return (mirrors as Array).has(p_weapon)
+	return false
+
+
+func _entries_of(p_player: Node2D) -> Array:
+	# 展示序列（发射口查询用）：真实武器（槽序）+ 僚机复制武器（环尾追加）
+	var entries: Array = []
+	var slots: Variant = p_player.get("weapon_slots")
+	if slots is Array:
+		for w in slots:
+			if w != null and is_instance_valid(w):
+				entries.append(w)
+	var copies: Variant = p_player.get("_summon_copies")
+	if copies is Array:
+		for w in copies:
+			if w != null and is_instance_valid(w):
+				entries.append(w)
+	var mirrors: Variant = p_player.get("_mirror_images")
+	if mirrors is Array:
+		for w in mirrors:
+			if w != null and is_instance_valid(w):
+				entries.append(w)          # R187 镜面化身（环尾追加——银白/冰青染色区分）
+	return entries
 
 
 func avatar_global(p_weapon: WeaponBase) -> Variant:
 	# 发射口查询（R25）：返回该武器化身**枪口**的全局位置；化身不可见/未建 → null
 	#（调用方回退）。R30：化身随射击指向旋转后，出膛点前伸到枪管尖端（化身位 + 朝向
 	# ×MUZZLE_REACH）——子弹从枪口出膛而非枪身中段；W9 刀画布朝上，朝向 −90° 还原。
+	# R183：僚机复制武器不在 weapon_slots——查询序列扩至「真实 + 副本」。
 	var player := get_parent()
 	if player == null or not is_instance_valid(player):
 		return null
-	var slots: Variant = player.get("weapon_slots")
-	if slots == null:
-		return null
-	var idx: int = (slots as Array).find(p_weapon)
+	var entries := _entries_of(player as Node2D)
+	var idx: int = entries.find(p_weapon)
 	if idx < 0 or idx >= _avatars.size():
 		return null
 	var a := _avatars[idx]
 	if not a.visible:
 		return null
-	var facing := a.rotation - PI * 0.5 if _is_blade_slot(slots, idx) else a.rotation
+	var facing := a.rotation - PI * 0.5 if _is_blade_weapon(entries[idx]) else a.rotation
 	return a.global_position + Vector2.from_angle(facing) * MUZZLE_REACH
 
 
-func _is_blade_slot(p_slots: Variant, p_idx: int) -> bool:
+func _is_blade_weapon(p_w: Variant) -> bool:
 	# 槽位武器是否 W9（画布朝上口径——朝向还原用）
-	var w: Variant = p_slots[p_idx] if p_idx < (p_slots as Array).size() else null
-	if w == null or not is_instance_valid(w):
+	if p_w == null or not is_instance_valid(p_w):
 		return false
-	var d: Variant = (w as WeaponBase).data
+	var d: Variant = (p_w as WeaponBase).data
 	return d != null and String(d.id).begins_with("W9")
 
 

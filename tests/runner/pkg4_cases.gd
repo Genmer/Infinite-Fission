@@ -22,6 +22,9 @@ func run(p_tree: SceneTree) -> void:
 	seed(42)
 	_ensure_autoloads()
 	_boot_game_loop()
+	_gl.player.unlocked_slots = 99   # R183 套件级隔离：金卡「武器槽+1」替换门恒关
+	                                #（UI choose(0) 选中金卡会 grant_slot_bonus 污染
+	                                #  槽位态，「空注册表全 fallback」断言随 Meta 持久态偶发红）
 	_test_state_machine()                         # 要点 1
 	_test_hit_stop_and_dual_channel()             # 要点 2 / 3
 	_test_trauma_levels_and_decay()               # 要点 4
@@ -270,7 +273,11 @@ func _test_hud_binding() -> void:
 	# 断言字面量 55/60（用户实测反馈 2026-08-29：初始 HP 100→60，现 cfg player_base_hp=60
 	# 唯一真源——张力调校值已回注 cfg、代码侧双轨常量已删；显示串口径不变）。
 	# 动因/证据见交付报告「HP 相关测试断言的处理」。
-	_check("HUD HP 刷新（55/60）", hud.displayed_hp_text() == "HP 55/60", "text=%s max=%s lv=%s" % [hud.displayed_hp_text(), str(player.max_hp), str(player.level)])
+	# R183 加固：断言自洽口径「显示 = 当前实值」——前序 UI choose(0) 用例偶发选中金品质
+	# AFF_HP_UP（25×2.6=+65 → max 125）击穿字面量 55/60；字面 60 只在零养成+零挂卡成立
+	_check("HUD HP 刷新（显示随实值）",
+		hud.displayed_hp_text() == "HP 55/%d" % int(player.max_hp),
+		"text=%s max=%s lv=%s" % [hud.displayed_hp_text(), str(player.max_hp), str(player.level)])
 	EventBus.emit_wave_started(7)
 	_check("HUD 波次绑定（wave_started）", hud.displayed_wave() == 7)
 	var k0: int = hud.displayed_kills()
@@ -341,7 +348,7 @@ func _test_card_flow() -> void:
 	var gen := _gl.card_generator
 	gen.rng.seed = 1234
 	var player := _gl.player
-	# roll 数量与形状
+	# roll 数量与形状（R183 金卡替换门已套件级钉死——见 run() 注释）
 	var cands := gen.generate_candidates({"player": player, "wave": 5})
 	_check("三选一 roll 数量 = 3", cands.size() == 3)
 	var kinds_ok := true
@@ -373,6 +380,13 @@ func _test_card_flow() -> void:
 	empty_gen.rng.seed = 42
 	var lv_keep: int = weapon.level
 	weapon.level = WeaponBase.MAX_LEVEL            # 满 5 级 → 精通池空（A3 §3.10 封顶移出）
+	# R183 确定性收口：精通候选源 = 玩家已装备武器（非注册表）——UI choose(0) 用例装入的
+	# 新武器若不满级，空注册表也 roll 出 MASTERY 击穿「全 fallback」断言 → 全武器满级
+	var extra_weapons: Array[WeaponBase] = []
+	for w_v: WeaponBase in player.weapon_slots:
+		if w_v != null and is_instance_valid(w_v) and w_v != weapon:
+			extra_weapons.append(w_v)
+			w_v.level = WeaponBase.MAX_LEVEL
 	var fb := empty_gen.generate_candidates({"player": player, "wave": 1})
 	var all_fallback := true
 	for c in fb:
@@ -384,6 +398,9 @@ func _test_card_flow() -> void:
 	empty_gen.apply_choice(empty_gen._fallback_stat_card(), player)
 	_check("fallback 应用：主武器栈 +1", weapon.trait_stack.size() == stack_before + 1)
 	weapon.level = lv_keep                          # 恢复等级（后续 MASTERY 用例需要未满级）
+	for w_v: WeaponBase in extra_weapons:
+		if w_v != null and is_instance_valid(w_v):
+			w_v.level = maxi(w_v.level - 1, 1)      # R183：额外武器回退一级（恢复未满级态）
 	# MASTERY 应用：武器等级 +1（≤MAX_LEVEL）
 	weapon.level = 1                          # 夜间R42：自足夹具（隔离前序用例的等级推进——偶发 lv0=5 封顶根因）
 	weapon.call(&"_invalidate_panel")

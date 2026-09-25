@@ -10,7 +10,7 @@ rof = 5.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "A3 §3.1 L1：面板 DPS 60；R5.12-P1 构筑提速 12→14（弱加强，观感为主）"
+note = "R187 §2.4 L1：面板 DPS 70（14×5.0 穿 1——p1_polish 锚 14 不动；旧 note「60」过期修正）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,34 +19,34 @@ rof = 5.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "A3 §3.1 L2：面板 DPS 70"
+note = "R187 §2.4 L2：面板 DPS 80（16×5.0；旧 note「70」过期修正）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
-base_atk = 17.0
-rof = 5.5
-cd = 0.0
-pierce = 2
-pellets = 1
-note = "R10 质变模板 L3（小质变）：穿透 1→2；面板 DPS 93.5"
-
-[sub_resource type="Resource" id="WeaponLevelStats_l4"]
-script = ExtResource("2_wls")
-base_atk = 20.0
-rof = 5.5
-cd = 0.0
-pierce = 1
-pellets = 1
-note = "A3 §3.1 L4：面板 DPS 110"
-
-[sub_resource type="Resource" id="WeaponLevelStats_l5"]
-script = ExtResource("2_wls")
-base_atk = 14.0
+base_atk = 11.0
 rof = 5.5
 cd = 0.0
 pierce = 2
 pellets = 2
-note = "R10 质变模板 L5（大质变）：双发点射（14×2）；面板 DPS ≈154；pierce 2"
+note = "R187 §2.4 L3「双管并排」：11×5.5×2=121（旧 L5 双发前移+真横向偏移 ±6px）；bounce 预算 1"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l4"]
+script = ExtResource("2_wls")
+base_atk = 13.0
+rof = 5.5
+cd = 0.0
+pierce = 2
+pellets = 2
+note = "R187 §2.4 L4：13×5.5×2=143（修 R10 模板 pierce 2→1 倒退回归）"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l5"]
+script = ExtResource("2_wls")
+base_atk = 12.0
+rof = 5.5
+cd = 0.0
+pierce = 2
+pellets = 3
+note = "R187 §2.4 L5「三线收束」：12×5.5×3=198（霰弹 201.6 的 98%）；±12px、55% 射程收束；bounce 预算 2"
 
 [resource]
 script = ExtResource("1_wd")
@@ -67,11 +67,21 @@ threshold_traits = [{
 "threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
 "effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
 }, {
-"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.35,
 "effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
+}, {
+"threshold_id": &"TH_VOLLEY_STATE", "metric": "pellets", "threshold": 6.0,
+"effect_id": &"EF_VOLLEY", "params": {"duration_s": 4.0, "cooldown_s": 3.0, "extra_pellets": 2.0, "interval_mult": 0.8}
+}, {
+"threshold_id": &"TH_BANK_SHOT", "metric": "bounce_count", "threshold": 12.0,
+"effect_id": &"EF_BANK", "params": {"shard_ratio": 0.5}
 }]
 ballistic = {
 "proj_speed": 620.0, "range": 680.0, "spread_deg": 2.0,
-"pierce": 1, "pellets": 1, "spin_up_time": 0.0, "rof_hot": 0.0
+"pierce": 1, "pellets": 1, "spin_up_time": 0.0, "rof_hot": 0.0,
+"lateral_gap_levels": [0.0, 0.0, 12.0, 12.0, 12.0],
+"converge_pct_levels": [0.0, 0.0, 0.0, 0.0, 0.55],
+"bounce_levels": [0.0, 0.0, 1.0, 1.0, 2.0],
+"bounce_amp": 0.12, "bounce_amp_cap": 1.0
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

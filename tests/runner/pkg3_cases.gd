@@ -786,6 +786,9 @@ func _test_laser_spawn_and_depth_gate() -> void:
 		w1.try_fire() and (w1.active_beams.size() == 1
 			and int(_laser_pool.stats()["live"]) == 1))
 	var beam := w1.active_beams[0]
+	# R187 主束常驻化翻转：无 pulse_duration 声明 → spawn lifetime 缺省 0 = 常驻
+	_check("主束常驻化：无 pulse_duration → beam.lifetime == 0（R187 新契约）",
+		_approx(beam.lifetime, 0.0, 0.0001), "lifetime=%s" % str(beam.lifetime))
 	_check("主束参数：depth=0 / dmg_mult=1 / tick_atk=10 / tick_rate=8（rof 口径）",
 		beam.depth == 0 and (_approx(beam.dmg_mult, 1.0) and (_approx(beam.tick_atk, 10.0)
 			and _approx(beam.tick_rate, 8.0))))
@@ -808,7 +811,8 @@ func _test_laser_spawn_and_depth_gate() -> void:
 
 
 func _test_laser_scorch_layers() -> void:
-	print("── LaserBeam 灼焦叠层 ──")
+	print("── LaserBeam 灼焦叠层（R187 目标侧单池） ──")
+	LaserBeam.scorch_pool_reset()             # R187 目标侧单池为静态——跨用例隔离清池
 	var data1: WeaponData = _make_weapon_data(GameConst.WeaponForm.LASER,
 		{"base_atk": 10.0, "rof": 8.0}, {"refract_beams": 0})
 	var w1 := _make_weapon(GameConst.WeaponForm.LASER, data1, Vector2(160, 640)) as LaserWeapon
@@ -816,21 +820,22 @@ func _test_laser_scorch_layers() -> void:
 	w1.try_fire()
 	var beam := w1.active_beams[0]
 	var uid := enemy.uid
+	# R187 API 翻转：灼焦层数读目标侧单池（原束实例私有 scorch_layers 字典退役）
 	# tick(0.26)：叠层先行（_on_hit_target）后结算——每 tick 恰 2 跳（0.26 > 2×0.125）
 	beam.tick(0.26)
-	var layers1: int = int(beam.scorch_layers.get(uid, 0))
+	var layers1: int = LaserBeam.scorch_layers_of(uid)
 	_check("灼焦叠层：持续照射 0.26s → 1 层（1 层/0.25s）", layers1 == 1, "layers=%d" % layers1)
 	_check("灼焦跳伤：1 层 Local 池 ×1.08 → 2 跳共 21.6",
 		_approx(enemy.hp, 978.4, 0.01), "hp=%s" % str(enemy.hp))
 	beam.tick(0.26)
-	var layers2: int = int(beam.scorch_layers.get(uid, 0))
+	var layers2: int = LaserBeam.scorch_layers_of(uid)
 	_check("灼焦叠层：0.52s → 2 层", layers2 == 2, "layers=%d" % layers2)
 	_check("灼焦跳伤：2 层 ×1.16 → 2 跳共 23.2（累计 44.8）",
 		_approx(enemy.hp, 955.2, 0.01), "hp=%s" % str(enemy.hp))
 	# 继续照射至 5 层 cap，再验证 cap 层伤害与节拍/节流计数
 	for i in range(6):
 		beam.tick(0.26)
-	var layers_cap: int = int(beam.scorch_layers.get(uid, 0))
+	var layers_cap: int = LaserBeam.scorch_layers_of(uid)
 	_check("灼焦叠层：cap 于 scorch_max_layers=5", layers_cap == 5, "layers=%d" % layers_cap)
 	_check("灼焦跳伤：层序 [1,2,3,4,5,5,5,5] ×2 跳 → 8 tick 累计 208（5 层后 14/跳）",
 		_approx(enemy.hp, 792.0, 0.05), "hp=%s" % str(enemy.hp))

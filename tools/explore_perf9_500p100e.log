@@ -1,0 +1,45 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · AC-01.2 压力场景（500弹+100敌） ══════════
+ERROR: unsupported format character
+   at: (core/variant/variant_op.h:951)
+ERROR: unsupported format character
+   at: (core/variant/variant_op.h:951)
+ERROR: unsupported format character
+   at: (core/variant/variant_op.h:951)
+ERROR: unsupported format character
+   at: (core/variant/variant_op.h:951)
+ERROR: unsupported format character
+   at: (core/variant/variant_op.h:951)
+ERROR: unsupported format character
+   at: (core/variant/variant_op.h:951)
+ERROR: unsupported format character
+   at: (core/variant/variant_op.h:951)
+[perf] 预铺完成：敌 117 / 弹 17 / 跳字 4 / 粒子 live 1
+[perf]  1200/7200 帧 | 近段帧均 3.221 ms | 弹 506 敌 100 | RSS 202.9 MB
+[perf]  2400/7200 帧 | 近段帧均 3.100 ms | 弹 503 敌 100 | RSS 204.6 MB
+[perf]  3600/7200 帧 | 近段帧均 3.345 ms | 弹 503 敌 114 | RSS 205.2 MB
+[perf]  4800/7200 帧 | 近段帧均 3.671 ms | 弹 501 敌 104 | RSS 205.9 MB
+[perf]  6000/7200 帧 | 近段帧均 3.479 ms | 弹 503 敌 100 | RSS 206.5 MB
+[perf]  7200/7200 帧 | 近段帧均 4.157 ms | 弹 501 敌 112 | RSS 207.0 MB
+[perf] 超阈帧 112 个（1.6%）超阈帧内各阶段：均值 {enemy=7.56, feel_ui=0.49, grid_projectile=1.72, player=0.62, wave=0.02} ms | 峰值 {enemy=14.47, feel_ui=1.32, grid_projectile=96.82, player=39.33, wave=0.04} ms
+[perf] 按分离相位(frame%12)分布：{ 7: 6, 9: 13, 10: 8, 2: 10, 1: 11, 11: 10, 3: 14, 0: 8, 5: 12, 6: 4, 8: 9, 4: 7 }
+[perf] 按 600 帧窗口分布：{ 0: 6, 1: 3, 2: 4, 3: 1, 4: 3, 5: 5, 6: 16, 7: 9, 8: 12, 9: 10, 10: 14, 11: 29 }
+[perf] RSS：开始 201.5 MB → 结束 207.0 MB（增幅 2.75%）
+── 帧时间统计（逻辑侧，7200 帧） ──
+[perf] avg=3.496 P50=2.950 P95=6.637 P99=9.186 MAX=100.467 (ms)
+[perf] 判定线：P95 < 8.3 ms（AC-01.2 总预算）：PASS
+[perf] 参考线：P95 < 7.3 ms（§5.4 逻辑合计）：PASS
+[perf] 池 projectile  live= 501 free= 139 inst=0 pollution=0 rejected=0
+[perf] 池 homing      live=   0 free=  24 inst=0 pollution=0 rejected=0
+[perf] 池 enemy       live= 112 free=  16 inst=0 pollution=0 rejected=0
+[perf] 池 popup       live=  36 free=  44 inst=0 pollution=0 rejected=0
+[perf] 池 particle    live=  58 free=   6 inst=0 pollution=0 rejected=0
+[perf] 池 laser       live=   0 free=  12 inst=0 pollution=0 rejected=0
+[perf] 池 xp          live=  60 free= 100 inst=0 pollution=0 rejected=0
+[perf] 六池 0 运行期实例化：PASS | 污染 0 / 非法归还 0（应为 0）
+[perf] 峰值节点数（root 递归）：3892
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

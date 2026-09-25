@@ -31,6 +31,16 @@ var hitbox_radius: float = 6.0
 var element: int = GameConst.Element.KIN
 var attach_value: float = 0.0                 # 元素附着负载（命中时提交 ElementalSystem）
 var size_mult: float = 1.0                    # 体积极限累计（碰撞盒/精灵等比）
+# R187 W1 三线收束 steer 通道（共享组开放；武器组只传参——spawn 契约可选键）：
+# 出膛横向偏移（lateral_gap px，符号与武器侧 position 偏移同号）在行进达
+# range×converge_pct 前线性回收归瞄准线（55% 射程处三弹距瞄准线 <10px 验收口径）。
+# 瞄准线方向缺省 = 初速方向（直线弹道即瞄准线）。
+var _conv_gap: float = 0.0                    # 剩余横向偏移 px（0 = 无收束）
+var _conv_gap0: float = 0.0                   # 出膛横向偏移快照（确定性重放用）
+var _conv_dist: float = 0.0                   # 收束总距 px（range × converge_pct）
+var _conv_done: float = 0.0                   # 已收束距离累计
+var _conv_authored: bool = false              # 武器侧已用初速指焦点收束（steer 让位防双通道过冲）
+var _corridor: bool = false                   # MEC_RICOCHET_HALL 回廊标记（反弹 offset 镜像）
 var weapon_uid: int = 0                       # 来源武器（面板快照归属）
 var weapon_ref: WeaponBase = null             # 来源武器引用（spawn 参数字典可选键——词条效果引擎侧结算通道，池化复位清零防陈旧引用）
 var panel_snapshot: Dictionary = {}           # 武器面板快照 {base_atk, crit_rate, crit_mult, flat_bonus, add_entries[]}
@@ -120,6 +130,17 @@ func spawn(p_params: Dictionary) -> void:
 	if p_params.has("position"):
 		position = p_params["position"]
 		_boom_origin = global_position                # R78 出膛后取原点（position 落位在快照段之后）
+	# R187 W1 收束 steer 通道参数（可选键缺省关闭——既有武器/测试零回归）：
+	# 键名对齐修复：武器侧 spawn 传 "lateral_offset"（ballistic_weapon 编队出膛横向偏移，
+	# 亦为回廊 offset 镜像基准）——本侧原读 "lateral_gap" 恒 0 死路，保留旧键回退兼容。
+	_conv_gap = float(p_params.get("lateral_offset", p_params.get("lateral_gap", 0.0)))
+	_conv_gap0 = _conv_gap
+	_corridor = bool(p_params.get("corridor", false))
+	_conv_authored = bool(p_params.get("converge_authored", false))
+	var conv_pct := clampf(float(p_params.get("converge_pct", 0.0)), 0.0, 1.0)
+	var conv_range := float(p_params.get("range", 0.0))
+	_conv_dist = conv_range * conv_pct if conv_pct > 0.0 and conv_range > 0.0 else 0.0
+	_conv_done = 0.0
 	_read_form_params(p_params)
 	hits_this_frame.clear()
 	_bounces_done = 0
@@ -155,6 +176,7 @@ func tick(p_game_delta: float) -> void:
 	_move(p_game_delta)
 	if not _live:
 		return
+	_apply_converge_steer(p_game_delta)       # R187 W1 三线收束（横向偏移线性归瞄准线）
 	_check_edge_bounce()                        # R15：基类统一边界反弹（弹道覆写内亦有调用——幂等）
 	if not _live:
 		return
@@ -175,6 +197,29 @@ func tick(p_game_delta: float) -> void:
 func _move(p_game_delta: float) -> void:
 	# 抽象：子类运动模型（直线/转向插值）。基类=匀速直线。
 	global_position += velocity * p_game_delta
+
+
+func _apply_converge_steer(p_game_delta: float) -> void:
+	# R187 W1 三线收束 steer 通道（共享组开放）：横向偏移随行进线性回收——
+	# 每前进 1px 回收 gap0/_conv_dist 比例份，至 range×converge_pct 处恰归瞄准线
+	#（验收：L5 弹步进至 55% 射程三弹距瞄准线 <10px）。纯几何位移、不改速度方向
+	#（不与索敌/反弹语义耦合）；速度近零（测试静止弹）时按 0 行进自然不动。
+	if _conv_gap == 0.0 or _conv_dist <= 0.0 or _conv_done >= _conv_dist:
+		return
+	if _conv_authored:
+		return                                 # 武器侧初速指焦点已收束——steer 让位（防双通道过冲）
+	var spd := velocity.length()
+	if spd <= 1.0:
+		return
+	var step := minf(spd * p_game_delta, _conv_dist - _conv_done)
+	# shift 只取模长（gap0 带符号会让负 gap 侧发散——键名激活前通道恒 0 死路不可见的
+	# 潜伏符号 bug），方向由 signf(_conv_gap) 单一提供：±lane 双侧均向瞄准线收束
+	var shift := absf(_conv_gap0) * (step / _conv_dist)
+	var perp := velocity.normalized().orthogonal()
+	shift = minf(shift, absf(_conv_gap))      # 收束末端防过冲（浮点残差钳制）
+	global_position -= perp * shift * signf(_conv_gap)
+	_conv_gap -= shift * signf(_conv_gap)
+	_conv_done += step
 
 
 func _boom_step(p_game_delta: float) -> bool:
@@ -306,8 +351,7 @@ func _prepare_hit_traits(p_ctx: DamageContext, p_target: Node2D) -> TraitContext
 	# + 集成包 B.2：遗物命中时点独立乘区（经 weapon_ref 的 RelicHandler 通道）
 	var tctx := _build_trait_ctx(GameConst.TraitEvent.ON_HIT,
 		{"target": p_target, "damage_ctx": p_ctx})
-	if weapon_ref != null and is_instance_valid(weapon_ref):
-		(weapon_ref as WeaponBase).inject_relic_pools(p_ctx, p_target)
+	inject_hit_relic_pools(p_ctx, p_target, weapon_ref)
 	if trait_stack is TraitStack:
 		for pool in (trait_stack as TraitStack).collect_mult_pools(tctx):
 			p_ctx.mult_pools.append(pool)
@@ -317,7 +361,37 @@ func _prepare_hit_traits(p_ctx: DamageContext, p_target: Node2D) -> TraitContext
 		for mounted in _traits_cache:
 			if mounted is Object and (mounted as Object).has_method(&"on_event"):
 				(mounted as Object).call(&"on_event", GameConst.TraitEvent.ON_HIT, tctx)
+	# R187 §2.1.10「全武器共享死节点修复」生产触发载体：TH_CRIT_SHARD 阈值质变武器侧
+	# 消费（TH_SWARM_NOVA/TH_PRISM_CHOIR 同款 weapon.get_threshold 直读先例）——运行时
+	# 栈无 EF_CRIT_SHARD 载体词条时经此触发（10 武器 .tres 全量声明 TH_CRIT_SHARD，但
+	# 无任何词条携带该 effect_id，此前生产路径恒不触发）；未来若有载体卡则随栈派发，
+	# 本侧自动让位不双触发。
+	if not _stack_has_effect(&"EF_CRIT_SHARD"):
+		var shard := TraitEffect.resolve(&"EF_CRIT_SHARD")
+		if shard != null:
+			shard.handle(null, tctx)
 	return tctx
+
+
+func _stack_has_effect(p_effect_id: StringName) -> bool:
+	# 运行时栈是否已携带指定 effect_id 的载体词条（防武器侧派发与栈派发双触发）
+	if trait_stack is TraitStack:
+		for tb in (trait_stack as TraitStack).traits:
+			var td: Variant = tb.get("data")
+			if td != null and StringName(str(td.get("effect_id"))) == p_effect_id:
+				return true
+	return false
+
+
+# ── R187 激光跳伤遗物公共入口（共享组通道；激光组 laser_beam._settle_one_tick 调用） ──
+static func inject_hit_relic_pools(p_ctx: DamageContext, p_target: Node2D,
+		p_weapon: WeaponBase) -> void:
+	# 激光束非投射物载体——此前跳伤路径接不通 inject_relic_pools（全仓唯一调用点在
+	# _prepare_hit_traits），5 件命中遗物对激光全无效（「抽了没反应」）。本公共入口与
+	# 投射物命中同源通道：inject_relic_pools 内部按 has_mult_pool 去重，同 ctx 多跳安全。
+	# 宿主武器飞行/结算中途可能被移除——is_instance_valid 守卫在前（先判有效再赋值纪律）。
+	if p_ctx != null and p_weapon != null and is_instance_valid(p_weapon):
+		p_weapon.inject_relic_pools(p_ctx, p_target)
 
 
 func _inject_vuln_pool(p_ctx: DamageContext, p_target: Node2D) -> void:
@@ -549,7 +623,16 @@ func _apply_bounce(p_normal: Vector2) -> void:
 		global_position.y = _screen.y - r
 	bounces_left -= 1
 	_bounces_done += 1
+	# R187 MEC_RICOCHET_HALL「回廊弹幕」（§2.4.4 消费口，武器侧 corridor 标记 +
+	# lateral_offset 基准）：反弹后 lane offset 镜像——弹位按当前飞行垂直轴翻到镜像侧
+	#（位移 = +perp×2×gap，与收束 steer 同符号约定），编队镜像保持回场（散弹变回廊弹幕）
+	if _corridor and absf(_conv_gap) > 0.01 and velocity.length_squared() > 1.0:
+		var perp := velocity.normalized().orthogonal()
+		global_position += perp * 2.0 * _conv_gap
+		_conv_gap = -_conv_gap
 	_dispatch_event(GameConst.TraitEvent.ON_BOUNCE)
+	if team == 0:   # R184 评审修正：只认我方弹——秘纹守卫反射（team 翻 1）的敌控弹不播「我方回弹」音
+		EventBus.emit_bullet_bounced(global_position)   # 反弹音广播（节流在 SfxBank 侧 THROTTLE_MS）
 
 
 func _check_edge_bounce() -> void:
@@ -646,6 +729,12 @@ func _reset_state() -> void:
 	_boom_speed_init = 0.0
 	_boom_return_speed = 0.0
 	_boom_icd.clear()                            # R78 接触内冷表清零
+	_conv_gap = 0.0                              # R187 收束 steer 通道归还清零
+	_conv_gap0 = 0.0
+	_conv_authored = false
+	_corridor = false
+	_conv_dist = 0.0
+	_conv_done = 0.0
 	_pierce_hits = 0
 	generation = 0
 	hitbox_radius = 6.0
@@ -708,6 +797,22 @@ func _sync_visual() -> void:
 				_sprite.rotation = velocity.angle()
 			_sprite.scale = Vector2(scale_f * 7.5, scale_f * 4.0)
 			return
+		# R187 镜面弹体（W5 万镜回廊）：来源武器 = 镜面（鸭子标记 is_mirror_image）
+		# → 镜像描边珠（银白/冰青，禁金染——与 R183 复制体金染读感分界）
+		if weapon_ref != null and is_instance_valid(weapon_ref) \
+				and bool(weapon_ref.get("is_mirror_image")):
+			_sprite.texture = TextureFactory.mirror_bead(fill, TEX_SIZE)
+			_sprite.rotation = 0.0
+			return
+		# R187 W1 黄金弹（TH_BANK_SHOT 阈值驱动通用视觉）：宿主声明该质变且本弹
+		# 累计反弹达线 → 金染升格（必暴/弹片结算归 W1 组 EF_BANK 处理器）
+		if weapon_ref != null and is_instance_valid(weapon_ref):
+			var bank_th: Dictionary = weapon_ref.get_threshold(&"TH_BANK_SHOT")
+			if not bank_th.is_empty() \
+					and float(_bounces_done) >= float(bank_th.get("threshold", 12.0)):
+				_sprite.texture = TextureFactory.gold_bead(TEX_SIZE)
+				_sprite.rotation = 0.0
+				return
 		match element:
 			GameConst.Element.FIR:
 				fill = PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)      # 派生橙（点燃火苗同源）

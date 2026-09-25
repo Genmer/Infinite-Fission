@@ -10,7 +10,7 @@ rof = 1.8182
 cd = 0.55
 pierce = 1
 pellets = 1
-note = "A3 §3.6 L1：cd 0.55s；单体 DPS 32.7（rof 记 1/cd 等效射速）"
+note = "A3 §3.6 L1：cd 0.55s；单体 DPS 32.7（rof 记 1/cd 等效射速）；R187 30% 规格：爆径 30（W7 110 的 27.3%）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -28,7 +28,7 @@ rof = 2.0833
 cd = 0.48
 pierce = 1
 pellets = 1
-note = "A3 §3.6 L3：cd 0.55→0.48s；单体 DPS 45.8"
+note = "A3 §3.6 L3：cd 0.55→0.48s；单体 DPS 45.8；R187 齐射轴 L3 双发"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 2.0833
 cd = 0.48
 pierce = 1
 pellets = 1
-note = "A3 §3.6 L5（R36 后口径）：cd 0.48s；blast_r 级表 L5=100；单体 DPS 66.7"
+note = "A3 §3.6 L5（R36 后口径）：cd 0.48s；R187 30% 规格：blast_r 级表 [30,32,34,36,38]、溅射 blast_atk_ratio 0.6、齐射 L5 三联；单体 DPS 66.7（直击不砍）"
 
 [resource]
 script = ExtResource("1_wd")
@@ -58,8 +58,8 @@ crit_dmg = 2.0
 hitbox_r = 6.0
 unlock_rarity = 1
 threshold_traits = [{
-"threshold_id": &"TH_SIZE_NOVA", "metric": "size_mult", "threshold": 3.0,
-"effect_id": &"EF_SIZE", "params": {"radius_mult": 1.5, "atk_ratio": 0.4}
+"threshold_id": &"TH_SWARM_NOVA", "metric": "volley_count", "threshold": 5.0,
+"effect_id": &"EF_SWARM_NOVA", "params": {"radius_mult": 1.2, "atk_ratio": 0.3}
 }, {
 "threshold_id": &"TH_FRACTAL_ECHO", "metric": "split_depth", "threshold": 3.0,
 "effect_id": &"EF_FRACTAL", "params": {"inherit_ratio": 0.6}
@@ -67,13 +67,15 @@ threshold_traits = [{
 "threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
 "effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
 }, {
-"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.35,
 "effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
 }]
 homing = {
-"proj_speed_init": 240.0, "proj_speed_max": 720.0, "accel": 900.0,
-"turn_rate": 480.0, "arm_delay": 0.15, "blast_r": 85.0, "blast_falloff": 0.6,
+"proj_speed_init": 420.0, "proj_speed_max": 720.0, "accel": 900.0,
+"turn_rate": 480.0, "arm_delay": 0.15, "blast_r": 30.0, "blast_falloff": 0.6,
+"blast_atk_ratio": 0.6,
 "sub_count": 0, "sub_delay": 0.4,
-"blast_r_levels": [75.0, 80.0, 85.0, 90.0, 100.0]
+"volley_count_levels": [1.0, 1.0, 2.0, 2.0, 3.0],
+"blast_r_levels": [30.0, 32.0, 34.0, 36.0, 38.0]
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

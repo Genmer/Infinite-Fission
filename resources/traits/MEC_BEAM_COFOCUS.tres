@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"MEC_BEAM_COFOCUS"
+display_name = "共焦棱"
+description = "束间拓扑（三选一）：副激光全部钉住主束目标（单体爆发路线）"
+pool = 3
+pool_id = &""
+effect_id = &"EF_MECH"
+value = 1.0
+value2 = 0.0
+params = {"required_forms": [1], "exclusive_group": "laser_topology"}
+event_hooks = []
+stack_max = 1
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 2
+tags = 0
+condition = {}

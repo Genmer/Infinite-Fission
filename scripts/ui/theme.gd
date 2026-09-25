@@ -9,6 +9,7 @@ extends RefCounted
 static var _theme: Theme = null
 static var _font: SystemFont = null
 static var _font_bold: SystemFont = null
+static var _rxn_fonts: Array[SystemFont] = [null, null, null]   # R186 反应大字三字型缓存
 static var _btn_styles: Dictionary = {}       # name -> StyleBoxFlat（按钮四态）
 
 
@@ -30,6 +31,24 @@ static func font_bold() -> SystemFont:
 		_font_bold.font_names = font().font_names
 		_font_bold.font_weight = 700
 	return _font_bold
+
+
+static func font_reaction(p_variant: int) -> SystemFont:
+	# R186 反应大字字型（碎裂/过载/超导专属；非法参（负值/越界）一律钳 0——§5 契约）：
+	# 0 直立 weight900 / 1 斜体 weight900 / 2 斜体 weight700——Latin 数字走 Arial Black
+	# 展示体打头，CJK 落既有链兜底；三枚惰性缓存全静态共享（同 font() 纪律）。
+	# 已知漂移：Windows 雅黑仅 Regular/Bold 真字重，900 走合成加粗、italic 为合成斜体
+	# （实机目检不可接受时仅降此处参数，表结构与缓存不动）。
+	var idx := p_variant if (p_variant >= 0 and p_variant <= 2) else 0
+	if _rxn_fonts[idx] == null:
+		var f := SystemFont.new()
+		var names := PackedStringArray(["Arial Black"])
+		names.append_array(font().font_names)
+		f.font_names = names
+		f.font_weight = 700 if idx == 2 else 900
+		f.font_italic = idx >= 1
+		_rxn_fonts[idx] = f
+	return _rxn_fonts[idx]
 
 
 # ── Theme（CanvasLayer 根 Control 挂载，子控件继承） ────────────────

@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"TH_PRISM_CHOIR"
+display_name = "棱镜合唱"
+description = "副激光 ≥3 束：副束跳频 +2 跳/s（钳 30）"
+pool = 3
+pool_id = &""
+effect_id = &"EF_CHOIR"
+value = 1.0
+value2 = 0.0
+params = {"threshold_only": true, "metric": "sub_beam_count", "threshold": 3.0}
+event_hooks = []
+stack_max = 1
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 3
+tags = 0
+condition = {}

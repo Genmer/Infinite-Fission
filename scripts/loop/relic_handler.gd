@@ -30,6 +30,10 @@ var pending_shop_waves: int = 0               # REL_BLACK_MARKET：商店波排�
 var phoenix_triggered: int = 0
 var crit_chain_resets: int = 0
 var _crit_chain_cd_left: float = 0.0            # R66 暴击谐振内部冷却剩余（30s 一触发）
+# ── R186 每击谐振（REL_ATTACK_CDR：开火口径计费 + 每秒预算封顶） ──
+var attack_cdr_credits: int = 0                # 计费击数遥测（测试观测口）
+var attack_cdr_seconds: float = 0.0            # 累计直减秒数遥测
+var _atk_cdr_budget: float = 0.0               # 计费预算存款（1 信用 = cd_per_attack；activate 拉满）
 var _frenzy_stacks: int = 0                    # R72 连杀狂热层数（击杀叠层，窗口衰减）
 var _frenzy_left: float = 0.0                  # 狂热窗口剩余
 var _thorns_cd_left: float = 0.0               # R72 荆棘王座反击内冷
@@ -68,6 +72,9 @@ func reset_run() -> void:
 	phoenix_triggered = 0
 	crit_chain_resets = 0
 	_crit_chain_cd_left = 0.0                    # R66：暴击谐振内冷复位
+	_atk_cdr_budget = 0.0                        # R186：每击谐振预算存款清零
+	attack_cdr_credits = 0                       # R186：计费遥测清零
+	attack_cdr_seconds = 0.0
 	echo_copies = 0
 	elite_dmg_hits = 0
 	momentum_hits = 0
@@ -272,6 +279,12 @@ func _apply_passive(p_data: RelicData) -> void:
 				player.set("skill_cd_relic_mult", mult)
 				if player.has_method(&"refresh_skill_cd"):
 					player.call(&"refresh_skill_cd")
+		&"REL_EF_ATTACK_CDR":
+			# R186 每击谐振：预算存款激活拉满 + 全屏横幅。推（on_attack_fired）+tick（回充）
+			# 驱动、listen_events 留空 → _listens 恒 false 不可用，守卫走 _owned_effect
+			#（先例 REL_EF_BOUNCE_MOMENTUM）；skill_cd_relic_mult 不碰——与时之沙/技能急速乘法正交
+			_atk_cdr_budget = _attack_cdr_bank_cap(p_data)
+			EventBus.emit_mechanics_intro("⚡ 每击谐振：攻击加速技能冷却（≤20 击/秒）")
 		_:
 			pass                                # 事件驱动型遗物无常驻位
 
@@ -355,6 +368,29 @@ func _on_player_hit(_p_damage: float, _p_source_uid: int) -> void:
 			weapon.get_current_atk() * atk_ratio, false)
 
 
+func on_attack_fired() -> void:
+	# R186 每击谐振 push 口（WeaponBase.tick try_fire 成功位调用——开火口径计费：一枪=一击，
+	# 霰弹 9 丸仍 1 击；不走 damage_resolved：结算侧幂等键折叠同帧多弹丸、AOE_SECONDARY
+	# 与直击不可区分且属风暴告警通道，设计案 §0 裁定）。守卫链：持有 → 玩家可用 →
+	# 技能冷却中（就绪不计费不耗预算，存款留给下轮）→ 预算足额（<1 击预算整击丢弃）。
+	# 预算扣减走 snappedf 整击网格：纯浮点连减会在满存款第 60 击处漂移出 0.00999… 假残量
+	#（<cdp 被误丢第 60 击），网格化保证「满存款恰 60 击用尽」语义精确。
+	var data := _owned_effect(&"REL_EF_ATTACK_CDR")
+	if data == null or player == null or not is_instance_valid(player):
+		return
+	var cd_left: float = player.get("skill_cd_left")
+	if cd_left <= 0.0:
+		return
+	var cdp := float(data.params.get("cd_per_attack", 0.01))
+	if cdp <= 0.0 or _atk_cdr_budget < cdp:
+		return
+	_atk_cdr_budget = maxf(snappedf(_atk_cdr_budget - cdp, cdp), 0.0)
+	player.set("skill_cd_left", maxf(cd_left - cdp, 0.0))
+	attack_cdr_credits += 1
+	attack_cdr_seconds += cdp
+	DebugStats.count(&"relic_attack_cdr")
+
+
 func tick(p_game_delta: float) -> void:
 	# R66 遗物内部冷却推进（GameLoop PLAYING ⑥——选卡/暂停期冻结，战斗时口径）
 	_crit_chain_cd_left = maxf(_crit_chain_cd_left - p_game_delta, 0.0)
@@ -365,6 +401,14 @@ func tick(p_game_delta: float) -> void:
 			_frenzy_stacks = 0
 	_thorns_cd_left = maxf(_thorns_cd_left - p_game_delta, 0.0)
 	_lifesteal_cd_left = maxf(_lifesteal_cd_left - p_game_delta, 0.0)
+	# R186 每击谐振：预算回充（rate×cdp 信用/游戏秒，存款帽封顶吸收齐射式爆发；
+	# 仅 PLAYING 到达此处——与 skill_cd 同冻结，无暂停套利）
+	var atk_cdr := _owned_effect(&"REL_EF_ATTACK_CDR")
+	if atk_cdr != null:
+		_atk_cdr_budget = minf(_atk_cdr_budget
+			+ float(atk_cdr.params.get("rate_per_sec", 20.0))
+			* float(atk_cdr.params.get("cd_per_attack", 0.01)) * p_game_delta,
+			_attack_cdr_bank_cap(atk_cdr))
 
 
 func frenzy_dmg_bonus() -> float:
@@ -424,7 +468,11 @@ func _on_card_chosen(p_card_id: StringName, p_kind: int) -> void:
 	var trait_data := registry.get_trait(p_card_id) if registry != null else null
 	if trait_data == null:
 		return                                  # FALLBACK 等运行期构造卡不复制
-	var target := _echo_weapon()
+	# R187 §三.7 防回响绕门 P0 补挂：回响挂载必须过挂载侧统一适配门
+	#（CardGenerator.mount_gate_allows——required_weapon/required_forms/requires_trait/
+	# exclusive_group 全校验）。否则 MEC_HIVE_RACK(W6 专属) 经回响落 W7 → volley_eff
+	# 白吃 +2（Boss 全中 ~235→~700 数值崩坏链）。全部武器不过门 → 本次回响不落卡。
+	var target := _echo_weapon(trait_data)
 	if target != null and target.attach_trait(trait_data):
 		echo_copies += 1
 		DebugStats.count(&"relic_echo")
@@ -436,6 +484,16 @@ func _effect_param(p_effect_id: StringName, p_key: String, p_default: float) -> 
 	if data == null:
 		return p_default
 	return float(data.params.get(p_key, p_default))
+
+
+func _attack_cdr_bank_cap(p_data: RelicData) -> float:
+	# R186 存款帽 = rate_per_sec × cd_per_attack × bank_mult 信用，快照整击网格——
+	# raw 浮点乘积 0.6000…01 ≠ 字面 0.6，网格化保证「激活拉满恰 60 击预算」；
+	# 下限 1 击防退化数据（bank_mult 极小时帽归零）。
+	var cdp := float(p_data.params.get("cd_per_attack", 0.01))
+	var cap := snappedf(float(p_data.params.get("rate_per_sec", 20.0)) * cdp
+		* float(p_data.params.get("bank_mult", 3.0)), cdp)
+	return maxf(cap, cdp)
 
 
 func _primary_weapon() -> WeaponBase:
@@ -450,15 +508,19 @@ func _primary_weapon() -> WeaponBase:
 	return null
 
 
-func _echo_weapon() -> WeaponBase:
-	# 回响宿主：随机一把武器（25% 复制目标；含主武器——A3「另一把随机武器」在单武器时退化为重挂）
+func _echo_weapon(p_trait: TraitData) -> WeaponBase:
+	# 回响宿主：随机一把「过挂载统一门」的武器（25% 复制目标；含主武器——A3「另一把
+	# 随机武器」在单武器时退化为重挂）。R187 §三.7：挂载侧 mount_gate_allows 校验
+	# required_weapon/required_forms/requires_trait/exclusive_group——不适配武器不入池
+	#（防回响绕门 P0 前科）；全池不过门 → null（本次回响静默不落卡，不计数）
 	if player == null or not is_instance_valid(player):
 		return null
 	var pool: Array[WeaponBase] = []
 	var slots: Variant = player.get("weapon_slots")
 	if slots is Array:
 		for w in (slots as Array):
-			if w is WeaponBase and is_instance_valid(w):
+			if w is WeaponBase and is_instance_valid(w) \
+					and CardGenerator.mount_gate_allows(p_trait, w):
 				pool.append(w)
 	if pool.is_empty():
 		return null

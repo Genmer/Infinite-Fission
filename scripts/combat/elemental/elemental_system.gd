@@ -58,6 +58,18 @@ func register_reaction_mult(p_source_uid: int, p_mult: float) -> void:
 		_reaction_mults[p_source_uid] = p_mult
 
 
+func unregister_reaction_mult(p_source_uid: int) -> void:
+	# R183 注销口：僚机复制武器到期回收时撤销其反应乘区（此前全工程零注销——
+	# 副本每次施放换新 uid 注册，reaction_mult 全表连乘 → 长局反应伤害无上界滚雪球）
+	_reaction_mults.erase(p_source_uid)
+
+
+func clear_reaction_mults() -> void:
+	# R183 局清空：新局/继续局武器全量重建（uid 全换），旧注册全部作废——
+	# 开局清表根治既有跨局慢性泄漏（原武器重建换 uid 也只增不减）
+	_reaction_mults.clear()
+
+
 func reaction_mult() -> float:
 	# 反应强化聚合（多源连乘；金卡唯一 → 实际单源 ×1.8）
 	var product := 1.0

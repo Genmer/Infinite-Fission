@@ -27,6 +27,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_rxn_alarm_line()                        # B.6 R_rxn 反应独立告警线
 	_test_xp_chain()                              # B.1
 	_test_relic_handler()                         # B.2
+	_test_relic_attack_cdr()                      # R186 CD 遗物「每击谐振」
 	_test_ranged_enemy_pool()                     # B.3
 	_test_wave_first_hit()                        # B.4
 	_test_separation_force()                      # B.5
@@ -161,6 +162,7 @@ func _test_full_chain_smoke() -> void:
 	var traits0: int = w.trait_stack.traits.size()
 	var wlevel0: int = w.level
 	var relics0: int = _gl.card_generator.owned_relics.size()
+	var slots0: int = _gl.player.unlocked_slots
 	_gl.card_select_ui.choose(0)
 	_check("选卡：恢复 PLAYING（AC-16.1 选卡段）",
 		_gl.state == GameConst.GameStatus.PLAYING and not _gl.card_select_ui.is_open)
@@ -173,6 +175,15 @@ func _test_full_chain_smoke() -> void:
 		2:                                      # RELIC：遗物入场
 			applied = _gl.card_generator.owned_relics.size() > relics0 \
 				or _gl.relic_handler.owned_count() > 0
+		4:                                      # WEAPON：新武器装配（apply_choice → Player.add_weapon 首空槽——不挂词条；卡池只上架未持有武器，槽内 id 唯一可查）
+			for slot in _gl.player.weapon_slots:
+				if slot is WeaponBase and is_instance_valid(slot) \
+						and String((slot as WeaponBase).data.id) == String(card.get("id", "")):
+					applied = true
+					break
+		5:                                      # SLOT_BONUS：金卡提前解锁帽内下一槽（grant_slot_bonus；帽内满员幂等拒绝不算失效）
+			applied = _gl.player.unlocked_slots > slots0 \
+				or _gl.player.unlocked_slots >= int(_gl.player.call(&"slot_cap_total"))
 		_:                                      # FALLBACK：+5% 攻击词条
 			applied = w.trait_stack.traits.size() > traits0
 	_check("词条生效：所选卡类别效果落武器（kind=%d）" % kind, applied)
@@ -188,7 +199,7 @@ func _test_full_chain_smoke() -> void:
 		boss_on_field and _gl.boss_bar.is_visible_bar())
 	# F-19：Boss 击杀 → 槽位解锁（EventBus 真实派发序回归——wave_director 读 tags
 	# 必须先于 spawner 归还清零，集成包修复的接线验证；w10 Boss1 → 槽 4）
-	_gl.player.call(&"set_difficulty", 2)   # R88 地狱帽 5（普通帽 3 截断槽 4 解锁）
+	_gl.player.call(&"set_difficulty", 2)   # R183 地狱帽 6（沿用地狱口径保槽 4 解锁稳定）
 	var slots_before: int = _gl.player.unlocked_slots
 	var bosses: Array[Enemy] = []
 	for e in _gl.spawner.active:
@@ -418,7 +429,7 @@ func _test_xp_chain() -> void:
 func _test_relic_handler() -> void:
 	print("── 遗物处理器 ──")
 	var h := _gl.relic_handler
-	_check("遗物注册表：17 件加载（R72 增 6 件）", _gl.registry.relics.size() == 17)
+	_check("遗物注册表：18 件加载（R72 增 6 + R186 增 1）", _gl.registry.relics.size() == 18)
 	# REL_MIDAS：经验倍率
 	_check("REL_MIDAS：激活 + 经验 ×1.2",
 		h.activate(&"REL_MIDAS") and is_equal_approx(h.xp_mult(), 1.2))
@@ -581,6 +592,96 @@ func _test_relic_handler() -> void:
 	for e: Enemy in [elite3, plain3]:
 		if is_instance_valid(e):
 			(_gl.pools[&"enemy"] as EnemyPool).release(e)
+
+
+# ── R186 CD 遗物「每击谐振」（REL_ATTACK_CDR：每击 −0.01s 技能 CD，预算窗封顶） ──
+func _test_relic_attack_cdr() -> void:
+	print("── R186 每击谐振（CD 遗物） ──")
+	var h := _gl.relic_handler
+	h.reset_run()                                 # 净态起步（前序用例遗物残余隔离；末尾 ⑦ 再清）
+	var rd: RelicData = _gl.registry.get_relic(&"REL_ATTACK_CDR")
+	_check("R186：注册可查 + effect_id/unique/params 三键",
+		rd != null and rd.effect_id == &"REL_EF_ATTACK_CDR" and rd.unique
+		and is_equal_approx(float(rd.params.get("cd_per_attack", 0.0)), 0.01)
+		and is_equal_approx(float(rd.params.get("rate_per_sec", 0.0)), 20.0)
+		and is_equal_approx(float(rd.params.get("bank_mult", 0.0)), 3.0))
+	# push 口未持有守卫：静默无效（不写 CD、不计费不耗预算）
+	_gl.player.set("skill_cd_left", 100.0)
+	h.on_attack_fired()
+	_check("R186：未持有 push 静默早退（守卫零副作用）",
+		is_equal_approx(float(_gl.player.get("skill_cd_left")), 100.0)
+		and h.attack_cdr_credits == 0 and h.attack_cdr_seconds == 0.0)
+	# ① 存款拉满：activate 后预算 = 0.60s（60 击信用）
+	_check("R186①：激活 + 预算存款拉满 0.60s",
+		h.activate(&"REL_ATTACK_CDR") and is_equal_approx(h._atk_cdr_budget, 0.6))
+	# ② 直减 + 耗尽：60 击 → CD 119.4 / 预算归零 / 计费 60（snappedf 网格保证第 60 击不丢）
+	_gl.player.set("skill_cd_left", 120.0)
+	for i in range(60):
+		h.on_attack_fired()
+	_check("R186②：60 击直减 → CD 119.4 / 预算归零 / 计费遥测 60",
+		is_equal_approx(float(_gl.player.get("skill_cd_left")), 119.4)
+		and is_equal_approx(h._atk_cdr_budget, 0.0) and h.attack_cdr_credits == 60
+		and is_equal_approx(h.attack_cdr_seconds, 0.6))
+	# ③ 整击丢弃：预算耗尽后再击无部分计费
+	h.on_attack_fired()
+	_check("R186③：预算耗尽 → 整击丢弃（CD/遥测不动）",
+		is_equal_approx(float(_gl.player.get("skill_cd_left")), 119.4)
+		and h.attack_cdr_credits == 60)
+	# ④ 回充 + 帽：1s 回充 0.20s（速率帽 20 击/s）；10s 触存款帽 0.60s
+	h.tick(1.0)
+	_check("R186④：tick(1.0) 回充 +0.20s（20 击/s 预算速率）",
+		is_equal_approx(h._atk_cdr_budget, 0.2))
+	h.tick(10.0)
+	_check("R186④：tick(10.0) 回充触帽 → 停在 0.60s（存款上限）",
+		is_equal_approx(h._atk_cdr_budget, 0.6))
+	# ⑤ 技能就绪不计费不耗预算
+	_gl.player.set("skill_cd_left", 0.0)
+	var credits5: int = h.attack_cdr_credits
+	h.on_attack_fired()
+	_check("R186⑤：技能就绪 → 不计费不耗预算（存款留给下轮）",
+		float(_gl.player.get("skill_cd_left")) == 0.0
+		and h.attack_cdr_credits == credits5 and is_equal_approx(h._atk_cdr_budget, 0.6))
+	# ⑥ 与暴击谐振共存：CRIT_CHAIN 整置 skill_cd_left=0（relic_handler.gd:395）→ 计费早退
+	_check("R186⑥：暴击谐振激活", h.activate(&"REL_CRIT_CHAIN"))
+	_gl.player.set("skill_cd_left", 0.0)          # 暴击谐振整置后的就绪态
+	h.on_attack_fired()
+	_check("R186⑥：整置就绪 → 计费早退、存款保留",
+		float(_gl.player.get("skill_cd_left")) == 0.0
+		and is_equal_approx(h._atk_cdr_budget, 0.6))
+	# ⑩ 正交回归：时之沙乘区不被覆盖 + 同帧越帽封顶（预算 0.6 → 恰 60 击，其余整击丢弃）
+	_check("R186⑩：时之沙激活 → skill_cd_relic_mult = 0.8",
+		h.activate(&"REL_TIMELORD")
+		and is_equal_approx(float(_gl.player.get("skill_cd_relic_mult")), 0.8))
+	_gl.player.set("skill_cd_left", 120.0)
+	var credits10: int = h.attack_cdr_credits
+	for i in range(120):                          # 同帧 120 击轰击：无 tick 回充 → 预算限 60
+		h.on_attack_fired()
+	_check("R186⑩：同帧 120 击越帽 → 计费恰 60（封顶语义）+ CD 119.4",
+		h.attack_cdr_credits - credits10 == 60
+		and is_equal_approx(float(_gl.player.get("skill_cd_left")), 119.4)
+		and is_equal_approx(h._atk_cdr_budget, 0.0))
+	_check("R186⑩：时之沙乘区 0.8 保持（本遗物不写乘区，正交）",
+		is_equal_approx(float(_gl.player.get("skill_cd_relic_mult")), 0.8))
+	# ⑪ 真链接线（生产开火路径计费）：前置用例全部直调 h.on_attack_fired()，无法发现
+	# WeaponBase.tick try_fire 成功位 → relic_handler 的接线缺失（「假遗物」先例）——
+	# 此处走真实 GameLoop 驱动（enemy_grid.rebuild → player.tick → weapon.tick →
+	# try_fire 成功 → on_attack_fired），断言真实开火产生计费遥测。
+	h.tick(10.0)                                  # 存款回满 0.60（⑩ 已耗尽）
+	_gl.player.set("skill_cd_left", 120.0)
+	var credits_chain: int = h.attack_cdr_credits
+	var xp_need0: float = _gl.player.xp_need
+	_gl.player.xp = 0.0
+	_gl.player.xp_need = 999999.0                 # 防 LEVEL_UP 冻结劫持计费窗（遗物段先例）
+	_drive(90)                                    # w1 敌陆续入场 → 起始武器真实开火
+	_check("R186⑪：真链接线（tick→try_fire→on_attack_fired）真实开火计费 >0",
+		h.attack_cdr_credits > credits_chain
+		and float(_gl.player.get("skill_cd_left")) < 120.0)
+	_gl.player.xp_need = xp_need0
+	# ⑦ reset_run 清态（兼本用例收尾隔离——owned 清空不污染后续用例，同 AFF_HP_UP 先例）
+	h.reset_run()
+	_check("R186⑦：reset_run 三态清零 + owned 清空",
+		h._atk_cdr_budget == 0.0 and h.attack_cdr_credits == 0
+		and h.attack_cdr_seconds == 0.0 and h.owned_count() == 0)
 
 
 # ── RANGED 敌弹池化（B.3） ────────────────────────────────────────
@@ -943,14 +1044,31 @@ func _test_crit_shard_and_validator() -> void:
 	_check("Fix4：双镜像清单同步（TraitEffect.known_effect_ids / TECH_EFFECT_IDS ∋ EF_CRIT_SHARD）",
 		TraitEffect.known_effect_ids().has(&"EF_CRIT_SHARD")
 		and DataValidator.TECH_EFFECT_IDS.has(&"EF_CRIT_SHARD"))
-	var w: WeaponBase = _gl.player.weapon_slots[0]   # W1_pistol：.tres 声明 TH_CRIT_SHARD(0.6, ratio 0.5)
+	var w: WeaponBase = _gl.player.weapon_slots[0]   # W1_pistol：.tres 声明 TH_CRIT_SHARD(0.35, ratio 0.5)
 	var th: Dictionary = w.get_threshold(&"TH_CRIT_SHARD")
-	_check("Fix4：注册武器 TH_CRIT_SHARD 存活（66 资源 0 rejected 口径不回归）",
+	_check("Fix4：注册武器 TH_CRIT_SHARD 存活（注册资源 0 rejected 口径不回归）",
 		not th.is_empty() and StringName(str(th.get("effect_id", ""))) == &"EF_CRIT_SHARD")
+	# R187 翻转：TH_CRIT_SHARD 0.6→0.35（全武器共享死节点修复——五方向定案统一裁定）
+	_check("R187：TH_CRIT_SHARD 阈值 0.6 → 0.35（注册武器声明翻转）",
+		not th.is_empty() and is_equal_approx(float(th.get("threshold", 0.0)), 0.35),
+		str(th.get("threshold", "null")))
+	# R187 补口（交付抽查发现修复缺口，主控落地）：生产载体——此前 EF_CRIT_SHARD 无任何
+	# 词条 .tres 携带，执行器在生产永不触发（本套件的 TEST_CRIT_SHARD 属内联构造单元路径）
+	var carrier: TraitData = load("res://resources/traits/MEC_CRIT_SHARD.tres")
+	_check("R187 补口：MEC_CRIT_SHARD 生产载体（EF_CRIT_SHARD + ON_HIT 派发 + MECH 池）",
+		carrier != null and carrier.effect_id == &"EF_CRIT_SHARD"
+		and carrier.event_hooks.has(GameConst.TraitEvent.ON_HIT)
+		and carrier.pool == GameConst.PoolClass.MECH)
 	# 弹片结算（真件武器 threshold + 真实管线；主目标 1000000 血，邻近单体半径内/外各一）
 	var main: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
 	main.spawn(_make_enemy_data(&"E_SHARD_MAIN", 1000000.0), 1, 0)
 	main.position = Vector2(360.0, 400.0)
+	# R187 补口：W8 蓄能档位通道 + 头顶读数数据源（「蓄能 x/5」挂 enemy._draw，headless 验数据面）
+	main.add_charge_stacks(3, 5)
+	_check("R187 补口：蓄能档位通道（add 3/5 → 3，帽记录）",
+		main.charge_stacks == 3 and main.charge_cap == 5)
+	main.clear_charge_stacks()
+	_check("R187 补口：蓄能引爆清零（clear → 0）", main.charge_stacks == 0)
 	var near: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
 	near.spawn(_make_enemy_data(&"E_SHARD_NEAR", 1000000.0), 1, 0)
 	near.position = Vector2(380.0, 420.0)            # 弹片半径内
@@ -979,12 +1097,12 @@ func _test_crit_shard_and_validator() -> void:
 	dctx.crit_mult = 2.0
 	dctx.pos = proj.global_position
 	tctx.damage_ctx = dctx
-	# 阈下：暴击率 0.5 < 0.6 → 质变未激活
-	dctx.crit_chance = 0.5
+	# 阈下：暴击率 0.3 < 0.35（R187 阈值翻转）→ 质变未激活
+	dctx.crit_chance = 0.3
 	ef.handle(shard_tb, tctx)
-	_check("Fix4：暴击率 0.5 < 0.6 阈下 → 弹片不结算", is_equal_approx(near.hp, 1000000.0),
+	_check("Fix4：暴击率 0.3 < 0.35 阈下 → 弹片不结算", is_equal_approx(near.hp, 1000000.0),
 		"hp=%s" % str(near.hp))
-	# 阈上：暴击率堆过 0.6 → 弹片 = 0.5 × 暴伤 = base_atk × crit_mult × ratio = 100×2×0.5 = 100
+	# 阈上：暴击率堆过 0.35（R187 翻转后阈值）→ 弹片 = 0.5 × 暴伤 = 100×2×0.5 = 100
 	dctx.crit_chance = 0.65
 	ef.handle(shard_tb, tctx)
 	_check("Fix4：暴击率堆过阈值 → 邻近单体弹片结算（0.5×暴伤 = 100）",

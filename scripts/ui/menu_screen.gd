@@ -34,6 +34,7 @@ var _panel_title: Label = null
 var _panel_list: Control = null
 var _codex_tabs: Dictionary = {}              # 页签按钮（页名 → Button）
 var _codex_tab: String = "怪物"
+var _char_new_badge: bool = false             # R186：新角色解锁「·新」角标（打开选人面板清除）
 
 
 func _ready() -> void:
@@ -44,6 +45,13 @@ func _ready() -> void:
 	_root.visible = false
 	EventBus.state_changed.connect(_on_state_changed)
 	Meta.codex_changed.connect(_refresh_lobby_counts)
+	Meta.fissioner_unlocked.connect(_on_fissioner_unlocked)   # R186：普通通关解锁角标
+
+
+func _on_fissioner_unlocked() -> void:
+	# R186：改造者·枢解锁（结算兑现点派发）——「角色」入口加「·新」角标
+	_char_new_badge = true
+	_refresh_lobby_counts()
 
 
 func _on_state_changed(p_state: int) -> void:
@@ -201,6 +209,7 @@ func _refresh_mascot() -> void:
 		&"bulwark": Color(0.72, 0.84, 1.0), &"ranger": Color(0.66, 1.0, 0.92),
 		&"zero": Color(0.85, 0.72, 1.0), &"mank": Color(0.66, 1.0, 0.55),
 		&"vera": Color(0.72, 1.0, 0.72), &"noah": Color(1.0, 0.93, 0.62),
+		&"fission": Color(0.62, 0.9, 1.0), &"echo": Color(0.82, 0.66, 1.0),   # R186 新角色
 	}
 	_mascot.modulate = tints.get(Meta.character_id, Color.WHITE)
 	name_tag.text = String(def.get("name", "哨兵-9"))
@@ -430,7 +439,10 @@ func _refresh_lobby_counts() -> void:
 	(_lobby_btns["codex"] as Button).text = "图鉴 %d/%d" % [codex_got, codex_total]
 	(_lobby_btns["ach"] as Button).text = "成就 %d/%d" % [ach.x, ach.y]
 	(_lobby_btns["records"] as Button).text = "记录"
-	(_lobby_btns["char"] as Button).text = "角色"
+	var char_txt := "角色"
+	if _char_new_badge:
+		char_txt = "角色 ·新"                     # R186：新角色解锁角标（打开选人面板清除）
+	(_lobby_btns["char"] as Button).text = char_txt
 	(_lobby_btns["upgrade"] as Button).text = "养成 %d💎" % Meta.crystals
 	var dbest: Dictionary = Meta.daily_record()
 	var dbest_txt := "每日挑战" if dbest.is_empty() \
@@ -458,6 +470,8 @@ func _on_lobby_pressed(p_kind: String) -> void:
 			_rebuild_records()
 		"char":
 			_panel_title.text = "选择角色"
+			_char_new_badge = false            # R186：打开选人面板即清除「·新」角标
+			_refresh_lobby_counts()
 			_rebuild_char_select()
 		"upgrade":
 			_panel_title.text = "局外养成"
@@ -769,6 +783,13 @@ func _rebuild_char_select() -> void:
 			var umap: StringName = def.get("unlock_map", &"")
 			if umap != &"":
 				unlock_hint = "　🔒 通关「%s」解锁" % String(MapTable.get_map(umap).get("name", "?"))
+			elif bool(def.get("unlock_normal_clear", false)):
+				# R186：改造者·枢——任一地图常规局普通通关（每日局结算分流不解锁）
+				unlock_hint = "　🔒 通关普通难度解锁（任一地图常规局 · 当前最佳 %d 波 / 首关需 %d 波）" % [
+					int(Meta.records.get("best_wave", 0)),
+					int(MapTable.get_map(MapTable.FIRST_MAP_ID).get("final_wave", 10))]
+			elif bool(def.get("unlock_hard_clear", false)):
+				unlock_hint = "　🔒 任意地图·困难难度通关解锁"   # R186：回响·伊可
 			elif int(def.get("unlock_kills", 0)) > 0:
 				unlock_hint = "　🔒 图鉴累计击杀 %d 解锁" % int(def.get("unlock_kills", 0))
 			elif def.get("unlock_achievement", &"") != &"":
@@ -793,14 +814,42 @@ func _rebuild_char_select() -> void:
 		stat_l.size = Vector2(346.0, 20.0)
 		stat_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(stat_l)
+		# 技能行（R186：改 def.get() 读法 + no_skill 分支——全项目唯一点读
+		# def.skill_name/skill_desc/cd 处，fission 无技能键不崩）
+		var has_skill := CharacterTable.has_skill(def.id)
 		var skill_l := Label.new()
 		StickerTheme.label_sticker(skill_l, 14, PopPalette.ENEMY)
-		skill_l.text = "技能【%s】%s（CD %.0fs）" % [String(def.skill_name),
-			String(def.skill_desc), float(def.cd)]
+		if has_skill:
+			skill_l.text = "技能【%s】%s（CD %.0fs）" % [String(def.get("skill_name", "")),
+				String(def.get("skill_desc", "")), float(def.get("cd", 120.0))]
+		else:
+			skill_l.text = "无技能 · 初始武器自定义（开局前选定）"
 		skill_l.position = Vector2(74.0, 72.0)
 		skill_l.size = Vector2(486.0, 20.0)
 		skill_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(skill_l)
+		if not has_skill:
+			# R186 改造者·枢：行内首发武器循环（候选 = 手枪白名单 ∪ 图鉴已解锁，registry 序）
+			var wcycle := Button.new()
+			wcycle.name = "CustomWeaponCycle"
+			wcycle.text = "初始武器：%s ▸" % _custom_weapon_label()
+			wcycle.add_theme_font_size_override("font_size", 13)
+			wcycle.add_theme_font_override("font", StickerTheme.font_bold())
+			wcycle.position = Vector2(74.0, 92.0)
+			wcycle.size = Vector2(300.0, 24.0)
+			wcycle.focus_mode = Control.FOCUS_NONE
+			wcycle.pressed.connect(_on_custom_weapon_cycle)
+			wcycle.button_down.connect(func() -> void: StickerTheme.press_punch(wcycle))
+			row.add_child(wcycle)
+			var codex_l := Label.new()
+			StickerTheme.label_sticker(codex_l, 12, PopPalette.INK_SOFT)
+			codex_l.text = "图鉴 %d/%d · 局内抽到新枪可解选" % [
+				Meta.codex_weapons.size(),
+				registry.weapons.size() if registry != null else 0]
+			codex_l.position = Vector2(382.0, 96.0)
+			codex_l.size = Vector2(180.0, 18.0)
+			codex_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			row.add_child(codex_l)
 		if not picked and unlocked:
 			var pick_btn := Button.new()
 			pick_btn.text = "选用"
@@ -827,6 +876,39 @@ func _rebuild_char_select() -> void:
 			buy_btn.button_down.connect(func() -> void: StickerTheme.press_punch(buy_btn))
 			row.add_child(buy_btn)
 		_panel_list.add_child(row)
+
+
+func _custom_weapon_candidates() -> Array[StringName]:
+	# R186：fission 首发候选集 = W1_pistol 白名单（W1 被卡池永久排除，必须放行）∪
+	# 图鉴已解锁武器（registry 序，去重）
+	var cands: Array[StringName] = [&"W1_pistol"]
+	if registry != null:
+		for wid_v: Variant in registry.weapons.keys():
+			var sid := StringName(String(wid_v))
+			if sid != &"W1_pistol" and not cands.has(sid) and Meta.is_weapon_unlocked(sid):
+				cands.append(sid)
+	return cands
+
+
+func _custom_weapon_label() -> String:
+	# R186：当前首发展示名（空键 → 手枪；脏 id → 原样 id 文本）
+	var wid := Meta.custom_weapon()
+	if wid == &"":
+		return "手枪"
+	var wd: WeaponData = registry.get_weapon(wid) if registry != null else null
+	return String(wd.display_name) if wd != null else String(wid)
+
+
+func _on_custom_weapon_cycle() -> void:
+	# R186：首发循环按钮——候选序取当前下一项（缺项/脏键 → 回首候选），写口自校验
+	#（未解锁 push_warning 忽略）+ 写即落盘，重建面板即时刷新
+	var cands := _custom_weapon_candidates()
+	if cands.is_empty():
+		return
+	var idx := cands.find(Meta.custom_weapon())
+	var next: StringName = cands[0] if idx < 0 else cands[(idx + 1) % cands.size()]
+	Meta.set_custom_weapon(next)
+	_rebuild_char_select()
 
 
 func _on_char_pick(p_id: StringName) -> void:

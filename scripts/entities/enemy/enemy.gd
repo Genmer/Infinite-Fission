@@ -27,6 +27,18 @@ var elem_immune: int = 0                      # 元素伤害免疫位（R22 P1�
 var elemental: ElementalState = null          # 状态容器（M-11 注入；包 3 收紧：register_host 挂 ElementalState）
 var ext_slow_mult: float = 1.0                # 外部减速乘区（P2 毒云等直结算通道；与元素冰缓正交）
 var ext_slow_left: float = 0.0                # 外部减速剩余 s（到期自动还原 1.0——免逐敌摘除）
+
+# ── R187 敌侧通用标记通道（共享组；W6/W7 引信 + W8 蓄能——「标记在敌人身上」） ──
+# 命名避让说明：本类既有爆虫自爆访问器 fuse_left()（pkg4:524 契约冻结不可改名），
+# W6/W7 引信通道避让为 fuse_mark_left（文档 R187 §三.6 的「fuse_left 字段」同义位）。
+var fuse_mark_left: float = 0.0               # 引信涂层剩余 s（W6 直击挂 4s 幂等刷新；>0 = 引信在身）
+var fuse_coat_amp: float = 1.0                # 引信增伤倍率（§2.3.5 目标侧标记：挂标时随涂层落敌身，
+                                              # 任何自导爆炸命中引信敌同享 ×(1+0.2×层)——W7 连携通道）
+var fuse_detonate_guard_left: float = 0.0     # 定向爆破护栏剩余 s（每敌 0.5s——防同帧双爆双吃）
+var charge_stacks: int = 0                    # W8 蓄能档位（目标 uid 全局单例：本体+复制体共享加速、引爆当量不复制）
+var charge_cap: int = 5                       # 最近叠档的帽（头顶读数「x/N」分母；W8 charge_max 默认 5，validator [3,8]）
+var charge_gain_cd_left: float = 0.0          # 蓄能获取共享内冷剩余 s（同目标口径——承接 hit_cd 退役语义）
+var detonate_icd_left: float = 0.0            # 单目标引爆 ICD 剩余 s（0.25s；全局 ICD 在武器侧）
 var dead: bool = false                        # 死亡短路标志（E-06：首次致死立即置位）
 var boss_phase: int = 0                       # Boss 阶段（HP<50% → 2 等）
 var fire_cd_left: float = 0.0                 # RANGED 行为射击冷却
@@ -303,6 +315,7 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	if is_boss():
 		immune_mask |= GameConst.IMMUNE_FREEZE
 	dead = false
+	_reset_marks()                              # R187 通用标记通道随出生清零（池复用防陈旧前科）
 	boss_phase = 1 if is_boss() else 0
 	elemental = null                          # 包 3 ElementalSystem.register_host 挂入
 	bullet_speed = float(data.ranged.get("bullet_speed", 300.0))
@@ -401,6 +414,16 @@ func tick(p_game_delta: float) -> void:
 			ext_slow_mult = 1.0
 		else:
 			sf *= ext_slow_mult
+	# R187 通用标记通道计时推进（game_delta 通道——顿帧自然冻结；到期归零不清前科：
+	# 前科防的是「只减不清」的池复用残留，清零统一收口在 spawn/_on_died/_reset_state 三处）
+	if fuse_mark_left > 0.0:
+		fuse_mark_left = maxf(fuse_mark_left - p_game_delta, 0.0)
+	if fuse_detonate_guard_left > 0.0:
+		fuse_detonate_guard_left = maxf(fuse_detonate_guard_left - p_game_delta, 0.0)
+	if charge_gain_cd_left > 0.0:
+		charge_gain_cd_left = maxf(charge_gain_cd_left - p_game_delta, 0.0)
+	if detonate_icd_left > 0.0:
+		detonate_icd_left = maxf(detonate_icd_left - p_game_delta, 0.0)
 	var player := _player()
 	# 击退冲量衰减位移（R7：与追击位移叠加，指数衰减——9/s 阻尼约 0.11s 消散）
 	if knock_vel != Vector2.ZERO:
@@ -636,6 +659,56 @@ func fuse_left() -> float:
 	return _fuse_left
 
 
+# ── R187 通用标记通道 API（共享组；W6/W7 引信 + W8 蓄能唯一写入口） ──
+func _reset_marks() -> void:
+	# 标记通道清零（spawn / _on_died / _reset_state 三路统一收口——池复用防陈旧前科）
+	fuse_mark_left = 0.0
+	fuse_coat_amp = 1.0
+	fuse_detonate_guard_left = 0.0
+	charge_stacks = 0
+	charge_gain_cd_left = 0.0
+	detonate_icd_left = 0.0
+
+
+func apply_fuse_mark(p_duration: float, p_amp: float = 1.0) -> void:
+	# 引信涂层挂标（MEC_FUSE_COAT 消费口）：幂等刷新——重复命中取 max（不叠加时长/
+	# 增伤倍率，层数增伤随标记落敌身）；A3 §2.3「4s 幂等刷新」口径 + §2.3.5 目标侧 amp
+	fuse_mark_left = maxf(fuse_mark_left, maxf(p_duration, 0.0))
+	fuse_coat_amp = maxf(fuse_coat_amp, maxf(p_amp, 1.0))
+
+
+func has_fuse_mark() -> bool:
+	# 引信在身判定（W7 定向爆破消费口 + 测试观测口）
+	return fuse_mark_left > 0.0
+
+
+func add_charge_stacks(p_delta: int, p_cap: int) -> int:
+	# 蓄能叠档（W8 接触/脉冲消费口）：目标 uid 全局单例——本体+复制体同孔加速；
+	# p_cap ≤0 视为无帽（调用方传 charge_max）。返回叠后档位。
+	charge_stacks = clampi(charge_stacks + maxi(p_delta, 0), 0, maxi(p_cap, charge_stacks))
+	charge_cap = maxi(p_cap, charge_stacks)
+	queue_redraw()                            # R187 §2.5.10：头顶「蓄能 x/5」读数随档重绘
+	return charge_stacks
+
+
+func clear_charge_stacks() -> void:
+	# 满档引爆后清零重蓄（W8 引爆消费口）
+	charge_stacks = 0
+	queue_redraw()
+
+
+func _draw() -> void:
+	# R187 §2.5.10 验收项：W8 蓄能目标头顶「蓄能 x/5」档位读数。无 W8 参战时
+	# charge_stacks 恒 0 → 零绘制；queue_redraw 只在叠档/引爆清零时触发，无常驻成本。
+	if charge_stacks <= 0:
+		return
+	var font := ThemeDB.fallback_font
+	if font == null:
+		return
+	var label := "蓄能 %d/%d" % [charge_stacks, maxi(charge_cap, charge_stacks)]
+	draw_string(font, Vector2(-30.0, -34.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.76, 0.28))
+
+
 func is_boss() -> bool:
 	return (tags & GameConst.TAG_BOSS) != 0
 
@@ -647,6 +720,8 @@ func is_elite() -> bool:
 func _on_died() -> void:
 	# 一次性死亡：置 dead → EventBus.emit_enemy_killed → 池归还（EnemySpawner 订阅承担）
 	dead = true
+	_reset_marks()                              # R187 敌亡回收：引信/蓄能随死亡清零
+	                                            #（蓄能池以 uid 单例——亡敌残留档位会污染复用实例）
 	# R19 打击质感：死亡弹爆（白环扩散 + 四向碎屑，0.2s 自清——击杀瞬间重量感）
 	if get_parent() != null and clampi(int(Meta.settings("fx_quality")), 0, 2) > 0:
 		var pop := DeathPop.new()
@@ -860,9 +935,10 @@ func _tick_blink(p_dt: float, p_player: Node2D, p_sf: float) -> void:
 
 
 func _blink_teleport() -> void:
-	# 落点 = 快照 ±24px 随机偏移（防贴脸重合），钳屏内；红圈挂世界层钉死落点
-	var off := Vector2(randf_range(-BLINK_OFFSET, BLINK_OFFSET),
-		randf_range(-BLINK_OFFSET, BLINK_OFFSET))
+	# 落点 = 快照 ±24px 随机偏移（防贴脸重合），钳屏内；红圈挂世界层钉死落点。
+	# 偏移按半径 ≤24px 圆盘均匀采样（§3.3 rand_offset(24)：到快照距离恒 ≤24——
+	# 逐轴 ±24 方形采样角点最远 24√2 ≈ 34px，会破「落点 = 快照 ±24px」口径）
+	var off := Vector2.from_angle(randf() * TAU) * (BLINK_OFFSET * sqrt(randf()))
 	var size := Vector2(720.0, 1280.0)
 	if GameConfig.balance != null:
 		size = Vector2(GameConfig.balance.res_logic)
@@ -1549,6 +1625,7 @@ func _reset_state() -> void:
 	elemental = null
 	ext_slow_mult = 1.0                       # 外部减速复位（P2：池归还清零契约同口径）
 	ext_slow_left = 0.0
+	_reset_marks()                            # R187 通用标记通道归还清零（引信/蓄能/双 ICD）
 	dead = true                               # 池内 = 不存在（死亡态短路）：同帧网格快照仍含
 	                                          # 已归还节点，二次命中经 apply_damage 走 dead 短路
 	                                          # /管线 dropped_dead 丢弃——否则会二次死亡广播 +

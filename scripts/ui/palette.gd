@@ -27,6 +27,15 @@ const PANEL := Color("ffffff")                # 面板纯白（圆角 20 + 藏�
 const PANEL_PRESS := Color("e2e7fb")          # 按下下沉变暗
 const DIM := Color(0.133, 0.145, 0.29, 0.55)  # 全屏压暗（藏青半透）
 
+# ── 元素反应跳字双色（R186 反应字体：填充=主读感亲、描边=副亲；描边全深色——
+#    亮底 BG #eef3ff 与暗色怪堆双可读；避 FIR 橙 #FF9940 / 敌红 #ff5d5d / 金档 #ffc93c） ──
+const RXN_FILL_SHATTER := Color("ffefd6")     # 碎裂内填充 暖雪白（灼融白热）
+const RXN_LINE_SHATTER := Color("e0483e")     # 碎裂描边 绯红（重击感）
+const RXN_FILL_OVERLOAD := Color("ff7a3d")    # 过载内填充 爆裂橙（火归填充）
+const RXN_LINE_OVERLOAD := Color("3f2d7a")    # 过载描边 暗电紫（雷归描边，呼应 fx 紫橙双环）
+const RXN_FILL_SUPER := Color("d7ecff")       # 超导内填充 冰晶白（呼应雾环）
+const RXN_LINE_SUPER := Color("5a3ec8")       # 超导描边 靛紫（深紫保亮底可读）
+
 # ── 稀有度（普通灰蓝 / 稀有天蓝 / 史诗葡萄紫 / 传说柠檬金） ─────────
 const RARITY_NORMAL := Color("8a90b8")
 const RARITY_RARE := Color("3fa9ff")

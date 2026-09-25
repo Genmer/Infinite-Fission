@@ -22,6 +22,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_w9_random_facing()
 	_test_energy_orb_visuals()
 	_test_w9_chaser()
+	_test_w8_charge_channel()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -380,6 +381,55 @@ func _test_w9_chaser() -> void:
 		"i=%.3f attach=%s tempo=%s cdr=%s" % [interval, str(t_ok),
 			str(tempo != null and int(tempo.pool)),
 			str(w9.trait_stack.aggregate_panel().get("add_cdr", -1.0))])
+
+
+# ── R187 W8 蓄能通道（附着用例随 R186 路线拆除——蓄能用例增） ──────────
+func _test_w8_charge_channel() -> void:
+	# 翻转口径：R186 附着三件套（attach_gate/attach_mult/_orb_element）拆除负向锁定
+	# + R187 敌侧通用标记通道 charge_stacks（目标 uid 全局单例）+ 敌亡回收（共享组契约）
+	print("── W8 蓄能通道（R187 翻转：附着退役 → 蓄能上户） ──")
+	var w8: WeaponBase = null
+	for w in _gl.player.weapon_slots:
+		if w != null and is_instance_valid(w) and String(w.data.id).begins_with("W8"):
+			w8 = w
+			break
+	_check("前置：W8 在场", w8 != null)
+	if w8 == null:
+		return
+	w8.call("try_fire")
+	var field: Node = w8.get("orbit_field")
+	_check("前置：力场创建", field != null)
+	if field == null:
+		return
+	# R186 移除负向：附着三件套字段经 W8 路径零残留（get 缺失字段恒 null——不复潮锁）
+	_check("R187：附着三件套拆除（attach_gate/attach_mult/_orb_element 恒空）",
+		field.get("attach_gate") == null and field.get("attach_mult") == null
+			and field.get("_orb_element") == null)
+	# 数据键全落 .tres melee 段（R187 纪律：吸取 attach_mult 未落 .tres 教训）
+	var md: Dictionary = w8.data.melee
+	_check("R187：蓄能数据键在册（charge_max/detonate_mult/detonate_radius/pulse_cd/"
+		+ "effective_blade_cap/charge_gain_cd_levels）",
+		md.has("charge_max") and md.has("detonate_mult") and md.has("detonate_radius")
+			and md.has("pulse_cd") and md.has("effective_blade_cap")
+			and md.has("charge_gain_cd_levels"))
+	# 蓄能通道：敌侧通用标记 charge_stacks（目标 uid 全局单例——本体/复制体共池）
+	var enemy := _spawn_chase_enemy(Vector2(60.0, 0.0))
+	var set_charge: Callable = Callable(field, "set_charge")
+	var charge_of: Callable = Callable(field, "charge_of")
+	if not set_charge.is_valid() or not charge_of.is_valid():
+		_check("R187：蓄能通道 API 在册（set_charge/charge_of）", false, "orbit_field 缺静态口")
+		_clear_chase_enemies()
+		return
+	set_charge.call(enemy, 3)
+	_check("R187：蓄能写入（charge_of == 3）", int(charge_of.call(enemy)) == 3,
+		str(charge_of.call(enemy)))
+	_check("R187：敌侧标记通道同步（enemy.charge_stacks == 3）",
+		int(enemy.get("charge_stacks")) == 3, str(enemy.get("charge_stacks")))
+	# 敌亡回收（防池复用残留——tracker「只减不清」前科锁死）
+	var dead := enemy.apply_damage(999999.0)
+	_check("R187：敌亡回收（死亡即清蓄能标记）", dead and int(enemy.get("charge_stacks")) == 0,
+		str(enemy.get("charge_stacks")))
+	_clear_chase_enemies()
 
 
 func _spawn_chase_enemy(p_offset: Vector2) -> Enemy:

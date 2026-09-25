@@ -65,6 +65,13 @@ func tick(p_game_delta: float) -> void:
 		if try_fire():
 			cooldown_left = _fire_interval()
 			_last_interval = cooldown_left
+			# R186 每击谐振计费口（开火口径：一枪=一击，霰弹 9 丸仍 1 击——relic_handler
+			# .on_attack_fired 注释裁定；不走 damage_resolved：结算侧幂等键折叠多弹丸）。
+			# try_fire 成功位 = 全形态唯一真实开火咽喉（四形态子类均经本 tick 基类；
+			# 直调 try_fire 的测试/技能特殊通道不计费）。此前接线缺失成「假遗物」：
+			# 激活横幅照播、技能 CD 永不直减——仅测试直调 push 口掩盖死卡。
+			if relic_handler != null:
+				relic_handler.on_attack_fired()
 	_on_tick_post(p_game_delta)
 
 
@@ -330,10 +337,13 @@ func level_up() -> void:
 # ── 内部 ──────────────────────────────────────────────────────────
 func _player_rof_mult() -> float:
 	# 玩家侧射速合成倍率：过载咆哮（角色技能）× 地图祝福·射速（词缀二期「狂热」+6%，
-	# 数值真源 map_table.gd）——基类与 BallisticWeapon 覆写共用（两形态同一口径）
+	# 数值真源 map_table.gd）× 无技能角色 CDR 折算（comp_rof_mult——改造者·枢契约，
+	# player.refresh_skill_cd 真源、有技能角色恒 1.0；此前零消费为死写，角色机制补偿
+	# 未兑现）——基类与 BallisticWeapon 覆写共用（两形态同一口径）
 	if player == null or not is_instance_valid(player):
 		return 1.0
-	return maxf(float(player.get("rof_mult")) * float(player.get("map_rof_mult")), 0.1)
+	return maxf(float(player.get("rof_mult")) * float(player.get("map_rof_mult"))
+		* float(player.get("comp_rof_mult")), 0.1)
 
 
 func knockback_force() -> float:

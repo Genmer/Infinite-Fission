@@ -10,6 +10,9 @@
 # 设置页音量接线（P3，META_ROADMAP §5.10「设置页」）：Meta.settings(sfx/bgm_volume)
 # 线性 0~1 → 响度近似 db（linear_to_db(max(v,0.001))，0 → -60dB 静音档）——音量 1.0 =
 # 既有基准档；settings_changed 信号驱动实时应用。
+# R184 导弹爆/反弹反馈（用户反馈「命中像转子马达，回弹的也优化一下，干脆点」）：boom 重做
+# 分层合成（噪声冲击 + 低频 thump，总长 0.22s，去 0.5s 锯齿长滑轰鸣）；新增 bounce
+# 高频短下滑 tick（bullet_bounced 事件接线，节流沿用既有 THROTTLE_MS）。
 class_name SfxBank
 extends Node
 
@@ -140,7 +143,11 @@ func _build_all() -> void:
 	_make(&"cast_warn", 0.14, 260.0, 620.0, "sine", 0.22)
 	_make(&"cast_snap", 0.06, 900.0, 420.0, "square", 0.22)
 	_make(&"tier_epic", 0.22, 240.0, 70.0, "saw", 0.34)
-	_make(&"boom", 0.5, 130.0, 34.0, "saw", 0.5)   # R80 导弹爆低音（130→34Hz 下滑轰鸣）
+	# R184 命中/反弹反馈重做（用户反馈「导弹命中跟转子马达一样，还有回弹的，干脆点」）：
+	# boom = 噪声冲击 + 低频 thump 分层爆破（0.22s，替代 R80 0.5s 锯齿长滑轰鸣）；
+	# bounce = 高频短下滑 tick（与 hit 的低频噪声明显可辨）；节流沿用 THROTTLE_MS
+	_make_boom()
+	_make(&"bounce", 0.05, 2400.0, 900.0, "sine", 0.20)
 	# 夜间R15 反应音色（此前反应只有视觉无声音）：碎裂=玻璃感高频下滑 /
 	# 过载=电感锯齿上行 / 超导=低频衰减嗡鸣
 	_make(&"rxn_shatter", 0.18, 2200.0, 620.0, "sine", 0.24)
@@ -160,11 +167,15 @@ func _build_all() -> void:
 
 func _make(p_name: StringName, p_dur: float, p_f0: float, p_f1: float,
 		p_kind: String, p_vol: float) -> void:
-	var stream := _synthesize(p_dur, p_f0, p_f1, p_kind, p_vol)
-	_streams[p_name] = stream
+	_register(p_name, _synthesize(p_dur, p_f0, p_f1, p_kind, p_vol))
+
+
+func _register(p_name: StringName, p_stream: AudioStreamWAV) -> void:
+	# 流注册 + 专属播放器装配（_make / _make_boom 共用；音量/polyphony 同档）
+	_streams[p_name] = p_stream
 	var player := AudioStreamPlayer.new()
 	player.name = "Sfx_%s" % String(p_name)
-	player.stream = stream
+	player.stream = p_stream
 	player.volume_db = SFX_BASE_DB
 	player.max_polyphony = 4
 	add_child(player)
@@ -194,6 +205,48 @@ func _synthesize(p_dur: float, p_f0: float, p_f1: float, p_kind: String,
 				sample = sin(TAU * phase)
 		var env := pow(1.0 - prog, 1.6)              # 指数衰减包络（去爆音）
 		var v := int(clampf(sample * env * p_vol, -1.0, 1.0) * 32767.0)
+		data.encode_s16(i * 2, v)
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = rate
+	wav.stereo = false
+	wav.data = data
+	return wav
+
+
+func _make_boom() -> void:
+	# R184 导弹爆音重做（用户反馈「跟转子马达一样」——旧 R80 0.5s saw 130→34Hz 下滑轰鸣）：
+	# 分层干脆爆破 = ① 噪声冲击层（~1ms 快起音 + 0.06s 幂衰减——爆破的「脆」）+
+	# ② 低频 thump 层（190→42Hz 正弦快滑 + 0.22s 幂衰减——冲击的「沉」）。
+	# 总长 0.22s；双层包络尾点趋零（无拖尾无循环爆音）。play(&"boom") 接口与
+	# 大范围爆（r>=100）0.8 音高乘子语义不变（0.8 乘子 → thump 落 152→34Hz 更沉）。
+	_register(&"boom", _synthesize_boom(0.22, 190.0, 42.0, 0.06, 0.62))
+
+
+func _synthesize_boom(p_dur: float, p_thump_f0: float, p_thump_f1: float,
+		p_crack_dur: float, p_vol: float) -> AudioStreamWAV:
+	# 分层爆破合成：噪声冲击 + thump 双层线性叠加。容器口径与 _synthesize 一致
+	#（FORMAT_16_BITS 单声道 22.05k——时长 = data 字节 ÷ 2 ÷ mix_rate）；~1ms 起音斜坡
+	#（消起振 DC 爆音）+ 双层幂衰减包络（尾点趋零，无长滑音无拖尾）。
+	var rate := 22050
+	var n := int(p_dur * rate)
+	var crack_n := mini(int(p_crack_dur * rate), n)
+	var attack_n := maxi(int(0.001 * float(rate)), 1)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var phase := 0.0
+	for i in range(n):
+		var prog := float(i) / float(n)
+		var ease_out := 1.0 - (1.0 - prog) * (1.0 - prog)     # 前段快降贴底（先「砸」后余沉）
+		var f := lerpf(p_thump_f0, p_thump_f1, ease_out)
+		phase += f / float(rate)
+		var thump := sin(TAU * phase) * pow(1.0 - prog, 2.4) * 0.52
+		var crack := 0.0
+		if i < crack_n:
+			var c_prog := float(i) / float(maxi(crack_n, 1))
+			crack = (randf() * 2.0 - 1.0) * pow(1.0 - c_prog, 1.8) * 0.42
+		var attack := minf(float(i) / float(attack_n), 1.0)
+		var v := int(clampf((thump + crack) * attack * p_vol, -1.0, 1.0) * 32767.0)
 		data.encode_s16(i * 2, v)
 	var wav := AudioStreamWAV.new()
 	wav.format = AudioStreamWAV.FORMAT_16_BITS

@@ -8,6 +8,8 @@
 # · 购买门 unlock_price ×2（结晶永久解锁，Meta.purchase_character 扣费）：
 #   ranger 80💎 / zero 160💎（结晶 = 局内波次+击杀+成就产出，纯游玩经济）；
 # · 成就/挑战门 ×2：vera = 图鉴累计击杀 500；noah = 成就「深入敌阵」（单局 20 波）。
+# · R186 通关分档门 ×2：fission = 任一地图常规局普通通关（unlock_normal_clear）；
+#   echo = 任意地图困难/地狱通关（unlock_hard_clear——Meta.hard_cleared 剥 #N 后缀查表）。
 # · sentinel 初始免费（新手底座）。
 class_name CharacterTable
 extends RefCounted
@@ -63,11 +65,33 @@ const CHARACTERS: Array[Dictionary] = [
 		"unlock_kills": 500,                # 图鉴累计击杀 500 只解锁（挑战门）
 	},
 	{
-		"id": &"noah", "name": "召唤师·诺亚", "desc": "僚机使役者（血 50 / 攻 +5%），环绕增援",
+		"id": &"noah", "name": "召唤师·诺亚", "desc": "僚机使役者（血 50 / 攻 +5%），复制增援",
 		"hp": 50.0, "atk_pct": 0.05,
-		"skill_name": "召唤僚机", "skill_desc": "召唤 2 只环绕僚机，持续 10 秒后离场",
+		"skill_name": "召唤僚机", "skill_desc": "随机复制 2 把当前武器（含全部强化），僚机携带参战 10 秒后离场",
 		"cd": 120.0,
 		"unlock_achievement": &"wave_20",   # 成就「深入敌阵」（单局抵达第 20 波）解锁
+	},
+	{
+		# R186 第 9 角色「改造者·枢」：交换定位 技能 ↔ 首发——无技能（no_skill 契约，
+		# player.activate_skill 短路 + CDR 折算射速，归 G1 机制组），开局武器任选
+		#（图鉴已解锁 ∪ W1_pistol 白名单，Meta.custom_weapon 持久化）。
+		# ★ cd 键必须保留（tests/runner/verify_feedback_cases.gd 遍历全角色断言 cd==120）。
+		"id": &"fission", "name": "改造者·枢",
+		"desc": "无技能·初始武器自定义（血 65 / 攻 +0%）",
+		"unlock_normal_clear": true,         # 任一地图常规局普通通关（每日局结算分流不解锁）
+		"hp": 65.0, "atk_pct": 0.0,
+		"no_skill": true, "cd": 120.0,
+	},
+	{
+		# R186 第 10 角色「回响·伊可」：构筑随机性即身份——开局随机双武器（有放回，
+		# P(同款)=1/9），GameLoop._grant_random_dual_loadout 注入；困难通关解锁。
+		"id": &"echo", "name": "回响·伊可",
+		"desc": "随机武装体（血 55 / 攻 +0%），开局随机双武器",
+		"random_dual": true,                 # GameLoop 开局随机双武器注入（有技能角色）
+		"unlock_hard_clear": true,           # 任意地图困难/地狱通关（map_records #N 分档键）
+		"hp": 55.0, "atk_pct": 0.0,
+		"skill_name": "双生回响", "skill_desc": "5 秒内全武器射速 +50%",
+		"cd": 120.0,
 	},
 ]
 
@@ -81,3 +105,9 @@ static func get_character(p_id: StringName) -> Dictionary:
 
 static func count() -> int:
 	return CHARACTERS.size()
+
+
+static func has_skill(p_id: StringName) -> bool:
+	# R186 无技能角色契约（G1 机制组消费：player.activate_skill 短路 / HUD 技能键可见性）：
+	# no_skill 键缺省 = 有技能（旧角色数据零改动兼容）
+	return not bool(get_character(p_id).get("no_skill", false))

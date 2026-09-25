@@ -13,6 +13,7 @@ extends Node
 signal codex_changed()                        # 图鉴解锁（大厅面板刷新用）
 signal achievements_changed(ach_id: StringName)   # 成就解锁提示（大厅面板刷新用）
 signal settings_changed(p_key: String)        # 设置变更（P3：SfxBank 音量实时应用等）
+signal fissioner_unlocked()                   # R186：改造者·枢普通通关解锁（结算兑现点派发；HUD toast/大厅角标消费）
 
 static func save_path() -> String:
 	# 存档路径（headless = 自动化测试 → 独立测试档）：杜绝测试套件把通关/购买位/
@@ -64,6 +65,8 @@ var crystals: int = 0                         # 裂变结晶（每局结算产�
 var upgrades: Dictionary = {}                 # upgrade_id(String) → 等级
 var character_id: StringName = &"sentinel"    # 当前选用角色（大厅选人）
 var unlocked_characters: Dictionary = {}      # 购买解锁的角色 id(String) → true（永久，存档）
+var custom_weapon_id: String = ""             # R186：改造者·枢（fission）自定义首发武器 id
+                                              #（"" = 手枪兜底；单键全局归属 fission，换角/重开不清）
 
 # 永久升级定义表（cost = base_cost × (当前级+1)）
 const UPGRADES: Array[Dictionary] = [
@@ -201,6 +204,10 @@ func is_character_unlocked(p_id: StringName) -> bool:
 	var unlock_map: StringName = def.get("unlock_map", &"")
 	if unlock_map != &"":
 		return is_map_cleared(unlock_map)
+	if bool(def.get("unlock_normal_clear", false)):
+		return normal_cleared()               # R186：改造者·枢（任一地图常规局普通通关）
+	if bool(def.get("unlock_hard_clear", false)):
+		return hard_cleared()                 # R186：回响·伊可（任意地图困难/地狱通关）
 	var unlock_kills := int(def.get("unlock_kills", 0))
 	if unlock_kills > 0:
 		return int(records["total_kills"]) >= unlock_kills
@@ -390,6 +397,21 @@ func normal_cleared() -> bool:
 	return false
 
 
+func hard_cleared() -> bool:
+	# R186 echo 解锁门：任意地图困难（#1）/地狱（#2）通关。★必须剥掉 "#N" 后缀再查
+	# MapTable——get_map 是精确 id 匹配（map_table.gd 未命中返回 {}），带后缀查表必空 →
+	# final_wave 回退 1<<30 → 恒 false（echo 永不解锁）。normal_cleared 既有口径不动。
+	for key: Variant in map_records.keys():
+		var ks := String(key)
+		if not (ks.ends_with("#1") or ks.ends_with("#2")):
+			continue                          # 普通键（无后缀）不算
+		var map_id := StringName(ks.get_slice("#", 0))   # 剥后缀还原地图 id
+		var final_wave := int(MapTable.get_map(map_id).get("final_wave", 1 << 30))
+		if int(map_records[key].get("best_wave", 0)) >= final_wave:
+			return true
+	return false
+
+
 func mark_first_met(p_enemy_id: StringName) -> bool:
 	# E5 首遇提示：第一次实际刷出 → true（调用方发机制提示条）；此后 false 不再打扰
 	var key := String(p_enemy_id)
@@ -404,6 +426,33 @@ func is_weapon_unlocked(p_id: StringName) -> bool:
 	return codex_weapons.has(String(p_id))
 
 
+func custom_weapon() -> StringName:
+	# R186：fission 自定义首发读口（"" → StringName("")，GameLoop 侧兜底手枪）
+	return StringName(custom_weapon_id)
+
+
+func set_custom_weapon(p_id: StringName) -> void:
+	# R186：fission 自定义首发写口——W1_pistol 白名单（卡池永久排除 W1，必须放行）∪
+	# 图鉴已解锁；校验不过 push_warning 忽略（不写不落盘）。写即落盘。
+	if p_id != &"W1_pistol" and not is_weapon_unlocked(p_id):
+		push_warning("[Meta] 首发武器未解锁（%s）——忽略" % String(p_id))
+		return
+	custom_weapon_id = String(p_id)
+	_save()
+
+
+func mark_weapon_codex(p_id: StringName) -> bool:
+	# R186：武器注入即计图鉴（开局首发/echo 随机武装白拿口径——不增 _run_weapons_drawn，
+	# 军火大亨成就仍是卡池抽卡口径）。幂等：已解锁 → false 不重复发 codex_changed。
+	# 不立即落盘（同 mark_first_met——随结算统一 _save，防高频 IO）。
+	var key := String(p_id)
+	if key.is_empty() or codex_weapons.has(key):
+		return false
+	codex_weapons[key] = true
+	codex_changed.emit()
+	return true
+
+
 func is_trait_unlocked(p_id: StringName) -> bool:
 	return codex_traits.has(String(p_id))
 
@@ -416,7 +465,10 @@ func _on_enemy_killed(p_enemy: Node2D) -> void:
 	records["total_kills"] = int(records["total_kills"]) + 1
 	if eid != &"":
 		codex_kills[String(eid)] = codex_kill_count(eid) + 1
-	if (int(p_enemy.get("tags")) if p_enemy.get("tags") != null else 0 & GameConst.TAG_BOSS) != 0:
+	# 位运算次序：先归一取值再 & TAG_BOSS（旧写法 `& TAG_BOSS` 只作用于三元 else 的字面量
+	# 0，真实 tags 整值放行——精英击杀误计 Boss 击杀，「击败首个 Boss」成就提前解锁发结晶）
+	var etags: int = int(p_enemy.get("tags")) if p_enemy.get("tags") != null else 0
+	if (etags & GameConst.TAG_BOSS) != 0:
 		_run_boss_slain += 1
 	_check_achievements()
 	# 击杀侧不落盘（高频事件；计数随 GAME_OVER 结算统一落盘——防测试/高频帧 IO 风暴）
@@ -469,6 +521,7 @@ func _settle_run_result() -> void:
 		_reset_run_counters()
 		return
 	# 局结算：最高记录（全局 + 分图）+ 局数 + 成就 + 落盘 + 单局计数复位
+	var normal_before := normal_cleared()     # R186：解锁翻转基线（落账前快照——胜利屏当场查询必 false，提示只挂结算兑现点）
 	records["best_wave"] = maxi(int(records["best_wave"]), _run_max_wave)
 	records["best_kills"] = maxi(int(records["best_kills"]), _run_kills)
 	records["best_level"] = maxi(int(records["best_level"]), _run_max_level)
@@ -487,6 +540,8 @@ func _settle_run_result() -> void:
 	mr["endless_depth"] = maxi(int(mr.get("endless_depth", 0)), maxi(0, _run_max_wave - final_wave))
 	_check_achievements()
 	_save()
+	if not normal_before and normal_cleared():
+		fissioner_unlocked.emit()             # R186：普通通关当场兑现（恰发一次；每日分流不走此路天然不解锁）
 	_reset_run_counters()
 
 
@@ -559,6 +614,7 @@ func _save() -> void:
 	cfg.set_value("meta", "upgrades", upgrades)
 	cfg.set_value("meta", "character", String(character_id))
 	cfg.set_value("characters", "unlocked", unlocked_characters.keys())
+	cfg.set_value("characters", "custom_weapon", custom_weapon_id)   # R186：fission 自定义首发
 	cfg.set_value("settings", "values", _settings)
 	cfg.save(save_path())
 
@@ -595,6 +651,7 @@ func _load() -> void:
 	unlocked_characters = {}
 	for cid in cfg.get_value("characters", "unlocked", []):
 		unlocked_characters[String(cid)] = true
+	custom_weapon_id = String(cfg.get_value("characters", "custom_weapon", ""))   # R186：旧档缺键回退空→手枪
 	# 设置段（P3）：逐键白名单归一（脏档键值丢弃 → 缺键回默认表）
 	_settings = {}
 	var saved_settings: Variant = cfg.get_value("settings", "values", {})

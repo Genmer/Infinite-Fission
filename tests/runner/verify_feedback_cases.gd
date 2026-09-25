@@ -79,6 +79,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_r82_haste_chain()
 	_test_r86_r89_r90()
 	_test_r87_r88()
+	_test_r183_slots()
 	_test_r91_prism_laser()
 	_test_r92_fast_clear()
 	_test_r94_star_chain()
@@ -720,6 +721,7 @@ func _test_meta_systems() -> void:
 	Meta.codex_weapons = {}
 	Meta.codex_traits = {}
 	Meta.achievements_done = {}
+	Meta.custom_weapon_id = ""                # R186：fission 自定义首发清零兜底（MF3 跨次运行不泄漏）
 	Meta.records = {"best_wave": 0, "best_kills": 0, "best_level": 1,
 		"total_runs": 0, "total_kills": 0}
 	# 图鉴：武器获得解锁 / 词条抽取解锁
@@ -875,8 +877,8 @@ func _test_swamp_eco() -> void:
 # ── ⑱ 角色系统 + 局外养成（M8 落地验收） ─────────────────────────
 func _test_char_meta() -> void:
 	print("── 角色与局外养成 ──")
-	_check("CharacterTable：8 角色（解锁矩阵完整——通关3/购买2/挑战2/初始1）",
-		CharacterTable.count() == 8)
+	_check("CharacterTable：10 角色（R186 +2——通关门3/购买2/挑战2/分档门2/初始1）",
+		CharacterTable.count() == 10)
 	# 解锁矩阵（2026-09-13）：ranger/zero 转结晶购买门——全图通关不再解锁二者
 	for m in MapTable.MAPS:
 		Meta.mark_map_cleared(m.id)
@@ -912,6 +914,72 @@ func _test_char_meta() -> void:
 	Meta.character_id = saved_char
 	Meta.crystals = saved_crystals
 	Meta.unlocked_characters = saved_unlocked.duplicate()
+	# R186 新角色：改造者·枢（普通通关门 + 无技能契约 + 自定义首发）/ 回响·伊可（困难通关门）
+	# MF3 测试档纪律：入口快照 codex/map_records/records，收尾还原 + 立即落盘
+	var saved_codex_w_r186: Dictionary = Meta.codex_weapons.duplicate()
+	var saved_maps_r186: Dictionary = Meta.map_records.duplicate()
+	Meta.map_records = {}
+	_check("R186：未通关——fission 锁定 / echo 锁定（分档门派生，零存档字段）",
+		not Meta.is_character_unlocked(&"fission") and not Meta.is_character_unlocked(&"echo"))
+	var echo_def := CharacterTable.get_character(&"echo")
+	var fis_def := CharacterTable.get_character(&"fission")
+	_check("R186：新角色数值（echo 55 血 / fission 65 血 · cd 120 · random_dual/no_skill 键）",
+		absf(float(echo_def.get("hp", 0.0)) - 55.0) <= 0.01
+		and absf(float(fis_def.get("hp", 0.0)) - 65.0) <= 0.01
+		and absf(float(fis_def.get("cd", 0.0)) - 120.0) <= 0.01
+		and bool(fis_def.get("no_skill", false)) and bool(echo_def.get("random_dual", false)))
+	_check("R186：has_skill 契约（fission 无技能 / echo·哨兵有技能——G1 消费口）",
+		not CharacterTable.has_skill(&"fission")
+		and CharacterTable.has_skill(&"echo") and CharacterTable.has_skill(&"sentinel"))
+	Meta.map_records = {"world_grass": {"best_wave": 10, "best_kills": 0, "best_level": 5}}
+	_check("R186：普通通关（草原 10 波）→ fission 解锁 / echo 仍锁定",
+		Meta.is_character_unlocked(&"fission") and not Meta.is_character_unlocked(&"echo"))
+	Meta.map_records = {"world_grass#1": {"best_wave": 15, "best_kills": 0, "best_level": 5}}
+	_check("R186：hard_cleared 剥 #N 后缀查 final_wave（#1 键 15 波≥15 → true）"
+		+ "且不污染普通门", Meta.hard_cleared() and not Meta.normal_cleared())
+	_check("R186：困难通关 → echo 解锁 / fission 仍锁定（普通门不吃 #1 键）",
+		Meta.is_character_unlocked(&"echo") and not Meta.is_character_unlocked(&"fission"))
+	Meta.map_records = {"world_grass#2": {"best_wave": 10, "best_kills": 0, "best_level": 5}}
+	_check("R186：地狱(#2)分档记录兼认困难门", Meta.hard_cleared())
+	Meta.map_records = saved_maps_r186
+	# 自定义首发持久化：未解锁拒绝 / 解锁后写档 / 读口直返；mark_weapon_codex 幂等不计抽卡
+	#（先擦位——前序套件可能已解锁同款，快照收尾统一还原）
+	Meta.codex_weapons.erase("W2_gatling")
+	Meta.set_custom_weapon(&"W2_gatling")
+	_check("R186：未解锁 W2 设首发 → 忽略（空 = 手枪兜底）", Meta.custom_weapon() == &"")
+	Meta.codex_weapons["W2_gatling"] = true
+	Meta.set_custom_weapon(&"W2_gatling")
+	_check("R186：已解锁 W2 设首发 → 写档可读回", Meta.custom_weapon() == &"W2_gatling")
+	Meta.codex_weapons.erase("W5_prism")
+	_check("R186：mark_weapon_codex 幂等（新写 true / 重复 false）且不计抽卡口径",
+		Meta.mark_weapon_codex(&"W5_prism") and not Meta.mark_weapon_codex(&"W5_prism"))
+	# R186：结算翻转恰发一次 fissioner_unlocked（普通通关结算当场兑现——胜利屏当场查询必 false 口径）
+	var saved_rec_r186: Dictionary = Meta.records.duplicate()
+	var saved_cryst_r186: int = Meta.crystals
+	var saved_achd_r186: Dictionary = Meta.achievements_done.duplicate()
+	var fired_r186: Array[int] = [0]
+	var cb_r186 := func() -> void: fired_r186[0] += 1
+	Meta.fissioner_unlocked.connect(cb_r186)
+	Meta.map_records = {}
+	Meta.set_run_map(&"world_grass")
+	Meta.set_run_difficulty(GameConst.Difficulty.NORMAL)
+	Meta.set_run_daily(false)
+	Meta._run_max_wave = 10
+	Meta._run_kills = 0
+	Meta._run_max_level = 5
+	Meta._settle_run_result()
+	_check("R186：首次普通通关结算 → fissioner_unlocked 恰发一次", fired_r186[0] == 1)
+	Meta._run_max_wave = 12
+	Meta._settle_run_result()
+	_check("R186：已解锁再结算 → 不重复发", fired_r186[0] == 1)
+	Meta.fissioner_unlocked.disconnect(cb_r186)
+	Meta.records = saved_rec_r186
+	Meta.crystals = saved_cryst_r186
+	Meta.achievements_done = saved_achd_r186
+	Meta.codex_weapons = saved_codex_w_r186
+	Meta.map_records = saved_maps_r186           # 结算测试写过的 world_grass 记录一并还原
+	Meta.custom_weapon_id = ""                    # MF3：收尾清零（立即落盘覆盖中途存档污染窗）
+	Meta._save()
 	Meta.maps_cleared = {}
 	Meta.mark_map_cleared(&"world_grass")
 	_check("解锁链：薇拉解锁（草原） / 磐回落锁定（冰原未清）",
@@ -995,7 +1063,7 @@ func _test_char_meta() -> void:
 	# 大厅面板
 	var menu: MenuScreen = _gl.menu_screen
 	menu._on_lobby_pressed("char")
-	_check("大厅：角色面板 3 张卡", _live_children(menu._panel_list) == CharacterTable.count())
+	_check("大厅：角色面板（条目 = 角色数，R186 10 角色）", _live_children(menu._panel_list) == CharacterTable.count())
 	for c in menu._panel_list.get_children():
 		c.free()                                  # 立即清（queue_free 无帧迭代不清真——计数口径）
 	menu._on_lobby_pressed("upgrade")
@@ -1088,9 +1156,9 @@ func _test_polish() -> void:
 	p.set("invuln_left", 0.0)                     # 清无敌（接触伤害有无敌帧护栏）
 	p.set("hp", 1.0)
 	p.call(&"take_contact_damage", 50.0)
-	_check("复活：致死伤害 → 满血存活 + 2s 无敌",
+	_check("复活：致死伤害 → 满血存活 + 3s 无敌（R186 E2 r2 同步）",
 		absf(float(p.get("hp")) - float(p.get("max_hp"))) <= 0.01
-		and float(p.get("invuln_left")) >= 1.5 and int(p.get("revives_left")) == 0)
+		and is_equal_approx(float(p.get("invuln_left")), 3.0) and int(p.get("revives_left")) == 0)
 	p.set("invuln_left", 0.0)
 	p.call(&"take_contact_damage", 99999.0)
 	_check("复活：耗尽后正常死亡仲裁（E-16 不受扰）", bool(p.get("_dead")))
@@ -1147,7 +1215,9 @@ func _test_p0_fixes() -> void:
 		absf(float(p.get("hp")) - hp0) <= 0.01 and not bool(p.get("shield_ready"))
 		and absf(float(p.get("shield_timer")) - 5.5) <= 0.01)
 	# ⑤ 前置还原：清除护盾状态（防本批次后续 roll 断言被充能干扰——语义无后续依赖）
-	# ② W4 脉冲：真池真网格（GameLoop 既有依赖），0.5s 收束 + cd 后再起束
+	# ② W4 主束：真池真网格（GameLoop 既有依赖）。R187 翻转重写（原「0.5s 脉冲收束」——
+	#    pulse_duration 已随主束常驻化定案从 .tres 真删，同文件 R91 段/数据契约段同口径）：
+	#    spawn lifetime 缺省 0 = 常驻聚焦锚，0.5s 后仍存活不收束
 	var lw: Node = load("res://scripts/combat/weapon/laser_weapon.gd").new()
 	lw.name = "VerifyW4"
 	_gl.add_child(lw)
@@ -1157,12 +1227,13 @@ func _test_p0_fixes() -> void:
 	})
 	lw.try_fire()
 	var beam: Node = lw._main_beam
-	_check("W4 脉冲：lifetime=0.5 已接线", beam != null and absf(beam.lifetime - 0.5) <= 0.01)
+	_check("W4 主束：常驻 lifetime==0（R187 常驻化定案接线）",
+		beam != null and absf(float(beam.lifetime)) < 0.0001, str(beam.get("lifetime")))
 	var t := 0.0
 	while t < 0.6:
 		lw.tick(1.0 / 120.0)
 		t += 1.0 / 120.0
-	_check("W4 脉冲：0.5s 后光束收束", not beam.is_live())
+	_check("W4 主束：0.5s 后仍存活（常驻不收束）", beam != null and beam.is_live())
 	lw.free()
 	# ③ W5 对照组：无 pulse_duration 键 → 常驻（行为不回归）
 	var w5: Node = load("res://scripts/combat/weapon/laser_weapon.gd").new()
@@ -1199,10 +1270,12 @@ func _test_p0_fixes() -> void:
 	for c: Dictionary in CharacterTable.CHARACTERS:
 		if absf(float(c.get("cd", 0.0)) - 120.0) > 0.01:
 			all_cd = false
-	_check("技能：6 角色 CD 全员 120s", all_cd and CharacterTable.CHARACTERS.size() >= 6)
-	# ⑦ W4 数据键 + W5 对照（数据侧口径锁定）
+	_check("技能：全角色 CD 全员 120s（R186 10 角色含 fission/echo）",
+		all_cd and CharacterTable.CHARACTERS.size() >= 6)
+	# ⑦ W4 数据键 + W5 对照（数据侧口径锁定；R187 常驻化定案 = pulse_duration 死键真删）
 	var w4d: Resource = _gl.registry.get_weapon(&"W4_pulse_beam")
-	_check("数据：W4 laser.pulse_duration=0.5", absf(float(w4d.laser.get("pulse_duration", 0.0)) - 0.5) <= 0.01)
+	_check("数据：W4 laser.pulse_duration 死键真删（R187 常驻口径）",
+		not w4d.laser.has("pulse_duration"))
 	var w5d: Resource = _gl.registry.get_weapon(&"W5_prism")
 	_check("数据：W5 无 pulse_duration（常驻口径）", not w5d.laser.has("pulse_duration"))
 
@@ -2022,38 +2095,149 @@ func _test_p2_characters() -> void:
 	_check("技能·毒云：到期后不再结算", absf(float(target.get("hp")) - hp_after_cloud) <= 0.001)
 	_gl.elemental.unregister_host(target)
 	(_gl.pools[&"enemy"] as EnemyPool).release(target)
-	# 诺亚：召唤僚机（主武器 orbs_bonus +2 持续 10s 后还原）
+	# 诺亚：召唤僚机（R183 重定义：随机复制 2 把当前武器 + 全部 buff，10s 后回收）
 	_gl.state = GameConst.GameStatus.MENU
 	Meta.character_id = &"noah"
 	p.call(&"set_character", &"noah")
 	_check("角色：诺亚血量 50 + 养成加成",
 		absf(float(p.get("max_hp")) - (50.0 + Meta.hp_bonus())) <= 0.01)
-	p.call(&"unlock_slot", 2)
 	var orbit: WeaponBase = p.call(&"add_weapon", _gl.registry.get_weapon(&"W8_orbit_field"))
 	_check("诺亚：环绕武器装配（真件 OrbitWeapon）", orbit is OrbitWeapon)
-	if orbit is OrbitWeapon:
-		(orbit as OrbitWeapon).try_fire()          # 首开火建立力场（基线球数）
-		var base_orbs: int = (orbit as OrbitWeapon).orbit_field.orbs
-		p.set("skill_cd_left", 0.0)
-		p.call(&"activate_skill")
-		_check("技能·僚机：召唤 +2（orbs_bonus 与力场球数同步 +2）",
-			int((orbit as OrbitWeapon).orbs_bonus) == 2
-			and (orbit as OrbitWeapon).orbit_field.orbs == base_orbs + 2)
-		for i in range(600):                       # 5s（仍在持续期）
-			GameConfig.advance_frame()
-			p.call(&"tick", DT, Vector2.ZERO)
-		_check("技能·僚机：持续期保持（5s 时仍 +2）",
-			int((orbit as OrbitWeapon).orbs_bonus) == 2)
-		for i in range(720):                       # 再 6s（10s 到期 + 余量）
-			GameConfig.advance_frame()
-			p.call(&"tick", DT, Vector2.ZERO)
-		_check("技能·僚机：10s 到期还原（orbs_bonus 0 / 球数回落）",
-			int((orbit as OrbitWeapon).orbs_bonus) == 0
-			and (orbit as OrbitWeapon).orbit_field.orbs == base_orbs)
-		var slots: Array = p.get("weapon_slots")
-		slots[slots.find(orbit)] = null            # 先摘槽（有效引用期）再 free——find 对 freed 实例失效
-		(orbit as Node).free()
-	# 选人面板：8 格（锁定态展示——薇拉/诺亚解锁门文案）
+	# 手枪挂 2 层 ADD 词条（「武器下全部 buff 拷贝」断言锚——含逐层品级数值）
+	var pistol: WeaponBase = null
+	for w_v: WeaponBase in p.get("weapon_slots"):
+		if w_v != null and is_instance_valid(w_v) and w_v.data != null and w_v.data.id == &"W1_pistol":
+			pistol = w_v
+	var add_trait: TraitData = null
+	for tid: StringName in _gl.registry.trait_ids_by_pool(GameConst.PoolClass.ADD):
+		var td: TraitData = _gl.registry.get_trait(tid)
+		if td != null and td.stack_max >= 2:
+			add_trait = td
+			break
+	var rxn_trait: TraitData = null
+	for tid2: StringName in _gl.registry.trait_ids_by_pool(GameConst.PoolClass.ELEM):
+		var td2: TraitData = _gl.registry.get_trait(tid2)
+		if td2 != null and td2.params.has("reaction_mult"):
+			rxn_trait = td2
+			break
+	if pistol != null and add_trait != null:
+		pistol.attach_trait(add_trait)
+		pistol.attach_trait(add_trait)
+	var r_base := 1.0
+	if pistol != null and rxn_trait != null:
+		pistol.attach_trait(rxn_trait)         # ELE 反应强化（副本注册/注销断言锚）
+		r_base = float(_gl.elemental.reaction_mult())   # 本体注册基准（施放前取——副本未在场）
+	# 仅手枪在装（复制目标确定性口径——两把副本必为手枪；清前序用例残留 + 刚装的环绕）
+	var slots: Array = p.get("weapon_slots")
+	for i in range(slots.size()):
+		var w_v: WeaponBase = slots[i]
+		if w_v != null and is_instance_valid(w_v) and w_v.data != null and w_v.data.id != &"W1_pistol":
+			slots[i] = null
+			(w_v as Node).queue_free()
+	p.set("skill_cd_left", 0.0)
+	p.call(&"activate_skill")
+	var copies: Array = p.get("_summon_copies")
+	var both_pistol := copies.size() == 2
+	for c in copies:
+		if c == null or not is_instance_valid(c) or (c as WeaponBase).data == null \
+				or (c as WeaponBase).data.id != &"W1_pistol":
+			both_pistol = false
+	_check("R183·僚机：随机复制 2 把当前武器（= 手枪 ×2）", both_pistol, str(copies.size()))
+	_check("R183·僚机：护航舰随行（R93 舰体保留）", _count_noah_drones() >= 2,
+		str(_count_noah_drones()))
+	_check("R183·僚机：不占真实槽位（weapon_slots 无副本）",
+		copies.is_empty() or slots.find(copies[0]) < 0, "")
+	if copies.size() == 2 and pistol != null and add_trait != null:
+		var cp_stack: TraitStack = (copies[0] as WeaponBase).trait_stack
+		var buff_copied := false
+		for src_tb: TraitBase in pistol.trait_stack.traits:
+			if src_tb.data.id != add_trait.id:
+				continue
+			var cp_tb: TraitBase = null
+			for tb: TraitBase in cp_stack.traits:
+				if tb.data.id == add_trait.id:
+					cp_tb = tb
+					break
+			buff_copied = cp_tb != null and cp_tb.layers == src_tb.layers \
+				and cp_tb.layer_values.size() == src_tb.layer_values.size()
+		_check("R183·僚机：武器下全部 buff 拷贝（词条/层数/逐层数值）", buff_copied, "")
+		_check("R183·僚机：等级同步（副本 = 同源等级）",
+			int((copies[0] as WeaponBase).level) == int(pistol.level), "")
+	if rxn_trait != null and pistol != null:
+		_check("R183·僚机：ELE 反应乘区副本注册（施放期多源抬升）",
+			float(_gl.elemental.reaction_mult()) > r_base + 1.0,
+			"%.3f vs %.3f" % [float(_gl.elemental.reaction_mult()), r_base])
+	for i in range(600):                           # 5s（仍在持续期）
+		GameConfig.advance_frame()
+		p.call(&"tick", DT, Vector2.ZERO)
+	_check("R183·僚机：持续期保持（5s 时副本仍在）",
+		(p.get("_summon_copies") as Array).size() == 2, "")
+	var copy0: WeaponBase = copies[0] if copies.size() > 0 else null
+	for i in range(720):                           # 再 6s（10s 到期 + 余量）
+		GameConfig.advance_frame()
+		p.call(&"tick", DT, Vector2.ZERO)
+	_check("R183·僚机：10s 到期回收（副本清空 + 实例释放）",
+		(p.get("_summon_copies") as Array).is_empty()
+		and (copy0 == null or not is_instance_valid(copy0)
+			or (copy0 as Node).is_queued_for_deletion()), "")
+	if rxn_trait != null and pistol != null:
+		_check("R183·僚机：ELE 反应乘区随副本注销回落（P1 泄漏锁死）",
+			is_equal_approx(float(_gl.elemental.reaction_mult()), r_base),
+			"%.3f vs %.3f" % [float(_gl.elemental.reaction_mult()), r_base])
+	# R186 MF1 对账：开局首发双保险（角色门 + 对账重装）。MF3 纪律：map_records 按引用
+	# 快照还原（saved_maps 语义）；custom_weapon_id 收尾清零 + 立即落盘
+	var saved_maps_mf1: Dictionary = Meta.map_records
+	var saved_char_mf1: StringName = Meta.character_id
+	_gl.state = GameConst.GameStatus.MENU
+	Meta.custom_weapon_id = "W5_prism"           # 脏残留模拟（不经 set_custom_weapon 守卫直写字段）
+	Meta.character_id = &"sentinel"
+	_gl.call(&"start_run")
+	var mf1_w0: WeaponBase = _gl.player.weapon_slots[0]
+	_check("R186 对账：哨兵开局角色门强制手枪（custom 键休眠不泄漏）",
+		mf1_w0 != null and mf1_w0.data != null and mf1_w0.data.id == &"W1_pistol")
+	_gl.state = GameConst.GameStatus.MENU
+	Meta.map_records = {"world_grass": {"best_wave": 10, "best_kills": 0, "best_level": 5}}
+	Meta.character_id = &"fission"               # 普通通关记录 → fission 解锁（派生门）
+	_gl.call(&"start_run")
+	mf1_w0 = _gl.player.weapon_slots[0]
+	_check("R186 对账：fission 开局装 custom 首发（W5）",
+		mf1_w0 != null and mf1_w0.data != null and mf1_w0.data.id == &"W5_prism")
+	_gl.state = GameConst.GameStatus.MENU
+	Meta.character_id = &"sentinel"
+	_gl.call(&"start_run")
+	mf1_w0 = _gl.player.weapon_slots[0]
+	var mf1_live := 0
+	for w_mf1: WeaponBase in _gl.player.get("weapon_slots"):
+		if w_mf1 != null and is_instance_valid(w_mf1) and not (w_mf1 as Node).is_queued_for_deletion():
+			mf1_live += 1
+	_check("R186 对账：fission→sentinel 换角 → 手枪回收且 W5 清除（仅 1 把在装）",
+		mf1_w0 != null and mf1_w0.data != null and mf1_w0.data.id == &"W1_pistol"
+		and mf1_live == 1, "live=%d" % mf1_live)
+	# R186 echo：困难通关解锁 → 开局随机双武装（排除 W1；每日种子确定性——同种子同双武器）
+	var echo_ids_a: Array[StringName] = []
+	_gl.state = GameConst.GameStatus.MENU
+	Meta.map_records = {"world_grass#1": {"best_wave": 15, "best_kills": 0, "best_level": 5}}
+	Meta.character_id = &"echo"
+	_gl.call(&"start_run", 20260924)
+	for w_e: WeaponBase in _gl.player.get("weapon_slots"):
+		if w_e != null and is_instance_valid(w_e) and w_e.data != null:
+			echo_ids_a.append(w_e.data.id)
+	var echo_ids_b: Array[StringName] = []
+	_gl.state = GameConst.GameStatus.MENU
+	_gl.call(&"start_run", 20260924)
+	for w_e2: WeaponBase in _gl.player.get("weapon_slots"):
+		if w_e2 != null and is_instance_valid(w_e2) and w_e2.data != null:
+			echo_ids_b.append(w_e2.data.id)
+	_check("R186 echo：开局随机双武装（排除 W1 + 每日种子确定性）",
+		echo_ids_a.size() == 2 and echo_ids_a[0] != &"W1_pistol" and echo_ids_a[1] != &"W1_pistol"
+		and echo_ids_a == echo_ids_b, "a=%s b=%s" % [str(echo_ids_a), str(echo_ids_b)])
+	_gl.state = GameConst.GameStatus.MENU           # 收尾恢复哨兵手枪基线（后续套件依赖主武器暖状态）
+	Meta.character_id = saved_char_mf1
+	_gl.call(&"start_run")
+	Meta.map_records = saved_maps_mf1
+	Meta.custom_weapon_id = ""                    # MF3：收尾清零（立即落盘覆盖中途存档污染窗）
+	Meta._save()
+	# 选人面板：10 格（锁定态展示——薇拉/诺亚解锁门文案 + R186 fission/echo 分档门）
 	Meta.records["total_kills"] = saved_kills
 	Meta.map_records = saved_maps                 # 解锁门快照还原（测试不留痕）
 	Meta.achievements_done = saved_ach
@@ -2062,7 +2246,7 @@ func _test_p2_characters() -> void:
 	Meta.character_id = &"sentinel"
 	var menu: MenuScreen = _gl.menu_screen
 	menu._on_lobby_pressed("char")
-	_check("大厅：选人面板 8 格（P2 +2）",
+	_check("大厅：选人面板 10 格（R186 +2）",
 		_live_children(menu._panel_list) == CharacterTable.count())
 	menu._on_panel_close()
 	p.call(&"set_character", &"sentinel")
@@ -3281,28 +3465,99 @@ func _test_ev1_reward() -> void:
 
 
 func _test_ev2_revive() -> void:
-	print("── E2 复活演出（冲击环 + 横幅 + 最高档顿帧） ──")
+	# R186 E2 r2：复活演出改专用 revive_burst 通道（白闪/横幅/音效由订阅方消费）+
+	# 无敌 2.0→3.0 + 260px 内至多 24 颗清弹缓冲（_skill_stomp 同帽）——不再复用
+	# kill_blast / mechanics_intro（旧通道断言随行为删除，防双发回归）
+	print("── E2 复活演出（revive_burst 通道 + 清弹缓冲 + 最高档顿帧） ──")
+	var bursts: Array = []                        # [{pos: Vector2, charges: int}]
+	var burst_cb := func(p_pos: Vector2, p_charges: int) -> void:
+		bursts.append({"pos": p_pos, "charges": p_charges})
+	EventBus.revive_burst.connect(burst_cb)
+	var nullified: Array = []                     # 涟漪位置（每颗清弹恰一次）
+	var nullified_cb := func(p_pos: Vector2) -> void: nullified.append(p_pos)
+	EventBus.bullet_nullified.connect(nullified_cb)
+	# 播种敌弹（复审 M3）：直调 _try_revive 不跑物理帧，敌弹网格仅帧序④重建——
+	# 播种后必须手工 rebuild（pkg3_cases.gd _spawn_enemy_bullet 同范式）
+	var ppos: Vector2 = _gl.player.global_position
+	var bullets: Array[Node2D] = []
+	for i in range(26):                           # 260px 内 26 颗（最远 210px < 240）
+		bullets.append(_ev2_spawn_enemy_bullet(
+			ppos + Vector2.from_angle(TAU * float(i) / 26.0) * (60.0 + 6.0 * float(i))))
+	# 远弹放 380px：query_circle 距离精判 reach = radius + 入桶保守半径 64
+	#（_max_entity_radius，space_grid.gd rebuild/query 语义）→ 实际清除判定 324px，
+	# 280px 会落候选超集内被正常回收（上一轮门禁 FAIL 根因）
+	var far_b1 := _ev2_spawn_enemy_bullet(ppos + Vector2(380.0, 0.0))
+	var far_b2 := _ev2_spawn_enemy_bullet(ppos + Vector2(-380.0, 0.0))
+	bullets.append(far_b1)
+	bullets.append(far_b2)
+	_gl.enemy_bullet_grid.rebuild(bullets)
 	_gl.player.revives_left = 1
 	_gl.player.hp = 0.0
 	_gl.player.invuln_left = 0.0
-	var banners: Array[String] = []
-	var banner_cb := func(p_text: String) -> void: banners.append(p_text)
-	EventBus.mechanics_intro.connect(banner_cb)
-	var blasts: Array = []
-	var blast_cb := func(p_pos: Vector2, p_radius: float) -> void: blasts.append(p_radius)
-	EventBus.kill_blast.connect(blast_cb)
 	var ok := _gl.player._try_revive()
-	EventBus.mechanics_intro.disconnect(banner_cb)
-	EventBus.kill_blast.disconnect(blast_cb)
-	_check("E2 前置：复活成功且满血+无敌", ok and _gl.player.hp == _gl.player.max_hp
-		and _gl.player.invuln_left > 0.0)
-	_check("E2：复活横幅（剩余次数提示）",
-		banners.size() >= 1 and String(banners[0]).contains("复活"),
-		str(banners))
-	_check("E2：白环冲击表现（kill_blast 通道 r=260）",
-		blasts.size() >= 1 and absf(float(blasts[0]) - 260.0) <= 0.01, str(blasts))
-	_check("E2：次数耗尽拒绝复活（不误发演出）",
-		not _gl.player._try_revive())
+	EventBus.revive_burst.disconnect(burst_cb)
+	EventBus.bullet_nullified.disconnect(nullified_cb)
+	_check("E2 前置：复活成功且满血 + 3s 无敌（R186）",
+		ok and _gl.player.hp == _gl.player.max_hp
+		and is_equal_approx(_gl.player.invuln_left, 3.0))
+	_check("R186·E2：复活走专用通道（payload = 玩家位 + 扣减后余量）",
+		bursts.size() == 1 and (bursts[0]["pos"] as Vector2).distance_to(ppos) <= 0.01
+		and int(bursts[0]["charges"]) == 0, str(bursts))
+	_check("R186·E2：清弹缓冲 260px 内至多 24 颗（涟漪逐颗）",
+		nullified.size() == 24, "n=%d" % nullified.size())
+	_check("R186·E2：260px 外敌弹不受扰（保留存活）",
+		far_b1 != null and far_b2 != null
+		and not far_b1.is_clean and not far_b2.is_clean)
+	_check("R186·E2：青弧置位（3.0s 倒数双字段）",
+		is_equal_approx(_gl.player._revive_protect_left, 3.0)
+		and is_equal_approx(_gl.player._revive_protect_max, 3.0))
+	if far_b1 != null:
+		far_b1.pool.release(far_b1)               # 存活弹归还（24 颗清弹已随 nullify 归还）
+	if far_b2 != null:
+		far_b2.pool.release(far_b2)
+	_gl.player.respawn()
+	_check("R186·E2：respawn 后青弧清零（跨局不残留）",
+		_gl.player._revive_protect_left == 0.0 and _gl.player._revive_protect_max == 0.0)
+	# 小弹量对照：帽内全额清除（5 颗 → 5）
+	var nullified2: Array = []
+	var nullified2_cb := func(p_pos: Vector2) -> void: nullified2.append(p_pos)
+	EventBus.bullet_nullified.connect(nullified2_cb)
+	var small: Array[Node2D] = []
+	for i in range(5):
+		small.append(_ev2_spawn_enemy_bullet(ppos + Vector2(30.0 * float(i + 1), -20.0)))
+	_gl.enemy_bullet_grid.rebuild(small)
+	_gl.player.revives_left = 1
+	var ok2 := _gl.player._try_revive()
+	EventBus.bullet_nullified.disconnect(nullified2_cb)
+	_check("R186·E2：小弹量对照（5 颗帽内全额清除）",
+		ok2 and nullified2.size() == 5, "n=%d" % nullified2.size())
+	# 次数耗尽拒绝复活（不误发演出——原断言保留，R186 改 revive_burst 口径）
+	_gl.player.revives_left = 0
+	var bursts_before: int = bursts.size()
+	_check("R186·E2：次数耗尽拒绝复活（不误发演出）",
+		not _gl.player._try_revive() and bursts.size() == bursts_before)
+
+
+func _ev2_spawn_enemy_bullet(p_pos: Vector2) -> ProjectileBase:
+	# R186 E2 r2 复活清弹断言播种口（镜像 pkg3_cases.gd _spawn_enemy_bullet 范式：
+	# acquire + damage_pipeline/pool 注入 + spawn team=1——直调 _try_revive 不跑
+	# 物理帧，enemy_bullet_grid 仅帧序④重建，调用方须手工 rebuild）
+	var pool: ProjectilePool = _gl.pools[&"projectile"]
+	var b := pool.acquire() as ProjectileBase
+	if b == null:                                 # 池耗尽防御（:2606 同款判空）
+		return null
+	b.damage_pipeline = _gl.pipeline
+	b.pool = pool
+	b.spawn({
+		"position": p_pos,
+		"velocity": Vector2.ZERO,
+		"lifetime": 10.0,
+		"pierce": 1,
+		"hitbox_radius": 6.0,
+		"panel_snapshot": {"base_atk": 0.0},
+		"team": 1,
+	})
+	return b
 
 
 func _test_ev3_burst() -> void:
@@ -3719,14 +3974,15 @@ func _test_g10_peak_and_banner() -> void:
 	_gl.state = GameConst.GameStatus.MENU
 	_gl.current_map_id = MapTable.FIRST_MAP_ID
 	_gl._difficulty = 1                        # 困难档（start_run 不改写——menu 入口职责）
-	var got := [""]
-	var cap := func(p_msg: String) -> void: got[0] = p_msg
-	EventBus.mechanics_intro.connect(cap)
+	# R186：难度横幅改 _run_intro_lines 收口（与随机武装/大关段三源合并单 toast），不再直发——
+	# start_run 只收集，消费点 = _on_menu_start / _on_menu_start_daily / restart_run
+	_gl._run_intro_lines.clear()
 	_gl.call(&"start_run")
-	EventBus.mechanics_intro.disconnect(cap)
-	_check("G10：困难开局发规则横幅（数值/复活/奖励）",
-		String(got[0]).begins_with("【困难】") and String(got[0]).contains("复活 1 次"),
-		String(got[0]))
+	_check("G10：困难开局收口难度横幅（数值/复活/奖励——R186 三源合并消费口径）",
+		_gl._run_intro_lines.size() >= 1 and String(_gl._run_intro_lines[0]).begins_with("【困难】")
+			and String(_gl._run_intro_lines[0]).contains("复活 1 次"),
+		str(_gl._run_intro_lines))
+	_gl._run_intro_lines.clear()               # 测试不留残留（无消费点路径）
 	_gl.call(&"quit_to_menu")
 	_gl._difficulty = 0
 
@@ -3942,28 +4198,52 @@ func _test_r87_r88() -> void:
 	_gl.state = GameConst.GameStatus.MENU
 	_gl.call(&"start_run")
 	_gl.player.set("unlocked_slots", 4)
-	# R88 槽位帽：普通难度帽 3——波浪里程碑解锁第 4 槽被截断
+	# R183 槽位帽：普通难度帽 5——波浪里程碑解锁第 6 槽被截断
 	_gl.player.set("slot_bonus", 0)
 	_gl.player.call(&"set_difficulty", 0)
-	_gl.player.set("unlocked_slots", 3)
-	_check("R88：普通难度帽 3（w 解锁第 4 槽被拒）",
-		not _gl.player.call(&"unlock_slot", 4), "")
-	# 金卡扩容越帽
-	_check("R88：金卡扩容 grant_slot_bonus 越帽 +1",
-		bool(_gl.player.call(&"grant_slot_bonus")) and int(_gl.player.get("unlocked_slots")) == 4, "")
-	_check("R88：扩容后有效帽 = 4（3+1）",
-		int(_gl.player.call(&"slot_cap_total")) == 4, str(_gl.player.call(&"slot_cap_total")))
-	# 地狱帽 5
+	_gl.player.set("unlocked_slots", 5)
+	_check("R183：普通难度帽 5（w 解锁第 6 槽被拒）",
+		not _gl.player.call(&"unlock_slot", 6), "")
+	# R185 金卡语义 = 帽内提前解锁（不越帽）：帽内已满拒绝；未满时解锁下一槽、总位数不变
+	_check("R185：帽内已满金卡无槽可解（grant 拒绝）",
+		not _gl.player.call(&"grant_slot_bonus"), "")
+	_gl.player.set("unlocked_slots", 2)
+	_gl.player.set("slot_bonus", 0)
+	_check("R185：金卡 = 提前解锁帽内下一槽（2→3、帽仍 5）",
+		bool(_gl.player.call(&"grant_slot_bonus"))
+		and int(_gl.player.get("unlocked_slots")) == 3
+		and int(_gl.player.get("slot_bonus")) == 1
+		and int(_gl.player.call(&"slot_cap_total")) == 5,
+		"u=%s cap=%s" % [str(_gl.player.get("unlocked_slots")), str(_gl.player.call(&"slot_cap_total"))])
+	# 地狱帽 6
 	_gl.player.call(&"set_difficulty", 2)
-	_check("R88：地狱帽 5（unlock 5 通）",
-		bool(_gl.player.call(&"unlock_slot", 5)), "")
+	_gl.player.set("unlocked_slots", 5)
+	_gl.player.set("slot_bonus", 1)
+	_check("R183：地狱帽 6（unlock 6 通）",
+		bool(_gl.player.call(&"unlock_slot", 6)), "")
+	_check("R185：地狱 6/6 帽内已满金卡拒绝",
+		not _gl.player.call(&"grant_slot_bonus"), "")
 	# 金卡构造与生效链
 	var card: Dictionary = _gl.card_generator._make_slot_bonus_card()
 	_gl.player.set("unlocked_slots", 2)
 	_gl.player.set("slot_bonus", 0)
 	_gl.card_generator.apply_choice(card, _gl.player)
-	_check("R88：金卡 apply → 槽 +1（越过普通帽）",
+	_check("R183：金卡 apply → 槽 +1",
 		int(_gl.player.get("unlocked_slots")) == 3, str(_gl.player.get("unlocked_slots")))
+	# R185 概率口径：每批一次 5% 掷（旧每张 4% ≈ 每批 11.5%）——300 批命中 ≤30（≤10%）
+	var slot_hits := 0
+	var keep_u: int = int(_gl.player.get("unlocked_slots"))
+	_gl.player.set("unlocked_slots", 2)          # 帽内未满 → 门开
+	_gl.card_generator.rng.seed = 1234
+	_gl.card_generator._slot_rng.seed = 20260919
+	for i in range(300):
+		var batch := _gl.card_generator.generate_candidates({"player": _gl.player, "wave": 10})
+		for c in batch:
+			if int(c.get("kind", -1)) == CardGenerator.CardKind.SLOT_BONUS:
+				slot_hits += 1
+	_gl.player.set("unlocked_slots", keep_u)     # R185：恢复解锁态（不污染后续装槽断言）
+	_check("R185：槽位金卡每批 5% 口径（300 批命中 ≤30）", slot_hits <= 30 and slot_hits >= 2,
+		"hits=%d" % slot_hits)
 	# R88 解锁门：普通未通关 → normal_cleared false（受前序用例污染的 records 已含
 	# 冰原通关记录时为 true——双向断言记录状态即可，菜单置灰逻辑同源）
 	var cleared: bool = Meta.normal_cleared()
@@ -4004,25 +4284,87 @@ func _test_r87_r88() -> void:
 	_gl.call(&"quit_to_menu")
 
 
+func _test_r183_slots() -> void:
+	print("── R183 槽位画满/上锁样式/难度默认 ──")
+	_gl.state = GameConst.GameStatus.MENU
+	_gl._difficulty = GameConst.Difficulty.NORMAL
+	_gl.call(&"start_run")
+	_check("R183：普通开局默认解锁 2",
+		int(_gl.player.get("unlocked_slots")) == 2, str(_gl.player.get("unlocked_slots")))
+	_check("R183：难度默认 2/3/3 与帽 5/6/6（真源）",
+		GameConst.difficulty_slot_default(0) == 2 and GameConst.difficulty_slot_default(1) == 3
+		and GameConst.difficulty_slot_default(2) == 3
+		and GameConst.difficulty_slot_cap(0) == 5 and GameConst.difficulty_slot_cap(1) == 6
+		and GameConst.difficulty_slot_cap(2) == 6, "")
+	# HUD 构筑面板：按有效帽画满（普通 5 槽全画；默认解锁 2 → 3 个 🔒 上锁样式）
+	# 取样用引用差集（QA 审计：重建后新件与 queue_free 延帧残留同名 → 引擎自动改名
+	# @Control@N，按 name=="BuildContent" 取到的是旧快照——断言「巧合通过」测不出重绘）
+	var before: Array = []
+	for kid in _gl.hud._build_panel.get_children():
+		before.append(kid)
+	_gl.hud.call(&"_refresh_build")
+	var content: Node = null
+	for kid in _gl.hud._build_panel.get_children():
+		if not before.has(kid) and String(kid.name) != "BuildBg":
+			content = kid                     # 刷新后新增的唯一子节点 = 新 content
+	var wpn_n := 0
+	var lock_n := 0
+	if content != null:
+		for kid in content.get_children():
+			if String(kid.name).begins_with("Wpn"):
+				wpn_n += 1
+			elif String(kid.name).begins_with("Lock"):
+				lock_n += 1
+	_check("R183：HUD 按帽画满 5 槽（普通）", wpn_n == 5, str(wpn_n))
+	_check("R183：未解锁槽位 🔒 上锁样式（5-2=3 个）", lock_n == 3, str(lock_n))
+	# w31 保底里程碑：地狱帽 6 → 解锁第 6 槽；普通帽 5 → 截断
+	_gl.player.call(&"set_difficulty", 2)
+	_gl.player.set("slot_bonus", 0)
+	_gl.wave_director.call(&"start_wave", 31)
+	_check("R183：w31 保底解锁第 6 槽（地狱帽 6）",
+		int(_gl.player.get("unlocked_slots")) == 6, str(_gl.player.get("unlocked_slots")))
+	_gl.player.call(&"set_difficulty", 0)
+	_gl.player.set("unlocked_slots", 5)
+	EventBus.emit_slot_unlocked(6)
+	_check("R183：普通帽 5 截断第 6 槽解锁", int(_gl.player.get("unlocked_slots")) == 5,
+		str(_gl.player.get("unlocked_slots")))
+	_gl.call(&"quit_to_menu")
+
+
 func _test_r91_prism_laser() -> void:
-	print("── R91 棱镜/激光差异化 ──")
+	# R187 翻转重写（原 R91「W4 聚焦 / W5 分光折射差异化」——折射轴随 W5 本体退役）：
+	# 新契约 = W4 常驻聚焦单体锚（lifetime==0 + 聚焦爬坡 + CDR 换挂保留）/
+	# W5 校准锚束（单束、无 refract 五键、镜面键在册、束段指纹 == 1）
+	print("── R91 棱镜/激光差异化（R187 新契约重写） ──")
 	_gl.state = GameConst.GameStatus.MENU
 	_gl.call(&"start_run")
 	_gl.player.set("unlocked_slots", 4)
-	# 差异化开关：W4 聚焦爬坡 / W5 分光不变
+	# 差异化开关：W4 聚焦爬坡 / W5 无（镜面枢纽定位）
 	var w4d: WeaponData = _gl.registry.get_weapon(&"W4_pulse_beam")
 	var w5d: WeaponData = _gl.registry.get_weapon(&"W5_prism")
 	_check("R91：W4 开聚焦（focus_ramp）/ W5 无（分光定位）",
 		bool(w4d.laser.get("focus_ramp", false)) and not bool(w5d.laser.get("focus_ramp", false)), "")
-	# 聚焦机制：同目标计时 → 乘区爬坡；换目标归零
+	# W5 本体退役折射：laser 段 refract 五键真删（validator 同步剔除语义）
+	_check("R91：W5 refract 五键退役（refract_beams/ratio/depth/两 levels 全删）",
+		not w5d.laser.has("refract_beams") and not w5d.laser.has("refract_ratio")
+			and not w5d.laser.has("refract_depth")
+			and not w5d.laser.has("refract_beams_levels")
+			and not w5d.laser.has("refract_ratio_levels"), "")
+	_check("R91：W5 镜面键在册（mirrors_count_levels / mirror_ratio_levels）",
+		w5d.laser.has("mirrors_count_levels") and w5d.laser.has("mirror_ratio_levels"), "")
+	# 聚焦机制：同目标计时 → 乘区爬坡；换目标归零（无 AFF_CDR 挂载 = 保留 0%）
 	var w4: LaserWeapon = _gl.player.add_weapon(w4d) as LaserWeapon
 	_check("R91：W4 装备", w4 != null, "")
 	if w4 != null:
 		w4.try_fire()
 		var beam: LaserBeam = w4.get("_main_beam")
 		_check("R91：主束生成", beam != null and beam.is_live(), "")
+		# R187 主束常驻化：W4 .tres 删 pulse_duration → spawn lifetime 缺省 0 = 常驻
+		_check("R91：W4 主束常驻（lifetime == 0）",
+			beam != null and absf(float(beam.get("lifetime"))) < 0.0001,
+			str(beam.get("lifetime") if beam != null else "null"))
 		if beam != null:
-			beam.set("lifetime", 0.0)               # 测试期常驻（脉冲 0.5s 会过期跳过聚焦块）
+			beam.set("lifetime", 0.0)               # 测试期常驻兜底（防 .tres 双轨期脉冲过期）
 			beam.set("lifetime_left", 999.0)
 			beam.last_hit_uid = 777                 # 模拟命中目标 777
 			w4.call(&"_on_tick_post", 0.05)         # 首帧：锁定 777（归零起算）
@@ -4033,20 +4375,23 @@ func _test_r91_prism_laser() -> void:
 			_check("R91：8s 封顶 ×2", absf(w4.focus_multiplier() - 2.0) < 0.01,
 				"%f" % w4.focus_multiplier())
 			beam.last_hit_uid = 888                 # 换目标
-			w4.call(&"_on_tick_post", 0.05)         # 首帧换锁（归零）
+			w4.call(&"_on_tick_post", 0.05)         # 首帧换锁（无 AFF_CDR → 保留 0% 归零）
 			w4.call(&"_on_tick_post", 1.0)
 			_check("R91：换目标归零重聚（×1.15）",
 				absf(w4.focus_multiplier() - 1.15) < 0.01, "%f" % w4.focus_multiplier())
-	# W5 折射分色（depth 光谱）：直接验 spawn 参数消费——depth2 束 tint 为紫
+	# W5 校准锚束：单束常驻 + 无折射分叉（束段指纹 == 1——W5 重做定位锚）
 	var w5: LaserWeapon = _gl.player.add_weapon(w5d) as LaserWeapon
 	_check("R91：W5 装备", w5 != null, "")
 	if w5 != null:
-		var beam2: LaserBeam = w5.call(&"_spawn_beam",
-			Vector2(300.0, 600.0), Vector2(0.0, -1.0), 2, 0.36, 0)
-		_check("R91：W5 depth2 折射束生成（分光谱系）", beam2 != null and beam2.is_refraction, "")
-		if beam2 != null:
-			beam2.set("lifetime", 0.01)
-			beam2.call(&"tick", 0.02)
+		w5.try_fire()
+		_check("R91：W5 校准锚束单束（try_fire 后束段 == 1）",
+			w5.active_beams.size() == 1, str(w5.active_beams.size()))
+		if not w5.active_beams.is_empty():
+			var anchor: LaserBeam = w5.active_beams[0]
+			_check("R91：W5 锚束无折射分叉（refract_beams == 0）", anchor.refract_beams == 0,
+				str(anchor.refract_beams))
+			anchor.set("lifetime", 0.01)
+			anchor.call(&"tick", 0.02)              # 到期自回收（清场）
 	# 状态还原（含活束清场——常驻测试束残留会污染后续段）
 	if w4 != null and w4.get("_main_beam") != null 			and is_instance_valid(w4.get("_main_beam") as LaserBeam):
 		var kill_beam: LaserBeam = w4.get("_main_beam")

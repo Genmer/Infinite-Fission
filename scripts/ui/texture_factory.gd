@@ -1153,6 +1153,43 @@ static func missile_tex() -> ImageTexture:
 		])))
 
 
+static func sub_beam_color() -> Color:
+	# R187 W4 副激光「第三谱系束色」：主束=玩家蓝谱系、折射残迹退役——副束取电紫谱系
+	#（SHOCK 提亮派生；激光组 laser_beam 副束 tint 消费同源，保证图标与实况束色一致）
+	return PopPalette.SHOCK.lerp(Color.WHITE, 0.25)
+
+
+static func mirror_bead(p_fill: Color, p_size: int = 64) -> ImageTexture:
+	# R187 镜面弹体（W5 万镜回廊）：冰青珠体 + 银白镜像描边（双层描边=「镜中像」读感；
+	# 与本体弹珠的厚单描边区分——镜面弹体镜像描边验收口径）
+	var key := "mirror_bead_%s_%d" % [p_fill.to_html(), p_size]
+	return _cached(key, func() -> ImageTexture:
+		var r := float(p_size) * 0.5 - 10.0
+		var ice := PopPalette.PLAYER.lerp(Color.WHITE, 0.62)
+		var body_fill := ice if p_fill == PopPalette.PLAYER else p_fill.lerp(ice, 0.5)
+		return _render(p_size, p_size, _shade([
+			{"sd": _circle_at(Vector2.ZERO, r + 3.2), "fill": Color(0.86, 0.93, 1.0, 0.95), "ow": 0.0},
+			{"sd": _circle_at(Vector2.ZERO, r), "fill": body_fill, "ow": 0.0},
+			{"sd": _ring_at(r * 0.66, 1.6), "fill": Color(1.0, 1.0, 1.0, 0.55), "ow": 0.0},
+			{"sd": _circle_at(Vector2(-r * 0.32, -r * 0.36), r * 0.26),
+				"fill": Color(1.0, 1.0, 1.0, 0.95), "ow": 0.0},
+		])))
+
+
+static func gold_bead(p_size: int = 64) -> ImageTexture:
+	# R187 W1 黄金弹（TH_BANK_SHOT 反弹 ≥12 升格）：金体 + 白热高光 + 深金描边
+	#（金色弹染验收口径；与普通玩家蓝珠/镜面珠三向互异）
+	var key := "gold_bead_%d" % p_size
+	return _cached(key, func() -> ImageTexture:
+		var r := float(p_size) * 0.5 - 9.0
+		return _render(p_size, p_size, _shade([
+			{"sd": _circle_at(Vector2.ZERO, r), "fill": PopPalette.GOLD, "ow": 9.0,
+				"oc": PopPalette.GOLD.lerp(PopPalette.OUTLINE, 0.45)},
+			{"sd": _circle_at(Vector2(-r * 0.34, -r * 0.38), r * 0.3),
+				"fill": Color(1.0, 1.0, 1.0, 0.95), "ow": 0.0},
+		])))
+
+
 static func ice_shard() -> ImageTexture:
 	# 结霜小晶体（菱形冰渣）：淡冰蓝菱形 + 白高光 + 藏青描边（贴纸风统一）
 	var key := "ice_shard"
@@ -1212,42 +1249,107 @@ static func weapon_icon(p_id: StringName) -> ImageTexture:
 					{"sd": _box_at(Vector2(7.0, -4.0), Vector2(15.0, 3.4), 1.7), "fill": blue, "ow": 2.8},
 					{"sd": _box_at(Vector2(7.0, 4.0), Vector2(15.0, 3.4), 1.7), "fill": blue, "ow": 2.8},
 				]
-			"W4_pulse_beam":                  # 脉冲光束：发射器 + 直线光束条
+			"W4_pulse_beam":                  # 脉冲光束：发射器 + 主束条 + 裂片副束（细束第三谱系色）
+				var sub := sub_beam_color()
 				layers = [
 					{"sd": _box_at(Vector2(-9.0, 0.0), Vector2(6.0, 8.0), 3.0), "fill": deep, "ow": 3.0},
+					# R187 副激光分束视觉：两道细束斜出（±14°，细/短/第三谱系紫）压在主束下层
+					{"sd": _box_rot_at(Vector2(10.0, -7.5), Vector2(11.0, 1.1), 0.8, -0.24),
+						"fill": sub, "ow": 0.0},
+					{"sd": _box_rot_at(Vector2(10.0, 7.5), Vector2(11.0, 1.1), 0.8, 0.24),
+						"fill": sub, "ow": 0.0},
 					{"sd": _box_at(Vector2(8.0, 0.0), Vector2(17.0, 3.2), 1.6), "fill": blue, "ow": 2.6},
 					{"sd": _circle_at(Vector2(22.0, 0.0), 2.6), "fill": white, "ow": 0.0},
 				]
-			"W5_prism":                       # 棱镜：菱形晶体 + 折射双线
+			"W5_prism":
+				# R187 万镜回廊重绘（用户原话「棱镜图标改为一个棱形镜子」；文案禁「折射/
+				# 分光」同口径——图标亦退役折射双线）：菱形镜框（藏青厚框）+ 冰青镜面
+				# （银白/冰青读感，禁金色调性——与 R183 金染僚机区分）+ 斜向镜面高光
+				# + 右侧映出的小镜影（镜面军团的「映照」语义；与 9 武器像素互异）
+				var mirror_frame := PackedVector2Array([
+					Vector2(-2.0, -19.0), Vector2(13.0, -4.0), Vector2(-2.0, 11.0), Vector2(-17.0, -4.0),
+				])
+				var mirror_glass := PackedVector2Array([
+					Vector2(-2.0, -13.0), Vector2(7.0, -4.0), Vector2(-2.0, 5.0), Vector2(-11.0, -4.0),
+				])
+				var mirror_ghost := PackedVector2Array([
+					Vector2(9.0, -9.0), Vector2(15.0, -3.0), Vector2(9.0, 3.0), Vector2(3.0, -3.0),
+				])
+				var ice := PopPalette.PLAYER.lerp(Color.WHITE, 0.62)
 				layers = [
-					{"sd": _poly_sd(PackedVector2Array([
-						Vector2(-6.0, -14.0), Vector2(4.0, 0.0), Vector2(-6.0, 14.0), Vector2(-16.0, 0.0),
-					])), "fill": blue, "ow": 3.0},
-					{"sd": _box_at(Vector2(13.0, -7.0), Vector2(9.0, 2.0), 1.0), "fill": blue, "ow": 2.4},
-					{"sd": _box_at(Vector2(13.0, 7.0), Vector2(9.0, 2.0), 1.0), "fill": blue, "ow": 2.4},
-					{"sd": _circle_at(Vector2(-6.0, -6.0), 2.4), "fill": white, "ow": 0.0},
+					{"sd": _poly_sd(mirror_ghost), "fill": ice.lerp(Color.WHITE, 0.4), "ow": 2.2},
+					{"sd": _poly_sd(mirror_frame), "fill": PopPalette.PLAYER.lerp(PopPalette.OUTLINE, 0.5), "ow": 3.0},
+					{"sd": _poly_sd(mirror_glass), "fill": ice, "ow": 0.0},
+					{"sd": _box_rot_at(Vector2(-4.0, -6.0), Vector2(4.6, 1.1), 0.8, -0.78),
+						"fill": Color(1.0, 1.0, 1.0, 0.92), "ow": 0.0},
+					{"sd": _circle_at(Vector2(-2.0, -4.0), 1.8), "fill": white, "ow": 0.0},
 				]
-			"W6_micro_missile", "W7_cluster_rocket":
-				# R35 火箭筒化身（用户点名「导弹的悬浮的是火箭筒」）：肩扛发射器——
-				# 粗发射管斜置 + 管口火箭弹头露出 + 握把/肩托 + 观瞄小窗；
-				# W7 管径/弹头更粗（集束重火力读感），W6 略细
-				var tube_w := 5.0 if String(p_id) == "W7_cluster_rocket" else 4.0
-				# _sd_box 口径 = 半宽；管身水平（+X = 化身朝向口径，旋转后枪口对弹道）
+			"W6_micro_missile":
+				# R35 火箭筒化身（用户点名「导弹的悬浮的是火箭筒」）+ R184「W6/W7 图标太像」：
+				# 轻型细长单管 + 管口一枚细长自导导弹（小弹体 + 上下小尾翼），冷色钢蓝轻盈读感；
+				# 与 W7 靠三轴区分——轮廓（细单管 vs 粗管+弹舱）/ 弹头数（1 vs 3）/ 配色（钢蓝 vs 橙红）
+				var steel := PopPalette.PLAYER.lerp(Color.WHITE, 0.30)
+				var steel_deep := PopPalette.PLAYER.lerp(PopPalette.OUTLINE, 0.45)
+				var pale := PopPalette.PLAYER.lerp(Color.WHITE, 0.58)
+				# _box_at 口径 = 半宽；管身水平（+X = 化身朝向口径，旋转后枪口对弹道）
 				layers = [
-					# 发射管（管身蓝，水平指 +X）
-					{"sd": _box_at(Vector2(1.0, 0.0), Vector2(12.0, tube_w), 2.2), "fill": blue, "ow": 3.0},
-					# 管口（深色加粗箍）
-					{"sd": _box_at(Vector2(13.0, 0.0), Vector2(2.6, tube_w + 1.4), 1.4), "fill": deep, "ow": 2.4},
-					# 露出的火箭弹头（管口前方橙红锥）
-					{"sd": _poly_sd(PackedVector2Array([
-						Vector2(15.5, -tube_w - 0.5), Vector2(22.5, 0.0), Vector2(15.5, tube_w + 0.5),
-					])), "fill": Color(1.0, 0.55, 0.25), "ow": 2.2},
+					# 肩托（管尾，轻量窄条）
+					{"sd": _box_at(Vector2(-12.8, 4.2), Vector2(2.4, 4.6), 1.6), "fill": steel_deep, "ow": 2.4},
 					# 握把（管下垂直）
-					{"sd": _box_at(Vector2(-1.0, 9.5), Vector2(2.2, 5.0), 1.6), "fill": deep, "ow": 2.4},
-					# 肩托（管尾）
-					{"sd": _box_at(Vector2(-13.0, 1.0), Vector2(3.0, 6.0), 1.8), "fill": deep, "ow": 2.4},
+					{"sd": _box_at(Vector2(-1.5, 8.8), Vector2(1.9, 4.4), 1.4), "fill": steel_deep, "ow": 2.4},
+					# 发射管（细长单管，水平指 +X）
+					{"sd": _box_at(Vector2(0.5, 1.0), Vector2(10.5, 2.3), 2.4), "fill": steel, "ow": 2.8},  # R187 尺寸差：细长轻管再收一档
+					# 管口（深色细箍）
+					{"sd": _box_at(Vector2(11.8, 1.0), Vector2(1.7, 3.4), 1.2), "fill": steel_deep, "ow": 2.2},
+					# 导弹小尾翼（上下各一片后掠三角，压在弹体下层）
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(17.6, -0.4), Vector2(14.2, -3.6), Vector2(14.2, -0.4),
+					])), "fill": steel_deep, "ow": 2.0},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(17.6, 2.4), Vector2(14.2, 5.6), Vector2(14.2, 2.4),
+					])), "fill": steel_deep, "ow": 2.0},
+					# 细长导弹弹体（管口仅一枚，浅钢蓝）
+					{"sd": _box_at(Vector2(17.6, 1.0), Vector2(4.2, 1.6), 1.5), "fill": pale, "ow": 2.0},
+					# 尖锥弹头（饱和蓝点缀）
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(21.4, -0.9), Vector2(24.8, 1.0), Vector2(21.4, 2.9),
+					])), "fill": PopPalette.PLAYER, "ow": 2.0},
 					# 观瞄小窗（管身上方白点）
-					{"sd": _circle_at(Vector2(-3.0, -tube_w - 1.5), 2.0), "fill": white, "ow": 0.0},
+					{"sd": _circle_at(Vector2(-4.5, -3.2), 1.7), "fill": white, "ow": 0.0},
+				]
+			"W7_cluster_rocket":
+				# R35 火箭筒化身 + R184「W6/W7 图标太像」：重型粗管 + 顶部弹舱（双装填孔）
+				# + 管口三枚粗短集束弹头品字成组，暖色橙红厚重读感——与 W6 三轴区分
+				var warm := PopPalette.ENEMY.lerp(PopPalette.XP, 0.45)
+				var warm_deep := PopPalette.ENEMY.lerp(PopPalette.OUTLINE, 0.40)
+				var hot := PopPalette.XP.lerp(PopPalette.ENEMY, 0.25)
+				layers = [
+					# 肩托（加厚，重火力读感）
+					{"sd": _box_at(Vector2(-14.0, 3.0), Vector2(2.8, 6.0), 1.8), "fill": warm_deep, "ow": 2.4},
+					# 握把（加粗）
+					{"sd": _box_at(Vector2(-2.0, 11.6), Vector2(2.4, 4.8), 1.6), "fill": warm_deep, "ow": 2.4},
+					# 顶部弹舱（集束备弹 + 双装填孔白点）
+					{"sd": _box_at(Vector2(-6.5, -6.6), Vector2(4.6, 2.8), 1.6), "fill": warm_deep, "ow": 2.2},
+					{"sd": _circle_at(Vector2(-9.0, -6.6), 1.1), "fill": white, "ow": 0.0},
+					{"sd": _circle_at(Vector2(-4.0, -6.6), 1.1), "fill": white, "ow": 0.0},
+					# 发射管（重型粗管，水平指 +X）
+					{"sd": _box_at(Vector2(-0.5, 1.0), Vector2(13.5, 5.0), 2.4), "fill": warm, "ow": 3.0},  # R187 尺寸差：粗管再放一档（W6/W7 大小区分强化）
+					# 管口（深色加粗箍）
+					{"sd": _box_at(Vector2(11.3, 1.0), Vector2(2.2, 5.6), 1.4), "fill": warm_deep, "ow": 2.4},
+					# 三枚粗短集束弹头（品字成组：上/下珊瑚红短弹）
+					{"sd": _box_at(Vector2(15.2, -4.6), Vector2(3.4, 2.2), 1.7), "fill": PopPalette.ENEMY, "ow": 2.0},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(17.7, -6.2), Vector2(21.2, -4.6), Vector2(17.7, -3.0),
+					])), "fill": hot, "ow": 2.0},
+					{"sd": _box_at(Vector2(15.2, 6.6), Vector2(3.4, 2.2), 1.7), "fill": PopPalette.ENEMY, "ow": 2.0},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(17.7, 5.0), Vector2(21.2, 6.6), Vector2(17.7, 8.2),
+					])), "fill": hot, "ow": 2.0},
+					# 中轴主弹（橙红粗弹体 + 金橙钝锥）
+					{"sd": _box_at(Vector2(16.0, 1.0), Vector2(3.9, 2.7), 2.0), "fill": warm, "ow": 2.0},
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(18.8, -1.7), Vector2(22.6, 1.0), Vector2(18.8, 3.7),
+					])), "fill": hot, "ow": 2.0},
 				]
 			"W8_orbit_field":                 # 环绕力场：力场环 + 双卫星珠
 				layers = [

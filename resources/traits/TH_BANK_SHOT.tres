@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"TH_BANK_SHOT"
+display_name = "黄金弹"
+description = "单弹累计反弹 ≥12：升格黄金弹（后续反弹必暴 + 落点弹片 + 金染）"
+pool = 3
+pool_id = &""
+effect_id = &"EF_BANK"
+value = 1.0
+value2 = 0.0
+params = {"threshold_only": true, "metric": "bounce_count", "threshold": 12.0}
+event_hooks = []
+stack_max = 1
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 3
+tags = 0
+condition = {}

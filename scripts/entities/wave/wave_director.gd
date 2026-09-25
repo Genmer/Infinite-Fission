@@ -106,7 +106,10 @@ func start_wave(p_wave: int) -> void:
 		if _boss_wave:
 			_spawn_boss(p_wave)
 	EventBus.emit_wave_started(p_wave)
-	# F-19：w21 保底解锁武器槽5（Boss2 未击杀兜底；玩家侧 unlock_slot 幂等）
+	# F-19：w21 保底解锁武器槽5 / w31 保底解锁武器槽6（R183 帽扩 6——Boss 未击杀兜底；
+	# 玩家侧 unlock_slot 幂等且受难度帽截断：普通帽 5 内 w31 无效）
+	if p_wave >= 31:
+		EventBus.emit_slot_unlocked(6)
 	if p_wave >= 21:
 		EventBus.emit_slot_unlocked(5)
 
@@ -150,7 +153,7 @@ func tick(p_game_delta: float) -> void:
 				var shop_entry := _table_entry(current_wave)
 				if shop_entry != null and shop_entry.events.has(&"SHOP"):
 					shop_requested.emit(current_wave)
-				# F-19：槽2 解锁提前至 w2（R5.12-P1 构筑提速②，原 w3）/ w7 波后解锁槽3
+				# F-19：w2 槽2（R183 开局默认已 2——留作旧档兜底）/ w7 波后解锁槽3
 				if current_wave == SLOT2_UNLOCK_WAVE:
 					EventBus.emit_slot_unlocked(2)
 				elif current_wave == 7:
@@ -171,7 +174,9 @@ func on_enemy_killed(p_enemy: Node2D) -> void:
 		wave_first_kill_done = true
 	var enemy_tags := int(p_enemy.get("tags")) if p_enemy.get("tags") != null else 0
 	if (enemy_tags & GameConst.TAG_BOSS) != 0:
-		if current_wave >= 20:
+		if current_wave >= 30:
+			EventBus.emit_slot_unlocked(6)      # R183：Boss3 掉落武器槽6（帽 6 难度可用）
+		elif current_wave >= 20:
 			EventBus.emit_slot_unlocked(5)      # Boss2 击杀提前解锁（F-19）
 		elif current_wave >= 10:
 			EventBus.emit_slot_unlocked(4)      # Boss1 掉落武器槽4（F-19）

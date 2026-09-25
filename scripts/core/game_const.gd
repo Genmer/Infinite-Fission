@@ -5,6 +5,8 @@ class_name GameConst
 extends RefCounted
 
 enum Element { KIN, FIR, ICE, LTG }                       # 伤害/附着元素
+
+const MAX_WEAPON_SLOTS := 7                   # 槽位数组绝对上限（Player.MAX_SLOTS 同源；R185 起金卡不越帽，难度帽 5/6/6 恒在其内）
 enum PoolClass { ADD, MULT, LOCAL, MECH, ELEM }           # 词条池归类（B_spec §2.5）
 enum TraitEvent { ON_SPAWN, ON_TICK, ON_HIT, ON_PIERCE, ON_BOUNCE, ON_EXPIRE }  # 六大生命周期
 enum WeaponForm { BALLISTIC, LASER, HOMING, MELEE }       # 武器四形态
@@ -47,33 +49,52 @@ static func difficulty_dual_pick(p_d: int, p_roll: float) -> bool:
 
 
 static func difficulty_slot_cap(p_d: int) -> int:
-	# R88 分难度武器栏上限：普通 3 / 困难 4 / 地狱 5（金卡「武器槽+1」可越过帽，
-	# 绝对上限仍 MAX_SLOTS=5——普通 3+2 金卡 / 困难 4+1 / 地狱 5 满）
-	return [3, 4, 5][clampi(p_d, 0, 2)]
+	# R183 分难度武器栏上限：普通 5 / 困难 6 / 地狱 6（R185：金卡「武器槽+1」只提前
+	# 解锁帽内槽位、不越帽——总位数恒等于本帽，用户口径「3 解锁 2 锁」）
+	return [5, 6, 6][clampi(p_d, 0, 2)]
+
+
+static func difficulty_slot_default(p_d: int) -> int:
+	# R183 开局默认解锁槽数：普通 2 / 困难 3 / 地狱 3（用户口径「上限有多少画多少，
+	# 锁着的画上锁样式」——帽内其余槽位靠波次里程碑/金卡逐步解锁）
+	return [2, 3, 3][clampi(p_d, 0, 2)]
 
 
 const PLAYER_SIDE_POOLS: Array[StringName] = [&"add_hp", &"add_xp", &"add_pickup",
 	&"add_skillcdr", &"add_gold"]   # 玩家侧词条池（全局生效）：卡面【通用】前缀 + 构筑详情
 	                                # 「通用词条」段的归类真源（R80：此前错挂武器段误导归因）
 
+# ── R187 共享系统组常量 ───────────────────────────────────────────
+# laser_subbeam_spawned 归属字段（R183 束数折减断言通道：本体可挂副束、复制体强制 0）
+const SUBBEAM_OWNER_BODY := 0                 # 副激光生成自本体武器
+const SUBBEAM_OWNER_COPY := 1                 # 副激光生成自诺亚复制体（新数据下恒不发生——折减断言用）
+# W6/W7 引信标记（enemy.fuse_left 通用标记通道）
+const FUSE_MARK_DURATION := 4.0               # 引信涂层持续 s（幂等刷新）
+const FUSE_DETONATE_GUARD := 0.5              # 定向爆破每敌护栏 s（防同帧双爆双吃）
+# W8 蓄能标记（enemy.charge_stacks 通用标记通道；蓄能池以目标 uid 为全局单例）
+const CHARGE_STACK_DEFAULT_MAX := 5           # 满档档位缺省（真源 W8 melee.charge_max，缺省兜底）
+
 
 static func weapon_note(p_weapon_id: String) -> String:
-	# G8 新武器首获横幅一句话（空 = 不提示）；与 enemy_attack_note 同源纪律
+	# G8 新武器首获横幅一句话（空 = 不提示）；与 enemy_attack_note 同源纪律。
+	# R187 六把重写（W4/W5/W6/W7/W8/W1 与五方向定案同步；W5 禁「折射/分光」、W8 禁「护盾」）
 	match p_weapon_id:
+		"W1_pistol":
+			return "并行弹幕——并排编队越排越宽，L3 起跳弹回场增值"
 		"W2_gatling":
 			return "越打越快——预热满档倾泻如雨，停火 0.8s 归零"
 		"W3_shotgun":
 			return "贴脸爆发——越近越痛，散射锥覆盖整排"
 		"W4_pulse_beam":
-			return "穿透光束——直线扫排，站位居中收益最大"
+			return "常驻聚焦光束——持续照射爬坡 ×2，裂片棱镜解锁副激光分束"
 		"W5_prism":
-			return "棱镜折射——弹道分光，走廊地形火力翻倍"
+			return "万镜回廊——棱镜映照其他武器，镜面军团只吃棱镜自身词条"
 		"W6_micro_missile":
-			return "自导微导——追踪索敌，专治蛇皮走位"
+			return "齐射引发器——高频小爆多点铺场，直击挂引信标记"
 		"W7_cluster_rocket":
-			return "集束重轰——大范围溅射，清屏级压制"
+			return "攻城引爆器——慢节拍集束清屏，引信连携双倍余波"
 		"W8_orbit_field":
-			return "环绕力场——贴身护盾 + 卫星珠撞击"
+			return "蓄能撞击——接触蓄能 x/5，满档在敌人身上引爆"
 		"W9_arc_slash":
 			return "弧斩化身——近身旋斩，贴脸收割"
 		"W10_boomerang":
@@ -114,7 +135,7 @@ static func difficulty_desc(p_d: int) -> String:
 			return "敌 HP/攻击 ×9 · 复活 +3 · 每次升级成对抉择（2 列 6 卡选同行两张）"
 		_:
 			return "现行口径 · 无附赠复活"
-enum PopupStyle { NORMAL, CRIT, REACTION, DOT, HEAL, XP, IMMUNE }   # IMMUNE：R22 元素免疫跳字
+enum PopupStyle { NORMAL, CRIT, REACTION, DOT, HEAL, XP, IMMUNE, CHARGE_BURST }   # IMMUNE：R22 元素免疫跳字；CHARGE_BURST：R187 W8 蓄能满档引爆（独立桶——同 uid 合并不吞引爆大数字）
 enum FeelLevel { HIT, CRIT, CATALYST, BOSS_DEATH }        # GameFeel 分级（Q-12）
 enum ReactionType { RXN_FIR_ICE, RXN_FIR_LTG, RXN_ICE_LTG }  # 碎裂/过载/超导（中性 ID）
 enum TargetStrategy { NEAREST, FOREMOST, LOWEST_HP, LOCKED }  # 武器目标策略

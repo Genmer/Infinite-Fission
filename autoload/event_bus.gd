@@ -43,10 +43,16 @@ signal poison_cloud_cast(pos: Vector2, radius: float)        # 毒云领域施�
 signal poison_cloud_tick(pos: Vector2, radius: float)        # 毒云每跳（表现层专用：毒圈持续/绿雾，R10）
 signal kill_blast(pos: Vector2, radius: float)               # 死亡新星击杀爆炸（表现层专用：橙红爆炸环，R13）
 signal missile_blast(pos: Vector2, radius: float)             # R80 导弹命中/空爆（强化版四层爆 + 震屏 + 低音）
+signal bullet_bounced(pos: Vector2)                           # 弹幕边界反弹（表现层专用：清脆 tick 音效，R95）
 signal skill_cast(pos: Vector2, character_id: String)        # 角色技能施放（表现层专用：金环爆发，R19）
 signal mechanics_intro(text: String)                        # 大关新机制解锁横幅（HUD 开局长 toast）
+signal revive_burst(pos: Vector2, charges_left: int)         # 复活成功爆发（白闪/横幅/音效表现源，E2 r2；player 唯一发点，charges_left=扣减后余量）
 signal chain_fused(depth: int, trait_id: StringName)       # 链式/分叉深度熔断遥测
 signal card_chosen(card_id: StringName, target_kind: int)  # 选卡应用完成（遗物回响等）
+# R187 三新信号（共享组落点；归属字段口径见 GameConst.SUBBEAM_OWNER_*）：
+signal laser_subbeam_spawned(owner_kind: int)               # 副激光生成（owner_kind：0=本体/1=复制体——R183 束数折减断言通道）
+signal mirror_formed(text: String)                          # 棱镜镜面生成/重掷（HUD toast；文案「棱镜映照：镜面承接了 X」）
+signal w8_detonated(pos: Vector2, target_uid: int)          # W8 蓄能满档引爆事件（target_uid——CHARGE_BURST 大字按同帧该敌结算聚合起字）
 
 var _dispatch_count: Dictionary = {}        # StringName(事件) -> int(本帧计数)
 const STORM_WARN_THRESHOLD := 128           # 同事件同帧派发上限（§六.4）
@@ -244,9 +250,35 @@ func emit_missile_blast(pos: Vector2, radius: float) -> void:
 	missile_blast.emit(pos, radius)
 
 
+func emit_bullet_bounced(pos: Vector2) -> void:
+	_track_dispatch(&"bullet_bounced")
+	bullet_bounced.emit(pos)
+
+
 func emit_mechanics_intro(text: String) -> void:
 	_track_dispatch(&"mechanics_intro")
 	mechanics_intro.emit(text)
+
+
+func emit_revive_burst(pos: Vector2, charges_left: int) -> void:
+	_track_dispatch(&"revive_burst")
+	revive_burst.emit(pos, charges_left)
+
+
+# ── R187 三新信号派发包装（统一过 _track_dispatch 口径） ──────────
+func emit_laser_subbeam_spawned(owner_kind: int) -> void:
+	_track_dispatch(&"laser_subbeam_spawned")
+	laser_subbeam_spawned.emit(owner_kind)
+
+
+func emit_mirror_formed(text: String) -> void:
+	_track_dispatch(&"mirror_formed")
+	mirror_formed.emit(text)
+
+
+func emit_w8_detonated(pos: Vector2, target_uid: int) -> void:
+	_track_dispatch(&"w8_detonated")
+	w8_detonated.emit(pos, target_uid)
 
 
 # ── 计数 / 风暴防护 / 订阅纪律 ─────────────────────────────────────

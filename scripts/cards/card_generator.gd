@@ -14,7 +14,7 @@ extends RefCounted
 enum CardKind { MASTERY, TRAIT, RELIC, FALLBACK, WEAPON, SLOT_BONUS }
 
 var registry: DataRegistry = null             # M-14 注入
-var _slot_rng := RandomNumberGenerator.new()   # R88 扩容金卡独立随机（种子固定可复现）
+var _slot_rng := RandomNumberGenerator.new()   # R88 扩容金卡独立随机（种子 _init 期固定——可复现）
 var rarity_weights: Dictionary = {}           # {rarity(int) -> weight(float)}（按波次折算）
 var category_weights: Dictionary = {}         # {category(String) -> weight(float)}（A3 §6.3 静态表）
 var owned_relics: Array[StringName] = []      # 每场已获遗物（unique 每场唯一，A3 §5）
@@ -30,6 +30,11 @@ func _init() -> void:
 	# 四套构筑可复现）；游戏运行时随机性由 spawner 出生点流（randomize）与管线暴击流
 	# 承担，卡牌流不引入额外随机源。
 	rng.seed = RNG_SEED
+	# R183 真修：扩容金卡流同口径构造期定种。旧「懒初始化 seed==0 守卫」几乎恒假
+	#（Godot 4 的 RandomNumberGenerator.new() 默认带熵种子）→ 4% 金卡替换实际逐进程
+	# 随机——pkg4「空注册表 → 全 fallback」用例被 UI choose(0) 偶发选中的金卡污染
+	#（grant_slot_bonus 改玩家槽位态）而偶发红
+	_slot_rng.seed = 20260919
 
 # 类别权重静态表（A3 §6.3 原值；BalanceTables.category_weights 为同源镜像）。
 # WEAPON（用户反馈 2026-08-29「怎么只有手枪」：原版无任何新武器获取途径——equip_weapon
@@ -81,16 +86,18 @@ func generate_candidates(p_context: Dictionary) -> Array[Dictionary]:
 	var fixed_rarities: Variant = p_context.get("fixed_rarities", [])
 	var out: Array[Dictionary] = []
 	var picked_ids: Array[StringName] = []       # 同批去重（同 ID 不重复上货架）
-	if _slot_rng.seed == 0:
-		_slot_rng.seed = 20260919                # R88 扩容 roll 独立种子（懒初始化）
+	# R185 金卡「武器槽+1」替换式（用户裁定两改）：①概率按「出金的概率 5%」=每批一次掷
+	#（旧每张 4% 独立掷 → 每批 3 张 ≈11.5% 过频）；②语义=提前解锁帽内下一槽（不再越帽）
+	# → 仅当 unlocked < 有效帽时才可替换，帽内开满后自然断供。保底卡神圣不可替换
+	#（AC-16.4 界面永不空语义）。
+	var slot_roll := player != null and player.has_method(&"grant_slot_bonus") 		and int(player.get("unlocked_slots")) < int(player.call(&"slot_cap_total")) 		and _slot_rng.randf() < 0.05
 	for i in range(deal):
 		var card := _roll_one(player, wave, picked_ids)
 		if card.is_empty():
 			card = _fallback_stat_card()
-		# R88 金卡「武器槽+1」替换式：正常发牌后低概率（4%，独立 RNG）顶替为扩容卡——
-		# 主随机序列消耗量与既有一致（发牌确定性/测试锚零扰动）；仅当还有扩容空间
-		if int(player.get("unlocked_slots")) < 5 and card.get("kind") != CardKind.SLOT_BONUS 				and int(card.get("kind", -1)) != CardKind.FALLBACK 				and _slot_rng.randf() < 0.04:
-			card = _make_slot_bonus_card()      # 保底卡神圣不可替换（AC-16.4 界面永不空语义）
+		if slot_roll and card.get("kind") != CardKind.SLOT_BONUS 				and int(card.get("kind", -1)) != CardKind.FALLBACK:
+			card = _make_slot_bonus_card()
+			slot_roll = false                    # 每批至多一张
 		if card["kind"] != CardKind.FALLBACK:
 			picked_ids.append(card["id"])
 		out.append(card)
@@ -215,7 +222,16 @@ func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
 
 # R69 计数型词条（+N 取整消费；基值 1.45 → 取整梯 = 白/蓝/紫/金 +1/+2/+3/+4——
 # 基值 1.0 时 ×1.4 取整塌回 +1，「蓝=白」；1.45 是四档全分化的最小实用基值）
-const COUNT_TRAIT_IDS: Array[StringName] = [&"AFF_PIERCE", &"AFF_MULTI", &"MEC_ORBIT_LINK"]
+# R187 增补：MEC_SPLIT_PRISM（W4 副激光 +1）/ MEC_MIRROR_SPLIT（W5 镜面 +1）/
+# MEC_HIVE_RACK（W6 齐射 +1 枚）——计数键口径：消费点直读词条栈层数（不走 add 池、
+# 显式豁免满层质变 ×1.6 与乘区名额——计数键 ≠ 伤害键）
+const COUNT_TRAIT_IDS: Array[StringName] = [&"AFF_PIERCE", &"AFF_MULTI", &"MEC_ORBIT_LINK",
+	&"MEC_SPLIT_PRISM", &"MEC_MIRROR_SPLIT", &"MEC_HIVE_RACK"]
+
+# R187 阈值型词条（TH_*：质变阈值声明的注册表镜像，全局唯一 id 真源在 resources/traits/）。
+# 阈值消费走 WeaponData.threshold_traits（武器 .tres 内联 metric/threshold/effect_id），
+# 词条本体永不上卡架——_trait_candidates 按 params.threshold_only 过滤（防卡池污染）
+const THRESHOLD_ONLY_KEY := "threshold_only"
 
 
 func _rarity_desc_mech(p_data: TraitData, p_scale: float, p_rarity: int) -> String:
@@ -334,7 +350,7 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 			if rid != &"" and not owned_relics.has(rid):
 				owned_relics.append(rid)
 		CardKind.SLOT_BONUS:
-			# R88 金卡扩容：+1 栏位（幂等失败=已满不动）
+			# R88 金卡 → R185 语义：提前解锁帽内下一槽（幂等失败=已满不动）
 			if p_player != null and p_player.has_method(&"grant_slot_bonus"):
 				p_player.call(&"grant_slot_bonus")
 	if kind == CardKind.FALLBACK:
@@ -350,8 +366,6 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 
 # ── 内部：roll 链 ─────────────────────────────────────────────────
 func _roll_one(p_player: Node, p_wave: int, p_picked: Array[StringName]) -> Dictionary:
-	if _slot_rng.seed == 0:
-		_slot_rng.seed = 20260919            # R88 扩容 roll 种子（固定——非 0 判已初始化）
 	# 单张：类别 roll（池空重 roll）→ 稀有度 roll → 候选过滤 → 随机抽 1
 	# 遗物类目门控（MechanicGate）：第 1 关不上架遗物——重 roll 为乘区（同抽空口径）
 	var relic_available := MechanicGate.relics_unlocked() and _unowned_relic_ids().size() > 0
@@ -422,6 +436,8 @@ func _trait_candidates(p_category: String, p_player: Node, p_picked: Array[Strin
 			continue
 		if used_layers.get(tid, 0) >= t.stack_max:
 			continue                            # 叠层上限（§6.4）
+		if bool(t.params.get(THRESHOLD_ONLY_KEY, false)):
+			continue                            # R187 阈值型词条（TH_*）不上卡架（注册表镜像专用）
 		if not MechanicGate.trait_allowed(t):
 			continue                            # 元素解锁门（火/冰 第 2 关 · 雷 第 3 关）
 		if not _form_allows(t, p_target):
@@ -431,6 +447,16 @@ func _trait_candidates(p_category: String, p_player: Node, p_picked: Array[Strin
 
 
 func _form_allows(p_t: TraitData, p_target: WeaponBase) -> bool:
+	# 卡架候选过滤 → 委托统一挂载侧门（R187 拆公共静态：回响/副本/直挂等一切
+	# 非「候选-选卡」挂载路径共用同一道门，杜绝绕门分叉）
+	return mount_gate_allows(p_t, p_target)
+
+
+static func mount_gate_allows(p_t: TraitData, p_target: WeaponBase) -> bool:
+	# ★ R187 挂载侧统一适配门（原 _form_allows 本体静态化——防回响绕门 P0 前科补挂）：
+	# REL_ECHO 回响复制（relic_handler 挂载路径）等非卡架挂载必须经本门校验
+	# required_weapon/required_forms/requires_trait/exclusive_group，否则「平行校准」
+	# 类武器专属词条会经回响落到不适配武器（W1 验收 6 反证口径）。
 	# 形态/武器适配（TraitData.params，2026-09-13 全量审计接线）：
 	# · required_forms = WeaponForm 数组（0 弹道/1 激光/2 自导/3 近战）——投射物专属词条
 	#   （反弹/分裂/体积/弹速/穿透/弹丸数）不上架错形态武器；
@@ -621,14 +647,14 @@ func _make_mastery_card(p_weapon: Object) -> Dictionary:
 
 
 func _make_slot_bonus_card() -> Dictionary:
-	# R88 金色扩容卡：武器栏位 +1（越过难度帽——普通 3 帽下最想要的卡）
+	# R88 金色扩容卡 → R185 语义修正：提前解锁帽内下一槽（总位数=难度帽不变）
 	return {
 		"kind": CardKind.SLOT_BONUS,
 		"id": &"SLOT_BONUS",
 		"rarity": 3,
 		"value_scale": 1.0,
 		"display_name": "武器槽 +1",
-		"description": "武器栏位永久 +1（本局，可越过难度上限）",
+		"description": "提前解锁下一个武器槽（本局有效；总槽位数不变，只是提前开锁）",
 		"milestone": false,
 	}
 

@@ -101,22 +101,37 @@ func _test_rof_trait_scales_pending() -> void:
 
 
 func _test_cdr_trait_scales_pending_laser() -> void:
-	print("── CDR 词条：非弹道形态挂卡即缩（W4 激光 cd 口径）──")
+	# R187 翻转（W4 主束常驻化 → AFF_CDR 消费点从脉冲 cd 改写为「换目标保留聚焦进度
+	# 12.5%×层数」——cd 键对常驻束作废，节拍断言退役为聚焦保留断言）
+	print("── CDR 词条：W4 换目标聚焦保留（R187 换挂口径）──")
 	_gl.player.unlocked_slots = 4
-	var w: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W4_pulse_beam"))
-	_check("W4 装配成功", w != null, "add_weapon 返回 null")
-	if w == null:
+	var w4: LaserWeapon = _gl.player.add_weapon(_gl.registry.get_weapon(&"W4_pulse_beam")) as LaserWeapon
+	_check("W4 装配成功", w4 != null, "add_weapon 返回 null")
+	if w4 == null:
 		return
-	var before := _fire_once(w)
-	_check("W4 开火进入冷却", before > 0.0, "before=%.4f" % before)
-	var old_iv := w._fire_interval()
-	_check("AFF_CDR 挂载成功", w.attach_trait(_trait("res://resources/traits/AFF_CDR.tres")), "")
-	var new_iv := w._fire_interval()
-	_check("节拍确按 cd×(1−CDR) 收缩", is_equal_approx(new_iv, old_iv * 0.9),
-		"old=%.4f new=%.4f" % [old_iv, new_iv])
-	_check("倒计时立刻缩短且不超新节拍",
-		w.cooldown_left < before - 0.0001 and w.cooldown_left <= new_iv + 0.0001,
-		"before=%.4f after=%.4f new_iv=%.4f" % [before, w.cooldown_left, new_iv])
+	w4.try_fire()
+	var beam: LaserBeam = w4.get("_main_beam")
+	_check("W4 主束生成（常驻）", beam != null and beam.is_live(), "")
+	if beam == null:
+		return
+	beam.set("lifetime", 0.0)
+	beam.set("lifetime_left", 999.0)
+	beam.last_hit_uid = 555
+	w4.call(&"_on_tick_post", 0.05)            # 首帧锁 555（归零起算）
+	w4.call(&"_on_tick_post", 2.0)             # 照射 2s → focus_time = 0.30
+	_check("照射 2s 聚焦 ×1.30 成立", absf(w4.focus_multiplier() - 1.30) < 0.01,
+		"%f" % w4.focus_multiplier())
+	# 挂 AFF_CDR ×4（required_forms [1,2,3] 门内；4 层 = 保留 50%）
+	var attached := true
+	for i in range(4):
+		attached = attached and w4.attach_trait(_trait("res://resources/traits/AFF_CDR.tres"))
+	_check("AFF_CDR ×4 挂载成功", attached, "")
+	beam.last_hit_uid = 666                    # 换目标
+	w4.call(&"_on_tick_post", 0.05)            # 首帧换锁：focus_time（秒）×0.5 = 1.0s
+	w4.call(&"_on_tick_post", 1.0)             # +1s → focus_time = 2.0s → ×1.30
+	# 保留对照：无 CDR 归零口径下同拍 = 1.0s ×0.15 → ×1.15——保留 50% 即 ×1.30
+	_check("R187：AFF_CDR×4 换目标保留 50% 聚焦（×1.30 ≠ 归零口径 ×1.15）",
+		absf(w4.focus_multiplier() - 1.30) < 0.02, "%f" % w4.focus_multiplier())
 
 
 func _test_longer_interval_no_penalty() -> void:

@@ -7,46 +7,46 @@
 script = ExtResource("2_wls")
 base_atk = 10.0
 rof = 1.0
-cd = 1.0
+cd = 3.0
 pierce = 1
 pellets = 1
-note = "A3 §3.8 L1：orb_atk 10 × 2 球；贴身单体 DPS 40（cd 为轮询节拍占位，力场常驻）"
+note = "蓄能改版 L1：orb_atk 10 × 2 球；裸装 DPS 33.3（接触 16.7 + 引爆 16.7）；cd = 引力脉冲节拍（pulse_cd 语义，AFF_CDR 通道）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
 base_atk = 13.0
 rof = 1.0
-cd = 1.0
+cd = 3.0
 pierce = 1
 pellets = 1
-note = "A3 §3.8 L2：orb_atk 13；贴身单体 DPS 52"
+note = "蓄能改版 L2：orb_atk 13；裸装 DPS 43.3"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
 base_atk = 13.0
 rof = 1.0
-cd = 1.0
+cd = 3.0
 pierce = 1
 pellets = 1
-note = "A3 §3.8 L3：orbs 2→3；贴身单体 DPS 78"
+note = "蓄能改版 L3：orbs 2→3；裸装 DPS 65.0"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
 base_atk = 17.0
 rof = 1.0
-cd = 1.0
+cd = 3.0
 pierce = 1
 pellets = 1
-note = "A3 §3.8 L4：orb_atk 17；贴身单体 DPS 102"
+note = "蓄能改版 L4：orb_atk 17；裸装 DPS 96.3"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
 base_atk = 17.0
 rof = 1.0
-cd = 1.0
+cd = 3.0
 pierce = 1
 pellets = 1
-note = "A3 §3.8 L5：orbs 3→4；orbit_radius 90→110；贴身单体 DPS 136"
+note = "蓄能改版 L5：orbs 4；orbit_radius 120；裸装 DPS 113.3（×3.4，夹 W6 66.7 与 W1 132 之间）"
 
 [resource]
 script = ExtResource("1_wd")
@@ -58,17 +58,14 @@ crit_dmg = 2.0
 hitbox_r = 6.0
 unlock_rarity = 1
 threshold_traits = [{
-"threshold_id": &"TH_SIZE_NOVA", "metric": "size_mult", "threshold": 3.0,
-"effect_id": &"EF_SIZE", "params": {"radius_mult": 1.5, "atk_ratio": 0.4}
-}, {
-"threshold_id": &"TH_FRACTAL_ECHO", "metric": "split_depth", "threshold": 3.0,
-"effect_id": &"EF_FRACTAL", "params": {"inherit_ratio": 0.6}
-}, {
-"threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
-"effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
-}, {
-"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.35,
 "effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
+}, {
+"threshold_id": &"TH_DETONATION_ECHO", "metric": "detonation_count", "threshold": 8.0,
+"effect_id": &"EF_DETONATION_ECHO", "params": {"echo_mult": 1.5}
+}, {
+"threshold_id": &"TH_RING_PRESSURE", "metric": "charged_hits", "threshold": 60.0,
+"effect_id": &"EF_RING_PRESSURE", "params": {"radius_mult": 1.2}
 }]
 melee = {
 "orbit_radius": 90.0, "angular_speed": 240.0, "orbs": 2, "hit_cd": 0.5,
@@ -77,6 +74,10 @@ melee = {
 "orbit_radius_levels": [90.0, 90.0, 100.0, 108.0, 120.0],
 "orbs_levels": [2.0, 2.0, 3.0, 3.0, 4.0],
 "angular_speed_levels": [240.0, 240.0, 270.0, 300.0, 335.0],
-"orb_r_levels": [16.0, 16.0, 17.0, 18.0, 20.0]
+"orb_r_levels": [16.0, 16.0, 17.0, 18.0, 20.0],
+"charge_max": 5, "charge_gain_cd": 0.5,
+"charge_gain_cd_levels": [0.5, 0.45, 0.4, 0.35, 0.3],
+"detonate_mult": 5.0, "detonate_radius": 90.0,
+"pulse_cd": 3.0, "effective_blade_cap": 8, "detonate_global_icd": 0.5
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

@@ -716,9 +716,10 @@ func _test_player() -> void:
 	for i in range(6):
 		var w: WeaponBase = ws.new()
 		weapons.append(w)
+	player2.unlocked_slots = 1              # R183：开局默认已 2——显式置 1 保「未解锁拒绝」门断言口径
 	_check("武器槽：槽 1 可装备", player2.equip_weapon(weapons[0]))
 	_check("武器槽：槽 2 未解锁拒绝", not player2.equip_weapon(weapons[1]))
-	player2.call(&"set_difficulty", 2)   # R88 地狱帽 5（普通帽 3 会截断后续 4/5 断言）
+	player2.call(&"set_difficulty", 2)   # R183 地狱帽 6（普通帽 5 内 3~5 均可，沿用地狱保后续断言）
 	player2.unlock_slot(3)
 	_check("武器槽：解锁至 3 后可装 2 把", player2.equip_weapon(weapons[1]) and player2.equip_weapon(weapons[2]))
 	player2.tick(DT, Vector2.ZERO)

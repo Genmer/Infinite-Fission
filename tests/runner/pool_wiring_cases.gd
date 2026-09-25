@@ -21,6 +21,7 @@ func run(p_tree: SceneTree) -> void:
 	seed(42)
 	_boot_game_loop()
 	_audit_all_add_pools()
+	_audit_r187_traits()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -237,3 +238,73 @@ func _audit_all_add_pools() -> void:
 	var pierce_card: TraitData = _gl.registry.get_trait(_pool_card_id(&"add_pierce"))
 	_check("卡面口径：穿透卡描述说明「贯穿敌人数」机制",
 		pierce_card != null and String(pierce_card.description).contains("贯穿"))
+
+
+# ── R187 新词条上架审计（共享组；22+ 新词条注册/唯一性/门/白名单） ──
+func _audit_r187_traits() -> void:
+	print("── R187 新词条上架审计 ──")
+	# ① 18 张新 MEC 卡 + 7 条 TH_* 阈值镜像全部注册（全局唯一 id——重复键会互相覆盖）
+	var new_mec: Array[String] = ["MEC_SPLIT_PRISM", "MEC_BEAM_TRACK", "MEC_BEAM_FAN",
+		"MEC_BEAM_COFOCUS", "MEC_PHASE_SYNC", "MEC_BEAM_LAG", "MEC_BEAM_SPECTRA",
+		"MEC_MIRROR_SPLIT", "MEC_MIRROR_LOCK", "MEC_MIRROR_WEIGHT", "MEC_MIRROR_TEMPO",
+		"MEC_HIVE_RACK", "MEC_FUSE_COAT", "MEC_FUSE_DETONATE", "MEC_PARALLEL_CAL",
+		"MEC_RICOCHET_HALL", "MEC_CRITICAL_MASS", "MEC_CHAIN_DETONATE"]
+	var new_th: Array[String] = ["TH_PRISM_CHOIR", "TH_MIRROR_CHOIR", "TH_SWARM_NOVA",
+		"TH_VOLLEY_STATE", "TH_BANK_SHOT", "TH_DETONATION_ECHO", "TH_RING_PRESSURE"]
+	var missing: Array[String] = []
+	for tid in new_mec + new_th:
+		if _gl.registry.get_trait(StringName(tid)) == null:
+			missing.append(tid)
+	_check("R187 审计：25 个新词条 id 全部注册（全局唯一）", missing.is_empty(), str(missing))
+	# ② TH_* 阈值镜像永不上卡架（threshold_only 门——卡池零污染）
+	var leaked: Array[String] = []
+	for tid2 in new_th:
+		var t: TraitData = _gl.registry.get_trait(StringName(tid2))
+		if t == null or not bool(t.params.get("threshold_only", false)):
+			leaked.append(tid2)
+	_check("R187 审计：TH_* 全部带 threshold_only 门（不上卡架）", leaked.is_empty(), str(leaked))
+	var th_in_shop := false
+	var picked: Array[StringName] = []
+	var mech_pool: Array[StringName] = _gl.card_generator._trait_candidates("MECH", _gl.player, picked, null)
+	for tid3 in new_th:
+		if mech_pool.has(StringName(tid3)):
+			th_in_shop = true
+	_check("R187 审计：MECH 候选集不含任何 TH_*（卡架过滤生效）", not th_in_shop)
+	# ③ COUNT_TRAIT_IDS 增补（计数键口径：不走 add 池、消费点直读栈层数）
+	var count_ids: Array = CardGenerator.COUNT_TRAIT_IDS
+	var count_ok := count_ids.has(&"MEC_SPLIT_PRISM") \
+		and count_ids.has(&"MEC_MIRROR_SPLIT") and count_ids.has(&"MEC_HIVE_RACK")
+	_check("R187 审计：COUNT_TRAIT_IDS 增补 SPLIT_PRISM/MIRROR_SPLIT/HIVE_RACK", count_ok)
+	# ④ 互斥组门：laser_topology / prism_pointer 组内同组互不上架（_form_allows 门）
+	# 隔离宿主：新装一把干净 W4（前序 ADD 审计可能已把既有武器词槽挂满 12 帽——
+	# attach 拒绝会污染互斥断言口径）
+	_gl.player.set("unlocked_slots", 7)
+	var w4: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W4_pulse_beam"))
+	var track: TraitData = _gl.registry.get_trait(&"MEC_BEAM_TRACK")
+	var fan: TraitData = _gl.registry.get_trait(&"MEC_BEAM_FAN")
+	var topo_ok := false
+	if w4 != null and track != null and fan != null:
+		topo_ok = _gl.card_generator.call("_form_allows", track, w4) \
+			and w4.attach_trait(track) \
+			and not _gl.card_generator.call("_form_allows", fan, w4)
+	_check("R187 审计：laser_topology 互斥组（挂 TRACK 后 FAN 不上架）", topo_ok)
+	# ⑤ required_weapon 门：HIVE_RACK 不上 W4 货架（错武器词条零越界）
+	var hive: TraitData = _gl.registry.get_trait(&"MEC_HIVE_RACK")
+	var gate_ok := false
+	if w4 != null and hive != null:
+		gate_ok = not _gl.card_generator.call("_form_allows", hive, w4)
+	_check("R187 审计：required_weapon 门（HIVE_RACK 拒上 W4）", gate_ok)
+	# ⑥ R187 新 EF 白名单（check_references 悬空剔除语义依赖）
+	var ef_ok := true
+	for ef in [&"EF_CHOIR", &"EF_SWARM_NOVA", &"EF_VOLLEY", &"EF_BANK",
+		&"EF_DETONATION_ECHO", &"EF_RING_PRESSURE"]:
+		ef_ok = ef_ok and DataValidator.TECH_EFFECT_IDS.has(ef)
+	_check("R187 审计：6 新 EF 入 TECH_EFFECT_IDS 白名单", ef_ok)
+	# ⑦ MEC_KNOCK required_forms 扩 W8（form 3 上架）+ MEC_FRACTAL inheritable 改 true
+	var knock: TraitData = _gl.registry.get_trait(&"MEC_KNOCK")
+	var forms: Array = knock.params.get("required_forms", []) if knock != null else []
+	_check("R187 审计：MEC_KNOCK required_forms 扩 [0,2,3]",
+		forms.has(0) and forms.has(2) and forms.has(3), str(forms))
+	var fractal: TraitData = _gl.registry.get_trait(&"MEC_FRACTAL")
+	_check("R187 审计：MEC_FRACTAL inheritable == true（分裂子代继承）",
+		fractal != null and bool(fractal.inheritable))

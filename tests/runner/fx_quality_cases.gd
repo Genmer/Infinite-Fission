@@ -18,6 +18,7 @@ func run(p_tree: SceneTree) -> void:
 	_boot_game_loop()
 	_test_setting_roundtrip()
 	_test_popup_scaling()
+	_test_reaction_popup()
 	_test_particle_scaling()
 	_test_rocket_blast_fx()
 	_teardown_game_loop()
@@ -106,6 +107,195 @@ func _test_popup_scaling() -> void:
 		int(_gl.popup_manager.active_popups) == 35,
 		"实得 %d" % int(_gl.popup_manager.active_popups))
 	_gl.popup_manager.clear_all()
+
+
+# ── R186 反应字体（碎裂/过载/超导双色大字 + 分桶合并/升格 + 密度护栏） ──
+func _test_reaction_popup() -> void:
+	print("── R186 反应字体 ──")
+	var pm: PopupManager = _gl.popup_manager
+	var pool: PopupPool = _gl.pools[&"popup"]
+	pool.prewarm(GameConfig.get_pool_capacity(&"popup"))
+	var numbers_prev: bool = bool(Meta.settings("damage_numbers_on"))
+	var provider_prev: Callable = pm.baseline_provider
+	Meta.set_setting("damage_numbers_on", true)
+	pm.baseline_provider = Callable()             # 分级关闭（量级档噪声隔离）
+	pm.tick(10.0)
+	pm.clear_all()
+	# ① REACTION 规格表分流：54px + 12px 描边 + 双色真分通道（碎裂）
+	pm._rxn_frame_stamp = -1                      # 帧计数器隔离（同帧护栏判据重置）
+	var r := DamageResult.new()
+	r.final_value = 12.0
+	r.target_uid = 610001
+	r.pos = Vector2(300.0, 400.0)
+	r.popup_style = GameConst.PopupStyle.REACTION
+	r.element = GameConst.ReactionType.RXN_FIR_ICE
+	pm.on_damage_resolved(r)
+	var p0: DamagePopup = pm._active_list[0]
+	_check("R186 碎裂大字：54px 字号 + 12px 描边 + 数值直读",
+		pm.active_popups == 1
+		and p0._label.get_theme_font_size("font_size") == DamagePopup.FONT_SIZE_REACTION
+		and p0._label.get_theme_constant("outline_size") == DamagePopup.OUTLINE_PX_REACTION
+		and p0._label.text == "12")
+	_check("R186 碎裂大字：双色通道（暖雪白填充/绯红描边）+ 乘色退位 + 专属字型",
+		p0._label.get_theme_color("font_color") == PopPalette.RXN_FILL_SHATTER
+		and p0._label.get_theme_color("font_outline_color") == PopPalette.RXN_LINE_SHATTER
+		and p0._label.self_modulate == Color.WHITE
+		and p0._label.get_theme_font("font") == StickerTheme.font_reaction(0))
+	# ② 升格（R2b）：同 uid 直击小字在窗吃到大额反应结算 → 原地换反应样式重弹
+	var rd := DamageResult.new()
+	rd.final_value = 12.0
+	rd.target_uid = 610002
+	rd.pos = Vector2(300.0, 400.0)
+	rd.popup_style = GameConst.PopupStyle.NORMAL
+	pm.on_damage_resolved(rd)
+	var rr := DamageResult.new()
+	rr.final_value = 8.0
+	rr.target_uid = 610002
+	rr.pos = Vector2(300.0, 400.0)
+	rr.popup_style = GameConst.PopupStyle.REACTION
+	rr.element = GameConst.ReactionType.RXN_FIR_LTG
+	pm.on_damage_resolved(rr)
+	var p1: DamagePopup = pm._active_list[1]
+	_check("R186 升格：直击小字原地换过载大字（active 不涨 / 数值并入 12+8）",
+		pm.active_popups == 2 and p1.style == GameConst.PopupStyle.REACTION
+		and absf(p1.merged_value - 20.0) <= 0.001)
+	_check("R186 升格：过载双色（爆裂橙填充/暗电紫描边）+ 斜体 900 字型",
+		p1._label.get_theme_color("font_color") == PopPalette.RXN_FILL_OVERLOAD
+		and p1._label.get_theme_color("font_outline_color") == PopPalette.RXN_LINE_OVERLOAD
+		and p1._label.get_theme_font("font") == StickerTheme.font_reaction(1)
+		and p1._label.text == "20")
+	# ③ 直击遇反应大字在窗（R2c）：不吞大字，新起小字下移 +20px
+	var rr2 := DamageResult.new()
+	rr2.final_value = 9.0
+	rr2.target_uid = 610003
+	rr2.pos = Vector2(300.0, 400.0)
+	rr2.popup_style = GameConst.PopupStyle.REACTION
+	rr2.element = GameConst.ReactionType.RXN_FIR_ICE
+	pm.on_damage_resolved(rr2)
+	var rd2 := DamageResult.new()
+	rd2.final_value = 5.0
+	rd2.target_uid = 610003
+	rd2.pos = Vector2(300.0, 400.0)
+	rd2.popup_style = GameConst.PopupStyle.NORMAL
+	pm.on_damage_resolved(rd2)
+	var small: DamagePopup = pm._active_list[-1]
+	_check("R186 直击让行：反应大字不被吞，新起小字下移 +20px（30px 常规字号）",
+		pm.active_popups == 4
+		and small.style == GameConst.PopupStyle.NORMAL
+		and small.position == Vector2(300.0, 420.0)
+		and small._label.get_theme_font_size("font_size") == DamagePopup.FONT_SIZE)
+	# ④ 超导文字标签（R3）：RXN_ICE_LTG 无 DamageResult 通道 → 纯文字「超导」
+	pm.on_reaction_triggered(GameConst.ReactionType.RXN_ICE_LTG, Vector2(320.0, 420.0), 610004)
+	var p4: DamagePopup = pm._active_list[-1]
+	_check("R186 超导标签：纯文字 + 冰晶白/靛紫双色 + 斜体 700 字型",
+		pm.active_popups == 5 and p4._label.text == "超导"
+		and p4._label.get_theme_color("font_color") == PopPalette.RXN_FILL_SUPER
+		and p4._label.get_theme_color("font_outline_color") == PopPalette.RXN_LINE_SUPER
+		and p4._label.get_theme_font("font") == StickerTheme.font_reaction(2))
+	# ④b 碎裂/过载禁走 reaction_triggered 起字（管线 settle 已派生，二次会翻倍）
+	var before := int(pm.active_popups)
+	pm.on_reaction_triggered(GameConst.ReactionType.RXN_FIR_ICE, Vector2(320.0, 420.0), 610005)
+	_check("R186 超导专属：碎裂 reaction_triggered 不在此起字（防翻倍刷屏）",
+		int(pm.active_popups) == before)
+	# ⑤ 零值短路（R4c）：反应结算值 ≤0.5 不起大字（防 54px 大「0」）
+	var rz := DamageResult.new()
+	rz.final_value = 0.3
+	rz.target_uid = 610006
+	rz.pos = Vector2(300.0, 400.0)
+	rz.popup_style = GameConst.PopupStyle.REACTION
+	rz.element = GameConst.ReactionType.RXN_FIR_ICE
+	pm.on_damage_resolved(rz)
+	_check("R186 零值短路：≤0.5 反应结算不起大字", int(pm.active_popups) == before)
+	# ⑥ 同帧起字上限（R4a，低档 = 1）：超限就近并入本帧已起同反应大字（位置不动）
+	Meta.set_setting("fx_quality", 0)
+	pm._rxn_frame_stamp = -1
+	var ra := DamageResult.new()
+	ra.final_value = 5.0
+	ra.target_uid = 610007
+	ra.pos = Vector2(300.0, 400.0)
+	ra.popup_style = GameConst.PopupStyle.REACTION
+	ra.element = GameConst.ReactionType.RXN_FIR_ICE
+	pm.on_damage_resolved(ra)
+	var rb := DamageResult.new()
+	rb.final_value = 7.0
+	rb.target_uid = 610008
+	rb.pos = Vector2(310.0, 410.0)
+	rb.popup_style = GameConst.PopupStyle.REACTION
+	rb.element = GameConst.ReactionType.RXN_FIR_ICE
+	pm.on_damage_resolved(rb)
+	var host: DamagePopup = pm._active_list[-1]
+	_check("R186 帧上限（低档=1）：同帧第二条就近并入宿主（数值累加/位置不动/active 不涨）",
+		int(pm.active_popups) == before + 1
+		and absf(host.merged_value - 12.0) <= 0.001
+		and host.position == Vector2(300.0, 400.0))
+	pm._rxn_frame_stamp = -1                      # 模拟跨帧（frame 号推进）
+	var rc := DamageResult.new()
+	rc.final_value = 3.0
+	rc.target_uid = 610009
+	rc.pos = Vector2(300.0, 400.0)
+	rc.popup_style = GameConst.PopupStyle.REACTION
+	rc.element = GameConst.ReactionType.RXN_FIR_ICE
+	pm.on_damage_resolved(rc)
+	_check("R186 帧上限：跨帧计数重置后可再起", int(pm.active_popups) == before + 2)
+	# ⑦ 满池回收（R4b）：REACTION 满池时回收最老非反应槽再起字
+	pm.tick(10.0)
+	pm.clear_all()
+	pm._rxn_frame_stamp = -1
+	for i in range(20):
+		var rf := DamageResult.new()
+		rf.final_value = 1.0
+		rf.target_uid = 620000 + i
+		rf.pos = Vector2(100.0 + float(i), 100.0)
+		rf.popup_style = GameConst.PopupStyle.NORMAL
+		pm.on_damage_resolved(rf)
+	var dropped0: int = pm.dropped_count()
+	var rrx := DamageResult.new()
+	rrx.final_value = 9.0
+	rrx.target_uid = 620100
+	rrx.pos = Vector2(300.0, 400.0)
+	rrx.popup_style = GameConst.PopupStyle.REACTION
+	rrx.element = GameConst.ReactionType.RXN_FIR_ICE
+	pm.on_damage_resolved(rrx)
+	var rxn_slots := 0
+	for p: DamagePopup in pm._active_list:
+		if p.style == GameConst.PopupStyle.REACTION:
+			rxn_slots += 1
+	_check("R186 满池回收：最老直击槽让位反应大字（active 守恒 20 / 不涨丢弃计数）",
+		int(pm.active_popups) == 20 and pm.dropped_count() == dropped0 and rxn_slots == 1
+		and (pm._active_list[0] as DamagePopup).target_uid == 620001)
+	# ⑧ 池复用串色防线（§4.1）：同一槽先起反应大字 → 归还 → LIFO 必取同槽再起直击
+	# 小字 = 贴纸出厂态（无 54px/双色/大字字型残留）
+	pm.tick(10.0)
+	pm.clear_all()
+	pm._rxn_frame_stamp = -1
+	var rs := DamageResult.new()
+	rs.final_value = 6.0
+	rs.target_uid = 630000
+	rs.pos = Vector2(300.0, 400.0)
+	rs.popup_style = GameConst.PopupStyle.REACTION
+	rs.element = GameConst.ReactionType.RXN_FIR_ICE
+	pm.on_damage_resolved(rs)
+	pm.tick(10.0)                                 # 归还（release → _reset_state 清覆盖）
+	var rn := DamageResult.new()
+	rn.final_value = 1.0
+	rn.target_uid = 630001
+	rn.pos = Vector2(300.0, 400.0)
+	rn.popup_style = GameConst.PopupStyle.NORMAL
+	pm.on_damage_resolved(rn)
+	var p8: DamagePopup = pm._active_list[0]
+	_check("R186 串色防线：复用反应槽起直击小字 = 白填充/藏青描边/8px/30px/常规字型",
+		p8._label.get_theme_color("font_color") == Color.WHITE
+		and p8._label.get_theme_color("font_outline_color") == PopPalette.OUTLINE
+		and p8._label.get_theme_constant("outline_size") == DamagePopup.OUTLINE_PX
+		and p8._label.get_theme_font_size("font_size") == DamagePopup.FONT_SIZE
+		and p8._label.get_theme_font("font") == StickerTheme.font()
+		and p8._label.text == "1")
+	# 复位（防污染其他用例）
+	pm.tick(10.0)
+	pm.clear_all()
+	pm.baseline_provider = provider_prev
+	Meta.set_setting("damage_numbers_on", numbers_prev)
+	Meta.set_setting("fx_quality", 2)
 
 
 func _test_particle_scaling() -> void:
