@@ -333,18 +333,15 @@ func _test_event_dispatch_order() -> void:
 		"hitbox_radius": 6.0,
 	}, [ta, tb, tc])
 	proj.tick(DT)                                     # tick1：ON_TICK → ON_HIT → ON_PIERCE（pierce 2→1）
-	print("[DEBUG t1] live=%s bl=%d shared=%s" % [str(proj._live), proj.bounces_left, str(shared)])
 	proj.position = Vector2(3, 640)
 	proj.velocity = Vector2(-100, 0)
 	proj.tick(DT)                                     # tick2：ON_BOUNCE（左缘反射）→ ON_TICK
-	print("[DEBUG t2] live=%s bl=%d pos=%s vel=%s shared_tail=%s" % [str(proj._live),
-		proj.bounces_left, str(proj.position), str(proj.velocity),
-		str(shared.slice(maxi(shared.size() - 4, 0)))])
+	# R196 FIX-2 生命周期逐目标去重（有意契约变更）：同敌整弹生命周期只结算一次，
+	# bounce 后不清表——tick3 的第 2 跳须由第 2 名敌人承接（原「同敌回场重击耗尽」语义退役）
+	var enemy2 := _spawn_enemy_at(ed, Vector2(365, 640))
 	proj.position = Vector2(360, 640)
 	proj.velocity = Vector2(100, 0)
-	proj.tick(DT)                                     # tick3：ON_TICK → ON_HIT → ON_EXPIRE（pierce 1→0 回收）
-	print("[DEBUG t3] live=%s shared_tail=%s hp=%s" % [str(proj._live),
-		str(shared.slice(maxi(shared.size() - 4, 0))), str(enemy.hp)])
+	proj.tick(DT)                                     # tick3：ON_TICK → ON_HIT(enemy2) → ON_EXPIRE（pierce 1→0 回收）
 	var log_a: Array = ta.get("log") as Array
 	var log_b: Array = tb.get("log") as Array
 	var log_c: Array = tc.get("log") as Array
@@ -373,8 +370,12 @@ func _test_event_dispatch_order() -> void:
 	for e in log_c:
 		seq_c.append(int(String(e).split(":")[1]))
 	_check("三条词条事件序列一致（A=B=C）", seq_a == seq_b and seq_b == seq_c)
-	_check("敌人被命中两次（穿透序）", _approx(enemy.hp, 500.0 - 20.0),
-		"hp %s" % str(enemy.hp))
+	# R196 FIX-2（有意契约变更——原「敌人被命中两次 hp=480」）：首敌恰 1 击，
+	# 第 2 跳承接于第 2 敌（穿透预算花在换目标）
+	_check("穿透序：首敌恰 1 击（R196 FIX-2 同敌生命周期不重击）",
+		_approx(enemy.hp, 500.0 - 10.0), "hp %s" % str(enemy.hp))
+	_check("穿透序：第 2 跳承接于第 2 敌（预算花在换目标）",
+		_approx(enemy2.hp, 500.0 - 10.0), "hp %s" % str(enemy2.hp))
 	_teardown_world()
 
 
@@ -460,16 +461,26 @@ func _test_pierce_and_bounce() -> void:
 	print("── 穿透/反弹 ──")
 	_setup_world()
 	var ed := _make_enemy_data("E_PIERCE", 1000.0)
-	_spawn_enemy_at(ed, Vector2(365, 640))
+	var enemy_a := _spawn_enemy_at(ed, Vector2(365, 640))
 	# 穿透计数递减：pierce=3 → 命中后 2 → 1 → 0（回收）
 	var proj := _spawn_ballistic({"position": Vector2(360, 640), "velocity": Vector2(100, 0),
 		"lifetime": 10.0, "pierce": 3, "hitbox_radius": 6.0})
 	proj.tick(DT)
 	_check("穿透计数递减：pierce 3→2", proj.pierce_left == 2, "got %d" % proj.pierce_left)
 	_check("穿透后弹体存活（继续飞行）", proj.velocity != Vector2.ZERO and proj.visible)
+	# R196 FIX-2（有意契约变更——原「同敌连续三跳耗尽」语义退役）：穿透预算花在
+	# 换目标上，补两名接触带内新敌承接第 2/3 跳
+	var enemy_b := _spawn_enemy_at(ed, Vector2(370, 640))
+	var enemy_c := _spawn_enemy_at(ed, Vector2(375, 640))
 	proj.tick(DT)
-	proj.tick(DT)
-	_check("穿透耗尽：pierce=3 三次命中后回收", proj.pierce_left == 0 and not proj.visible)
+	_check("穿透耗尽：pierce=3 三名不同敌命中后回收（R196 FIX-2）",
+		proj.pierce_left == 0 and not proj.visible,
+		"pierce=%d live=%s" % [proj.pierce_left, str(proj.visible)])
+	_check("穿透序：首敌整弹生命周期恰 1 击（同敌不重击）",
+		_approx(enemy_a.hp, 1000.0 - 10.0), "hp %s" % str(enemy_a.hp))
+	_check("穿透序：第 2/3 敌各恰 1 击",
+		_approx(enemy_b.hp, 1000.0 - 10.0) and _approx(enemy_c.hp, 1000.0 - 10.0),
+		"b=%s c=%s" % [str(enemy_b.hp), str(enemy_c.hp)])
 	# 反弹反射角镜像 < 2°（左缘：法线 (1,0)，理想镜像 = 速度 x 分量取反）
 	var p2 := _spawn_ballistic({"position": Vector2(3, 640), "velocity": Vector2(-80, -60),
 		"lifetime": 10.0, "pierce": 1, "bounces": 2, "hitbox_radius": 6.0})
@@ -502,9 +513,15 @@ func _test_frame_dedup() -> void:
 	_check("同帧同目标去重：血量只扣一次", is_equal_approx(enemy.hp, 100.0 - 10.0),
 		"hp %s" % str(enemy.hp))
 	_check("同帧同目标去重：结算只发生一次", int(_pipeline.stats()["settles"]) == settles0 + 1)
-	proj.tick(DT)                                    # 下一帧聚合清零 → 再命中
-	_check("帧聚合跨帧清零：下一帧可再命中", is_equal_approx(enemy.hp, 100.0 - 20.0),
-		"hp %s" % str(enemy.hp))
+	proj.tick(DT)                                    # 下一帧聚合清零
+	# R196 FIX-2（有意契约变更——原「下一帧可再命中同敌 hp=80」）：帧层清零后，
+	# 同敌重击被生命周期命中表拦截（hp 恒 90），帧聚合只对新目标放行
+	_check("同敌跨帧不重击（R196 FIX-2 生命周期去重优先）",
+		is_equal_approx(enemy.hp, 100.0 - 10.0), "hp %s" % str(enemy.hp))
+	var enemy2 := _spawn_enemy_at(ed, Vector2(375, 640))
+	proj._submit_hit(enemy2)                         # 下一帧新目标：帧层放行
+	_check("帧聚合跨帧清零：下一帧可命中新目标",
+		is_equal_approx(enemy2.hp, 100.0 - 10.0), "hp %s" % str(enemy2.hp))
 	_teardown_world()
 
 

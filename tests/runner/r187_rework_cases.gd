@@ -2262,17 +2262,24 @@ func _test_review1_fixes() -> void:
 	_kill_weapon(w1)
 	_clear_enemies()
 	# ③ R2 N=2 束质变：SPLIT_PRISM×2 → 副束索敌半径 250→350px
+	# （excl 显式类型化：_nearest_unhit 形参 Array[int] 不接受非类型化 []——此前
+	# SCRIPT ERROR 中断本函数，评审R2/R5 及其后检查静默未执行。
+	# 夹具距离 380px（竖向、场内）：space_grid.rebuild 以保守半径 64 入桶（R188），
+	# query 精判 reach=索敌半径+64 → 0/1 层 250+64=314、2 层 350+64=414。原夹具
+	# 300px 落在 0 层 314 reach 内——本段自 SCRIPT ERROR 起从未执行，该潜在夹具
+	# 缺陷由类型化修复首次暴露；380 ∈ (314,414] 使 250/350 判别语义成立）
 	var w4 := _make_w(&"W4_pulse_beam", 1)
-	var far_e := _spawn_e(_gl.player.global_position + Vector2(300.0, 0.0))
+	var far_e := _spawn_e(_gl.player.global_position + Vector2(0.0, 380.0))
 	var prism := _gl.registry.get_trait(&"MEC_SPLIT_PRISM")
-	var far300: Node2D = w4.call("_nearest_unhit", w4.muzzle_position(), [])
-	_check("评审R2 前置：无棱镜 300px 敌不在 250px 索敌域", far300 == null)
+	var excl: Array[int] = []
+	var far_pre: Node2D = w4.call("_nearest_unhit", w4.muzzle_position(), excl)
+	_check("评审R2 前置：无棱镜 380px 敌不在 250px 索敌域（reach=250+64）", far_pre == null)
 	w4.attach_trait(prism)
-	var mid: Node2D = w4.call("_nearest_unhit", w4.muzzle_position(), [])
+	var mid: Node2D = w4.call("_nearest_unhit", w4.muzzle_position(), excl)
 	w4.attach_trait(prism)
-	var far350: Node2D = w4.call("_nearest_unhit", w4.muzzle_position(), [])
-	_check("评审R2：副束=1 → 250px 不索 / 副束=2 → 350px 索得 300px 敌",
-		mid == null and far350 == far_e and int(w4.call("_sub_beam_count")) == 2)
+	var far380: Node2D = w4.call("_nearest_unhit", w4.muzzle_position(), excl)
+	_check("评审R2：副束=1 → 250px 不索 / 副束=2 → 350px 索得 380px 敌（reach=半径+64）",
+		mid == null and far380 == far_e and int(w4.call("_sub_beam_count")) == 2)
 	_kill_weapon(w4)
 	_clear_enemies()
 	# ④ R5 W8 复制体：BASE 单环阵 + 相位偏移 45°

@@ -3,7 +3,8 @@
 # 掉卡规则真源 A3 §6：
 #   §6.1 稀有度权重（w<10 基础 {白58,蓝30,紫10,金2}；w≥10 调整公式——白 58−0.7w（下限 40）、
 #        蓝 30+0.1w（上限 34）、紫 10×(1+0.045w)、金 2×(1+0.075w)，收敛于 §6.1 深度列）
-#   §6.3 卡池构成（类别 roll）：MASTERY 12 / ADD 40 / MULT 18 / MECH 14 / ELEM 10 / RELIC 6
+#   §6.3 卡池构成（类别 roll）：MASTERY 12 / ADD 40 / MULT 18 / MECH 14 / ELEM 14（R192
+#        10→14，池 8 员稀释补偿）/ RELIC 6
 #        （遗物唯一，抽空 → 重 roll 为乘区）
 #   §6.4 叠层规则：同 ID 至 stack_max 后该 ID 移出池（过滤依据）
 #   AC-16.4 卡池耗尽 fallback："+5% 攻击"属性卡，界面永不空。
@@ -39,8 +40,11 @@ func _init() -> void:
 # 类别权重静态表（A3 §6.3 原值；BalanceTables.category_weights 为同源镜像）。
 # WEAPON（用户反馈 2026-08-29「怎么只有手枪」：原版无任何新武器获取途径——equip_weapon
 # 全工程零调用点；新武器卡补全构筑获取链；R5.12-P1 构筑提速 10→14）。
+# ELEM（R192 wire 案 10→14）：元素池 4→8 员（HYD/ANE/GEO/DEN 入池），w=10 时每卡获取
+# 稀释 −52% 过狠、w=14 → −32%——三源同改（本 const + balance_tables.gd 默认 +
+# data/balance/balance_tables.tres 运行时真源；setup() 逐键覆写本 const，单改此处运行时无效）。
 const CATEGORY_WEIGHTS := {
-	"MASTERY": 12.0, "ADD": 36.0, "MULT": 18.0, "MECH": 14.0, "ELEM": 10.0, "RELIC": 6.0,
+	"MASTERY": 12.0, "ADD": 36.0, "MULT": 18.0, "MECH": 14.0, "ELEM": 14.0, "RELIC": 6.0,
 	"WEAPON": 14.0,
 }
 # R5.12-P1 构筑提速①：前期货架保底 ≥1 张武器卡（w < 5 或玩家等级 ≤ 3 时生效）
@@ -157,6 +161,15 @@ func _apply_rarity_values(p_cards: Array[Dictionary]) -> void:
 				out.rarity = rarity
 				if scale > 1.0:
 					out.value = data.value * scale
+					if data.params.has("value_lv2"):
+						# R192 审查④：EF_ELEMENTAL 2 层质变值随品质同缩（蓝/紫/金 =
+						# 30×1.4/1.9/2.6）——否则单层附着（30.8/41.8/57.2）≥ 白基准 30，
+						# 二层质变零/负收益且卡面「+57.2/跳 … 附着→30/跳」自相矛盾。
+						# params 经 duplicate() 为浅拷贝（直改写穿 .tres 注册表真源，
+						# E-08）——深复制后改（R68 condition 同款防线）。ELE_FREEZE 同构
+						# 既有病一并修正；ELE_IGNITE/ELE_SHOCK 无该键不受影响。
+						out.params = data.params.duplicate(true)
+						out.params["value_lv2"] = float(data.params["value_lv2"]) * scale
 					# R66b：MULT/LOCAL 池上限随品质同缩——否则「上限=白值」的词条（背水协议
 					# cap 0.6 = value 0.6）品质缩放全被单区钳制截回白值，「什么品质都一样」
 					#（用户反馈「背水协议怎么什么品质都是35%」——35% 条件阈值本不缩放，
@@ -241,7 +254,12 @@ func _rarity_desc_mech(p_data: TraitData, p_scale: float, p_rarity: int) -> Stri
 	# · 计数型（AFF_PIERCE/AFF_MULTI/MEC_ORBIT_LINK）：「+1」→「+N」按 round 终值
 	# · MEC_SHIELD（value=充能倍率）：秒数 = 基准/倍率（8s→5.7/4.2/3.1s）
 	# · MEC_KILL_BLAST（value=爆炸伤害比）："30%"/层2 "45%" 按终值重写
-	# · ELE_REACTION_VOID（value=反应乘数直乘）：「×1.8」→「×N.N」
+	# · EF_ELEMENTAL value_lv2（params 语义键分流，id 不进判据）：先走通用重写
+	#   （+22→+N.N 带号数字），再重写「→30/跳」锚 = 30×scale（R192 审查④——运行时
+	#   lv2 按品质因子放大，卡面不同步即「+57.2/跳 … 质变：附着→30/跳」自相矛盾；
+	#   白卡 scale=1.0 两段逐字节不变）
+	# · 反应乘数卡（params.reaction_mult，value=反应乘数直乘）：「×1.8」→「×N.N」（R192
+	#   泛化为语义键分流——卡 id 不进判据）
 	var _r := p_rarity                                 # 预留：文案按品质措辞（当前不用）
 	var desc := p_data.description
 	if COUNT_TRAIT_IDS.has(p_data.id):
@@ -257,8 +275,17 @@ func _rarity_desc_mech(p_data: TraitData, p_scale: float, p_rarity: int) -> Stri
 		var pct2 := int(round(float(p_data.params.get("atk_ratio_lv2", 0.45)) * p_scale * 100.0))
 		var out_p := _replace_first(desc, "30%", "%d%%" % pct)
 		return _replace_first(out_p, "45%", "%d%%" % pct2)
-	if p_data.id == &"ELE_REACTION_VOID":
-		return _replace_first(desc, "×1.8", "×%.1f" % (p_data.value * p_scale))
+	if p_data.params.has("value_lv2"):
+		var out_d := _scaled_description(desc, p_scale, p_rarity)
+		var lv2_v := int(round(float(p_data.params.get("value_lv2", 30.0)) * p_scale))
+		return _replace_first(out_d, "→30/跳", "→%d/跳" % lv2_v)
+	if p_data.params.has("reaction_mult"):
+		# R192 wire T5 泛化：反应乘数卡（params.reaction_mult 语义键，VOID 本含该键）共用
+		# 本臂——品质缩放 = value × scale（与旧 id 特例同式）；锚字样按基值生成（基值 1.8
+		# → "×1.8" 与原描述逐字节同形，金卡 1.8×2.6=4.68 → "×4.7" 逐字节不变——verify_feedback
+		# 契约锁）。禁按 id 字面量分流、禁按「×N 字样」猜测分流。
+		return _replace_first(desc, "×%.1f" % p_data.value,
+			"×%.1f" % (p_data.value * p_scale))
 	return ""
 
 
@@ -343,8 +370,15 @@ func apply_choice(p_card: Dictionary, p_player: Node) -> void:
 				var target: Object = p_card.get("target_weapon")
 				var weapon := target if target is WeaponBase and is_instance_valid(target) \
 					else _pick_attach_target(data, p_player)
-				if weapon != null:
-					weapon.attach_trait(data)
+				# R189c 挂载失败转应急强化（评审#12：单栈 12 条目帽满时词条卡静默浪费——
+				# 挂机无人值守下反复发生。找有空位的武器挂 FALLBACK_ATK；全满员才放弃）
+				if weapon != null and not weapon.attach_trait(data):
+					var fb: TraitData = (_fallback_stat_card().get("data") as TraitData)
+					if fb != null and p_player != null:
+						for w2 in p_player.get("weapon_slots"):
+							if w2 is WeaponBase and is_instance_valid(w2) \
+									and (w2 as WeaponBase).attach_trait(fb):
+								break
 		CardKind.RELIC:
 			var rid := StringName(String(p_card.get("id", "")))
 			if rid != &"" and not owned_relics.has(rid):
@@ -434,7 +468,12 @@ func _trait_candidates(p_category: String, p_player: Node, p_picked: Array[Strin
 		var t := registry.get_trait(tid)
 		if t == null:
 			continue
-		if used_layers.get(tid, 0) >= t.stack_max:
+		# R196 有意契约变更（原 §6.4「至 stack_max 移出池」）：仅 ADD 池上架帽放宽至
+		# stack_max + TraitStack.OVERCAP_EXT_MAX（超质变叠层——与 TraitStack.attach
+		# 拒绝线同口径）；非 ADD 池保持原帽
+		var stack_cap: int = t.stack_max \
+			+ (TraitStack.OVERCAP_EXT_MAX if t.pool == GameConst.PoolClass.ADD else 0)
+		if used_layers.get(tid, 0) >= stack_cap:
 			continue                            # 叠层上限（§6.4）
 		if bool(t.params.get(THRESHOLD_ONLY_KEY, false)):
 			continue                            # R187 阈值型词条（TH_*）不上卡架（注册表镜像专用）
@@ -442,8 +481,37 @@ func _trait_candidates(p_category: String, p_player: Node, p_picked: Array[Strin
 			continue                            # 元素解锁门（火/冰 第 2 关 · 雷 第 3 关）
 		if not _form_allows(t, p_target):
 			continue                            # 形态/武器适配门（错形态词条不上架——§5.12 P0）
+		if _laser_second_elem_blocked(t, p_target):
+			continue                            # R199 D17 激光双元素死卡门（上架侧收窄）
 		out.append(tid)
 	return out
+
+
+func _laser_second_elem_blocked(p_t: TraitData, p_target: WeaponBase) -> bool:
+	# R199 D17 激光双元素死卡（上架侧收窄，combat 侧零改动）：激光主束元素 = 挂载序首个
+	# 非 KIN 附魔（weapon_base.gd:317-326 dominant_element；laser_weapon.gd:215 主束缺省
+	# 取值）且永不轮换；trait_effect_elemental.gd:44-46 宿主元素守卫使异元素词条零附着
+	# ——激光已持元素后再上架第二张元素词条卡 = 结构性死卡（零附着/无寒滞易伤冻结，
+	# 碎裂反应不可达）。弹道/自导逐发随机取元素（weapon_base roll）不受此限。
+	# 设计定案（laser_beam.gd:14-15）：W4 主束单元素——激光形态目标已持有元素词条
+	# （ELEM 池 + params.element 键）→ 元素词条卡不再进入该目标的候选池。
+	if p_target == null or not is_instance_valid(p_target):
+		return false
+	var wd: Variant = p_target.get("data")
+	var form_v: Variant = wd.get("form") if wd != null else null
+	if wd == null or (int(form_v) if form_v != null else -1) != GameConst.WeaponForm.LASER:
+		return false
+	if int(p_t.pool) != GameConst.PoolClass.ELEM or not p_t.params.has("element"):
+		return false                             # 非元素卡/无 element 键（如反应强化）不在此限
+	var tstack: Variant = p_target.get("trait_stack")
+	if tstack == null or tstack.get("traits") == null:
+		return false
+	for tb: Variant in (tstack.get("traits") as Array):
+		var td: Variant = tb.get("data")
+		if td != null and int(td.pool) == GameConst.PoolClass.ELEM \
+				and (td as TraitData).params.has("element"):
+			return true                          # 目标已持元素词条 → 第二张元素卡不上架
+	return false
 
 
 func _form_allows(p_t: TraitData, p_target: WeaponBase) -> bool:
@@ -462,10 +530,30 @@ static func mount_gate_allows(p_t: TraitData, p_target: WeaponBase) -> bool:
 	#   （反弹/分裂/体积/弹速/穿透/弹丸数）不上架错形态武器；
 	# · required_weapon = 单武器 id（MEC_ORBIT_LINK 仅环绕力场 W8——谐振轨道上手枪误刷根修）；
 	# · 两键缺省 = 全形态通用（攻击/暴击/HP/元素/条件乘区等）。
+	# R199 上架侧收紧三键（死卡治理——不合格武器不再上架，货架/回响/黑市同门）：
+	# · requires_weapon_keys = 能力键数组：候选 WeaponData 四形态段（ballistic/laser/homing/
+	#   melee）或顶层须实有该键（消费实证 ballistic_weapon.gd:340-345 _formation_enabled
+	#   纯数据驱动读 ballistic.lateral_gap_levels，全仓仅 W1 在册）——无键武器挂上即零
+	#   效果死卡（D01 平行校准 / D02 回廊弹幕）；
+	# · requires_projectile = true：仅携带 projectile 上下文的形态（弹道/自导经
+	#   projectile_base 派发生命周期；消费侧 trait_effect_mech.gd:33 projectile==null 早退）
+	#   ——激光（beam 上下文，projectile 恒 null，laser_beam.gd:587-595）与近战（无
+	#   ON_EXPIRE 派发点）不上架（D03 死亡新星）；
+	# · excluded_weapons = 排除武器 id 数组：同形态段内个别零消费武器精确下架，不动
+	#   required_forms 锁定矩阵（D04 动能冲击——R199 D04 执行口径 supersede 记录：计划原拟
+	#   required_forms 去 form 3，经实证 W8 环绕力场同 form=3 且是击退真实消费方
+	#   orbit_field.gd:583 / w8_charge_cases.gd:424「40+60」锁定，去 3 会误下架 W8 并打红
+	#   pool_wiring_cases.gd:306 / r187_rework_cases.gd:460/:2095 三处 R187 锁定断言；
+	#   改按武器 id 精确下架零击退设计的 W9 追击者 arc_slash.gd:23/:36 全文件零读取，
+	#   证据链见升级仲裁记录）。
 	var forms: Variant = p_t.params.get("required_forms", null)
 	var weapon_req: Variant = p_t.params.get("required_weapon", null)
 	var need_trait: Variant = p_t.params.get("requires_trait", null)
-	if forms == null and weapon_req == null and need_trait == null:
+	var wkeys: Variant = p_t.params.get("requires_weapon_keys", null)          # R199 D01/D02
+	var need_proj: bool = bool(p_t.params.get("requires_projectile", false))   # R199 D03
+	var excluded: Variant = p_t.params.get("excluded_weapons", null)           # R199 D04
+	if forms == null and weapon_req == null and need_trait == null \
+			and wkeys == null and not need_proj and excluded == null:
 		return true
 	var form := -1
 	var wid := &""
@@ -500,6 +588,19 @@ static func mount_gate_allows(p_t: TraitData, p_target: WeaponBase) -> bool:
 			return false
 	if need_trait != null and not has_trait_req:
 		return false
+	if wkeys != null and not _weapon_data_has_keys(p_target, wkeys):
+		return false                             # R199 D01/D02 能力键门：无键武器不上架
+	if need_proj and form != GameConst.WeaponForm.BALLISTIC \
+			and form != GameConst.WeaponForm.HOMING:
+		return false                             # R199 D03 投射物上下文门（无目标 form=-1 同拦）
+	if excluded != null:
+		# R199 D04 负向排除：按武器 id 精确下架（required_forms 矩阵不动——同段其余照常）
+		if excluded is Array:
+			for wv in (excluded as Array):
+				if wid == StringName(String(wv)):
+					return false
+		elif wid == StringName(String(excluded)):
+			return false
 	if forms is Array and not (forms as Array).is_empty() and not (forms as Array).has(form):
 		return false
 	# R19 互斥组（exclusive_group）：目标武器已挂同组词条 → 本卡永不再上架
@@ -513,6 +614,35 @@ static func mount_gate_allows(p_t: TraitData, p_target: WeaponBase) -> bool:
 				if td != null and String(td.params.get("exclusive_group", "")) == String(excl):
 					return false
 	return true
+
+
+# R199 D01/D02 能力键实有性（static——货架/回响/黑市经 mount_gate_allows 同门共用）：
+# 所列键全部实有才放行（空数组 = 无要求恒真）；键语义与消费侧
+# ballistic_weapon._formation_enabled 同源（纯数据驱动，无武器 id 硬编码）。
+static func _weapon_data_has_keys(p_target: WeaponBase, p_keys: Variant) -> bool:
+	if p_keys is Array:
+		for kv in (p_keys as Array):
+			if not _weapon_data_has_key(p_target, String(kv)):
+				return false
+		return true
+	return _weapon_data_has_key(p_target, String(p_keys))
+
+
+static func _weapon_data_has_key(p_target: WeaponBase, p_key: String) -> bool:
+	# 四形态段（ballistic/laser/homing/melee）任一 Dictionary 或 WeaponData 顶层属性
+	# 持有该键即真；目标无效/非 WeaponData = 无法证实实有 → false（保守不上架）
+	if p_target == null or not is_instance_valid(p_target):
+		return false
+	var wd: Variant = p_target.get("data")
+	if wd == null or not (wd is WeaponData):
+		return false
+	var wdata := wd as WeaponData
+	if wdata.get(p_key) != null:
+		return true                              # 顶层属性键
+	for section in [wdata.ballistic, wdata.laser, wdata.homing, wdata.melee]:
+		if section is Dictionary and section.has(p_key):
+			return true                          # 形态段键（lateral_gap_levels 所在层）
+	return false
 
 
 func _mastery_candidates(p_player: Node) -> Array:
@@ -529,7 +659,10 @@ func _mastery_candidates(p_player: Node) -> Array:
 
 func _weapon_candidates(p_player: Node) -> Array[WeaponData]:
 	# 新武器卡候选（用户反馈 2026-08-29「怎么只有手枪」）：注册表武器 − 已持有，
-	# 且玩家存在已解锁空槽（equip_weapon 首空槽口径，满员不上架）
+	# 且玩家存在已解锁空槽（equip_weapon 首空槽口径，满员不上架）。
+	# R196 武器准入门：MechanicGate.weapon_allowed 过滤（大关分批上架——同 trait_allowed
+	# / relic_allowed 既有消费范式；无局态全开 = 既有验收基线不受扰）。写口
+	# mark_weapon_codex 不设门——只有候选上架才可被抽，门自然收口。
 	var out: Array[WeaponData] = []
 	if registry == null or p_player == null:
 		return out
@@ -551,6 +684,8 @@ func _weapon_candidates(p_player: Node) -> Array[WeaponData]:
 	for wid in registry.weapons.keys():
 		if owned.has(wid):
 			continue
+		if not MechanicGate.weapon_allowed(StringName(String(wid))):
+			continue                        # 武器准入门（R196：越门大关不上架）
 		var wd := registry.get_weapon(wid)
 		if wd != null:
 			out.append(wd)
@@ -597,9 +732,11 @@ func _make_trait_card(p_tid: StringName, p_wave: int, p_target: WeaponBase = nul
 	# 满层质变预览（2026-08-31）：本卡若挂上即满层（ADD 池 stack_max ≥2 且现有层 = max−1）
 	# → 卡面标注「质变」，描述补「全部层数 ×1.6」（质变实装在 WeaponBase.attach_trait；
 	#   大关门：满层质变第 4 关解锁——未解锁期不上架预告）
+	# R196 超帽态预览：ADD 池且目标现有层 ≥ stack_max（挂上即超质变层 ×0.7）→
+	# 卡描述尾追 GameConst.OVERCAP_NOTE（milestone 门不约束本态——超帽不靠大关解锁）
 	var milestone := false
-	if MechanicGate.milestone_unlocked() and t != null and t.pool == GameConst.PoolClass.ADD \
-			and t.stack_max >= 2 and p_target != null and is_instance_valid(p_target):
+	var overcap := false
+	if t != null and t.pool == GameConst.PoolClass.ADD and p_target != null and is_instance_valid(p_target):
 		var cur := 0
 		var tstack: Variant = p_target.get("trait_stack")
 		if tstack != null and tstack.get("traits") != null:
@@ -607,7 +744,9 @@ func _make_trait_card(p_tid: StringName, p_wave: int, p_target: WeaponBase = nul
 				var td: Variant = tb.get("data")
 				if td != null and StringName(str(td.get("id"))) == p_tid:
 					cur = int(tb.get("layers"))
-		milestone = cur + 1 >= t.stack_max
+		overcap = cur >= t.stack_max
+		if MechanicGate.milestone_unlocked() and t.stack_max >= 2:
+			milestone = cur + 1 >= t.stack_max
 	# 前缀体系（R10 整理）：玩家侧池（生命/经验/磁吸/技能急速）=【通用】——效果全局生效，
 	# 不再误导性地挂武器名；武器侧词条 =【武器名】（绑定目标武器）
 	var prefix := "【通用】" if t != null and (t.pool_id in GameConst.PLAYER_SIDE_POOLS) 		else (("【%s】" % _weapon_short_name(p_target)) if p_target != null else "")
@@ -623,6 +762,7 @@ func _make_trait_card(p_tid: StringName, p_wave: int, p_target: WeaponBase = nul
 		"display_name": prefix + (t.display_name if t != null else String(p_tid)),
 		"description": (t.description if t != null else ""),
 		"milestone": milestone,
+		"overcap": overcap,
 	}
 	if milestone:
 		var note := "\n◆ 满层质变：该词条全部层数数值 ×1.6！"
@@ -630,6 +770,14 @@ func _make_trait_card(p_tid: StringName, p_wave: int, p_target: WeaponBase = nul
 		if data != null:
 			# 同步写入 data 副本描述（_apply_rarity_values 描述重写以 data.description 为源）
 			data.description = String(data.description) + note
+	if overcap:
+		# R196 超帽注记（文案真源 GameConst.OVERCAP_NOTE）：milestone 同款双写——
+		# card["description"] 与 data 副本描述都追加（防 _apply_rarity_values 重写丢注）；
+		# 注册表基描述保持干净（duplicate 落卡）
+		var oc_note := "\n" + GameConst.OVERCAP_NOTE
+		card["description"] = String(card["description"]) + oc_note
+		if data != null:
+			data.description = String(data.description) + oc_note
 	return card
 
 

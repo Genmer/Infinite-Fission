@@ -10,7 +10,7 @@ description = "环绕体化为裂空斧：范围 +25%、体积 +15%、击退 +60
 pool = 3
 pool_id = &""
 effect_id = &"EF_MECH"
-value = 0.0
+value = 0.25
 value2 = 0.0
 params = {
 	"required_weapon": &"W8_orbit_field",

@@ -1,11 +1,17 @@
 # scripts/combat/elemental/elemental_state.gd
 # M-11 ElementalState（架构 §2.10）：单敌状态容器（A2 §4.1 附着—衰减—触发—消耗）。
-# · gauges：附着计量 G（4 槽，下标 = GameConst.Element 枚举值直索引：KIN=0 槽恒 0 弃用，
-#   FIR/ICE/LTG = 1/2/3；容量 100，满槽触发状态并清空该槽，F19/F20 稳态免疫线）。
+# · gauges：附着计量 G（8 槽，下标 = GameConst.Element 枚举值直索引：KIN=0 槽恒 0 弃用，
+#   FIR/ICE/LTG = 1/2/3，HYD/ANE/GEO/DEN = 4/5/6/7（R192 追加不重排）；容量 100。
+#   满槽语义分派：旧三元素清槽并触发状态（F19/F20 稳态免疫线）；新四元素满槽钳制
+#   GAUGE_MAX 存续不清零不触发——纯反应载体（燃料），消耗走 clear_element）。
 # · 状态运行时：点燃 DOT（15%ATK/0.5s×3s，层 ≤5——第 6 次附着拒绝）；寒滞（−40% 移速）
 #   + 易伤（×1.25 独立乘区，vuln 池注入）；二次满槽 → 完全冻结 1.2s（定身，受 immune_mask）；
 #   感电连锁参数（3 目标/160px/35%每跳/深度 2 衰减 60%——执行在 ElementalSystem）。
 # · λ 比例衰减：G *= (1 − λ_ele×dt)（F-22；λ 数组真源 BalanceTables.element_decay_lambda）。
+# · 绽放载体（R192）：bloom_timer/bloom_snapshot_atk（HYD+DEN 延迟 AoE 快照）——tick 推进，
+#   consume_bloom_expired 到期消费（照 consume_superconduct_expired 模式，调度在 ElementalSystem）。
+# · 超导账本（M0 修复）：superconduct_delta 记录本次削抗幅度——激活期重触只刷新时长
+#   （不重扣）；到期由系统按记录 delta 恢复一次（净 0，修原 +0.3 硬编码不对称）。
 class_name ElementalState
 extends RefCounted
 
@@ -17,7 +23,7 @@ const TRIGGER_CHILL: int = 2
 const TRIGGER_FREEZE: int = 3
 const TRIGGER_SHOCK: int = 4
 
-var gauges: Array[float] = [0.0, 0.0, 0.0, 0.0]  # 元素枚举直索引（KIN 槽恒 0 弃用）：FIR/ICE/LTG = 1/2/3
+var gauges: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # 元素枚举直索引（KIN 槽恒 0 弃用）：FIR/ICE/LTG = 1/2/3，HYD/ANE/GEO/DEN = 4/5/6/7
 var immune_mask: int = 0                       # 宿主 Enemy 注入（F-17 免疫矩阵）
 # 状态运行时
 var burn_layers: int = 0                       # ≤5（第 6 次附着拒绝）
@@ -35,31 +41,41 @@ var shock_chain_cd: float = 0.0
 var shock_chain_targets: int = 3               # ELE_SHOCK 层 2 → 4 覆写
 var shock_chain_decay: float = 0.6             # 感电每跳衰减（ELE_SHOCK 层 2 质变 → 0.75 覆写）
 var burn_spread_radius: float = 0.0            # 点燃蔓延半径（ELE_IGNITE 层 2 质变 → 燃烧者死亡传火；0=未启用）
-var reaction_cd: Dictionary = {}               # rxn -> 剩余（cd_rxn=2s）
+var reaction_cd: Dictionary = {}               # rxn -> 剩余（cd_rxn=2s；到期键 erase）
 var superconduct_left: float = 0.0             # 超导削抗剩余（−30% 全抗，6s）
 var superconduct_active: bool = false
+var superconduct_delta: float = 0.0            # M0：本次削抗幅度记录（到期按此恢复一次；重触不叠记）
 var last_attach_snapshot: float = 0.0          # 最近一次附着的攻击者面板快照（过载 120%ATK 基数）
+var bloom_timer: float = 0.0                   # R192 绽放延迟臂剩余（HYD+DEN 触发时置位）
+var bloom_snapshot_atk: float = 0.0            # 绽放爆发快照面板 S_snap
+var bloom_active: bool = false                 # 绽放调度标记（照 superconduct_active 模式）
 var _chill_from_full: bool = false             # 寒滞已由满槽触发（二次满槽 → 冻结判定位）
 
 
 func apply(p_element: int, p_value: float, p_snapshot: float = 0.0,
 		p_overrides: Dictionary = {}) -> int:
-	# 附着：计量累计 → 满槽触发状态并清空该槽（返回触发码；快照为攻击者面板 S）
-	if p_element < GameConst.Element.FIR or p_element > GameConst.Element.LTG:
+	# 附着：计量累计 → 满槽分派（快照为攻击者面板 S）。
+	# 守卫按枚举界（KIN 槽弃用 + 越界拒绝——新元素扩容后仍封闭）
+	if p_element <= GameConst.Element.KIN or p_element >= GameConst.Element.size():
 		return TRIGGER_NONE
 	if p_snapshot > 0.0:
 		last_attach_snapshot = p_snapshot
 	gauges[p_element] = minf(gauges[p_element] + maxf(p_value, 0.0), GAUGE_MAX * 2.0)
 	if gauges[p_element] < GAUGE_MAX:
 		return TRIGGER_NONE
-	gauges[p_element] = 0.0
-	return _trigger(p_element, p_overrides)
+	# 满槽分派按元素身份（禁按返回码分支——免疫/层满拒绝与触发共用 TRIGGER_NONE）：
+	# 旧三元素 = 清槽 → _trigger（逐字节不变）；新四元素 = 钳制 GAUGE_MAX 存续为反应燃料
+	if p_element <= GameConst.Element.LTG:
+		gauges[p_element] = 0.0
+		return _trigger(p_element, p_overrides)
+	gauges[p_element] = GAUGE_MAX
+	return TRIGGER_NONE
 
 
 func tick(p_game_delta: float, p_decay_lambdas: Array[float]) -> void:
 	# λ 比例衰减（F-22）+ 全部状态计时
-	# 槽 0（KIN）弃用跳过；λ 数组真源 BalanceTables.element_decay_lambda 为 [FIR, ICE, LTG]
-	# 无 KIN 位——槽 i≥1 取 p_decay_lambdas[i − 1]。
+	# 槽 0（KIN）弃用跳过；λ 数组真源 BalanceTables.element_decay_lambda 为 7 项
+	# （FIR..DEN，无 KIN 位）——槽 i≥1 取 p_decay_lambdas[i − 1]，欠长槽兜底 0.35。
 	for i in range(1, gauges.size()):
 		var lambda := 0.35
 		if i - 1 < p_decay_lambdas.size():
@@ -77,10 +93,18 @@ func tick(p_game_delta: float, p_decay_lambdas: Array[float]) -> void:
 	freeze_timer = maxf(freeze_timer - p_game_delta, 0.0)
 	vuln_timer = maxf(vuln_timer - p_game_delta, 0.0)
 	shock_chain_cd = maxf(shock_chain_cd - p_game_delta, 0.0)
+	# 反应 CD：到期键 erase（字典回落——长期局 CD 键不再常驻）
+	var _expired: Array = []
 	for rxn in reaction_cd:
 		reaction_cd[rxn] = maxf(float(reaction_cd[rxn]) - p_game_delta, 0.0)
+		if float(reaction_cd[rxn]) <= 0.0:
+			_expired.append(rxn)
+	for rxn in _expired:
+		reaction_cd.erase(rxn)
 	if superconduct_active:
 		superconduct_left = maxf(superconduct_left - p_game_delta, 0.0)
+	if bloom_timer > 0.0:
+		bloom_timer = maxf(bloom_timer - p_game_delta, 0.0)   # 绽放延迟臂推进
 
 
 func get_speed_factor() -> float:
@@ -137,7 +161,7 @@ func consume_dot_due() -> bool:
 
 
 func consume_superconduct_expired() -> bool:
-	# 超导到期消费（ElementalSystem 恢复抗性 +0.3）
+	# 超导到期消费（ElementalSystem 按 superconduct_delta 记录恢复抗性一次）
 	if superconduct_active and superconduct_left <= 0.0:
 		superconduct_active = false
 		return true
@@ -145,14 +169,35 @@ func consume_superconduct_expired() -> bool:
 
 
 func apply_superconduct(p_delta: float, p_duration: float) -> void:
-	# 超导：全抗 −|p_delta|，持续 p_duration（抗性改写在宿主 Enemy.resist，系统侧执行）
+	# 超导：全抗 −|p_delta|，持续 p_duration（抗性改写在宿主 Enemy.resist，系统侧执行）。
+	# M0 账本：首触记录 delta；激活期重触只刷新时长（抗性已削过——不重扣不叠记），
+	# 到期由系统按记录 delta 恢复一次（持续期 N 次重触 → 恢复恰一次，净 0）。
+	if superconduct_active:
+		superconduct_left = p_duration
+		return
+	superconduct_delta = p_delta
 	superconduct_active = true
 	superconduct_left = p_duration
 
 
+func arm_bloom(p_delay: float, p_snapshot: float) -> void:
+	# 绽放延迟臂置位（R192 RXN_HYD_DEN 触发期调用）：delay 后由系统到期消费爆发
+	bloom_active = true
+	bloom_timer = maxf(p_delay, 0.0)
+	bloom_snapshot_atk = p_snapshot
+
+
+func consume_bloom_expired() -> bool:
+	# 绽放到期消费（照 consume_superconduct_expired 模式；爆发调度在 ElementalSystem）
+	if bloom_active and bloom_timer <= 0.0:
+		bloom_active = false
+		return true
+	return false
+
+
 func reset() -> void:
 	# 归还清零（AC-11.1：死亡/回收清 DOT）
-	gauges = [0.0, 0.0, 0.0, 0.0]
+	gauges = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	burn_layers = 0
 	burn_timer = 0.0
 	dot_tick_left = 0.5
@@ -171,13 +216,18 @@ func reset() -> void:
 	reaction_cd.clear()
 	superconduct_left = 0.0
 	superconduct_active = false
+	superconduct_delta = 0.0
 	last_attach_snapshot = 0.0
+	bloom_timer = 0.0
+	bloom_snapshot_atk = 0.0
+	bloom_active = false
 	_chill_from_full = false
 
 
 # ── 内部 ──────────────────────────────────────────────────────────
 func _trigger(p_element: int, p_overrides: Dictionary) -> int:
-	# 满槽状态触发（快照/覆写按 ELE 词条层 2 递进写入；免疫位检查 F-17）
+	# 满槽状态触发（快照/覆写按 ELE 词条层 2 递进写入；免疫位检查 F-17）。
+	# 仅旧三元素有臂——新四元素满槽在 apply 已按身份分派钳制，不入此路径。
 	match p_element:
 		GameConst.Element.FIR:
 			if (immune_mask & GameConst.IMMUNE_BURN) != 0:

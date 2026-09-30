@@ -134,9 +134,10 @@ func _test_shop_refresh_price() -> void:
 		absf(float(c1) / float(c0) - 1.5) < 0.2 and absf(float(c2) / float(c1) - 1.5) < 0.2,
 		"%d/%d/%d" % [c0, c1, c2])
 	_gl.shop_ui.close()
-	_gl.shop_ui.open(_gl.player, 6, false)
-	_check("刷新价：关店重置（重开回到基准价）",
-		int(_gl.shop_ui.refresh_cost()) == c0 or _gl.shop_ui.refresh_cost() > 0)
+	_gl.shop_ui.open(_gl.player, 5, false)         # 同波重开（行情系数随波漂移——同波才可比基准价）
+	# R188-1 收紧：移除恒真右支（or refresh_cost()>0）——重开必须精确回到基准价 ==c0
+	_check("刷新价：关店重置（重开回到基准价 ==c0）",
+		int(_gl.shop_ui.refresh_cost()) == c0)
 	_gl.shop_ui.close()
 
 

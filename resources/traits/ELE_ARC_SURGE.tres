@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"ELE_ARC_SURGE"
 display_name = "链隙电弧"
-description = "对感电目标伤害 ×1.5"
+description = "对感电目标伤害 ×1.5（不附着雷元素）"
 pool = 1
 pool_id = &"shocked_dmg"
 effect_id = &"EF_STAT"

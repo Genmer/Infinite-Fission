@@ -10,7 +10,7 @@ rof = 5.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "R187 §2.4 L1：面板 DPS 70（14×5.0 穿 1——p1_polish 锚 14 不动；旧 note「60」过期修正）"
+note = "单发速射：每发 14 伤 × 5 发/s，面板 DPS 70"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,7 +19,7 @@ rof = 5.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "R187 §2.4 L2：面板 DPS 80（16×5.0；旧 note「70」过期修正）"
+note = "每发 14→16 伤，面板 DPS 80"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
@@ -28,7 +28,7 @@ rof = 5.5
 cd = 0.0
 pierce = 2
 pellets = 2
-note = "R187 §2.4 L3「双管并排」：11×5.5×2=121（旧 L5 双发前移+真横向偏移 ±6px）；bounce 预算 1"
+note = "双管并排：一次射出 2 排子弹（每排 11 伤 × 5.5 发/s），面板 DPS 121；子弹可弹射 1 次"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -37,7 +37,7 @@ rof = 5.5
 cd = 0.0
 pierce = 2
 pellets = 2
-note = "R187 §2.4 L4：13×5.5×2=143（修 R10 模板 pierce 2→1 倒退回归）"
+note = "每发 11→13 伤，面板 DPS 143"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 5.5
 cd = 0.0
 pierce = 2
 pellets = 3
-note = "R187 §2.4 L5「三线收束」：12×5.5×3=198（霰弹 201.6 的 98%）；±12px、55% 射程收束；bounce 预算 2"
+note = "三线收束：一次射出 3 排子弹（每排 12 伤），面板 DPS 198；三线向准星收拢更集中，子弹可弹射 2 次"
 
 [resource]
 script = ExtResource("1_wd")

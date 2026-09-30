@@ -17,6 +17,17 @@
 #   ▸ 遗物乘区接线：_settle_one_tick 经 weapon.inject_relic_pools 注入 B.2 命中乘区
 #     （此前激光跳伤路径绕过 REL_TROPHY/MOMENTUM——与 projectile_base 通道对齐）。
 #   ▸ R183 复制体灰染：gray_tint 束染（RARITY_NORMAL 灰蓝）由宿主武器 copy_tint 注入。
+# ── R195 穿透定案（2026-09-30）────────────────────────────────────
+# · 预算口径 N=pierce（镜像弹体 pierce_left 可命中总数，pkg2:464-469 同源）：主束沿
+#   射线按 t 升序取前 N 个目标逐拍结算（_hits_along_ray 扩自旧 _first_hit）；基线
+#   pierce=1 与旧单目标口径逐位同构（pkg3 激光已知数 955.2/16 settles/8 popups 零位移）。
+# · 仅主束吃穿透：depth==0 ∧ ¬sub_beam ∧ ¬overlap_fallback 三重门（_hit_budget）；
+#   副束/折射束/重叠回退束恒 1（武器侧 _spawn_beam 传 1 同源防御）。
+# · 无逐目标衰减（f=1：弹体同口径每跳同 base_atk 只扣计数）；增减伤走现成
+#   pierce_index→pierce_dmg 池（SYN_PIERCE_EVO：ctx.pierce_index=序数+1，首目标=2）。
+# · last_hit_uid 仅随首目标写（R91「主束锁定最近敌」/聚焦换目标契约不破）；
+#   束端表现=末贯穿目标（t 最大者）；贯穿目标照常入 _hit_exclusions（防子束回烧）
+#   但不触发新折射分叉（防 W5 分叉×穿透连乘）。
 class_name LaserBeam
 extends Node2D
 
@@ -64,10 +75,15 @@ var trait_stack: TraitStack = null             # 武器运行时栈副本（共�
 var panel_snapshot: Dictionary = {}
 var weapon_uid: int = 0
 var target_uid: int = 0                        # 副束/折射子束锁定目标（0 = 主束自由瞄准）
+var pierce: int = 1                            # R195 穿透预算 N（主束每拍可结算目标数；1=旧单目标口径）
 
 var _aim_dir: Vector2 = Vector2.UP            # 主束指向（武器每帧刷新）
 var _tick_left: float = 0.0
 var _hit_exclusions: Dictionary = {}           # target_uid -> true（折射去重：已命中目标）
+# R195 射线查询缓冲（成员复用——tick 路径禁每帧 Dictionary/Array 分配，R188 红线）
+var _ray_candidates: Array[Node2D] = []        # 网格查询候选（_hits_along_ray 每拍复用清空）
+var _ray_hits: Array[Node2D] = []              # 贯穿目标集（t 升序；仅本帧 tick 同步消费，禁跨帧持有）
+var _ray_ts: Array[float] = []                 # 贯穿目标 t 值并行缓冲（升序插入排序用）
 var _time_alive: float = 0.0
 var _live: bool = false
 var _line: Line2D = null                      # 外层蓝束（粗，方向 C：蓝白渐变观感）
@@ -130,14 +146,12 @@ static func _scorch_add(p_target_uid: int, p_delta: float, p_cap: int, p_beam_ui
 
 
 static func element_tint(p_element: int, p_alpha: float = 0.85) -> Color:
-	# 元素束色（第三谱系读感；取色与 damage_popup 元素表同源——禁散落新色值）
-	match p_element:
-		GameConst.Element.FIR:
-			return Color(1.0, 0.6, 0.25, p_alpha)
-		GameConst.Element.ICE:
-			return Color(0.62, 0.85, 1.0, p_alpha)
-		GameConst.Element.LTG:
-			return Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g, PopPalette.SHOCK.b, p_alpha)
+	# 元素束色（第三谱系读感；取色单源 PopPalette.ELEMENT_COLORS——禁散落新色值；
+	# R192 八元素：表内直查带 alpha，KIN/表外回落玩家蓝兜底）
+	var table: Dictionary = PopPalette.ELEMENT_COLORS
+	if table.has(p_element) and p_element != GameConst.Element.KIN:
+		var base: Color = table[p_element]
+		return Color(base.r, base.g, base.b, p_alpha)
 	return Color(PopPalette.PLAYER.r, PopPalette.PLAYER.g, PopPalette.PLAYER.b, p_alpha)
 
 
@@ -174,6 +188,9 @@ func spawn(p_params: Dictionary) -> void:
 	beam_length = maxf(float(p_params.get("beam_length", 560.0)), 1.0)
 	lifetime = maxf(float(p_params.get("lifetime", 0.0)), 0.0)
 	beam_width = maxf(float(p_params.get("beam_width", 14.0)), 1.0)
+	# R195 穿透预算 N（镜像弹体 pierce_left 注入口 projectile_base.gd:118 缺省/钳制同式）；
+	# 缺省 1 与旧单目标口径同构；主束由武器传 _pierce_count()，副束/折射束恒 1
+	pierce = maxi(int(p_params.get("pierce", 1)), 0)
 	# 束色解析（优先级：R183 灰染 > SPECTRA 元素染色 > W5 折射光谱 > 主束玩家蓝）
 	is_refraction = bool(p_params.get("is_refraction", false))
 	sub_beam = bool(p_params.get("sub_beam", false))
@@ -232,7 +249,9 @@ func spawn(p_params: Dictionary) -> void:
 
 
 func tick(p_game_delta: float) -> void:
-	# 朝向解析 → 首敌命中 → 灼焦叠层管理 → 节拍结算 → 渲染同步
+	# 朝向解析 → 射线命中集 → 灼焦叠层管理 → 节拍结算 → 渲染同步
+	# R195 多目标贯穿（有意变更契约）：主束预算口径沿射线取前 pierce 个目标逐拍结算；
+	# 基线 pierce=1 时与旧「单目标 _first_hit」行为逐位同构（选中一次算定）
 	if not _live:
 		return
 	_time_alive += p_game_delta
@@ -240,13 +259,16 @@ func tick(p_game_delta: float) -> void:
 		_recycle()
 		return
 	var dir := _resolve_aim()
-	var hit := _first_hit(dir)
+	var hits := _hits_along_ray(dir, _hit_budget())
 	var end_pos := global_position + dir * beam_length
-	if hit != null:
-		end_pos = (hit as Node2D).global_position
-		_on_hit_target(hit, p_game_delta)
+	if not hits.is_empty():
+		end_pos = (hits[hits.size() - 1] as Node2D).global_position   # R195：束端=末贯穿目标（t 最大）
+		for i in hits.size():
+			# 折射分叉仅由首个（最近）目标首次命中触发（现语义保留）；贯穿目标
+			# 照常入 _hit_exclusions 但不触发新分叉（防 W5 分叉×穿透连乘）
+			_on_hit_target(hits[i], p_game_delta, i == 0)
 	_sync_line(end_pos)
-	_tick_settle(hit, p_game_delta)
+	_tick_settle(hits, p_game_delta)
 
 
 func set_origin(p_origin: Vector2) -> void:
@@ -307,6 +329,7 @@ func _reset_state() -> void:
 	tick_rate = 8.0
 	beam_length = 560.0
 	beam_width = 14.0
+	pierce = 1                                # R195 穿透预算归缺省（副束/下任主束缺省 1）
 	scorch_max_layers = 5
 	scorch_per_layer = 0.08
 	refract_beams = 0
@@ -322,6 +345,9 @@ func _reset_state() -> void:
 	panel_snapshot = {}
 	popup_throttle.clear()
 	_hit_exclusions.clear()
+	_ray_candidates.clear()                   # R195 射线缓冲随归还清空（不持死节点引用）
+	_ray_hits.clear()
+	_ray_ts.clear()
 	_tick_left = 0.0
 	_time_alive = 0.0
 	_aim_dir = Vector2.UP
@@ -363,16 +389,30 @@ func _find_target() -> Node2D:
 	return null
 
 
-func _first_hit(p_dir: Vector2) -> Node2D:
-	# 首敌命中：射线段内垂直距离 ≤ beam_width/2 + 目标半径 的最近者（Q-15 网格实现）
-	if enemy_grid == null:
-		return null
-	var candidates: Array[Node2D] = []
-	candidates.append_array(enemy_grid.query_circle(global_position, beam_length))
-	var best: Node2D = null
-	var best_t := INF
+func _hit_budget() -> int:
+	# R195 穿透预算门：仅主束吃穿透（depth==0 ∧ ¬sub_beam ∧ ¬overlap_fallback——
+	# is_refraction 蕴含于 depth==0 之外的三重防御：副束 depth 恒 0 但 sub_beam 真、
+	# 折射束 depth≥1、回退束 overlap_fallback 真），预算口径 N=pierce；
+	# 副束/折射/重叠回退束恒 1（旧单目标口径）
+	if depth == 0 and not sub_beam and not overlap_fallback:
+		return pierce
+	return 1
+
+
+func _hits_along_ray(p_dir: Vector2, p_budget: int) -> Array[Node2D]:
+	# R195 射线命中集（扩自旧 _first_hit，判定式逐字保留）：射线段内垂直距离
+	# ≤ beam_width/2 + 目标半径，按 t 升序取前 p_budget 个贯穿目标（Q-15 网格实现）。
+	# 候选不查 _hit_exclusions（主束锁定持续照射语义保留——贯穿目标入排除集只为
+	# 子束寻的防回烧）。缓冲成员复用（R188 禁每帧分配）；返回数组仅供本帧 tick
+	# 同步消费，禁跨帧持有（下拍即被清空覆写）。
+	_ray_hits.clear()
+	_ray_ts.clear()
+	if enemy_grid == null or p_budget <= 0:
+		return _ray_hits
+	_ray_candidates.clear()
+	_ray_candidates.append_array(enemy_grid.query_circle(global_position, beam_length))
 	var half_w := beam_width * 0.5
-	for cand in candidates:
+	for cand in _ray_candidates:
 		if bool(cand.get("dead")):
 			continue
 		var rel := (cand as Node2D).global_position - global_position
@@ -381,30 +421,43 @@ func _first_hit(p_dir: Vector2) -> Node2D:
 			continue
 		var perp := (rel - p_dir * t).length()
 		var reach := half_w + float(cand.get("hitbox_r"))
-		if perp <= reach and t < best_t:
-			best_t = t
-			best = cand
-	return best
+		if perp <= reach:
+			# t 升序插入（容量 ≤ 预算上界，尾部超额即裁——保最近 p_budget 个）
+			var at := _ray_ts.size()
+			while at > 0 and _ray_ts[at - 1] > t:
+				at -= 1
+			_ray_ts.insert(at, t)
+			_ray_hits.insert(at, cand)
+			if _ray_hits.size() > p_budget:
+				_ray_ts.remove_at(_ray_ts.size() - 1)
+				_ray_hits.remove_at(_ray_hits.size() - 1)
+	return _ray_hits
 
 
-func _on_hit_target(p_target: Node2D, p_game_delta: float) -> void:
+func _on_hit_target(p_target: Node2D, p_game_delta: float, p_can_refract: bool = true) -> void:
 	# 叠层 +1（1 层/0.25s，上限 scorch_max_layers；目标侧单池）→ 折射调度（新目标）。
-	# 重叠回退束不叠灼焦（「不叠灼焦不附着」定案；伤害侧仍读共享层数乘区）
+	# 重叠回退束不叠灼焦（「不叠灼焦不附着」定案；伤害侧仍读共享层数乘区）。
+	# R195：p_can_refract 仅首目标（最近）为真——折射分叉仍由每束首个目标首次命中
+	# 触发一次，贯穿目标照常入 _hit_exclusions（防子束回烧）但不触发新分叉
+	# （防 W5 分叉×穿透连乘；探针 S8 锁分叉数不随 N 增长）
 	var target_uid := int(p_target.get("uid"))
 	if not _hit_exclusions.has(target_uid):
 		_hit_exclusions[target_uid] = true
-		if refract_beams > 0 and weapon != null:
+		if p_can_refract and refract_beams > 0 and weapon != null:
 			request_refract(refract_beams)
 	if not overlap_fallback:
 		_scorch_add(target_uid, p_game_delta, scorch_max_layers, uid)
 
 
-func _tick_settle(p_hit: Node2D, p_game_delta: float) -> void:
-	# 节拍结算（tick_rate 跳/s；HIT 通道——灼焦 Local 池 + 词条乘区 + 暴击每跳独立）
+func _tick_settle(p_hits: Array[Node2D], p_game_delta: float) -> void:
+	# 节拍结算（tick_rate 跳/s；HIT 通道——灼焦 Local 池 + 词条乘区 + 暴击每跳独立）。
+	# R195 多目标：选中一次算定——同拍内前目标死亡不移除后目标；逐目标复用
+	# _settle_one_tick 单口（灼焦/跳字闸/ELE 附着/遗物乘区全走现管道，禁旁路简化结算）
 	_tick_left -= p_game_delta
-	while _tick_left <= 0.0 and p_hit != null and _live:
+	while _tick_left <= 0.0 and not p_hits.is_empty() and _live:
 		_tick_left += 1.0 / tick_rate
-		_settle_one_tick(p_hit)
+		for i in p_hits.size():
+			_settle_one_tick(p_hits[i], i + 1)
 	if _tick_left < 0.0:
 		_tick_left = 0.0
 
@@ -420,14 +473,16 @@ func apply_focus_visual(p_focus_time: float) -> void:
 			Color(1.0, 0.95, 0.75, 1.0), _focus_visual)
 
 
-func _settle_one_tick(p_hit: Node2D) -> void:
+func _settle_one_tick(p_hit: Node2D, p_ordinal: int = 1) -> void:
+	# p_ordinal = 贯穿序数（1 基，R195 多目标；缺省 1 = 旧单目标口径）
 	if damage_pipeline == null:
 		return
 	var ctx := DamageContext.make()
 	ctx.source_uid = uid
 	ctx.target = p_hit
 	ctx.target_uid = int(p_hit.get("uid"))
-	last_hit_uid = ctx.target_uid               # R91 聚焦判据（武器侧消费）
+	if p_ordinal == 1:
+		last_hit_uid = ctx.target_uid           # R91 聚焦判据（武器侧消费）——R195 仅首目标写
 	ctx.frame_stamp = GameConfig.frame_stamp
 	ctx.base_atk = tick_atk * dmg_mult * focus_mult   # R91 W4 聚焦爬坡（主束专属，副束恒 1.0）
 	ctx.flat_bonus = float(panel_snapshot.get("flat_bonus", 0.0))
@@ -439,6 +494,23 @@ func _settle_one_tick(p_hit: Node2D) -> void:
 			ctx.add_entries.append(entry)
 	ctx.element = element                       # 元素束侧化（删 KIN 硬编码：附魔/SPECTRA 生效）
 	ctx.pos = (p_hit as Node2D).global_position
+	# R199 F11/F10：波首命中位 + 玩家血线条件输入（激光自建 ctx 此前零写口——先手协议
+	# SYN_FIRST_STRIKE 对激光族死卡、背水/壁垒血线条件断供恒默认值）。经宿主武器问询，
+	# 与近战 builder（weapon_base.build_damage_context:212/:217）和投射物路径
+	#（projectile_base.gd:485-486）同源同式；无宿主（纯束测试夹具）→ 安全缺省 false/1.0
+	if weapon != null and is_instance_valid(weapon):
+		ctx.is_first_hit_of_wave = weapon.is_wave_first_hit()
+		ctx.player_hp_pct = weapon.player_hp_pct()
+	# R195 穿透序数（弹体同式复制——镜像 projectile_base.gd:462/:484-485）：第 k 目标
+	# pierce_index=k+1（首目标=2）+ 恒 HIT_AFTER_PIERCE。SYN_PIERCE_EVO 条件
+	# pierce_index≥2 因此在激光首目标即贡献 value×(2−1)，与弹体同紫卡首跳同数值；
+	# HIT_AFTER_PIERCE 全仓零消费者，写入纯为口径统一
+	# R198（r195-1 口径 1）：序数加成仅主束——副束/折射束/重叠回退束 pierce_index 恒 1
+	#（SYN_PIERCE_EVO 对副束 (pierce_index-1)=0，贡献归零）。副束/折射/重叠回退束本就
+	# 永不贯穿（_hit_budget 恒预算 1），其首目标白吃首跳 ×1.2 系序数口径缺口。谓词与
+	# _hit_budget（:392-399）逐字同源；弹体路径（projectile_base.gd:481）不动
+	ctx.pierce_index = (p_ordinal + 1) if (depth == 0 and not sub_beam and not overlap_fallback) else 1
+	ctx.hit_flags |= GameConst.HIT_AFTER_PIERCE
 	# F-15 灼焦 Local 私有池（∏ L_l：不入名额、不受 cap_prod、自有 cap_local）——
 	# 层数读目标侧单池（多束同目标共享；W4 裁定 2026-09-25）
 	var layers := scorch_layers_of(ctx.target_uid)
@@ -463,21 +535,25 @@ func _settle_one_tick(p_hit: Node2D) -> void:
 		weapon.inject_relic_pools(ctx, ctx.target)   # 遗物乘区接线（激光跳伤路径此前绕过）
 	if trait_stack != null:
 		trait_stack.dispatch(GameConst.TraitEvent.ON_HIT, tctx)
+	var result: DamageResult = damage_pipeline.call(&"resolve", ctx)
+	settle_count += 1
 	if not tctx.attach_request.is_empty() and not overlap_fallback \
 			and weapon != null and weapon.elemental != null:
-		# ELE 词条附着请求（引擎结算后提交；重叠回退束不附着——「不叠灼焦不附着」定案）。
-		# ★ 快照基数 = 单跳 × 跳频 × 0.5s（= 每「燃烧跳伤间隔」造成的照射伤害——与弹道
-		# 武器的「每发快照」口径对齐；旧版直接传单跳值 6 → 点燃 DOT 0.9/跳，观感即
-		# 「烧伤 0」，2026-08-31 修复）
+		# ELE 词条附着请求（引擎结算后提交——对齐投射物 _apply_elemental 时序：
+		# projectile_base.gd 在 _on_settled 即 resolve 之后提交）。★ 快照基数 = 单跳 ×
+		# 跳频 × 0.5s（= 每「燃烧跳伤间隔」造成的照射伤害——与弹道武器的「每发快照」
+		# 口径对齐；旧版直接传单跳值 6 → 点燃 DOT 0.9/跳，观感即「烧伤 0」，
+		# 2026-08-31 修复）。R199 D16：hit_damage 改传真实跳伤（result.final_value，
+		# 同 projectile_base.gd:540-547 先例）——此前恒 0.0 使雷引 ELE_SHOCK 满槽感电的
+		# 连锁传导伤害 0.35×0=0，连锁闪电特效空放（elemental_system._shock_chain 消费）。
+		# result 为 null（透传桩缺结果）→ 回落 0.0 旧口径。
 		var request: Dictionary = tctx.attach_request
 		weapon.elemental.apply_attach(ctx.target, int(request["element"]),
 			float(request["value"]), {
 				"snapshot": ctx.base_atk * tick_rate * 0.5,
-				"hit_damage": 0.0,
+				"hit_damage": float(result.final_value) if result != null else 0.0,
 				"overrides": request.get("overrides", {}),
 			})
-	var result: DamageResult = damage_pipeline.call(&"resolve", ctx)
-	settle_count += 1
 	# 命中迸裂表现（用户反馈 2026-08-31「脉冲的命中迸裂没看见特效」）：每跳结算瞬间
 	# 广播命中点 + 束方向（ElementalFxLayer 迸裂星闪 + 火花承接；跳频即特效频率——
 	# 射速强化卡在激光上同时加密迸裂节奏，升级反馈可视化）

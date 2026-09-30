@@ -397,10 +397,16 @@ func _test_trait_stack_core() -> void:
 	_check("挂载：同 ID 第 2 次叠层成功（layers=2）",
 		s1.attach(d1) and (s1.size() == 1 and s1.traits[0].layers == 2))
 	var rej_stack: int = DebugStats.get_counter(&"trait_attach_rejected_stack")
-	_check("挂载：stack_max=3 内第 3 次仍成功（layers=3），第 4 次拒绝 + 计数",
-		s1.attach(d1) and (s1.traits[0].layers == 3
+	# R196 有意契约变更（原「第 4 次拒绝」）：ADD 池帽放宽至 stack_max + OVERCAP_EXT_MAX
+	# = 3+5 = 8（trait_stack.gd），第 4~8 层超帽可叠（×0.7 计贡献），第 9 层才拒绝 + 计数
+	var att3 := s1.attach(d1)                       # 第 3 层（stack_max 质变层）
+	var s1_ext := true
+	for i in range(TraitStack.OVERCAP_EXT_MAX):
+		s1_ext = s1_ext and s1.attach(d1)           # 第 4~8 层（超帽延伸全成功）
+	_check("挂载：stack_max=3 内第 3 次仍成功（layers=3），第 4~8 层超帽延伸成功（layers=8），第 9 次拒绝 + 计数",
+		att3 and s1_ext and s1.traits[0].layers == 8
 			and ((not s1.attach(d1))
-				and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej_stack + 1)))
+				and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej_stack + 1))
 	# 单栈上限 12
 	var s2 := TraitStack.new()
 	var all_ok := true

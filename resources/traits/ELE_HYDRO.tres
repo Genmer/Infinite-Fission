@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"ELE_HYDRO"
+display_name = "潮湿"
+description = "水附着 +22/跳；满槽不清除，蓄为反应燃料（火→蒸发 · 冰→冻结 · 雷→感电 · 草→绽放）；2 层质变：附着→30/跳"
+pool = 4
+pool_id = &""
+effect_id = &"EF_ELEMENTAL"
+value = 22.0
+value2 = 0.0
+params = {"element": 4, "value_lv2": 30.0, "required_forms": [0, 1, 2]}
+event_hooks = [0, 2]
+stack_max = 2
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+condition = {}

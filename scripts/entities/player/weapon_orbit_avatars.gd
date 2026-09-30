@@ -91,11 +91,16 @@ func _process(p_delta: float) -> void:
 		else:
 			match (w as WeaponBase).dominant_element():
 				GameConst.Element.FIR:
-					tint = PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)
+					tint = PopPalette.ELEMENT_COLORS[GameConst.Element.FIR]
 				GameConst.Element.ICE:
-					tint = PopPalette.PLAYER.lerp(Color.WHITE, 0.5)
+					tint = PopPalette.ELEMENT_COLORS[GameConst.Element.ICE]
 				GameConst.Element.LTG:
-					tint = PopPalette.SHOCK
+					tint = PopPalette.ELEMENT_COLORS[GameConst.Element.LTG]
+				GameConst.Element.HYD, GameConst.Element.ANE, GameConst.Element.GEO, \
+				GameConst.Element.DEN:
+					tint = PopPalette.ELEMENT_COLORS[(w as WeaponBase).dominant_element()]
+				_:
+					tint = Color.WHITE
 		avatar.modulate = avatar.modulate.lerp(tint, minf(p_delta * 10.0, 1.0))
 
 
@@ -141,11 +146,22 @@ func avatar_global(p_weapon: WeaponBase) -> Variant:
 	#（调用方回退）。R30：化身随射击指向旋转后，出膛点前伸到枪管尖端（化身位 + 朝向
 	# ×MUZZLE_REACH）——子弹从枪口出膛而非枪身中段；W9 刀画布朝上，朝向 −90° 还原。
 	# R183：僚机复制武器不在 weapon_slots——查询序列扩至「真实 + 副本」。
+	# R191#2（用户反馈「枪口不在镜子也不在复制出的加特林身上」）：镜面开火经 inner
+	# 查询，而 inner 是外层 MirrorImage 包装体的 child（入册的是包装体本体，见
+	# mirror_image.gd setup_mirror/add_child）——首查恒落空 → 调用方回退
+	# inner.global_position（静态菱形标记位），可见化身却在公转环上，两环两角永不
+	# 合拢。修复：首查落空时沿 p_weapon.get_parent()（外层包装体）别名再查一次
+	# entries，命中即返回包装体化身枪口；副本/真件首次 find 即命中，本分支零触达
+	#（行为零变化）；两级落空维持 null（调用方回退本体位）。
 	var player := get_parent()
 	if player == null or not is_instance_valid(player):
 		return null
 	var entries := _entries_of(player as Node2D)
 	var idx: int = entries.find(p_weapon)
+	if idx < 0:
+		var alias: Variant = p_weapon.get_parent()   # R191#2 镜面别名（外层包装体）
+		if alias is WeaponBase:
+			idx = entries.find(alias)
 	if idx < 0 or idx >= _avatars.size():
 		return null
 	var a := _avatars[idx]

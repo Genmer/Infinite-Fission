@@ -66,6 +66,19 @@ static func theme() -> Theme:
 	t.set_color("font_disabled_color", "Button", PopPalette.INK_SOFT)
 	t.set_color("font_color", "Label", PopPalette.INK)
 	t.set_constant("outline_size", "Label", 0)
+	# R191#1 全局 tooltip 换装（引擎默认黑底小字在亮底贴纸风里不可读）：Theme 条目级覆盖
+	# 一处生效——挂本主题子树内所有 tooltip_text 自动继承（HUD 武器栏 / 大厅循环按钮 /
+	# 图鉴行未来 hover），无需 project.godot 工程主题与 set_type_variation。
+	var tsb := panel_style(10.0, 2, true)          # 白实底 PANEL + 藏青描边 2px + 底部投影（现成工厂）
+	tsb.content_margin_left = 12.0
+	tsb.content_margin_right = 12.0
+	tsb.content_margin_top = 6.0
+	tsb.content_margin_bottom = 8.0
+	t.set_stylebox("panel", "TooltipPanel", tsb)
+	t.set_color("font_color", "TooltipLabel", PopPalette.INK)
+	t.set_font("font", "TooltipLabel", font())
+	t.set_font_size("font_size", "TooltipLabel", 20)   # 正文下限 18 之上再抬一档（悬停说明要读清）
+	t.set_constant("outline_size", "TooltipLabel", 0)  # 对齐 Label 条目 outline 0 口径
 	_theme = t
 	return _theme
 

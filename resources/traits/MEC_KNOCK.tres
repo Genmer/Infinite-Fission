@@ -14,7 +14,8 @@ value = 60.0
 value2 = 0.0
 params = {
 	"stat": "knockback",
-	"required_forms": [0, 2, 3]
+	"required_forms": [0, 2, 3],
+	"excluded_weapons": ["W9_arc_slash"]
 }
 event_hooks = []
 stack_max = 2

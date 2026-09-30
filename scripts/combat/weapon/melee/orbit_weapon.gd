@@ -28,6 +28,11 @@ const ENGAGE_R := 46.0                        # R65：贴身开砍距离（刀�
 const CHASE_SPEED := 420.0                    # R65：追击移速 px/s
 const PULSE_MIN_INTERVAL := 0.05              # 引力脉冲节拍下限（CDR 钳制后防 0 除）
 const COPY_PHASE_OFFSET_DEG := 45.0           # R183 W8 复制体阵相位偏移（BASE 单环阵 + 45°）
+# R199 F01/F04：词条 value 基准锚（.tres value 同值——桩夹具 value≤0 缺省回落）
+const GIANT_BLADE_SCALE_BASE := 0.25          # MEC_GIANT_BLADE 刀体缩放基准（白）
+const ORBIT_STYLE_BASE := {                   # 环绕形态主乘区基准（白）
+	&"sword": 0.25, &"axe": 0.25, &"bolt": 0.50,
+}
 
 var orbit_field: OrbitField = null            # 环绕力场实体（单武器常驻单例）
 var arc_slash: ArcSlash = null                # 周期挥斩实体槽 0（兼容观测口；多刀 = _slash_pool）
@@ -87,10 +92,12 @@ func level_up() -> void:
 
 func attach_trait(p_trait: TraitData) -> bool:
 	# 词条挂载（R19 环绕形态卡：orbit_style 形态卡挂上即重铺外观+乘区；
-	# R65 巨刃（knife_scale）挂上即时重铺；R69 谐振轨道聚合直读 → 挂上即重铺刀数）
+	# R65 巨刃（knife_scale）挂上即时重铺；R69 谐振轨道聚合直读 → 挂上即重铺刀数；
+	# R196 广域印刻（add_range 池）挂上即重铺——环绕半径/挥砍范围即时生效）
 	var ok := super.attach_trait(p_trait)
 	if ok and p_trait != null and (p_trait.params.has("orbit_style") \
-			or p_trait.params.has("knife_scale") or p_trait.id == &"MEC_ORBIT_LINK"):
+			or p_trait.params.has("knife_scale") or p_trait.id == &"MEC_ORBIT_LINK" \
+			or p_trait.pool_id == &"add_range"):
 		refresh_orbit_field()
 	return ok
 
@@ -157,8 +164,18 @@ func _open_slash(p_facing: float, p_center: Vector2) -> void:
 
 func effective_slash_radius() -> float:
 	# R65 挥砍判定半径 = 逐级参数 × 巨刃乘区（MEC_GIANT_BLADE 每层 +20%）
+	# R196 ×_range_mult()：AFF_RANGE 广域印刻（W9 判定半径 + 追击 leash _orbit_params
+	# 同源联动——判定半径经 ArcSlash.open_window 注入，本值即唯一真源）
 	return _leveled_param("slash_radius", float(data.melee.get("slash_radius", 150.0))) \
-		* (1.0 + 0.2 * float(_giant_blade_layers()))
+		* (1.0 + 0.2 * float(_giant_blade_layers())) * _range_mult()
+
+
+func _range_mult() -> float:
+	# R196「武器范围」词条（AFF_RANGE / add_range 池）：环绕轨道半径与挥砍范围
+	# +18%/层（aggregate_panel 聚合真值；trait_stack 判空返 1.0——零词条不放大）
+	if trait_stack == null:
+		return 1.0
+	return 1.0 + float(trait_stack.aggregate_panel().get("add_range", 0.0))
 
 
 func _giant_blade_layers() -> int:
@@ -171,6 +188,40 @@ func _giant_blade_layers() -> int:
 		if td != null and (td as TraitData).params.has("knife_scale"):
 			layers += int(tb.get("layers"))
 	return layers
+
+
+func _giant_blade_value() -> float:
+	# R199 F01：巨刃刀体缩放真源 = 挂载条目 data.value（白基准 0.25；品质缩放沿
+	# card_generator value×scale 链路——金卡 0.65 与卡面「刀体 +65%」一致）。旧消费
+	# 硬编码 0.25 只数层不读值（_giant_blade_layers），0.65 全仓无消费点。value≤0
+	#（桩夹具零声明）回落 GIANT_BLADE_SCALE_BASE，存量断言零位移。
+	if trait_stack != null:
+		for tb in trait_stack.traits:
+			var td: Variant = tb.get("data")
+			if td != null and (td as TraitData).params.has("knife_scale"):
+				var v := float((td as TraitData).value)
+				if v > 0.0:
+					return v
+				break
+	return GIANT_BLADE_SCALE_BASE
+
+
+func _orbit_style_value() -> float:
+	# R199 F04：环绕形态主乘区真源 = 形态卡 data.value（白基准 sword/axe 0.25 /
+	# bolt 0.50——tres 自本批回填；品质缩放沿 card_generator value×scale 链路，金卡
+	# 0.65/0.65/1.30 与卡面数字一致）。旧实现 match 硬编码乘区、tres value=0.0 从不
+	# 被消费——金卡数字集体失真（斧「范围+65%」实发 25%、雷「转速+130%」实发 50%、
+	# 剑「再命中节奏+65%」实发 25%）。value≤0（旧数据/桩夹具）回落基准常量零位移。
+	var style := _orbit_style()
+	if trait_stack != null:
+		for tb in trait_stack.traits:
+			var td: Variant = tb.get("data")
+			if td != null and (td as TraitData).params.has("orbit_style"):
+				var v := float((td as TraitData).value)
+				if v > 0.0:
+					return v
+				break
+	return float(ORBIT_STYLE_BASE.get(style, 0.0))
 
 
 func _ensure_orbit_field() -> void:
@@ -206,6 +257,10 @@ func _orbit_params() -> Dictionary:
 		orb_r = float(data.melee.get("orb_r", data.melee.get("orb_radius", 16.0)))
 		orbs_n = float(data.melee.get("orbs", 2))
 		phase_offset_deg = COPY_PHASE_OFFSET_DEG
+	# R196 广域印刻（AFF_RANGE / add_range 池）：环绕轨道半径 ×(1+Σadd_range)——
+	# 置于 copy 分支之后，本体与复制体同享（复制体仅锁等级成长，词条栈 copy_full
+	# 全量带入——R183 只锁等级、词条不锁口径）
+	orbit_radius *= _range_mult()
 	var hit_cd := float(data.melee.get("hit_cd", 0.5))
 	var knockback := float(data.melee.get("knockback", 40.0))
 	# 蓄能闸终值：melee.charge_gain_cd(_levels) 优先，未声明回落 hit_cd（旧数据兼容）
@@ -217,18 +272,23 @@ func _orbit_params() -> Dictionary:
 	# 引爆半径改义乘区：巨刃 +15%/层（R65 视觉轴追加引爆当量轴）+ 斧形态 +15%/层
 	var radius_bonus := 1.0 + OrbitField.DETONATE_RADIUS_PER_LAYER \
 		* float(_giant_blade_layers() + _trait_layers(&"MEC_ORBIT_AXE"))
+	# R199 F04 形态乘区真源化：sword 再命中节奏 / axe 范围 / bolt 转速改读形态卡
+	# data.value（_orbit_style_value；白基准与旧硬编码同值——0.25/0.25/0.50，存量断言
+	# 零位移；金卡经 value×scale 链路与卡面一致）。次要乘区（体积/击退/转速微调/
+	# 蓄能闸）仍为形态常量（卡面未随品质缩放，保持）。
+	var style_value := _orbit_style_value()
 	match style:
 		&"sword":
-			hit_cd *= 0.75
+			hit_cd *= 1.0 - style_value               # 再命中节奏 +value% = 命中冷却 −value
 			gain_cd *= 0.7
 		&"axe":
-			orbit_radius *= 1.25
+			orbit_radius *= 1.0 + style_value
 			orb_r *= 1.15
 			knockback *= 1.6
 			angular *= 0.85
 		&"bolt":
 			orb_r *= 0.9
-			angular *= 1.5
+			angular *= 1.0 + style_value
 			hit_cd *= 1.15
 	# R186 M5 击退终值钉死（继承）：终值 = data.melee.knockback × 形态乘区（上方 match 原样）
 	# + Σadd_knock（乘区之后平加，不进乘区——knockback_force() 先例 weapon_base.gd:349-357：
@@ -257,7 +317,8 @@ func _orbit_params() -> Dictionary:
 		"effective_blade_cap": int(data.melee.get("effective_blade_cap", 8)),
 		"detonate_global_icd": float(data.melee.get("detonate_global_icd", 0.5)),
 		"style": String(style) if style != &"" else "orb",
-		"knife_scale": 1.0 + 0.25 * float(_giant_blade_layers()),   # R65 巨刃：刀体视觉 +25%/层
+		"knife_scale": 1.0 + _giant_blade_value() * float(_giant_blade_layers()),
+		# R65 巨刃：刀体视觉 +value/层（R199 F01：改读 data.value——白 0.25/金 0.65 与卡面一致）
 	}
 	if _is_slash_mode():
 		out["leash_radius"] = effective_slash_radius() * SLASH_LEASH_MULT

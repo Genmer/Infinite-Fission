@@ -29,7 +29,32 @@ func _ready() -> void:
 	_build_ui()
 	_build_details_ui()
 	_root.visible = false
+	# R195 适配：安全区接入（底座组 SafeAreaHelper 单点引用，不复写）。守卫外
+	# （桌面窗口化/headless）insets 恒零 → offset 写 0 = 默认窗逐位恒等；真机延迟
+	# ≥1 帧重读兜首帧 transform 未定型，size_changed/重获焦点由 helper 重放回调。
+	_apply_safe_area()
+	if SafeAreaHelper.enabled(get_window()):          # 守卫外恒零→零协程悬挂（headless 全绿面）
+		_apply_safe_area_deferred()                # 真值环境延迟重读（SafeAreaHelper 契约）
+	SafeAreaHelper.bind_reread(get_window(), _apply_safe_area)
 	EventBus.state_changed.connect(_on_state_changed)
+
+
+func _apply_safe_area() -> void:
+	# R195 安全区应用（消费式契约=SafeAreaHelper.insets 注释）：根 FULL_RECT
+	# offset 左/上取正、右/下取负；dim FULL_RECT 子件随根。居中锚卡组随根域居中。
+	# 仅 realize/size_changed/焦点事件驱动，非每帧路径（R188 纪律）。
+	var ins := SafeAreaHelper.insets(get_window())
+	_root.offset_left = ins.position.x
+	_root.offset_top = ins.position.y
+	_root.offset_right = -ins.size.x
+	_root.offset_bottom = -ins.size.y
+
+
+func _apply_safe_area_deferred() -> void:
+	# realize 后延迟 ≥1 帧重读（首帧查询为未 realize 真值——SafeAreaHelper 契约）；
+	# 协程即发即续，不阻塞 _ready（调用方已守卫 enabled 才进来；二次应用幂等）
+	await SafeAreaHelper.read_deferred(get_window())
+	_apply_safe_area()
 
 
 func is_pause_visible() -> bool:
@@ -94,11 +119,19 @@ func _build_ui() -> void:
 	_root.add_child(dim)
 
 	# 暂停白卡（贴纸面板：圆角 24 + 藏青描边 + 底部厚投影；P3 加高容纳第四钮「设置」）
+	# R195 适配分区：整体居中锚（PRESET_CENTER，offset=卡位−设计中心(360,640)：
+	# (120,378)480×524 → ±240/±262；720×1280 恒等，任意视口下居中，卡内父相对零改动）
 	_card = Panel.new()
 	_card.name = "PauseCard"
 	_card.add_theme_stylebox_override("panel", StickerTheme.panel_style(24.0, 4, true))
-	_card.position = Vector2(120.0, 378.0)
-	_card.size = Vector2(480.0, 524.0)
+	_card.anchor_left = 0.5
+	_card.anchor_right = 0.5
+	_card.anchor_top = 0.5
+	_card.anchor_bottom = 0.5
+	_card.offset_left = -240.0
+	_card.offset_right = 240.0
+	_card.offset_top = -262.0
+	_card.offset_bottom = 262.0
 	_card.pivot_offset = _card.size * 0.5
 	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_card)
@@ -158,11 +191,19 @@ func _on_resume_pressed() -> void:
 
 # ── 构筑详情卡（buff 详情：武器 × 词条全量列表） ─────────────────────
 func _build_details_ui() -> void:
+	# R195 适配分区：整体居中锚（offset=卡位−设计中心(360,640)：(44,120)632×1000 →
+	# ±316/−520+480——卡心 y=620 恒等保持现位上偏；任意视口下居中随动）
 	_details_card = Panel.new()
 	_details_card.name = "DetailsCard"
 	_details_card.add_theme_stylebox_override("panel", StickerTheme.panel_style(24.0, 4, true))
-	_details_card.position = Vector2(44.0, 120.0)
-	_details_card.size = Vector2(632.0, 1000.0)
+	_details_card.anchor_left = 0.5
+	_details_card.anchor_right = 0.5
+	_details_card.anchor_top = 0.5
+	_details_card.anchor_bottom = 0.5
+	_details_card.offset_left = -316.0
+	_details_card.offset_right = 316.0
+	_details_card.offset_top = -520.0
+	_details_card.offset_bottom = 480.0
 	_details_card.pivot_offset = _details_card.size * 0.5
 	_details_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_details_card.visible = false
@@ -368,14 +409,18 @@ func _rebuild_details() -> void:
 
 
 func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
-	# 单武器区块：图标 + 名称 Lv 头行 + 词条行 ×N（章形 + 名 ×层 + 描述实际值）
+	# 单武器区块：图标 + 名称 Lv 头行 + 机制一句行 + 词条行 ×N（章形 + 名 ×层 + 描述实际值）
 	var wdata: Variant = p_w.get("data")
+	# R190b：机制一句话（GameConst.weapon_note 真源——详情卡与 HUD hover 同句逐字一致，
+	# 棱镜/蓄能等特殊机制读数值猜不出；未知 id/缺 data 空句护栏同 hud.gd 取值口径）
+	var note := GameConst.weapon_note(String(wdata.get("id")) if wdata != null else "")
 	var section := VBoxContainer.new()
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	section.add_theme_constant_override("separation", 4)
 	var head := Panel.new()
 	head.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 3, false))
-	head.custom_minimum_size = Vector2(576.0, 78.0)
+	# R190b：非空机制句条件加高 78→100（空句维持 78 不加行——未知 id/自定义武器护栏）
+	head.custom_minimum_size = Vector2(576.0, 100.0 if not note.is_empty() else 78.0)
 	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	section.add_child(head)
@@ -405,6 +450,17 @@ func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
 	wstats.size = Vector2(508.0, 20.0)
 	wstats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(wstats)
+	# R190b：机制一句话行（文案逐字取 GameConst.weapon_note 原句——禁止 UI 手抄）：
+	# 小字软墨 + 自动换行，属性行下方 (58,62) 508×34；加高代价 ≤154px 由详情卡纵滚容纳
+	if not note.is_empty():
+		var wnote := Label.new()
+		StickerTheme.label_sticker(wnote, 12, PopPalette.INK_SOFT)
+		wnote.text = note
+		wnote.position = Vector2(58.0, 62.0)
+		wnote.size = Vector2(508.0, 34.0)
+		wnote.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		wnote.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		head.add_child(wnote)
 
 	# L3/L5 质变词条行（R13 用户反馈「武器 3/5 级有什么作用显示一下，3 级紫 5 级金」）
 	var wlv: int = int(p_w.get("level"))
@@ -414,8 +470,8 @@ func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
 		if wtable == null or wtable.size() < tlv:
 			continue
 		var note_v: Variant = (wtable as Array)[tlv - 1].get("note")
-		var note := String(note_v) if note_v != null else ""
-		if note.is_empty():
+		var tnote := String(note_v) if note_v != null else ""   # tnote：与外层机制句 note 区名
+		if tnote.is_empty():
 			continue
 		var unlocked := wlv >= tlv
 		var mrow := HBoxContainer.new()
@@ -431,7 +487,7 @@ func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
 		mrow.add_child(mgem)
 		var mlabel := Label.new()
 		StickerTheme.label_sticker(mlabel, 13, tier[1] if unlocked else PopPalette.INK_SOFT)
-		mlabel.text = "【%d 级质变】%s%s" % [tlv, note,
+		mlabel.text = "【%d 级质变】%s%s" % [tlv, tnote,
 			"" if unlocked else "（Lv%d 解锁）" % tlv]
 		mlabel.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		mlabel.custom_minimum_size = Vector2(500.0, 0.0)
@@ -488,8 +544,16 @@ func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
 			PopPalette.GOLD][clampi(eff_rarity, 0, 3)]
 		StickerTheme.label_sticker(tname, 16, rarity_col, 0, Color.WHITE, true)
 		# R11 叠层可视化：可叠词条显示「当前/上限 层」（如 2/3）
+		# R196 超质变叠层：超帽时改「N/M+K 层」（防「6/3 层」显示乱——显示不能乱硬底线）
 		# R31 品级徽记（用户两轮反馈「为什么这个 buff 是金色字」——金色/紫色/蓝色名字 = 该词条抽到过对应品级，加 ◆ 标自解释）
-		var layers_txt := ("　%d/%d 层" % [layers, stack_max]) if stack_max > 1 else (("　×%d" % layers) if layers > 1 else "")
+		var layers_txt := ""
+		if stack_max > 1:
+			if layers > stack_max:
+				layers_txt = "　%d/%d+%d 层" % [layers, stack_max, layers - stack_max]
+			else:
+				layers_txt = "　%d/%d 层" % [layers, stack_max]
+		elif layers > 1:
+			layers_txt = "　×%d" % layers
 		if eff_rarity >= 1:
 			layers_txt += "　◆%s" % ["蓝", "紫", "金"][eff_rarity - 1]
 		tname.text = String(td.get("display_name")) + layers_txt
@@ -512,16 +576,28 @@ func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
 
 func _trait_desc_bbcode(p_tb: TraitBase) -> String:
 	# 叠层当前值可视化（R11 用户反馈「叠层 buff 显示 2/3 + 当前数值换色」）：
-	# ADD 池（可叠数值型）→ 描述首个「+N%」改写为当前生效总值（F3 衰减真值，含质变乘区），
-	# ≥2 层金色高亮；1 层保持默认文案。MULT/ELEM 等机制型不改写（合并规则逐卡特化）。
+	# ADD 池（可叠数值型）→ 描述首个「+N%」改写为当前生效总值，≥2 层金色高亮；
+	# 1 层保持默认文案。MULT/ELEM 等机制型不改写（合并规则逐卡特化）。
 	var td: TraitData = p_tb.data
 	var desc := String(td.description)
 	if td == null or td.pool != GameConst.PoolClass.ADD:
 		return desc
-	var eff := p_tb.stacked_add_total()   # R12c 逐层品级真值
+	# R199（N05+F08）：弃用 stacked_add_total()（trait_base.gd 全额累加，超帽层未折算
+	# ——超帽叠层后面板虚标，与卡面 OVERCAP_NOTE「超出质变等级的层数收益降低 30%」相反，
+	# 体检探针 B1 实证 8/3 层显示 +120% 实际 +97.5%）。改按 TraitStack.aggregate_panel
+	# 逐层路真值口径折算：前 stack_max 层全额 + 超帽层 ×OVERCAP_VALUE_MULT，再乘质变
+	# 乘区 value_mult（乘数常量引 TraitStack 单源；本函数只拿到单词条实例，同一词条
+	# 单独折算 = 面板池聚合按词条拆分的同式——池内多 id 不串账）。整数池显示小数
+	# （F09）不在本项范围（deferred）。
+	var eff := 0.0
+	for k in p_tb.layer_values.size():
+		var v_k := p_tb.layer_values[k]
+		if k >= td.stack_max:
+			v_k *= TraitStack.OVERCAP_VALUE_MULT
+		eff += v_k * p_tb.value_mult
 	if eff <= 0.0:
 		return desc
-	var re_num := RegEx.create_from_string("\\+\\d(\\.\\d)?%?")
+	var re_num := RegEx.create_from_string("\\+\\d+(\\.\\d+)?%?")
 	var m := re_num.search(desc)
 	if m == null:
 		return desc
@@ -540,6 +616,11 @@ func _trait_desc_bbcode(p_tb: TraitBase) -> String:
 func _weapon_stat_line(p_w: Node) -> String:
 	# 单武器核心属性行（面板快照实际生效值；防御式取值——桩/缺字段回退 0）
 	# R18：追加穿透列（用户点名「穿透这属性干嘛的要写出来」——贯穿敌人数，见数值）
+	# R196 FIX-1 配套反馈：追加弹丸数列（RC1 修复配套——多重装填/编队弹数可视化，
+	# 挂 AFF_MULTI 后面板即见「弹丸 N」）。has_method("_pellet_count") 守卫同穿透列
+	# 风格；该守卫仅弹道形态（BallisticWeapon）为真——激光/近战无弹丸概念，不列该段
+	# 防「弹丸 0」误导显示（显示不能乱硬底线）。属性行标签沿用本行 inline 口径
+	#（真源纪律：机制句文案走 GameConst.weapon_note，本行数值列标签本就 inline）。
 	var snap: Dictionary = p_w.call("build_panel_snapshot") if p_w.has_method("build_panel_snapshot") \
 		else {}
 	var atk := float(snap.get("base_atk", 0.0))
@@ -549,6 +630,10 @@ func _weapon_stat_line(p_w: Node) -> String:
 	if p_w.has_method("_fire_interval"):
 		interval = maxf(float(p_w.call("_fire_interval")), 0.01)
 	var pierce := int(p_w.call("_pierce_count")) if p_w.has_method("_pierce_count") else 0
+	if p_w.has_method("_pellet_count"):
+		return "攻击 %.1f　暴击 %.0f%% ×%.1f　间隔 %.2fs（%.1f 发/s）　弹丸 %d　穿透 %d 名" % [atk,
+			crit_rate * 100.0, crit_mult, interval, 1.0 / interval,
+			maxi(int(p_w.call("_pellet_count")), 0), maxi(pierce, 0)]
 	return "攻击 %.1f　暴击 %.0f%% ×%.1f　间隔 %.2fs（%.1f 发/s）　穿透 %d 名" % [atk,
 		crit_rate * 100.0, crit_mult, interval, 1.0 / interval, maxi(pierce, 0)]
 

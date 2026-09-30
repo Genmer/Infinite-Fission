@@ -6,9 +6,9 @@
 script = ExtResource("1_rd")
 id = &"REL_ATTACK_CDR"
 display_name = "每击谐振"
-description = "每次攻击使技能冷却 −0.01s（每秒最多计 20 次；100 击 ≈ 1s）"
+description = "每次攻击使技能冷却 −0.01s×开火间隔折算（慢速武器按比例补足，上限 ×10）；每秒计费预算与存款上限不变"
 rarity = 3
 listen_events = []
 effect_id = &"REL_EF_ATTACK_CDR"
-params = {"bank_mult": 3.0, "cd_per_attack": 0.01, "rate_per_sec": 20.0}
+params = {"bank_mult": 3.0, "cd_per_attack": 0.01, "fire_mult_max": 10.0, "rate_per_sec": 20.0}
 unique = true

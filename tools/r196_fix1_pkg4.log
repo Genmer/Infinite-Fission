@@ -1,0 +1,143 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 包 4 表现与流程自测 ══════════
+PASS | autoload 就绪（EventBus/GameConfig/DebugStats）
+PASS | GameConfig 非致命（balance 加载）
+PASS | Boot：完成且进入 MENU
+PASS | Boot：致命清单为空
+PASS | Boot：子系统组装齐全（player/wave/spawner/elemental/gamefeel/hud/popup/cards）
+PASS | Boot：双网格持有（§1.3-6）
+PASS | Boot：池×7 就绪（xp + homing——R94 导弹真件池挂载）
+PASS | Boot：首发手枪（Q-4）
+PASS | Boot：time_scale 初始 1.0 / Engine.time_scale 未被改写
+── 状态机迁移矩阵 ──
+WARNING: [GameLoop] 非法状态迁移拒绝：1 → 3
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 非法迁移拒绝：MENU→PAUSED
+WARNING: [GameLoop] 非法状态迁移拒绝：1 → 4
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 非法迁移拒绝：MENU→LEVEL_UP
+PASS | 非法迁移计数累计
+PASS | 拒绝后状态仍在 MENU
+PASS | start_run：MENU→PLAYING + 波次 1 开局
+PASS | request_pause：PLAYING→PAUSED + tree.paused
+PASS | request_resume：PAUSED→PLAYING + 恢复运行
+PASS | 死亡仲裁：PLAYING→GAME_OVER（E-16 最高优先）
+PASS | GameOver 丢弃升级请求（E-16）
+WARNING: [GameLoop] 非法状态迁移拒绝：5 → 3
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 非法迁移拒绝：GAME_OVER→PAUSED
+PASS | restart_run：GAME_OVER→PLAYING + 波次重开
+PASS | restart_run：玩家 HP/经验/武器重置
+PASS | 升级仲裁：PLAYING→LEVEL_UP
+PASS | 多级连升排队（A3 §6.2）
+PASS | 选卡后恢复 PLAYING + 排队继续弹
+PASS | 第二张选完回 PLAYING
+── 顿帧双通道 ──
+PASS | 档位真源：hit_stop_ms=[0,30,50,120]
+PASS | CRIT 顿帧 30ms（档位来自配置）
+PASS | 合并不叠加：激活中同档再触发不延长
+PASS | 合并取最大：CRIT→CATALYST 50ms
+PASS | BOSS_DEATH 顿帧 120ms（档位来自配置）
+PASS | 顿帧激活：time_scale=hit_stop_scale(0.05)
+PASS | 冻结契约：Engine.time_scale 恒为 1.0
+PASS | 双通道：顿帧期 game_delta = raw×0.05 ≈ 0
+PASS | 双通道：raw 通道不受缩放（gamefeel 剩余按 raw 衰减）
+PASS | 顿帧结束 ±1 帧恢复 time_scale=1.0
+── trauma 档位/衰减 ──
+PASS | 档位真源：shake_trauma=[0.15,0.4,0.5,1.0]
+FAIL | HIT 档 trauma 0.15
+FAIL | CATALYST 档叠加 0.5 → 0.65
+FAIL | trauma clamp 1.0
+PASS | 震屏上限 8px + 1.5°（Q-12）
+FAIL | 衰减 0.2s → 0.5
+PASS | 衰减 0.45s → 归零
+FAIL | player_hit → trauma 0.15（HIT 档）
+PASS | 色差起跳 0.004×2（CRIT 档）
+PASS | 色差 0.15s 内线性归零
+── 固定帧序 ──
+PASS | PLAYING 帧序 = ①输入②玩家(+武器)④网格弹⑤敌⑥波⑦feel⑧ui（架构 §2.17）
+PASS | PAUSED 帧序 = 仅⑦⑧（raw 通道）
+PASS | 帧尾钩子：pipeline/EventBus end_frame 每帧驱动（计数清零）
+── HUD 数值绑定 ──
+PASS | HUD HP 绑定
+PASS | HUD HP 刷新（显示随实值）
+PASS | HUD 波次绑定（wave_started）
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | HUD 击杀计数（enemy_killed）
+PASS | HUD 等级绑定（升级后）
+PASS | 升级仲裁联动：gain_xp → LEVEL_UP 选卡流打开
+PASS | HUD 状态提示（LEVEL_UP 覆盖显示）
+PASS | 选卡恢复 PLAYING（状态提示隐藏）
+── 跳字池化 ──
+PASS | 跳字弹出（active=1）
+PASS | 合并窗内同目标合并（active 仍 =1）
+PASS | 合并数值累加（12+8=20）
+PASS | 到期归还（active=0）
+PASS | 池循环 0 运行期实例化
+PASS | 同屏上限 ≤80（超限丢弃计数）
+PASS | 上限流量全量归还
+── 三选一卡牌流 ──
+PASS | 三选一 roll 数量 = 3
+PASS | 卡面字段齐全（kind/id/display_name）
+PASS | 稀有度权重分布合理（金卡 500 抽 ≤55，w<10 基础权重 6%）
+PASS | 夹具：AFF_ATK_UP 存在（stack_max=3）
+PASS | 叠层上限过滤：满 stack_max 层 ID 仍上架（ADD 池帽放宽至 stack_max+5）
+PASS | 叠层上限过滤：满 stack_max+5 层 ID 移出候选池
+PASS | 同批货架去重（picked 过滤）
+PASS | 卡池耗尽 → 全 fallback（AC-16.4）
+PASS | fallback 应用：主武器栈 +1
+PASS | MASTERY 应用：武器 +1 级
+PASS | 遗物唯一：重复应用不重复入列
+PASS | card_chosen 事件派发（id+kind）
+── 暂停系统 ──
+PASS | 组装：暂停遮罩面板就绪
+PASS | 暂停按钮：PLAYING 显示
+PASS | 暂停按钮：PAUSED 隐藏 + 面板显示
+PASS | 暂停冻结：trauma 不衰减（GameFeel 计时冻结）
+WARNING: [GameLoop] 非法状态迁移拒绝：3 → 3
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 暂停按钮信号：仲裁接通（重复暂停被拒）
+PASS | 暂停面板：继续 → PLAYING + 面板收起 + 宽限期置位
+PASS | 恢复宽限：0.5s 后输入使能恢复
+PASS | 暂停中重开：restart_run 自 PAUSED 放行（波次重开）
+PASS | 回主菜单：PAUSED→MENU 合法迁移 + 面板收起 + 战场清空
+WARNING: [GameLoop] 非法状态迁移拒绝：1 → 3
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 非法迁移回归：MENU→PAUSED 仍拒绝（矩阵不回归）
+── 爆虫自爆 ──
+PASS | 爆虫：未接触不引导
+PASS | 爆虫：接触后引导激活（A3 接触后 1.2s 引爆）
+PASS | 爆虫：警示圈程序化绘制（可见）
+PASS | 爆虫：恰在 1.2s 引爆（144 帧 ±2 @120Hz）
+PASS | 爆虫：爆炸伤害玩家（dmg_base=20 @w1）
+PASS | 爆虫：爆炸后警示圈收起
+PASS | 爆虫：远离不触发
+PASS | 爆虫：再次接触可再引导
+PASS | 爆虫：110px 半径外不受爆炸伤害
+PASS | 爆虫：第三只正常引导
+PASS | 爆虫：击退打断引导（警示圈收起）
+PASS | 爆虫：打断后不引爆（可再触发）
+PASS | 非爆虫（E1）贴脸不进入引导
+── Boss 波伴随怪 ──
+PASS | w10 节奏：×1/2.5s 场上≤12
+PASS | w10 伴 G（波表基础敌池首个）
+PASS | w20 节奏：×1/2.5s 场上≤12
+PASS | w20 伴 R（波表基础敌池第 2 首现敌）
+PASS | w30 节奏：混合怪 ×1/2s 场上≤14
+PASS | w30 混合池：全基础敌轮转（Boss/精英/悬空排除）
+PASS | w20 实刷：3.33s 内伴随 1 只（2.5s 节奏）
+PASS | w20 实刷：6.67s 累计 2 只
+PASS | w20 实刷：伴随全部为 R（E2）
+PASS | 无波表 fallback：×1/2.5s 场上≤12（pkg2 兼容）
+PASS | 无波表 fallback 实刷：伴随最便宜敌且场上 ≤12
+────────────────────────────────────────
+汇总：PASS 104 / FAIL 5（共 109 项）
+  FAIL 详情：FAIL | HIT 档 trauma 0.15
+  FAIL 详情：FAIL | CATALYST 档叠加 0.5 → 0.65
+  FAIL 详情：FAIL | trauma clamp 1.0
+  FAIL 详情：FAIL | 衰减 0.2s → 0.5
+  FAIL 详情：FAIL | player_hit → trauma 0.15（HIT 档）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

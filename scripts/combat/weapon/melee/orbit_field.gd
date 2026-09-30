@@ -263,7 +263,11 @@ func _judge_orb(p_orb_index: int, p_orb_pos: Vector2, p_center: Vector2) -> void
 		var dist := p_orb_pos.distance_to((target as Node2D).global_position)
 		if dist > orb_radius + float(target.get("hitbox_r")):
 			continue
-		_register_charge_hit(p_orb_index, target, p_center, tan)
+		if _register_charge_hit(p_orb_index, target, p_center, tan) and p_orb_index >= 0:
+			# R199 C16：命中反馈接线——_fire_hit_fx 是 _orb_punch 置 1 与 _hit_flashes
+			# 点亮的唯一写点，此前全仓零调用（特效系统整链死码：球体膨胀脉冲+命中点
+			# 冲击小环从不显示）。命中点 = 环绕球心（全局坐标，函数内 to_local 落位）。
+			_fire_hit_fx(p_orb_index, p_orb_pos)
 
 
 func gravity_pulse() -> int:
@@ -856,16 +860,20 @@ func _orb_tint(_p_index: int) -> Color:
 	# R26 元素附魔染色（无 ELE 卡 = 默认薄荷绿）。R186 拆除声明：按球定元素（_orb_element
 	# 稳定映射）随附着三件套一并删除——染色降为 weapon.dominant_element() 单色
 	#（R87 共鸣源，纯视觉读数、零附着语义），多 ELE 卡 = 主色稳定显示。
+	# R192：取色单源 PopPalette.ELEMENT_COLORS（收敛旧 FIR 0.55 漂移副本；KIN 兜底不变）
 	var elem := GameConst.Element.KIN
 	if weapon != null and is_instance_valid(weapon):
 		elem = weapon.dominant_element()
 	match elem:
 		GameConst.Element.FIR:
-			return Color(1.0, 0.55, 0.3)
+			return PopPalette.ELEMENT_COLORS[GameConst.Element.FIR]
 		GameConst.Element.ICE:
-			return Color(0.62, 0.85, 1.0)
+			return PopPalette.ELEMENT_COLORS[GameConst.Element.ICE]
 		GameConst.Element.LTG:
-			return PopPalette.SHOCK
+			return PopPalette.ELEMENT_COLORS[GameConst.Element.LTG]
+		GameConst.Element.HYD, GameConst.Element.ANE, GameConst.Element.GEO, \
+		GameConst.Element.DEN:
+			return PopPalette.ELEMENT_COLORS[elem]
 		_:
 			return PopPalette.SUCCESS
 

@@ -34,6 +34,23 @@ var _panel_title: Label = null
 var _panel_list: Control = null
 var _codex_tabs: Dictionary = {}              # 页签按钮（页名 → Button）
 var _codex_tab: String = "怪物"
+# ── R191#6 成就面板类别页签 + 分页（成就扩容配套：页容量 24 控单页行构建成本） ──
+var _ach_tabs: Dictionary = {}                # 类别页签（页名 → Button）
+var _ach_tab: String = "全部"
+var _ach_page: int = 0                        # 当前页（0 基）
+var _ach_prev_btn: Button = null
+var _ach_next_btn: Button = null
+var _ach_page_label: Label = null
+const ACH_PAGE_SIZE := 24                     # 成就分页页容量
+# 成就类别归类真源（type 字段 → 页签名；未知 type 归「进阶」兜底——三类别页签遍历
+# 累加恒等于全量，新族落地漏配也不丢行）
+const ACH_TYPE_CATEGORY := {
+	"total_kills": "猎杀", "boss_slain": "猎杀", "enemy_kills": "猎杀",
+	"run_wave": "进阶", "run_level": "进阶", "total_runs": "进阶",
+	"run_reactions": "进阶",                    # R192 反应族（单局触发反应数，run 域同进阶）
+	"run_weapons_drawn": "收集", "run_traits_drawn": "收集",
+	"codex_weapons": "收集", "codex_traits": "收集", "maps_cleared": "收集",
+}
 var _char_new_badge: bool = false             # R186：新角色解锁「·新」角标（打开选人面板清除）
 
 
@@ -43,13 +60,41 @@ func _ready() -> void:
 	_build_lobby()
 	_build_panel()
 	_root.visible = false
+	# R195 适配：安全区接入（底座组 SafeAreaHelper 单点引用，不复写）。守卫外
+	# （桌面窗口化/headless）insets 恒零 → offset 写 0 = 默认窗逐位恒等；真机延迟
+	# ≥1 帧重读兜首帧 transform 未定型，size_changed/重获焦点由 helper 重放回调。
+	_apply_safe_area()
+	if SafeAreaHelper.enabled(get_window()):          # 守卫外恒零→零协程悬挂（headless 全绿面）
+		_apply_safe_area_deferred()                # 真值环境延迟重读（SafeAreaHelper 契约）
+	SafeAreaHelper.bind_reread(get_window(), _apply_safe_area)
 	EventBus.state_changed.connect(_on_state_changed)
 	Meta.codex_changed.connect(_refresh_lobby_counts)
 	Meta.fissioner_unlocked.connect(_on_fissioner_unlocked)   # R186：普通通关解锁角标
+	Meta.echo_unlocked.connect(_on_fissioner_unlocked)        # R198（二aw-6）：困难/地狱通关解锁角标（复用同处理器——两新角色「·新」角标统一）
+
+
+func _apply_safe_area() -> void:
+	# R195 安全区应用（消费式契约=SafeAreaHelper.insets 注释）：根 FULL_RECT
+	# offset 左/上取正、右/下取负；底色/云 FULL_RECT 子件随根，面板锚组在让位域内锚定。
+	# 仅 realize/size_changed/焦点事件驱动，非每帧路径（R188 纪律）。
+	var ins := SafeAreaHelper.insets(get_window())
+	_root.offset_left = ins.position.x
+	_root.offset_top = ins.position.y
+	_root.offset_right = -ins.size.x
+	_root.offset_bottom = -ins.size.y
+
+
+func _apply_safe_area_deferred() -> void:
+	# realize 后延迟 ≥1 帧重读（首帧查询为未 realize 真值——SafeAreaHelper 契约）；
+	# 协程即发即续，不阻塞 _ready（调用方已守卫 enabled 才进来；二次应用幂等）
+	await SafeAreaHelper.read_deferred(get_window())
+	_apply_safe_area()
 
 
 func _on_fissioner_unlocked() -> void:
 	# R186：改造者·枢解锁（结算兑现点派发）——「角色」入口加「·新」角标
+	# R198（二aw-6）：echo_unlocked 同接本处理器（menu_screen _ready 连接区）——
+	# 回响·伊可解锁角标语义统一（信号源 meta_manager 结算兑现点，恰发一次边沿）
 	_char_new_badge = true
 	_refresh_lobby_counts()
 
@@ -93,11 +138,16 @@ func _build_ui() -> void:
 	_root.add_child(clouds)
 
 	# 大 logo：字母双色交替（天空蓝/珊瑚红）+ 白描边贴纸字
+	# R195 适配分区：全宽拉伸锚（anchor_l=0/anchor_r=1、y 不变；720×1280 恒等，
+	# 宽视口下满宽 + ALIGNMENT_CENTER 随动）
 	var logo := HBoxContainer.new()
 	logo.name = "Logo"
 	logo.add_theme_constant_override("separation", 2)
-	logo.position = Vector2(0.0, 258.0)
-	logo.size = Vector2(720.0, 64.0)
+	logo.anchor_right = 1.0
+	logo.offset_left = 0.0
+	logo.offset_right = 0.0
+	logo.offset_top = 258.0
+	logo.offset_bottom = 322.0
 	logo.alignment = BoxContainer.ALIGNMENT_CENTER
 	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(logo)
@@ -119,16 +169,25 @@ func _build_ui() -> void:
 	var subtitle := Label.new()
 	StickerTheme.label_sticker(subtitle, 24, PopPalette.INK, 0, Color.WHITE, true)
 	subtitle.text = Lore.SUBTITLE
-	subtitle.position = Vector2(0.0, 342.0)
-	subtitle.size = Vector2(720.0, 34.0)
+	# R195 适配分区：全宽拉伸锚（y 不变恒等；宽视口下满宽居中）
+	subtitle.anchor_right = 1.0
+	subtitle.offset_left = 0.0
+	subtitle.offset_right = 0.0
+	subtitle.offset_top = 342.0
+	subtitle.offset_bottom = 376.0
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_root.add_child(subtitle)
 	for i in range(Lore.MENU_LINES.size()):
 		var line := Label.new()
 		StickerTheme.label_sticker(line, 16, PopPalette.INK_SOFT)
 		line.text = Lore.MENU_LINES[i]
-		line.position = Vector2(0.0, 636.0 + 26.0 * float(i))   # R10：上移给「继续上次进度」让位（原 660 与按钮重叠）
-		line.size = Vector2(720.0, 22.0)
+		# R10：上移给「继续上次进度」让位（原 660 与按钮重叠）
+		# R195 适配分区：全宽拉伸锚（offset=现值−锚点设计位，y 行距恒等）
+		line.anchor_right = 1.0
+		line.offset_left = 0.0
+		line.offset_right = 0.0
+		line.offset_top = 636.0 + 26.0 * float(i)
+		line.offset_bottom = 658.0 + 26.0 * float(i)
 		line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_root.add_child(line)
 
@@ -136,7 +195,14 @@ func _build_ui() -> void:
 	_mascot = TextureRect.new()
 	_mascot.name = "Sentinel9"
 	_mascot.texture = TextureFactory.ship()
-	_mascot.position = Vector2(310.0, 452.0)
+	# R195 适配分区：横向居中锚（offset=现值−锚点(360,0)：左 310−360、右沿 410−360
+	# 贴中恒 ±50px；bob 补间仍写 position:y，宽视口下与全宽文字栈同随 vis 中心）
+	_mascot.anchor_left = 0.5
+	_mascot.anchor_right = 0.5
+	_mascot.offset_left = -50.0
+	_mascot.offset_right = 50.0
+	_mascot.offset_top = 452.0
+	_mascot.offset_bottom = 552.0
 	_mascot.custom_minimum_size = Vector2(100.0, 100.0)
 	_mascot.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_mascot.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -146,8 +212,12 @@ func _build_ui() -> void:
 	name_tag = Label.new()
 	StickerTheme.label_sticker(name_tag, 15, PopPalette.PLAYER, 0, Color.WHITE, true)
 	_refresh_mascot()
-	name_tag.position = Vector2(0.0, 566.0)
-	name_tag.size = Vector2(720.0, 20.0)
+	# R195 适配分区：全宽拉伸锚（y 不变恒等）
+	name_tag.anchor_right = 1.0
+	name_tag.offset_left = 0.0
+	name_tag.offset_right = 0.0
+	name_tag.offset_top = 566.0
+	name_tag.offset_bottom = 586.0
 	name_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_root.add_child(name_tag)
 
@@ -157,8 +227,14 @@ func _build_ui() -> void:
 	_start_btn.text = Lore.START_BUTTON
 	_start_btn.add_theme_font_size_override("font_size", 30)
 	_start_btn.add_theme_font_override("font", StickerTheme.font_bold())
-	_start_btn.position = Vector2(260.0, 790.0)
-	_start_btn.size = Vector2(200.0, 84.0)
+	# R195 适配分区：横向居中锚（offset=现值−锚点(360,0)：左 260−360、右沿 460−360
+	# 恒 ±100px；R194 触控 200×84 几何与默认窗落位恒等，宽视口下随 vis 中心）
+	_start_btn.anchor_left = 0.5
+	_start_btn.anchor_right = 0.5
+	_start_btn.offset_left = -100.0
+	_start_btn.offset_right = 100.0
+	_start_btn.offset_top = 790.0
+	_start_btn.offset_bottom = 874.0
 	_start_btn.pivot_offset = Vector2(100.0, 42.0)
 	_start_btn.pressed.connect(_on_start_pressed)
 	_start_btn.button_down.connect(func() -> void: StickerTheme.press_punch(_start_btn))
@@ -172,9 +248,15 @@ func _build_ui() -> void:
 	_continue_btn.text = "继续上次进度"
 	_continue_btn.add_theme_font_size_override("font_size", 17)
 	_continue_btn.add_theme_font_override("font", StickerTheme.font_bold())
-	_continue_btn.position = Vector2(190.0, 722.0)   # R10：文案（至 ~712）与出发（790）之间，不再压字
-	_continue_btn.size = Vector2(340.0, 48.0)
-	_continue_btn.pivot_offset = _continue_btn.size * 0.5
+	# R195 适配分区：横向居中锚（offset=现值−锚点(360,0)：左 190−360、右沿 530−360
+	# 恒 ±170px；R10 文案（至 ~712）与出发（790）之间落位恒等，宽视口下随 vis 中心）
+	_continue_btn.anchor_left = 0.5
+	_continue_btn.anchor_right = 0.5
+	_continue_btn.offset_left = -170.0
+	_continue_btn.offset_right = 170.0
+	_continue_btn.offset_top = 722.0
+	_continue_btn.offset_bottom = 770.0
+	_continue_btn.pivot_offset = Vector2(170.0, 24.0)
 	_continue_btn.pressed.connect(_on_continue_pressed)
 	_continue_btn.button_down.connect(func() -> void: StickerTheme.press_punch(_continue_btn))
 	_continue_btn.visible = false
@@ -192,11 +274,18 @@ func _build_ui() -> void:
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 	# 版本脚注
+	# R195 适配分区：全宽拉伸锚 + 下锚（offset=现值−锚点(0,1280)：上 1216−1280、
+	# 底沿 1236−1280 恒 44px；高视口下贴 vis 底）
 	var footer := Label.new()
 	StickerTheme.label_sticker(footer, 13, PopPalette.INK_SOFT)
 	footer.text = "竖屏弹幕防御 · Roguelike"
-	footer.position = Vector2(0.0, 1216.0)
-	footer.size = Vector2(720.0, 20.0)
+	footer.anchor_right = 1.0
+	footer.anchor_top = 1.0
+	footer.anchor_bottom = 1.0
+	footer.offset_left = 0.0
+	footer.offset_right = 0.0
+	footer.offset_top = -64.0
+	footer.offset_bottom = -44.0
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_root.add_child(footer)
 
@@ -244,6 +333,9 @@ func _open_map_select() -> void:
 	_panel_title.text = "选择关卡"
 	for kind: String in _codex_tabs:
 		(_codex_tabs[kind] as Button).visible = false
+	for kind: String in _ach_tabs:
+		(_ach_tabs[kind] as Button).visible = false
+	_set_ach_pager_visible(false)
 	for c in _panel_list.get_children():
 		(c as Node).queue_free()
 	_build_difficulty_row()
@@ -252,7 +344,7 @@ func _open_map_select() -> void:
 		var mid: StringName = def.id
 		var unlocked := Meta.is_map_unlocked(mid)
 		var cleared := Meta.is_map_cleared(mid)
-		var status := ("已通关 ★" if cleared else "可挑战") if unlocked else "🔒 通关上一关解锁"
+		var status := ("已通关 ★" if cleared else "可挑战") if unlocked else "通关上一关解锁"
 		var row := Panel.new()
 		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(14.0, 3, false))
 		row.custom_minimum_size = Vector2(576.0, 118.0)
@@ -309,8 +401,8 @@ func _open_map_select() -> void:
 			play_btn.text = "出发"
 			play_btn.add_theme_font_size_override("font_size", 15)
 			play_btn.add_theme_font_override("font", StickerTheme.font_bold())
-			play_btn.position = Vector2(486.0, 39.0)
-			play_btn.size = Vector2(76.0, 40.0)
+			play_btn.position = Vector2(486.0, 32.0)   # R194 触控目标放大 76×52（选关行 118 内，32+52=84 留底距）
+			play_btn.size = Vector2(76.0, 52.0)
 			play_btn.focus_mode = Control.FOCUS_NONE
 			play_btn.pressed.connect(_on_map_pick.bind(mid))
 			play_btn.button_down.connect(func() -> void: StickerTheme.press_punch(play_btn))
@@ -419,6 +511,12 @@ func _build_lobby() -> void:
 		btn.text = String(d.text)                # 基础文案（动态角标由 _refresh_lobby_counts 覆盖）
 		btn.add_theme_font_size_override("font_size", 22)
 		btn.add_theme_font_override("font", StickerTheme.font_bold())
+		if String(d.kind) == "upgrade":
+			# R196：结晶 emoji 字面量 → ui_gem 贴纸 icon（Android 系统字体链缺 emoji
+			# 字形只出字不出图——apk_menu_no_icons 定案；Button.icon 原生排版，
+			# icon_max_width 钳贴纸宽与 22 号字对齐不乱）
+			btn.icon = TextureFactory.ui_gem()
+			btn.add_theme_constant_override("icon_max_width", 26)
 		btn.position = d.pos
 		btn.size = Vector2(190.0, 74.0)
 		btn.pivot_offset = btn.size * 0.5
@@ -443,7 +541,7 @@ func _refresh_lobby_counts() -> void:
 	if _char_new_badge:
 		char_txt = "角色 ·新"                     # R186：新角色解锁角标（打开选人面板清除）
 	(_lobby_btns["char"] as Button).text = char_txt
-	(_lobby_btns["upgrade"] as Button).text = "养成 %d💎" % Meta.crystals
+	(_lobby_btns["upgrade"] as Button).text = "养成 %d" % Meta.crystals   # R196：结晶符号 → ui_gem icon（构建期已挂）
 	var dbest: Dictionary = Meta.daily_record()
 	var dbest_txt := "每日挑战" if dbest.is_empty() \
 		else "每日挑战 %d波" % int(dbest.get("best_wave", 0))
@@ -461,10 +559,14 @@ func _on_lobby_pressed(p_kind: String) -> void:
 	_panel_title.text = String(titles.get(p_kind, ""))
 	for kind: String in _codex_tabs:
 		(_codex_tabs[kind] as Button).visible = p_kind == "codex"
+	for kind: String in _ach_tabs:
+		(_ach_tabs[kind] as Button).visible = p_kind == "ach"
+	_set_ach_pager_visible(p_kind == "ach")
 	match p_kind:
 		"codex":
 			_rebuild_codex()
 		"ach":
+			_ach_page = 0                    # 重开成就面板回第一页（防跨类别页码越界残留）
 			_rebuild_achievements()
 		"records":
 			_rebuild_records()
@@ -499,11 +601,20 @@ func _build_panel() -> void:
 	var card := Panel.new()
 	card.name = "LobbyPanel"
 	card.add_theme_stylebox_override("panel", StickerTheme.panel_style(24.0, 4, true))
-	card.position = Vector2(36.0, 96.0)
-	card.size = Vector2(648.0, 1080.0)
-	card.pivot_offset = card.size * 0.5
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_panel_root.add_child(card)
+	# R195 适配分区：大厅卡左右居中锚（inset 36 恒等）+ 顶部 96 上锚 + 纵向拉伸
+	# （offset=现值−锚点设计位：上 96、底沿 1176=1280−104；720×1280 恒等，
+	# 宽视口下左右各收 36px、高视口下卡体随高拉伸——滚动区/底行随卡内锚联动）
+	card.anchor_left = 0.0
+	card.anchor_right = 1.0
+	card.anchor_top = 0.0
+	card.anchor_bottom = 1.0
+	card.offset_left = 36.0
+	card.offset_right = -36.0
+	card.offset_top = 96.0
+	card.offset_bottom = -104.0
+	card.pivot_offset = card.size * 0.5
 	_panel_title = Label.new()
 	StickerTheme.label_sticker(_panel_title, 32, PopPalette.INK, 0, Color.WHITE, true)
 	_panel_title.text = "图鉴"
@@ -511,8 +622,9 @@ func _build_panel() -> void:
 	_panel_title.size = Vector2(648.0, 42.0)
 	_panel_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card.add_child(_panel_title)
-	# 图鉴页签（仅图鉴模式可见；行 = [页名, x]）
-	var tabs := [["怪物", 36.0], ["武器", 244.0], ["词条", 452.0]]
+	# 图鉴页签（仅图鉴模式可见；行 = [页名, x]。R191#5：+「反应」页共 4 枚，宽 160→126
+	# 重排——末沿 486+126=612 与右距 36 均不变）
+	var tabs := [["怪物", 36.0], ["武器", 186.0], ["词条", 336.0], ["反应", 486.0]]
 	for t in tabs:
 		var tab := Button.new()
 		tab.name = "Tab_%s" % String(t[0])
@@ -520,15 +632,100 @@ func _build_panel() -> void:
 		tab.add_theme_font_size_override("font_size", 18)
 		tab.add_theme_font_override("font", StickerTheme.font_bold())
 		tab.position = Vector2(float(t[1]), 84.0)
-		tab.size = Vector2(160.0, 54.0)
+		tab.size = Vector2(126.0, 54.0)
 		tab.pivot_offset = tab.size * 0.5
 		tab.pressed.connect(_on_codex_tab.bind(String(t[0])))
 		card.add_child(tab)
 		_codex_tabs[String(t[0])] = tab
+	# 成就类别页签（仅成就模式可见；R191#6，复用图鉴页签按钮先例，同行错峰显隐）
+	var ach_tabs_def := [["全部", 36.0], ["猎杀", 186.0], ["进阶", 336.0], ["收集", 486.0]]
+	for t in ach_tabs_def:
+		var atab := Button.new()
+		atab.name = "AchTab_%s" % String(t[0])
+		atab.text = String(t[0])
+		atab.add_theme_font_size_override("font_size", 18)
+		atab.add_theme_font_override("font", StickerTheme.font_bold())
+		atab.position = Vector2(float(t[1]), 84.0)
+		atab.size = Vector2(126.0, 54.0)
+		atab.pivot_offset = atab.size * 0.5
+		atab.visible = false
+		atab.pressed.connect(_on_ach_tab.bind(String(t[0])))
+		atab.button_down.connect(func() -> void: StickerTheme.press_punch(atab))
+		card.add_child(atab)
+		_ach_tabs[String(t[0])] = atab
+	# 成就分页（上一页/下一页 + 页码读数；返回大厅按钮两侧让位——页容量 24）
+	_ach_prev_btn = Button.new()
+	_ach_prev_btn.name = "AchPrevButton"
+	_ach_prev_btn.text = "◀ 上一页"
+	_ach_prev_btn.add_theme_font_size_override("font_size", 15)
+	_ach_prev_btn.add_theme_font_override("font", StickerTheme.font_bold())
+	_ach_prev_btn.position = Vector2(36.0, 986.0)
+	_ach_prev_btn.size = Vector2(132.0, 64.0)
+	# R195 适配分区：底行下锚（offset=现值−锚点(0,1080)：上 986−1080、底沿 1050−1080
+	# 随卡底恒 30px；横向保持左 inset 36）
+	_ach_prev_btn.anchor_top = 1.0
+	_ach_prev_btn.anchor_bottom = 1.0
+	_ach_prev_btn.offset_top = -94.0
+	_ach_prev_btn.offset_bottom = -30.0
+	_ach_prev_btn.pivot_offset = _ach_prev_btn.size * 0.5
+	_ach_prev_btn.visible = false
+	_ach_prev_btn.pressed.connect(_on_ach_page_prev)
+	_ach_prev_btn.button_down.connect(func() -> void: StickerTheme.press_punch(_ach_prev_btn))
+	card.add_child(_ach_prev_btn)
+	_ach_next_btn = Button.new()
+	_ach_next_btn.name = "AchNextButton"
+	_ach_next_btn.text = "下一页 ▶"
+	_ach_next_btn.add_theme_font_size_override("font_size", 15)
+	_ach_next_btn.add_theme_font_override("font", StickerTheme.font_bold())
+	_ach_next_btn.position = Vector2(480.0, 986.0)
+	_ach_next_btn.size = Vector2(132.0, 64.0)
+	# R195 适配分区：底行下锚 + 右锚（offset=现值−锚点(648,1080)：左 480−648、右沿
+	# 612−648 随卡宽恒 inset 36——与左页签对称；默认窗 (480,986) 恒等）
+	_ach_next_btn.anchor_left = 1.0
+	_ach_next_btn.anchor_right = 1.0
+	_ach_next_btn.anchor_top = 1.0
+	_ach_next_btn.anchor_bottom = 1.0
+	_ach_next_btn.offset_left = -168.0
+	_ach_next_btn.offset_right = -36.0
+	_ach_next_btn.offset_top = -94.0
+	_ach_next_btn.offset_bottom = -30.0
+	_ach_next_btn.pivot_offset = _ach_next_btn.size * 0.5
+	_ach_next_btn.visible = false
+	_ach_next_btn.pressed.connect(_on_ach_page_next)
+	_ach_next_btn.button_down.connect(func() -> void: StickerTheme.press_punch(_ach_next_btn))
+	card.add_child(_ach_next_btn)
+	_ach_page_label = Label.new()
+	_ach_page_label.name = "AchPageLabel"
+	StickerTheme.label_sticker(_ach_page_label, 13, PopPalette.INK_SOFT)
+	# 坐标落在 ◀上一页(36~168) 与 返回大厅(211~) 之间 43px 空当内——旧位 136 压进按钮描边 30px
+	_ach_page_label.position = Vector2(170.0, 1004.0)
+	_ach_page_label.size = Vector2(39.0, 28.0)
+	# R195 适配分区：底行下锚（offset=现值−锚点(0,1080)：上 1004−1080、底沿 1032−1080；
+	# 横向固定随左页签——页码读数属翻页器）
+	_ach_page_label.anchor_top = 1.0
+	_ach_page_label.anchor_bottom = 1.0
+	_ach_page_label.offset_top = -76.0
+	_ach_page_label.offset_bottom = -48.0
+	_ach_page_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ach_page_label.visible = false
+	card.add_child(_ach_page_label)
 	var scroll := ScrollContainer.new()
 	scroll.name = "LobbyScroll"
 	scroll.position = Vector2(28.0, 156.0)
 	scroll.size = Vector2(592.0, 812.0)
+	# R195 适配分区：滚动列表区纵向拉伸（上锚 156 固定/下锚随卡底：底沿 968=1080−112；
+	# 720×1280 恒等，高视口下随卡体拉伸多显行）
+	# R198（r195-4）：横向改居中锚——父卡 720 设计域宽 648、锚 0.5=324 → 324±296=28..620
+	# 逐位恒等（720 域零变化）；宽画布域下滚动列随卡居中，消除右侧 ~268px 留白（960 宽
+	# 画布域卡宽 888 → 列左缘 28→148 卡内居中）。图鉴 4 页签/选关/记录三屏共用本列自动受益。
+	scroll.anchor_left = 0.5
+	scroll.anchor_right = 0.5
+	scroll.offset_left = -296.0
+	scroll.offset_right = 296.0
+	scroll.anchor_top = 0.0
+	scroll.anchor_bottom = 1.0
+	scroll.offset_top = 156.0
+	scroll.offset_bottom = -112.0
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	card.add_child(scroll)
 	_panel_list = VBoxContainer.new()
@@ -543,6 +740,16 @@ func _build_panel() -> void:
 	close_btn.add_theme_font_override("font", StickerTheme.font_bold())
 	close_btn.position = Vector2(211.0, 986.0)
 	close_btn.size = Vector2(226.0, 64.0)
+	# R195 适配分区：底行下锚 + 横向居中锚（offset=现值−锚点(324,1080)：左 211−324、
+	# 右 437−324——卡宽变化下保持行内居中；默认窗恒等）
+	close_btn.anchor_left = 0.5
+	close_btn.anchor_right = 0.5
+	close_btn.anchor_top = 1.0
+	close_btn.anchor_bottom = 1.0
+	close_btn.offset_left = -113.0
+	close_btn.offset_right = 113.0
+	close_btn.offset_top = -94.0
+	close_btn.offset_bottom = -30.0
 	close_btn.pivot_offset = close_btn.size * 0.5
 	close_btn.pressed.connect(_on_panel_close)
 	close_btn.button_down.connect(func() -> void: StickerTheme.press_punch(close_btn))
@@ -580,15 +787,51 @@ func _rebuild_codex() -> void:
 						int(ed.exp_base), atk_note]
 						if kills > 0 else "未解锁：击杀一只后展示详情"))
 		"武器":
+			# R196 三态（定案 wunlock）：①已获得 = got 现状（机制一句话 + 形态数值）；
+			# ②可获取 = 门开未获得（显示名 + 局内抽卡提示）；③未解锁 = 门未开（隐名 +
+			# 「通关『X』后开放」——句式单源 MechanicGate.weapon_locked_line，UI 禁手抄；
+			# 锁徽记走 ui_lock 贴纸，行压暗读感同 RxnRow 锁定态手法）。
+			# 「图鉴 %d/%d」计数保持获得口径不动（_refresh_lobby_counts）。
 			for wid: Variant in registry.weapons:
 				var wd: WeaponData = registry.get_weapon(wid)
 				if wd == null:
 					continue
 				var got := Meta.is_weapon_unlocked(wid)
-				_panel_list.add_child(_make_codex_row(
-					TextureFactory.weapon_icon(wid), got,
-					wd.display_name if got else "？？？",
-					_form_stat_line(wd) if got else "未解锁：抽到「新武器」卡后展示详情"))
+				# R196 评审修复：三态门态改进度派生（weapon_allowed_progress）——
+				# weapon_allowed 读 run_map（上一局地图残留），大厅冷启动全亮「可获取」
+				# 假话、局后按末局地图漂移；进度门 = 已通关大关数派生，与选关页一致
+				var allowed := MechanicGate.weapon_allowed_progress(wid)
+				# R190：解锁行副文案加机制一句话（图鉴直接可见，不靠 hover）——
+				# 万镜回廊/蓄能轨道等 R187 特殊机制读图标猜不出
+				var w_desc := ""
+				var w_name := wd.display_name
+				if got:
+					var w_note := GameConst.weapon_note(String(wid))
+					w_desc = ("%s\n%s" % [w_note, _form_stat_line(wd)]) if w_note != "" \
+						else _form_stat_line(wd)
+				elif allowed:
+					w_desc = "可获取：局内抽到「新武器」卡解锁"
+				else:
+					w_name = "？？？"
+					w_desc = MechanicGate.weapon_locked_line(wid)
+				var w_row := _make_codex_row(
+					TextureFactory.weapon_icon(wid), got or allowed,
+					w_name, w_desc)
+				if not allowed and not got:
+					# 未解锁三态：压暗 + 右上角锁徽贴纸（观察名 WeaponLockBadge）。
+					# R196 wunlock 定案 P6「获得优先于门」：门外已获得的武器按已获得态
+					# 展示（显示名 + 无锁徽 + 不压暗）——只拦「未获得 ∧ 门外」，老档无损
+					w_row.modulate.a = 0.55
+					var w_lock := TextureRect.new()
+					w_lock.name = "WeaponLockBadge"
+					w_lock.texture = TextureFactory.ui_lock()
+					w_lock.position = Vector2(536.0, 8.0)
+					w_lock.size = Vector2(26.0, 24.0)
+					w_lock.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+					w_lock.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+					w_lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					w_row.add_child(w_lock)
+				_panel_list.add_child(w_row)
 		"词条":
 			for tid: Variant in registry.traits:
 				var td: TraitData = registry.get_trait(tid)
@@ -599,6 +842,23 @@ func _rebuild_codex() -> void:
 					TextureFactory.type_icon(1, int(td.pool)), got,
 					td.display_name if got else "？？？",
 					td.description if got else "未解锁：抽到该词条卡后展示详情"))
+		"反应":
+			# R191#5 图鉴「反应」页：枚举全键全量可见（无解锁过滤——不设 codex 门、零新增
+			# 存档键；页面不出现难度门文案，条件句写代码真条件）。倍率运行时读
+			# GameConfig.balance.reaction_table 格式化（禁止硬编码数值）。
+			# R192 wire T2 rid 无关化：行建遍历 ReactionType 枚举声明序（keys() 即序——
+			# 枚举字典 = 名→int，keys() 给名字串，int 值经 ReactionType[名] 反查），逐键查
+			# reaction_table 成员过滤——缺键 push_error+跳过（半接线启动期报红，禁静默落行）；
+			# 行序 = 枚举声明序（构建序定位保留）。冰+草留白标注行（21 配对唯一空格）在循环
+			# 后单独追加——不计入枚举行数。
+			for rid_key: String in GameConst.ReactionType.keys():
+				if GameConfig.balance == null \
+						or not GameConfig.balance.reaction_table.has(rid_key):
+					push_error("[MenuScreen] reaction_table 缺键（半接线）：%s——行跳过" % rid_key)
+					continue
+				_panel_list.add_child(
+					_make_codex_reaction_row(int(GameConst.ReactionType[rid_key])))
+			_panel_list.add_child(_make_codex_blank_row())
 	_sticker_active_tab()
 
 
@@ -700,10 +960,220 @@ func _make_codex_row(p_tex: ImageTexture, p_unlocked: bool, p_name: String,
 	var desc_l := Label.new()
 	StickerTheme.label_sticker(desc_l, 13, PopPalette.INK_SOFT)
 	desc_l.text = p_desc
+	# P07(R199)：图鉴描述 autowrap + 按实测需求扩高——单行 500×22 定格把最长描述
+	#（风域 1263px）拦屏截断，被裁的恰是图鉴要解释的元素反应族。行高用 StickerTheme
+	# 字型排版实测（同 card_select_ui._measured_desc_h 口径：wrap 高 + 行距，禁拍值），
+	# 行体随描述扩高
+	desc_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var _raw_need: float = StickerTheme.font().get_multiline_string_size(p_desc,
+		HORIZONTAL_ALIGNMENT_LEFT, 500.0, 13, -1, 7).y
+	var _lines := maxi(1, roundi(_raw_need / maxf(StickerTheme.font().get_height(13), 1.0)))
+	var desc_need: float = _raw_need + float(_lines - 1) \
+		* float(desc_l.get_theme_constant("line_spacing"))
 	desc_l.position = Vector2(64.0, 34.0)
-	desc_l.size = Vector2(500.0, 22.0)
+	desc_l.size = Vector2(500.0, maxf(22.0, desc_need))
 	desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(desc_l)
+	row.custom_minimum_size = Vector2(576.0, maxf(64.0, 34.0 + desc_need + 10.0))
+	return row
+
+
+func _make_codex_reaction_row(p_rxn: int) -> Control:
+	# R191#5 反应行（576×150 高行——既有 64 行装不下 54px+12px 描边的预览大字）：
+	# 左配方双色环 +「+」/ 名称 / 效果与条件 / 解锁 / 倍率（运行时读表）/ 右 54px 预览。
+	# 预览复刻 DamagePopup._apply_reaction_look 五项 override（不走 label_sticker——
+	# 会覆写 font 破坏反应专属字型）；文案单源 GameConst.reaction_note。
+	var rid := String(GameConst.ReactionType.find_key(p_rxn))
+	var note: Dictionary = GameConst.reaction_note(rid)
+	var row := Panel.new()
+	row.name = "RxnRow_%s" % rid
+	row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
+	row.custom_minimum_size = Vector2(576.0, 150.0)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 配方双色环（元素色单源 PopPalette.ELEMENT_COLORS——R192 M2 改引：与跳字同表同源，
+	# 改表即跳字+图鉴环自动跟随；36px 环）
+	var elems: Array = note.get("elements", [])
+	var ring_xs := [14.0, 78.0]
+	for e_i in range(mini(elems.size(), 2)):
+		var ring := TextureRect.new()
+		ring.texture = TextureFactory.ring_tex(
+			PopPalette.ELEMENT_COLORS.get(int(elems[e_i]), Color.WHITE), 36, 5.0)
+		ring.position = Vector2(float(ring_xs[e_i]), 18.0)
+		ring.custom_minimum_size = Vector2(36.0, 36.0)
+		ring.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ring.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(ring)
+	var plus_l := Label.new()
+	StickerTheme.label_sticker(plus_l, 17, PopPalette.INK_SOFT)
+	plus_l.text = "+"
+	plus_l.position = Vector2(50.0, 24.0)
+	plus_l.size = Vector2(28.0, 24.0)
+	plus_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(plus_l)
+	var name_l := Label.new()
+	StickerTheme.label_sticker(name_l, 17, PopPalette.INK, 0, Color.WHITE, true)
+	name_l.name = "RxnName"
+	name_l.text = String(note.get("name", rid))
+	name_l.position = Vector2(128.0, 16.0)
+	name_l.size = Vector2(280.0, 28.0)
+	row.add_child(name_l)
+	var desc_l := Label.new()
+	StickerTheme.label_sticker(desc_l, 13, PopPalette.INK_SOFT)
+	desc_l.name = "RxnDesc"
+	desc_l.text = String(note.get("effect", ""))
+	desc_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # 条件句估宽 417~441px 超 400px 格——超宽折行（3 行 57px ≤ 60px 格）
+	desc_l.position = Vector2(14.0, 62.0)
+	desc_l.size = Vector2(400.0, 60.0)
+	row.add_child(desc_l)
+	var unlock_l := Label.new()
+	StickerTheme.label_sticker(unlock_l, 12, PopPalette.GOLD)
+	unlock_l.name = "RxnUnlock"
+	unlock_l.text = String(note.get("unlock", ""))
+	unlock_l.position = Vector2(14.0, 124.0)
+	unlock_l.size = Vector2(396.0, 18.0)
+	row.add_child(unlock_l)
+	var mult_l := Label.new()
+	StickerTheme.label_sticker(mult_l, 12, PopPalette.PLAYER)
+	mult_l.name = "RxnMult"
+	mult_l.text = _rxn_multiplier_text(rid)
+	mult_l.position = Vector2(414.0, 124.0)
+	# R198（R192-low8）：绽放（RXN_HYD_DEN）mult_fmt 三段串估宽超 148px 格——autowrap
+	# 折两行 + 高 18→34（宽 148/右对齐保持；其余反应单段串单行不受影响。文案真源
+	# GameConst mult_fmt 不动——口径 4，UI 侧承宽；R191 收口2 desc_l autowrap 同族）
+	mult_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mult_l.size = Vector2(148.0, 34.0)
+	mult_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	row.add_child(mult_l)
+	# 坏 ID 兜底改报红（R192 wire T2：禁静默——LOOKS 缺键 = 表现半接线，落首键观感防崩）
+	var look: Dictionary = DamagePopup.REACTION_LOOKS.get(p_rxn, {})
+	if look.is_empty():
+		push_error("[MenuScreen] REACTION_LOOKS 缺键（半接线）：rxn=%d——落首键观感" % p_rxn)
+		look = DamagePopup.REACTION_LOOKS.values()[0]
+	var prev := Label.new()
+	prev.name = "RxnPreview"
+	# R192 收口2：样张与实机跳字同源组合（用户口径「反应名+数字（包括图鉴）」）——
+	# dmg 型 = 反应名+样张数值段（note.sample 仅此型渲染）；pct/stat 型 = 反应名+
+	# DamagePopup.reaction_stat_text 读表统计段（与跳字同一函数，超导-30%/激化+25%…）；
+	# 无统计段反应（感电/扩散族）只显名（链伤/扩散一击走自身伤害通道另跳数字）。
+	prev.text = String(look["name"]) + (String(note.get("sample", "")) if String(look["fmt"]) == "dmg" \
+		else DamagePopup.reaction_stat_text(p_rxn))
+	prev.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	prev.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# 五项 override 逐项对齐 DamagePopup._apply_reaction_look（damage_popup.gd 五连装）
+	prev.add_theme_color_override("font_color", look["fill"])
+	prev.add_theme_color_override("font_outline_color", look["outline"])
+	prev.add_theme_constant_override("outline_size", DamagePopup.OUTLINE_PX_REACTION)
+	prev.add_theme_font_override("font", StickerTheme.font_reaction(int(look["variant"])))
+	prev.add_theme_font_size_override("font_size", DamagePopup.FONT_SIZE_REACTION)
+	prev.position = Vector2(420.0, 18.0)
+	prev.size = Vector2(140.0, 78.0)
+	row.add_child(prev)
+	# R192 visual 批1：预览缩放 CODEX_PREVIEW_SCALE 单源 + pivot 居中（54px 样张缩半适配
+	# 140×78 格——不改字号不加宽格，五项对位断言契约不变）。54px 反应字型的最小行高把
+	# size.y 顶过 78 设定值（实测 →108）且钳制时机延迟不定——挂 resized 单发跟随：任何
+	# 一次尺寸变化（含延迟钳制）都即刻重算 pivot，恒等式 pivot_offset == size×0.5 在任意
+	# 时点成立（fx_quality 预览缩放断言口径）。行随页签重建 queue_free，连接随节点销毁。
+	prev.resized.connect(func() -> void:
+		prev.pivot_offset = prev.size * DamagePopup.CODEX_PREVIEW_SCALE)
+	prev.pivot_offset = prev.size * DamagePopup.CODEX_PREVIEW_SCALE
+	prev.scale = Vector2.ONE * DamagePopup.CODEX_PREVIEW_SCALE
+	prev.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# R196 图鉴锁：未触发反应行锁定态（只读 Meta.is_reaction_seen——标记接线在 Meta 侧
+	# _on_reaction_triggered，本文件零写入口）。锁定只改样式不改行集合：全枚举行仍全量
+	# 可见（A5/D0 行数断言口径不动），解锁关提示单源复用上方 RxnUnlock 行（note.unlock
+	# 已含「第 N 关起」，零新文案、零 GameConst 改动）；行随页签 queue_free 重建 → 战斗内
+	# 首次触发后下次进图鉴自然解锁（持久化在 Meta codex/reaction_seen，旧档缺键 → 空表
+	# 全锁定，降级不崩）。
+	if not Meta.is_reaction_seen(StringName(rid)):
+		row.modulate.a = 0.55                    # 降透明读感（_make_codex_blank_row 同族手法）
+		# R196：锁徽记 emoji 字面量 → ui_lock 程序贴纸（Android 系统字体链缺 emoji 字形——
+		# apk_menu_no_icons 定案；观察名 RxnLockBadge 保留，图鉴武器行锁徽同款贴纸）
+		var lock_l := TextureRect.new()
+		lock_l.name = "RxnLockBadge"
+		lock_l.texture = TextureFactory.ui_lock()
+		lock_l.position = Vector2(536.0, 6.0)    # 预览格右上角（格 420..560×18..96）
+		lock_l.size = Vector2(26.0, 24.0)
+		lock_l.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		lock_l.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		lock_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var seen_l := Label.new()
+		StickerTheme.label_sticker(seen_l, 12, PopPalette.INK_SOFT)
+		seen_l.name = "RxnLockNote"
+		seen_l.text = "未触发"
+		seen_l.position = Vector2(520.0, 104.0)  # 预览格下方（y96）与 RxnMult（y124）之间——不压倍率
+		seen_l.size = Vector2(56.0, 18.0)
+		seen_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row.add_child(lock_l)
+		row.add_child(seen_l)
+	return row
+
+
+func _rxn_multiplier_text(p_rid: String) -> String:
+	# R192 wire T2：倍率行 token 格式化器（rid 无关——零 per-rid 分支，新反应零新代码）。
+	# 模板单源 GameConst.reaction_note[p_rid].mult_fmt（数值一律不进文案）；数值运行时读
+	# GameConfig.balance.reaction_table（禁硬编码数值，禁 rule.get 硬兜底默认——半接线
+	# 必须报红不可静默出数）。
+	# token 语法（reaction_note.mult_fmt 契约，validator 锁 mult_fmt token 键 ⊆ rule 键）：
+	# · {key:spec}     → rule[key] 按 spec printf（spec 如 .1f / .0f）
+	# · {key_pc:spec}  → rule[key 剥 _pc 后缀] × 100 后按 spec（resist_delta 等百分比口径）
+	# 不可解析 token（键不在表 / 语法残缺）→ push_error + 返空串（D 组行级断言 mult 非空
+	# 同红——缺件在页面读得见，不可静默空行）。
+	var rule: Dictionary = {}
+	if GameConfig.balance != null:
+		rule = GameConfig.balance.reaction_table.get(p_rid, {})
+	var note: Dictionary = GameConst.reaction_note(p_rid)
+	if note.is_empty() or not note.has("mult_fmt"):
+		return ""                                 # 坏 id / 模板缺键（validator 闸上游报红）
+	var out := ""
+	var rest: String = String(note["mult_fmt"])
+	while true:
+		var open := rest.find("{")
+		if open < 0:
+			out += rest
+			break
+		var close := rest.find("}", open)
+		if close < 0:                             # 模板残缺（无闭括号）——余段原样落行
+			out += rest
+			break
+		out += rest.substr(0, open)
+		var token := rest.substr(open + 1, close - open - 1)
+		var sep := token.find(":")
+		var key := token.substr(0, sep) if sep >= 0 else ""
+		var spec := token.substr(sep + 1) if sep >= 0 else ""
+		var rule_key := key.trim_suffix("_pc")
+		if key.is_empty() or spec.is_empty() or not rule.has(rule_key):
+			push_error("[MenuScreen] mult_fmt token 不可解析：rid=%s token={%s}" % [p_rid, token])
+			return ""
+		var value := float(rule[rule_key])
+		if key.ends_with("_pc"):
+			value *= 100.0                        # 百分比口径（×100 后按 spec）
+		out += ("%" + spec) % value
+		rest = rest.substr(close + 1)
+	return out
+
+
+func _make_codex_blank_row() -> Control:
+	# R192 M3 冰+草留白标注行（21 配对唯一空格；R191#4『选了没反应』误报教训——把空白变
+	# 规则）。循环后单独追加、不计入枚举行数（A5/D0/X3 行数口径 = 全枚举 或 全枚举+1）；
+	# 文案单源 GameConst.REACTION_BLANK_NOTE（数值不进文案，本行不承载任何表值）；
+	# 降透明样式 = 全行 modulate 半透（非活动页签同族读感——如实标注非图鉴遗漏）。
+	var row := Panel.new()
+	row.name = "RxnRow_BLANK"
+	row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
+	row.custom_minimum_size = Vector2(576.0, 56.0)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.modulate = Color(1.0, 1.0, 1.0, 0.5)
+	var note_l := Label.new()
+	StickerTheme.label_sticker(note_l, 13, PopPalette.INK_SOFT)
+	note_l.name = "RxnBlankNote"
+	note_l.text = GameConst.REACTION_BLANK_NOTE
+	note_l.position = Vector2(18.0, 18.0)
+	note_l.size = Vector2(540.0, 22.0)
+	note_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(note_l)
 	return row
 
 
@@ -714,11 +1184,62 @@ func _sticker_active_tab() -> void:
 			if kind == _codex_tab else Color(1.0, 1.0, 1.0, 0.55)
 
 
-# ── 成就内容 ──────────────────────────────────────────────────────
+# ── 成就内容（R191#6：类别页签 + 分页——全量行数上百，页容量 24 控单次行构建成本；
+#    行构建逻辑复用原 :732-759 不动） ─────────────────────────────────
+func _ach_filtered() -> Array:
+	# 类别过滤（type 字段单源归类 ACH_TYPE_CATEGORY；未知 type 归「进阶」兜底——
+	# 三类别页签遍历累加恒等于全量）
+	var out: Array = []
+	for a in Meta.ACHIEVEMENTS:
+		if _ach_tab == "全部" or String(ACH_TYPE_CATEGORY.get(String(a.type), "进阶")) == _ach_tab:
+			out.append(a)
+	return out
+
+
+func _ach_page_count() -> int:
+	# 当前页签总页数（≥1——空类别也保持「1/1」读数与翻页按钮可用语义）
+	return maxi(1, ceili(float(_ach_filtered().size()) / float(ACH_PAGE_SIZE)))
+
+
+func _on_ach_tab(p_tab: String) -> void:
+	_ach_tab = p_tab
+	_ach_page = 0                              # 切类别回第一页
+	_rebuild_achievements()
+
+
+func _on_ach_page_next() -> void:
+	_ach_page = mini(_ach_page + 1, _ach_page_count() - 1)
+	_rebuild_achievements()
+
+
+func _on_ach_page_prev() -> void:
+	_ach_page = maxi(_ach_page - 1, 0)
+	_rebuild_achievements()
+
+
+func _set_ach_pager_visible(p_visible: bool) -> void:
+	# 翻页控件显隐（页签行与返回大厅按钮同排错峰——选关面板/其他页签下不可见）
+	if _ach_prev_btn != null:
+		_ach_prev_btn.visible = p_visible
+		_ach_next_btn.visible = p_visible
+		_ach_page_label.visible = p_visible
+
+
+func _sticker_ach_tab() -> void:
+	# 成就活动页签高亮（非活动降透明；_sticker_active_tab 同款）
+	for kind: String in _ach_tabs:
+		(_ach_tabs[kind] as Button).modulate = Color.WHITE \
+			if kind == _ach_tab else Color(1.0, 1.0, 1.0, 0.55)
+
+
 func _rebuild_achievements() -> void:
 	for c in _panel_list.get_children():
 		(c as Node).queue_free()
-	for a in Meta.ACHIEVEMENTS:
+	var list := _ach_filtered()
+	var pages := maxi(1, ceili(float(list.size()) / float(ACH_PAGE_SIZE)))
+	_ach_page = clampi(_ach_page, 0, pages - 1)
+	for i in range(_ach_page * ACH_PAGE_SIZE, mini((_ach_page + 1) * ACH_PAGE_SIZE, list.size())):
+		var a: Dictionary = list[i]
 		var done := Meta.is_ach_done(a.id)
 		var row := Panel.new()
 		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
@@ -749,6 +1270,12 @@ func _rebuild_achievements() -> void:
 		desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(desc_l)
 		_panel_list.add_child(row)
+	_sticker_ach_tab()
+	if _ach_page_label != null:
+		_ach_page_label.text = "%d/%d" % [_ach_page + 1, pages]
+		if _ach_prev_btn != null:
+			_ach_prev_btn.disabled = _ach_page <= 0
+			_ach_next_btn.disabled = _ach_page >= pages - 1
 
 
 # ── 角色选择 ──────────────────────────────────────────────────────
@@ -761,7 +1288,7 @@ func _rebuild_char_select() -> void:
 		var unlocked: bool = Meta.is_character_unlocked(def.id)
 		var row := Panel.new()
 		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(14.0, 3, false))
-		row.custom_minimum_size = Vector2(576.0, 118.0)
+		row.custom_minimum_size = Vector2(576.0, 140.0)   # R194 触控目标放大联动（118→140，行底容纳 92+48 武器循环钮）
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		# 技能图标（2026-08-31 用户反馈「技能好歹画个对应的图标」）：行首 48px 程序化图标
@@ -779,31 +1306,40 @@ func _rebuild_char_select() -> void:
 		StickerTheme.label_sticker(name_l, 20, PopPalette.PLAYER if picked else (PopPalette.INK if unlocked else PopPalette.INK_SOFT),
 			0, Color.WHITE, true)
 		var unlock_hint := ""
+		# R196：锁/奖杯/结晶 emoji 前缀删除（Android 系统字体链缺 SMP 字形只出字不出图——
+		# apk_menu_no_icons 定案 T7；仅删符号不动词，行首全角空格保留）
 		if not unlocked:
 			var umap: StringName = def.get("unlock_map", &"")
 			if umap != &"":
-				unlock_hint = "　🔒 通关「%s」解锁" % String(MapTable.get_map(umap).get("name", "?"))
+				unlock_hint = "　通关「%s」解锁" % String(MapTable.get_map(umap).get("name", "?"))
 			elif bool(def.get("unlock_normal_clear", false)):
 				# R186：改造者·枢——任一地图常规局普通通关（每日局结算分流不解锁）
-				unlock_hint = "　🔒 通关普通难度解锁（任一地图常规局 · 当前最佳 %d 波 / 首关需 %d 波）" % [
-					int(Meta.records.get("best_wave", 0)),
+				# R198（二aw-7）：锁定句压缩——删「任一地图常规局 · 当前最佳 %d 波」段（当前最佳
+				# 波次已由记录/成就面可见，此处冗余）。规划拟句「（首关需 %d 波）」连同角色名前缀
+				# 实测仍溢 406px 格（≈21.5 全角 ≈430px → name_l autowrap 折两行压 stat/skill 行），
+				# 再省「需」字 + 数字前空格（语义不变）→ 估宽 400px（真字型 396px）单行可容；
+				# 兜底见下方 name_l autowrap。
+				unlock_hint = "　通关普通难度解锁（首关%d 波）" % [
 					int(MapTable.get_map(MapTable.FIRST_MAP_ID).get("final_wave", 10))]
 			elif bool(def.get("unlock_hard_clear", false)):
-				unlock_hint = "　🔒 任意地图·困难难度通关解锁"   # R186：回响·伊可
+				unlock_hint = "　任意地图·困难难度通关解锁"   # R186：回响·伊可
 			elif int(def.get("unlock_kills", 0)) > 0:
-				unlock_hint = "　🔒 图鉴累计击杀 %d 解锁" % int(def.get("unlock_kills", 0))
+				unlock_hint = "　图鉴累计击杀 %d 解锁" % int(def.get("unlock_kills", 0))
 			elif def.get("unlock_achievement", &"") != &"":
 				var uach: StringName = def.get("unlock_achievement", &"")
 				var aname := String(uach)
 				for a in Meta.ACHIEVEMENTS:
 					if a.id == uach:
 						aname = String(a.name)
-				unlock_hint = "　🏆 成就「%s」解锁" % aname
+				unlock_hint = "　成就「%s」解锁" % aname
 			elif int(def.get("unlock_price", 0)) > 0:
-				unlock_hint = "　🔒 结晶解锁 %d💎（当前 %d💎）" % [int(def.get("unlock_price", 0)), Meta.crystals]
+				unlock_hint = "　结晶解锁 %d（当前 %d）" % [int(def.get("unlock_price", 0)), Meta.crystals]
 		name_l.text = String(def.name) + ("　✓ 当前" if picked else "") + unlock_hint
 		name_l.position = Vector2(74.0, 12.0)
 		name_l.size = Vector2(406.0, 28.0)
+		# R198（二aw-7）：锁定句溢出兜底折行（高度 28 不变；theme.gd label_sticker 默认不加
+		# autowrap——调用点显式设避免全站涟漪；防未来文案漂移再裁字）
+		name_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(name_l)
 		var stat_l := Label.new()
@@ -816,6 +1352,9 @@ func _rebuild_char_select() -> void:
 		row.add_child(stat_l)
 		# 技能行（R186：改 def.get() 读法 + no_skill 分支——全项目唯一点读
 		# def.skill_name/skill_desc/cd 处，fission 无技能键不崩）
+		# R198（P2-skillcopy）：noah desc 尾补 12% 括注后长文案溢出 486px 单行格——
+		# 换行区自检落位：skill_l 补 autowrap（行底 72..108 有空，140 行高内二行可容；
+		# 短文案角色单行不变。调用点显式设——同二aw-7 name_l 口径，不动 label_sticker）
 		var has_skill := CharacterTable.has_skill(def.id)
 		var skill_l := Label.new()
 		StickerTheme.label_sticker(skill_l, 14, PopPalette.ENEMY)
@@ -825,7 +1364,8 @@ func _rebuild_char_select() -> void:
 		else:
 			skill_l.text = "无技能 · 初始武器自定义（开局前选定）"
 		skill_l.position = Vector2(74.0, 72.0)
-		skill_l.size = Vector2(486.0, 20.0)
+		skill_l.size = Vector2(486.0, 36.0)
+		skill_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		skill_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(skill_l)
 		if not has_skill:
@@ -836,8 +1376,16 @@ func _rebuild_char_select() -> void:
 			wcycle.add_theme_font_size_override("font_size", 13)
 			wcycle.add_theme_font_override("font", StickerTheme.font_bold())
 			wcycle.position = Vector2(74.0, 92.0)
-			wcycle.size = Vector2(300.0, 24.0)
+			wcycle.size = Vector2(300.0, 48.0)   # R194 触控目标放大（300×24→300×48，行底 92+48=140 恰齐）
 			wcycle.focus_mode = Control.FOCUS_NONE
+			# R190：武器效果 hover 说明——循环切换按钮只改名不解释，玩家不知道每把枪
+			# 干嘛的（尤其棱镜「万镜回廊」这类特殊机制）；note 取 GameConst 真源，
+			# cycle 后 _rebuild_char_select 重建按钮 → tooltip 随新武器刷新
+			var cw_note := GameConst.weapon_note(String(Meta.custom_weapon())) if String(Meta.custom_weapon()) != "" \
+				else GameConst.weapon_note("W1_pistol")
+			wcycle.tooltip_text = "点击切换初始武器\n%s" % cw_note if cw_note != "" \
+				else "点击切换初始武器"
+			wcycle.mouse_filter = Control.MOUSE_FILTER_STOP
 			wcycle.pressed.connect(_on_custom_weapon_cycle)
 			wcycle.button_down.connect(func() -> void: StickerTheme.press_punch(wcycle))
 			row.add_child(wcycle)
@@ -846,7 +1394,7 @@ func _rebuild_char_select() -> void:
 			codex_l.text = "图鉴 %d/%d · 局内抽到新枪可解选" % [
 				Meta.codex_weapons.size(),
 				registry.weapons.size() if registry != null else 0]
-			codex_l.position = Vector2(382.0, 96.0)
+			codex_l.position = Vector2(382.0, 118.0)   # R194 联动下移（96→118，避让放大后的武器循环钮 92-140）
 			codex_l.size = Vector2(180.0, 18.0)
 			codex_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			row.add_child(codex_l)
@@ -856,20 +1404,23 @@ func _rebuild_char_select() -> void:
 			pick_btn.add_theme_font_size_override("font_size", 16)
 			pick_btn.add_theme_font_override("font", StickerTheme.font_bold())
 			pick_btn.position = Vector2(478.0, 38.0)
-			pick_btn.size = Vector2(84.0, 44.0)
+			pick_btn.size = Vector2(84.0, 56.0)   # R194 触控目标放大（84×44→84×56，角色行 140 内）
 			pick_btn.focus_mode = Control.FOCUS_NONE
 			pick_btn.pressed.connect(_on_char_pick.bind(def.id))
 			pick_btn.button_down.connect(func() -> void: StickerTheme.press_punch(pick_btn))
 			row.add_child(pick_btn)
 		elif not picked and int(def.get("unlock_price", 0)) > 0:
 			# 购买门：解锁按钮（结晶不足置灰——purchase_character 不足返回 false 口径）
+			# R196：结晶符号 → ui_gem 贴纸 icon（Button.icon 原生排版，84px 钮内 icon_max_width 钳宽防挤）
 			var price := int(def.get("unlock_price", 0))
 			var buy_btn := Button.new()
-			buy_btn.text = "解锁 %d💎" % price
+			buy_btn.text = "解锁 %d" % price
+			buy_btn.icon = TextureFactory.ui_gem()
+			buy_btn.add_theme_constant_override("icon_max_width", 20)
 			buy_btn.add_theme_font_size_override("font_size", 14)
 			buy_btn.add_theme_font_override("font", StickerTheme.font_bold())
 			buy_btn.position = Vector2(478.0, 38.0)
-			buy_btn.size = Vector2(84.0, 44.0)
+			buy_btn.size = Vector2(84.0, 56.0)   # R194 触控目标放大（84×44→84×56，角色行 140 内）
 			buy_btn.focus_mode = Control.FOCUS_NONE
 			buy_btn.disabled = Meta.crystals < price
 			buy_btn.pressed.connect(_on_char_buy.bind(def.id))
@@ -880,13 +1431,20 @@ func _rebuild_char_select() -> void:
 
 func _custom_weapon_candidates() -> Array[StringName]:
 	# R186：fission 首发候选集 = W1_pistol 白名单（W1 被卡池永久排除，必须放行）∪
-	# 图鉴已解锁武器（registry 序，去重）
+	# 图鉴已解锁武器（registry 序，去重）。
+	# R196：准入门只设在「来源侧」（卡池上架 + echo 双武装池——mechanic_gate.gd wunlock
+	# 注释块）；到达本处的候选必已获得（上行 is_weapon_unlocked 过滤），按「获得优先于门」
+	# 照常入选——R196 评审修复：原 weapon_allowed 过滤在菜单态读 run_map 残留（冷启动
+	# =world_grass → map_index()==0），把老档已获得∧门外武器全滤掉（10→3 把）且循环钮
+	# 把存档非初始批首发静默降级手枪落盘——定案 P6「老档无损」被破，整段门滤除。
+	# 白名单首元素恒在 → 结果恒非空。
 	var cands: Array[StringName] = [&"W1_pistol"]
 	if registry != null:
 		for wid_v: Variant in registry.weapons.keys():
 			var sid := StringName(String(wid_v))
-			if sid != &"W1_pistol" and not cands.has(sid) and Meta.is_weapon_unlocked(sid):
-				cands.append(sid)
+			if sid == &"W1_pistol" or cands.has(sid) or not Meta.is_weapon_unlocked(sid):
+				continue
+			cands.append(sid)
 	return cands
 
 
@@ -962,11 +1520,15 @@ func _rebuild_upgrades() -> void:
 		desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(desc_l)
 		var buy := Button.new()
-		buy.text = "已满级" if maxed else "升级 (%d💎)" % cost
+		# R196：结晶符号 → ui_gem 贴纸 icon（已满级无花费 → 不挂贴纸；140px 钮内排版余量足）
+		buy.text = "已满级" if maxed else "升级 (%d)" % cost
+		buy.icon = null if maxed else TextureFactory.ui_gem()
+		if not maxed:
+			buy.add_theme_constant_override("icon_max_width", 22)
 		buy.add_theme_font_size_override("font_size", 15)
 		buy.add_theme_font_override("font", StickerTheme.font_bold())
-		buy.position = Vector2(420.0, 14.0)
-		buy.size = Vector2(140.0, 42.0)
+		buy.position = Vector2(420.0, 6.0)   # R194 触控目标放大 140×56（养成行 68 内居中：6+56=62）
+		buy.size = Vector2(140.0, 56.0)
 		buy.focus_mode = Control.FOCUS_NONE
 		buy.disabled = maxed or Meta.crystals < cost
 		buy.pressed.connect(_on_buy_upgrade.bind(u.id))

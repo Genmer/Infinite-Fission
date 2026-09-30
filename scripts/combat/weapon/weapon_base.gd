@@ -70,8 +70,11 @@ func tick(p_game_delta: float) -> void:
 			# try_fire 成功位 = 全形态唯一真实开火咽喉（四形态子类均经本 tick 基类；
 			# 直调 try_fire 的测试/技能特殊通道不计费）。此前接线缺失成「假遗物」：
 			# 激活横幅照播、技能 CD 永不直减——仅测试直调 push 口掩盖死卡。
+			# R198（二aw-2）：传本次开火节拍 _last_interval（上方刚赋值）——慢速武器按
+			# 间隔比例折算计费（relic_handler.on_attack_fired 口径 9），每秒 CDR 收益与
+			# 射速解耦。
 			if relic_handler != null:
-				relic_handler.on_attack_fired()
+				relic_handler.on_attack_fired(_last_interval)
 	_on_tick_post(p_game_delta)
 
 
@@ -117,7 +120,17 @@ func attach_trait(p_trait: TraitData) -> bool:
 			# AFF_HP_UP 消费点（原死池接线修复）：add_hp 池逐层落地玩家血条——A3 §4.2
 			# 每层 max_hp +25（stack_max 4，线性不衰减）；上限增量同步回补等量当前血
 			#（主控裁定 2026-08-29）。挂载收束口接线：选卡与 REL_ECHO 回响复制共用本路径。
-			player.call(&"apply_max_hp_up", p_trait.value)
+			# R196 评审修复：超帽延伸层（ADD 池帽 stack_max+OVERCAP_EXT_MAX，trait_stack.gd
+			# attach 已放行）直挂消费端同步 ×OVERCAP_VALUE_MULT——否则面板聚合 ×0.7 折算、
+			# 卡面 OVERCAP_NOTE「收益降低 30%」与实际血条全额回加失诺（挂载层序 = 本层
+			# 1-based 序，>stack_max 即超帽层；1~4 层全额零回归）
+			var hp_gain := p_trait.value
+			for mounted_hp in trait_stack.traits:
+				if mounted_hp.data != null and mounted_hp.data.id == p_trait.id:
+					if mounted_hp.layers > p_trait.stack_max:
+						hp_gain *= TraitStack.OVERCAP_VALUE_MULT
+					break
+			player.call(&"apply_max_hp_up", hp_gain)
 		if p_trait.pool == GameConst.PoolClass.ELEM \
 				and p_trait.params.has("reaction_mult") and elemental != null:
 			# ELE_REACTION_VOID：反应强化注册到 ElementalSystem（全局聚合）
@@ -197,6 +210,11 @@ func build_damage_context(p_target: Node2D) -> DamageContext:
 			ctx.add_entries.append(entry)
 	ctx.element = GameConst.Element.KIN
 	ctx.is_first_hit_of_wave = is_wave_first_hit()   # B.4：波首命中位（SYN_FIRST_STRIKE）
+	# R199 F10：玩家血线条件输入（PLAYER_HP_BELOW 背水 / PLAYER_HP_ABOVE 壁垒——
+	# 条件真源 synergy_rules.gd 直读 ctx.player_hp_pct）。近战 builder 此前零写口，
+	# 字段恒默认 1.0：背水残血永不加伤（死卡）、壁垒反向失真为残血仍恒触发。投射物
+	# 路径先例 projectile_base.gd:486 同源（_player_hp_pct → player.get_hp_pct）。
+	ctx.player_hp_pct = player_hp_pct()
 	if p_target != null:
 		ctx.pos = p_target.global_position
 		ctx.target_resist = _read_resist(p_target)
@@ -461,6 +479,15 @@ func is_wave_first_hit() -> bool:
 	# 波首命中位（B.4 接线：SYN_FIRST_STRIKE「本波首杀前」条件——
 	# WaveDirector.wave_first_kill_done 置位前均为 true；无导演引用（测试环境）→ false 安全）
 	return wave_director != null and not wave_director.wave_first_kill_done
+
+
+func player_hp_pct() -> float:
+	# R199 F10：玩家血线条件输入共用口（近战 build_damage_context + 激光束自建 ctx——
+	# laser_beam._settle_one_tick 经本武器问询；无玩家/未暴露 get_hp_pct → 1.0 满血安全值，
+	# 投射物路径 projectile_base._player_hp_pct 同式）
+	if player != null and is_instance_valid(player) and player.has_method(&"get_hp_pct"):
+		return float(player.call(&"get_hp_pct"))
+	return 1.0
 
 
 static func has_mult_pool(p_ctx: DamageContext, p_pool_id: StringName) -> bool:

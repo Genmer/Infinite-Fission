@@ -6,7 +6,7 @@
 # 需要解锁而非随意使用，三类门型混合给长线目标）：
 # · 通关门 unlock_map ×3：veles①草原 / bulwark②冰原 / mank⑤沼泽；
 # · 购买门 unlock_price ×2（结晶永久解锁，Meta.purchase_character 扣费）：
-#   ranger 80💎 / zero 160💎（结晶 = 局内波次+击杀+成就产出，纯游玩经济）；
+#   ranger 80 结晶 / zero 160 结晶（结晶 = 局内波次+击杀+成就产出，纯游玩经济）；
 # · 成就/挑战门 ×2：vera = 图鉴累计击杀 500；noah = 成就「深入敌阵」（单局 20 波）。
 # · R186 通关分档门 ×2：fission = 任一地图常规局普通通关（unlock_normal_clear）；
 #   echo = 任意地图困难/地狱通关（unlock_hard_clear——Meta.hard_cleared 剥 #N 后缀查表）。
@@ -41,14 +41,14 @@ const CHARACTERS: Array[Dictionary] = [
 		"hp": 52.0, "atk_pct": 0.10,
 		"skill_name": "影袭瞬步", "skill_desc": "朝移动方向瞬步 260px 并短暂无敌",
 		"cd": 120.0,
-		"unlock_price": 80,                 # 结晶购买解锁（80💎，永久）
+		"unlock_price": 80,                 # 结晶购买解锁（80 结晶，永久）
 	},
 	{
 		"id": &"zero", "name": "演算者·零", "desc": "战术演算体（血 65 / 攻 +15%），控场终局",
 		"hp": 65.0, "atk_pct": 0.15,
 		"skill_name": "时滞力场", "skill_desc": "全场敌人静止 2.5 秒（无视免疫）",
 		"cd": 120.0,
-		"unlock_price": 160,                # 结晶购买解锁（160💎，永久）
+		"unlock_price": 160,                # 结晶购买解锁（160 结晶，永久）
 	},
 	{
 		"id": &"mank", "name": "腐化者·莽", "desc": "毒沼共生体（血 58 / 攻 +12%），终局毒核",
@@ -67,7 +67,9 @@ const CHARACTERS: Array[Dictionary] = [
 	{
 		"id": &"noah", "name": "召唤师·诺亚", "desc": "僚机使役者（血 50 / 攻 +5%），复制增援",
 		"hp": 50.0, "atk_pct": 0.05,
-		"skill_name": "召唤僚机", "skill_desc": "随机复制 2 把当前武器（含全部强化），僚机携带参战 10 秒后离场",
+		# R198（P2-skillcopy）：desc 尾补伴随火力括注——12% 实存（player.gd 召唤僚机段：
+		# 弹伤 = 12% 主武器 ATK 的注释与 panel_snapshot base*0.12 双证）
+		"skill_name": "召唤僚机", "skill_desc": "随机复制 2 把当前武器（含全部强化），僚机携带参战 10 秒后离场（舰体伴随火力 = 主武器 ATK 的 12%）",
 		"cd": 120.0,
 		"unlock_achievement": &"wave_20",   # 成就「深入敌阵」（单局抵达第 20 波）解锁
 	},

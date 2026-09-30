@@ -10,7 +10,7 @@ rof = 0.5556
 cd = 1.8
 pierce = 1
 pellets = 1
-note = "A3 §3.9 L1：cd 1.8s；单体 DPS 15.6（rof 记 1/cd 等效射速）"
+note = "每 1.8s 环身挥斩一圈（120° 弧，至多 8 目标），单体 DPS 15.6"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,7 +19,7 @@ rof = 0.5556
 cd = 1.8
 pierce = 1
 pellets = 1
-note = "A3 §3.9 L2：atk 28→35；单体 DPS 19.4"
+note = "挥斩伤害 28→35，单体 DPS 19.4"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
@@ -28,7 +28,7 @@ rof = 0.6667
 cd = 1.5
 pierce = 1
 pellets = 1
-note = "A3 §3.9 L3：cd 1.8→1.5s；单体 DPS 23.3"
+note = "挥斩间隔 1.8s→1.5s，单体 DPS 23.3"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -37,7 +37,7 @@ rof = 0.6667
 cd = 1.5
 pierce = 1
 pellets = 1
-note = "A3 §3.9 L4：atk 35→44；单体 DPS 29.3"
+note = "挥斩伤害 35→44，单体 DPS 29.3"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 0.6667
 cd = 1.5
 pierce = 1
 pellets = 1
-note = "A3 §3.9 L5：atk 55；arc_deg 120°→160°；单体 DPS 36.7（群上限 8 目标 = 293）"
+note = "挥斩伤害 44→55，弧度 120°→160°（覆盖更广），单体 DPS 36.7"
 
 [resource]
 script = ExtResource("1_wd")

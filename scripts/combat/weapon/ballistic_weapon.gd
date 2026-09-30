@@ -64,6 +64,10 @@ var _muzzle_timer: float = 0.0
 
 func _show_muzzle_flash() -> void:
 	# 枪口星闪 0.05s（特效质量低档关闭；常驻 Sprite 显隐——零逐发实例化）
+	# R191#2 镜面分支：镜面开火改冰晶火花（ice_shard + MirrorImage.TINT 银白/冰青染、
+	# 0.09s）——发射口火花是唯一「镜面在开火」读感区分（弹体侧曳光判定先于镜面旗标，
+	# 读感同源）；常驻 Sprite 显隐复用零新实例，禁走粒子池（全池共享敌向材质、发射器
+	# 帽 64，镜面群发必挤兑战斗粒子）。本体星闪原样。
 	if _muzzle_flash == null:
 		_muzzle_flash = Sprite2D.new()
 		_muzzle_flash.name = "MuzzleFlash"
@@ -74,9 +78,15 @@ func _show_muzzle_flash() -> void:
 		return
 	_muzzle_flash.position = to_local(muzzle_position())
 	_muzzle_flash.rotation = randf() * TAU
-	_muzzle_flash.scale = Vector2.ONE * randf_range(0.45, 0.75)
+	if is_mirror_image:
+		_muzzle_flash.texture = TextureFactory.ice_shard()
+		_muzzle_flash.modulate = MirrorImage.TINT
+		_muzzle_flash.scale = Vector2.ONE * randf_range(0.5, 0.8)
+		_muzzle_timer = 0.09
+	else:
+		_muzzle_flash.scale = Vector2.ONE * randf_range(0.45, 0.75)
+		_muzzle_timer = 0.05
 	_muzzle_flash.visible = true
-	_muzzle_timer = 0.05
 
 
 func muzzle_position() -> Vector2:
@@ -95,15 +105,26 @@ func try_fire() -> bool:
 	var speed := _projectile_speed()   # AFF_PROJ_SPD 弹速池消费在 _projectile_speed 内（勿二次叠乘）
 	var size_mult := _proj_size_mult()                    # AFF_AREA 体积池（死卡接线）
 	var formation := _formation_enabled()
+	# R196 FIX-1 时序上移：gap/converge 原在共享 jitter 判定之后取值——有效编队判定
+	# 依赖二值，取值上移先于 jitter（类型化 := 赋值时序：先取值后判定）
+	var gap := _lateral_gap() * _volley_gap_mult()
+	var converge := _converge_pct()
+	# R196 FIX-1 有效编队判定（RC1 主修）：编队键在册 ∧（有效阵宽>0 ∨ 有效收束>0）。
+	# 原门只判键在册——W1 L1/L2 lateral_gap_levels/converge_pct_levels 全 0 时编队路
+	# 退化：全丸共享同一次 jitter、offset=gap×位差=0、且跳过 _spread_angle 锥形分布
+	# → N 弹同点同速像素重合（多重装填实发 2/4 弹探针 max_dist=0.0000px 复现，
+	# 「多重装填没生效还是单发」直接根因）。退化时回落原逐丸锥形路径（弹丸按锥角
+	# 均布，多重装填弹丸可见）。阵宽乘区 _volley_gap_mult∈{1.0,1.5} 恒正——
+	# gap>0 ⟺ _lateral_gap()>0，判定等价；_formation_enabled 本体不动
+	#（REL_ECHO 回响防绕门约束）。
+	var formation_active := formation and (gap > 0.0 or converge > 0.0)
 	# 编队微散射：并排编队全丸共享同一抖动角（同拍同向——编队几何全程确定性，验收②；
-	# 单丸/非编队变体保持原逐丸随机抖动）
+	# 单丸/非编队变体/编队退化回落保持原逐丸随机抖动）
 	var volley_jitter := 0.0
-	if formation and pellets > 1:
+	if formation_active and pellets > 1:
 		volley_jitter = randf_range(-deg_to_rad(_spread_deg()), deg_to_rad(_spread_deg()))
 	var aim_dir := aim_direction().rotated(volley_jitter)
 	var perp := aim_dir.orthogonal()
-	var gap := _lateral_gap() * _volley_gap_mult()
-	var converge := _converge_pct()
 	var corridor := _corridor_active()
 	var bank_armed := _bank_shot_armed()
 	var bounce_amp := _bounce_amp()
@@ -131,8 +152,8 @@ func try_fire() -> bool:
 			if to_focal.length_squared() > 1.0:
 				shot_dir = to_focal.normalized()
 		var angle := 0.0
-		if not formation or pellets <= 1:
-			angle = _spread_angle(i, pellets)   # 原路径：锥形分布/单丸随机抖动
+		if not formation_active or pellets <= 1:
+			angle = _spread_angle(i, pellets)   # R196 FIX-1：编队退化/非编队回落原锥形逐丸分布（单丸=锥内随机抖动）
 		var range_left := _range()
 		# G4 回旋刃：出程减速 + 回程返航由弹体自身接管——寿命走固定 3.2s 兜底
 		#（常规弹 range/speed×1.5 会在回程中途过期截断双程伤害）

@@ -10,7 +10,7 @@ description = "环绕体化为雷霆：转速 +50%、体积 -10%，紫电颤动"
 pool = 3
 pool_id = &""
 effect_id = &"EF_MECH"
-value = 0.0
+value = 0.50
 value2 = 0.0
 params = {
 	"required_weapon": &"W8_orbit_field",

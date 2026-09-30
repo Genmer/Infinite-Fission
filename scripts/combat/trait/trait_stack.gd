@@ -13,6 +13,11 @@ const MAX_CHAIN_DEPTH: int = 3                # 链式反应深度上限（B_spe
 const MAX_TRAITS: int = 12                    # 单投射物词条上限（B_spec §1.2）
 # 整数语义加算池（线性全额，不走 F3 衰减：穿透/弹丸数为整数增量）
 const LINEAR_ADD_POOLS: Array[StringName] = [&"add_pierce", &"add_pellets"]
+# R196 超质变叠层（有意契约变更——原「至 stack_max 拒绝」，测试断言改动须落 R196 注释）：
+const OVERCAP_VALUE_MULT := 0.7               # 超帽层收益乘子：按常规 ×0.7 加算（不叠乘）；
+                                              # value_mult（满层质变 ×1.6）仍乘在每层终值上——超帽层 = value×0.7×1.6
+const OVERCAP_EXT_MAX := 5                    # 超帽延伸层上限：ADD 池可叠至 stack_max+5（防失控护栏）；
+                                              # 非 ADD 池保持 stack_max 拒绝（MULT 取优/MECH/ELEM 语义不变）
 
 var traits: Array[TraitBase] = []             # 挂载序 = 派发序（确定性，AC-07.2）
 var _depth: int = 0                           # 当前派发链深度
@@ -23,11 +28,17 @@ var _fused_count: int = 0                     # 熔断计数
 
 func attach(p_data: TraitData) -> bool:
 	# 挂载：同 ID 叠层（至 stack_max）/ 新建；超 12 拒绝 + 计数
+	# R196 有意契约变更（原「至 stack_max 拒绝」）：仅 ADD 池帽放宽至
+	# stack_max + OVERCAP_EXT_MAX（超质变叠层——超帽层聚合按 OVERCAP_VALUE_MULT ×0.7
+	# 计贡献，见 aggregate_panel / aggregate_add_entries）；非 ADD 池保持原帽拒绝。
+	# 拒绝计数线 trait_attach_rejected_stack 语义随帽平移（满 stack_max+5 才计拒绝）。
 	if p_data == null:
 		return false
 	for mounted in traits:
 		if mounted.data.id == p_data.id:
-			if mounted.layers >= p_data.stack_max:
+			var cap: int = p_data.stack_max \
+				+ (OVERCAP_EXT_MAX if p_data.pool == GameConst.PoolClass.ADD else 0)
+			if mounted.layers >= cap:
 				DebugStats.count(&"trait_attach_rejected_stack")
 				return false
 			# R12c 分池语义：
@@ -35,6 +46,8 @@ func attach(p_data: TraitData) -> bool:
 			#   没有任何一张「白选」；层基数不再取优覆盖
 			# · MULT/ELE（机制合并表/每次附着定值）→ 取优（高品级定义覆盖），叠加计层
 			if p_data.pool == GameConst.PoolClass.ADD:
+				if mounted.layers >= p_data.stack_max:
+					DebugStats.count(&"trait_attach_overcap")   # R196 超帽层成功挂载（遥测观测口）
 				mounted.layer_values.append(p_data.value)
 				mounted.layer_rarities.append(p_data.rarity)
 			elif float(p_data.value) > float(mounted.data.value):
@@ -140,7 +153,10 @@ func collect_mult_pools(p_ctx: TraitContext) -> Array[Dictionary]:
 
 func aggregate_panel() -> Dictionary:
 	# 常驻加算聚合（build ctx 时求值）：pool_id → 有效和（F3 衰减 / 整数池线性全额）。
-	# 满层质变乘区 value_mult 乘在词条有效值上（2026-08-31：挂至 stack_max 时 ×1.6）
+	# 满层质变乘区 value_mult 乘在词条有效值上（2026-08-31：挂至 stack_max 时 ×1.6）。
+	# R196 有意契约变更：超帽层按 OVERCAP_VALUE_MULT ×0.7 计贡献——三路（逐层/整数/
+	# 衰减）同口径「前 stack_max 层全额 + 超帽层 ×0.7 加算」；未超帽时三式逐值退化为
+	# 原式（存量词条零回归）。
 	var sums: Dictionary = {}
 	for mounted in traits:
 		if mounted.data.pool != GameConst.PoolClass.ADD:
@@ -148,15 +164,30 @@ func aggregate_panel() -> Dictionary:
 		var pool_id: StringName = mounted.data.pool_id
 		var effective := 0.0
 		if mounted.layer_values.size() > 0:
-			# R14 直接叠加：每层全额（1 层 12%、2 层 24%），不再 F3 递减
+			# R14 直接叠加：每层全额（1 层 12%、2 层 24%），不再 F3 递减；
+			# R196 逐层路：前 stack_max 层全额 + 超帽层 ×OVERCAP_VALUE_MULT
 			for k in mounted.layer_values.size():
-				effective += mounted.layer_values[k] * mounted.value_mult
+				var v_k := mounted.layer_values[k]
+				if k >= mounted.data.stack_max:
+					v_k *= OVERCAP_VALUE_MULT
+				effective += v_k * mounted.value_mult
 		else:
 			var effective_value := mounted.data.value * mounted.value_mult
 			if LINEAR_ADD_POOLS.has(pool_id):
-				effective = effective_value * float(mounted.layers)
+				# R196 整数路：value×(cap + 0.7×extra)（消费侧 int(round()) 收整，
+				# 部分超帽层凑整语义由消费点裁定——本路只出聚合真值）
+				var lin_full := mini(mounted.layers, mounted.data.stack_max)
+				var lin_extra := maxi(mounted.layers - mounted.data.stack_max, 0)
+				effective = effective_value * float(lin_full) \
+					+ effective_value * OVERCAP_VALUE_MULT * float(lin_extra)
 			else:
-				effective = decay_sum(effective_value, mounted.layers, mounted.data.decay_delta)
+				# R196 衰减路：T(cap) + 0.7×(T(layers) − T(cap))（δ≥1 线性退化同式成立）
+				var dec_full := mini(mounted.layers, mounted.data.stack_max)
+				var t_full := decay_sum(effective_value, dec_full, mounted.data.decay_delta)
+				if mounted.layers > dec_full:
+					t_full += OVERCAP_VALUE_MULT \
+						* (decay_sum(effective_value, mounted.layers, mounted.data.decay_delta) - t_full)
+				effective = t_full
 		sums[pool_id] = float(sums.get(pool_id, 0.0)) + effective
 	return sums
 
@@ -164,7 +195,9 @@ func aggregate_panel() -> Dictionary:
 func aggregate_add_entries() -> Array[Dictionary]:
 	# add_atk 池 → DamageContext.add_entries（管线步骤 3 F3 衰减真源；面板段唯一入列池）
 	var out: Array[Dictionary] = []
-	# R14 直接叠加：每层一条贡献（层内全额；同 ID 混品级各按自身数值）
+	# R14 直接叠加：每层一条贡献（层内全额；同 ID 混品级各按自身数值）；
+	# R196 逐层路：前 stack_max 层全额 + 超帽层 ×OVERCAP_VALUE_MULT（直接折进 contrib，
+	# "layer"/decay_delta 记账键不变——管线侧零改动）
 	for mounted in traits:
 		if mounted.data.pool != GameConst.PoolClass.ADD:
 			continue
@@ -172,6 +205,8 @@ func aggregate_add_entries() -> Array[Dictionary]:
 			continue
 		for k in mounted.layer_values.size():
 			var v_k := mounted.layer_values[k] * mounted.value_mult
+			if k >= mounted.data.stack_max:
+				v_k *= OVERCAP_VALUE_MULT
 			out.append({
 				"trait_id": mounted.data.id,
 				"pool_id": mounted.data.pool_id,

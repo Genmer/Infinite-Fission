@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"ELE_ANEMO"
+display_name = "风域"
+description = "风附着 +22/跳；与火/冰/雷/水/草配对即「扩散」（火→扩散·火 · 冰→扩散·冰 · 雷→扩散·雷 · 水→扩散·水 · 草→扩散·草；岩→结晶·风）——主目标受扩散一击，该元素满槽转移给周围敌人；2 层质变：附着→30/跳"
+pool = 4
+pool_id = &""
+effect_id = &"EF_ELEMENTAL"
+value = 22.0
+value2 = 0.0
+params = {"element": 5, "value_lv2": 30.0, "required_forms": [0, 1, 2]}
+event_hooks = [0, 2]
+stack_max = 2
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+condition = {}

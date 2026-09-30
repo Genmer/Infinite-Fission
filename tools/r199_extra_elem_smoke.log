@@ -1,0 +1,39 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R192 元素扩容冒烟 ══════════
+── 枚举冒烟：Element 全序 + 免疫位 + ReactionType 演进 ──
+PASS | Element.size()==8（KIN 不参反应但占位）
+PASS | 元素序数 0..7（追加不重排：KIN=0 槽恒 0 弃用 · FIR/ICE/LTG 原值不动）
+PASS | 免疫位旧三位不变（FIR=2/ICE=4/LTG=8——bit=1<<Element 通用式）
+PASS | 免疫位新四位（HYD=16/ANE=32/GEO=64/DEN=128）
+PASS | IMMUNE_FREEZE/CHILL/BURN/SHOCK 位不变（1/2/4/8——状态免疫与元素免疫分账）
+PASS | ReactionType 演进口径：现役 0/1/2 字面序锁（追加保序）+ size==reaction_table 行数
+── λ 四源：.tres == .gd 默认 == 7 项定值 == 运行时 ──
+PASS | λ .gd 默认 恰 7 项且逐位 == 定值 [0.35,0.30,0.40,0.35,0.50,0.25,0.30]
+PASS | λ .tres 反序列化 恰 7 项且逐位 == .gd 默认（双源一致）
+PASS | λ GameConfig.balance（运行时）恰 7 项同值
+── validator：3 项 λ 输入告警（非致命）+ 欠长槽兜底 0.35 ──
+PASS | validator：3 项 λ 输入 → 报告含 element_decay_lambda 项（恰 7 口径）
+PASS | validator：λ 缺项为非致命（fatal==false 字段级回退不拒启——_nf 报告通道）
+PASS | 欠长兜底：HYD 槽按兜底 0.35 衰减（60→39）
+PASS | 欠长兜底：LTG 槽按 λ[2]=0.40 正常衰减（60→36）
+── 附着段：HYD 累积 / 满槽钳制 / FIR 旧语义 / has_both / 免疫16 / λ 新槽 ──
+PASS | 附着：apply(HYD,60) → gauges[4]==60（新元素累积）
+PASS | 满槽钳制：HYD 累计满槽 → gauges[4]==GAUGE_MAX 钳制不清零
+PASS | 满槽钳制：HYD 满槽返回 TRIGGER_NONE（无 _trigger 臂——燃料存续）
+PASS | FIR 满槽旧语义不变：gauges[1]==0 且 burn_layers==1（TRIGGER_BURN）
+PASS | 双附着：HYD+LTG has_both == true
+PASS | λ 新槽衰减：gauges[4] 按 λ[3]=0.35（60→39）
+PASS | 免疫：elem_immune=16 拒 HYD 附着（gauges[4] 恒 0）
+── 旧表兼容：仅 3 键 reaction_table → 告警不拒启 ──
+PASS | 旧 3 键表：报告含 reaction_table 键集缺口项（enum==table 双射闸报红）
+PASS | 旧 3 键表：缺口项非致命（fatal==false）→ 仅告警不拒启
+PASS | 旧 3 键表：全报告零 fatal 项（DataRegistry 不剔除不拒启）
+── 守护探针：进程内删 reaction_table 一键 → validator 报红 ──
+PASS | 删表键（RXN_FIR_ICE）→ 报告含 reaction_table 键集缺口项（半接线不可静默）
+PASS | 删表键缺口走非致命报告通道（fatal==false 启动期报红不崩溃）
+── 泛化探针：reaction_mult 语义键（2.2 假卡 ×5.7 · VOID 仍 ×4.7） ──
+PASS | reaction_mult 假卡：金品质卡面 ×5.7（2.2×2.6=5.72→5.7 口径）
+PASS | VOID 金卡逐字节不变：×4.7（1.8×2.6=4.68→×4.7——verify_feedback 同口径锁）
+────────────────────────────────────────
+汇总：PASS 27 / FAIL 0（共 27 项）

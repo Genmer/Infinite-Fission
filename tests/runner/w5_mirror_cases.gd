@@ -34,6 +34,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_ele_single_source()        # 验收 4 ELE 单源防泄漏（驱动 120s 不增长）
 	_test_session_state_semantics()  # 会话态（clear_mirrors 全清 + 重推导重建）
 	_test_production_wiring()        # 生产接线（add_weapon 分派 → MirrorWeapon 自驱成军）
+	_test_w4_source_mirror()         # R191 W4 源镜面（束入池/tick_atk 面板式/缓存失效/束卡锁 W4/束染）
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -701,3 +702,149 @@ func _test_production_wiring() -> void:
 		_gl.player.mirror_count() == 1 and prism.mirrors.size() == 1,
 		str(_gl.player.mirror_count()))
 	_wipe_weapons()
+
+
+# ── R191 W4 源镜面（束入共享池 / tick_atk 面板式 / apply_state 缓存失效 /
+#    直挂 SPLIT_PRISM 束段指纹==1 / 七束卡 mount 门锁 W4 / copy_tint 灰染传导） ──
+func _test_w4_source_mirror() -> void:
+	print("── R191 W4 源镜面（tick_atk 面板式 / 缓存失效 / 束卡锁 W4 / 灰染传导） ──")
+	_wipe_weapons()
+	_gl.player.rof_mult = 1.0
+	var w4 := _add_source(&"W4_pulse_beam")      # 源武器（L1 base_atk 6，meta=0 夹具）
+	if w4 != null:
+		w4.meta_atk_pct = 0.0
+		w4.cooldown_left = 9999.0                # 源静默（池账 +1 断言隔离）
+	var prism := _make_prism(1)                  # L1 → mirror_ratio 0.40
+	if prism != null:
+		prism.cooldown_left = 9999.0             # 棱镜锚束静默（同上）
+	_check("前置：W4 源 + 棱镜装配且 1 镜位指向 W4",
+		w4 != null and prism != null and prism.mirrors.size() == 1
+		and prism.mirrors[0].source_id() == &"W4_pulse_beam",
+		"%s" % str(_mirror_sources(prism) if prism != null else []))
+	if w4 == null or prism == null or prism.mirrors.is_empty():
+		_wipe_weapons()
+		return
+	var img: MirrorImage = prism.mirrors[0]
+	var inner := img.inner
+	# ① 束染构造口：make_mirror_image 产物 copy_tint == true（bool——此前写 Color 被
+	# LaserWeapon 类型化 bool 字段静默丢弃，镜面 W4 束恒玩家蓝的缺陷修复锚）
+	_check("束染：inner.copy_tint == true（bool 类型，非 Color）",
+		inner != null and typeof(inner.get("copy_tint")) == TYPE_BOOL
+		and bool(inner.get("copy_tint")),
+		str(typeof(inner.get("copy_tint")) if inner != null else -1))
+	if inner == null:
+		_wipe_weapons()
+		return
+	# ② 镜面出束：夹具敌 + 玩家驱动 → inner 主束入共享 laser 池（源/棱镜均已静默）
+	var pool := _gl.pools[&"laser"] as LaserBeamPool
+	var live0: int = int(pool.stats()["live"])
+	_gl.player.position = Vector2(360.0, 900.0)
+	var fixtures := _spawn_fixtures([Vector2(360.0, 700.0)] as Array[Vector2])
+	_drive(60)                                   # 0.5s @120Hz：镜面首拍即开火
+	var live1: int = int(pool.stats()["live"])
+	_check("束入池：镜面开火后共享 laser 池活束数 +1（源/棱镜静默隔离）",
+		live1 == live0 + 1, "%d→%d" % [live0, live1])
+	# ③ tick_atk 面板式：源 base_atk × mirror_ratio 0.40（meta=0 夹具；此前 _spawn_beam
+	# 裸 get_current_atk() 使 meta_atk_pct 在激光路径零消费——镜面恒 100% 源强度的缺陷锚）
+	var mbeam: LaserBeam = null
+	for b in pool.get_children():
+		if b is LaserBeam and (b as LaserBeam).is_live() and (b as LaserBeam).weapon == inner:
+			mbeam = b
+	var expect_atk := float(w4.get_stat(&"base_atk")) * 0.40
+	_check("束锚：镜面束 tick_atk == 源 base_atk×0.40 ±1e-6（6×0.40=2.4）",
+		mbeam != null and absf(mbeam.tick_atk - expect_atk) <= 0.000001,
+		"%.6f vs %.6f" % [mbeam.tick_atk if mbeam != null else -1.0, expect_atk])
+	_check("束染：镜面束 gray_tint == true（R183 灰染通道传导）",
+		mbeam != null and mbeam.gray_tint)
+	_release_fixtures(fixtures)
+	# ④ apply_state 面板缓存失效：开火已烧 inner 旧栈缓存 → 棱镜挂 crit/atk 卡 +
+	# sync_mirrors(true) 重铺 → 快照随新栈聚合（非旧值；失效点此前漏 apply_state）
+	var crit_old_snap: Dictionary = inner.build_panel_snapshot()
+	var outer_old_snap: Dictionary = img.build_panel_snapshot()
+	var crit := _gl.registry.get_trait(&"AFF_CRIT_RATE")
+	var atk := _gl.registry.get_trait(&"AFF_ATK_UP")
+	_check("前置：AFF_CRIT_RATE(add_crit)/AFF_ATK_UP(add_atk) 在册",
+		crit != null and String(crit.pool_id) == "add_crit"
+		and atk != null and String(atk.pool_id) == "add_atk")
+	if crit == null or atk == null:
+		_wipe_weapons()
+		return
+	prism.attach_trait(crit)
+	prism.attach_trait(atk)
+	prism.sync_mirrors(true)                     # 复用镜位 apply_state 重铺（新栈 copy_full）
+	var agg: Dictionary = inner.trait_stack.aggregate_panel()
+	var crit_cap := 1.0
+	if GameConfig.balance != null:
+		crit_cap = GameConfig.balance.cap_crit_rate
+	var expect_crit := clampf(float(w4.data.crit_rate) + float(agg.get("add_crit", 0.0)),
+		0.0, crit_cap)
+	var snap: Dictionary = inner.build_panel_snapshot()
+	_check("缓存失效：inner 面板 crit_rate == 新栈聚合值（非旧值）",
+		absf(float(snap.get("crit_rate", -1.0)) - expect_crit) <= 0.000001
+		and absf(float(snap.get("crit_rate", -1.0))
+			- float(crit_old_snap.get("crit_rate", -2.0))) > 0.000001,
+		"new %.4f / old %.4f / expect %.4f" % [float(snap.get("crit_rate", -1.0)),
+			float(crit_old_snap.get("crit_rate", -2.0)), expect_crit])
+	var entries: Array = snap.get("add_entries", []) as Array
+	_check("缓存失效：inner 面板 add_entries 随新栈（AFF_ATK_UP 条目入场，非旧空表）",
+		entries.size() == (inner.trait_stack.aggregate_add_entries() as Array).size()
+		and not entries.is_empty(), str(entries.size()))
+	var outer_snap: Dictionary = img.build_panel_snapshot()
+	_check("缓存失效：外壳身份壳面板同步失效（crit_rate 同新栈）",
+		absf(float(outer_snap.get("crit_rate", -1.0)) - expect_crit) <= 0.000001
+		and absf(float(outer_snap.get("crit_rate", -1.0))
+			- float(outer_old_snap.get("crit_rate", -2.0))) > 0.000001,
+		"new %.4f / old %.4f" % [float(outer_snap.get("crit_rate", -1.0)),
+			float(outer_old_snap.get("crit_rate", -2.0))])
+	# ⑤ 直挂 SPLIT_PRISM：引擎侧硬保证 sub_beams_override==0 → 棱镜束段指纹==1
+	#（七束卡 required_weapon 数据侧锁 W4；直挂 attach_trait 不经门由此兜底）
+	var split := _gl.registry.get_trait(&"MEC_SPLIT_PRISM")
+	_check("前置：MEC_SPLIT_PRISM 在册", split != null)
+	if split != null:
+		prism.attach_trait(split)
+		prism.try_fire()
+		_check("束段指纹：直挂 SPLIT_PRISM 后棱镜活束==1（sub_beams_override==0 硬保证）",
+			int(prism.get("sub_beams_override")) == 0 and _live_beams(prism).size() == 1,
+			"override=%d beams=%d" % [int(prism.get("sub_beams_override")),
+				_live_beams(prism).size()])
+	# ⑥ 数据门：七张束卡 mount_gate_allows 对 W5_prism 全 false / 对 W4_pulse_beam 全 true
+	var beam_cards: Array[StringName] = [&"MEC_SPLIT_PRISM", &"MEC_BEAM_TRACK",
+		&"MEC_BEAM_FAN", &"MEC_BEAM_COFOCUS", &"MEC_BEAM_LAG", &"MEC_BEAM_SPECTRA",
+		&"MEC_PHASE_SYNC"]
+	var gate_ok := true
+	var gate_detail: Array[String] = []
+	for cid in beam_cards:
+		var td: TraitData = _gl.registry.get_trait(cid)
+		if td == null:
+			gate_ok = false
+			gate_detail.append("%s:missing" % String(cid))
+			continue
+		var on_w5 := CardGenerator.mount_gate_allows(td, prism)
+		var on_w4 := CardGenerator.mount_gate_allows(td, w4)
+		if on_w5 or not on_w4:
+			gate_ok = false
+			gate_detail.append("%s:w5=%s/w4=%s" % [String(cid), str(on_w5), str(on_w4)])
+	_check("数据门：七张束卡 mount_gate 对 W5_prism 全 false / 对 W4_pulse_beam 全 true",
+		gate_ok, str(gate_detail))
+	# ⑦ 数据断言：七张 .tres params 均含 required_weapon=[&"W4_pulse_beam"]（原键保留）
+	var tres_ok := true
+	for cid2 in beam_cards:
+		var td2: TraitData = _gl.registry.get_trait(cid2)
+		if td2 == null or not ((td2.params.get("required_weapon", []) as Array).has(&"W4_pulse_beam")) \
+				or not (td2.params.get("required_forms", []) as Array).has(1):
+			tres_ok = false
+	_check("数据断言：七张束卡 params 均含 required_weapon=[W4_pulse_beam] 且 required_forms 保留",
+		tres_ok)
+	_wipe_weapons()
+
+
+func _live_beams(p_w: WeaponBase) -> Array:
+	# 活束集（r187_rework_cases 同款助手——本套件自持一份避免跨套件依赖）
+	var out: Array = []
+	var beams_v: Variant = p_w.get("active_beams")
+	if not (beams_v is Array):
+		return out
+	for b in (beams_v as Array):
+		if b != null and is_instance_valid(b) and b.is_live():
+			out.append(b)
+	return out

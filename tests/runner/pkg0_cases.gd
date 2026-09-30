@@ -665,7 +665,9 @@ func _test_data_registry() -> void:
 	_check("报告：total ≥ 1 且 rejected = 0", int(reg.report["total"]) >= 1 and int(reg.report["rejected"]) == 0)
 	_check("get_game_feel 单件入口", reg.get_game_feel() == reg.game_feel)
 	_check("get_weapon 未命中返回 null（fail-fast）", reg.get_weapon(&"W_MISSING") == null)
-	_check("trait_ids_by_pool（ADD）= 16 条内容词条（pkg3 + R9 萃取 + R5.12-P1 点金 + R18 动能冲击归位 + R65 刀势如风）", reg.trait_ids_by_pool(GameConst.PoolClass.ADD).size() == 16)
+	# R196 有意契约变更（原 16 条）：AFF_RANGE 广域印刻（add_range 池）上架，
+	# ADD 池内容词条 16 → 17（data_validator.gd:19 add_range 第 16 员追加）
+	_check("trait_ids_by_pool（ADD）= 17 条内容词条（原 16 条 + R196 AFF_RANGE 广域印刻）", reg.trait_ids_by_pool(GameConst.PoolClass.ADD).size() == 17)
 	var wave_tbl := reg.get_wave_table()
 	_check("波表加载：30 波 entries（pkg3 内容落地）", wave_tbl != null and wave_tbl.entries.size() == 30)
 	# 注入坏词条 → validate_all 剔除 + 错误清单含文件名/字段名

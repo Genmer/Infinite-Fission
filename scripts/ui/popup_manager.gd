@@ -7,7 +7,9 @@
 # 基准真源 = 主武器面板 base_atk × crit_mult（baseline_provider 由 GameLoop 注入；
 # 缺失/为 0 → 全白降级）。紫档微音 / 金档重音 + 轻震动（trauma 复用既有 hit 档）。
 # R186 反应字体：合并注册表分桶键 _mkey(uid, bucket)（直击 0 / 反应 1 / 其余 2 /
-# 文字 3）——REACTION 数值与文字永不同桶（§4.d：bucket3 无 merge 入口，文字桶结构性
+# 文字 3 / 引爆 4（CHARGE_BURST，R187）——与 _style_bucket 逐值对齐：NORMAL/CRIT→0、
+# REACTION→1、其余（DOT/HEAL/XP/IMMUNE）→2、text_mode 文字→3、CHARGE_BURST→4）——
+# REACTION 数值与文字永不同桶（§4.d：bucket3 无 merge 入口，文字桶结构性
 # 不可被数值并入）——
 # ① 同桶窗内照旧合并；② REACTION 结果遇同 uid 直击小字在窗 → upgrade_to_reaction
 # 原地升格重弹（active 不涨）；③ 直击遇同 uid 反应大字在窗 → 不吞大字、新起小字下移
@@ -51,6 +53,27 @@ const REACTION_FRAME_CAP: Array[int] = [1, 2, 3]
 
 # R3（R186）：超导文字标签与同目标数值大字错位防叠——起字位 = pos + 此偏移
 const TEXT_LABEL_OFFSET: Vector2 = Vector2(0.0, -30.0)
+
+# R192 纯文字标签门集合（原单 id 超导扩族）：无 DamageResult 通道的减益/工具反应
+# ——集合成员只起 bucket3 文字标签、无 bucket1 数值大字，无双起叠字面。
+# 扩散族×5【不在集】：主目标走管线结算（χ0.8×S_snap）→ damage_resolved 的 bucket1
+# 数值大字经 damage_popup 文案纯函数渲染「扩散·X」（fmt≠dmg 时 = 名+rxn_stat，扩散
+# 无统计段即纯名）——再入本集即同帧同文 54px 双起叠字（R192 审查①移除）。
+# 集合外反应（碎裂/过载/蒸发/绽放/扩散×5）由管线 settle 的 damage_resolved 通道起字，
+# 此处禁二次起字（翻倍刷屏防线不变）。
+const TEXT_LABEL_RXNS: Dictionary = {
+	GameConst.ReactionType.RXN_ICE_LTG: true,   # 超导
+	GameConst.ReactionType.RXN_ICE_HYD: true,   # 冻结
+	GameConst.ReactionType.RXN_LTG_HYD: true,   # 感电
+	GameConst.ReactionType.RXN_FIR_DEN: true,   # 燃烧
+	GameConst.ReactionType.RXN_LTG_DEN: true,   # 激化
+	GameConst.ReactionType.RXN_FIR_GEO: true,   # 结晶·火
+	GameConst.ReactionType.RXN_ICE_GEO: true,   # 结晶·冰
+	GameConst.ReactionType.RXN_LTG_GEO: true,   # 结晶·雷
+	GameConst.ReactionType.RXN_HYD_GEO: true,   # 结晶·水
+	GameConst.ReactionType.RXN_DEN_GEO: true,   # 结晶·草
+	GameConst.ReactionType.RXN_ANE_GEO: true,   # 结晶·风
+}
 
 # 活跃跳字注册表：_mkey(target_uid, bucket) -> {popup: DamagePopup, window_left: float}
 # （R186 分桶键：直击 0 / 反应 1 / 其余 2 / 文字 3——同 uid 多样式并存互不吞）
@@ -184,29 +207,32 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 
 
 func on_reaction_triggered(p_rxn: int, p_pos: Vector2, p_uid: int) -> void:
-	# R186 超导文字标签（R3）：RXN_ICE_LTG 走纯减益无 DamageResult（elemental_system
-	# 只削抗+广播）→ 此处经池起一张 value=0、style=REACTION、element=RXN_ICE_LTG 的
-	# 跳字，DamagePopup.REACTION 分支 value≤0 显示表内文字「超导」。
-	# 碎裂/过载禁在此处理：管线每次 settle 已广播 reaction_triggered（damage_pipeline
-	# :117；燎原传火也广播 RXN_FIR_ICE）——二次起字会翻倍刷屏。
+	# R186 超导文字标签（R3）→ R192 族化：TEXT_LABEL_RXNS 集合内反应走纯文字标签
+	#（超导/冻结/感电/燃烧/激化/结晶×6 无 DamageResult；扩散×5 主目标数值大字之外
+	# 补具名标签）→ 经池起一张 value=0、style=REACTION、element=p_rxn 的跳字，
+	# DamagePopup.REACTION 文字分支显示反应名（超导另带 rxn_stat 统计段「-30%」）。
+	# 碎裂/过载/蒸发/绽放禁在此处理：管线每次 settle 已广播 reaction_triggered——
+	# 二次起字会翻倍刷屏。
 	if popup_pool == null:
 		return
 	if not bool(Meta.settings("damage_numbers_on")):
 		return
-	if p_rxn != GameConst.ReactionType.RXN_ICE_LTG:
+	if not TEXT_LABEL_RXNS.has(p_rxn):
 		return
-	# R4a（§4.7）：超导标签同吃帧上限（按 rxn 分组计数）——多次超导同帧齐爆防刷屏
+	# R4a（§4.7）：文字标签同吃帧上限（按 rxn 分组计数）——同反应同帧齐爆防刷屏
 	if not _reaction_frame_allow(p_rxn, p_pos, 0.0):
 		return
-	# R2d/R3-D：文字 REACTION 注册 bucket3（数值与文字永不同桶）——同 uid 碎裂/过载
-	# 数值大字在 bucket1 窗内互不吞，本标签与数值大字并存
+	# R2d/R3-D：文字 REACTION 注册 bucket3（数值与文字永不同桶）——同 uid 数值大字
+	# 在 bucket1 窗内互不吞，本标签与数值大字并存。
+	# R192 审查②：窗内去重只对**同反应**生效（bucket3 键无 rxn 分量）——异反应标签
+	# （超导→冻结等，reaction_cd 2s ≫ 合并窗）照常起字换键，后到反应名不再被静默吞；
+	# 旧标签展示至自然到期，其 _retire 键清除按 entry["popup"]==自身 判定不误删新条目。
 	var key := _mkey(p_uid, 3)
 	var entry: Dictionary = _merge_registry.get(key, {})
 	if not entry.is_empty():
-		# 同 uid 超导标签已在窗（bucket3）：不重复起标签
 		var popup: DamagePopup = entry["popup"]
-		if is_instance_valid(popup) and popup.is_active:
-			return
+		if is_instance_valid(popup) and popup.is_active and popup.element == p_rxn:
+			return                                 # 同 uid 同反应标签已在窗：不重复起标签
 		_merge_registry.erase(key)
 	# R4b：满池先回收最老非反应槽；全是反应槽则丢弃 + 计数
 	if _active_list.size() >= max_active_for(_quality()) and not _retire_oldest_non_reaction():
@@ -217,6 +243,10 @@ func on_reaction_triggered(p_rxn: int, p_pos: Vector2, p_uid: int) -> void:
 		_dropped_count += 1
 		return
 	var popup := node as DamagePopup
+	# R192：统计段读表一次性格式化经 rxn_stat 传入（超导「-30%」；数值禁写进 const
+	# 文案表）——先赋值再起字（show_popup 内 _refresh_label 渲染时读；_reset_state 池
+	# 复用清空由表现批承担）
+	popup.rxn_stat = _rxn_stat_text(p_rxn)
 	# R3：pos+(0,-30) 与同目标数值大字错位防叠
 	popup.show_popup(p_pos + TEXT_LABEL_OFFSET, 0.0, GameConst.PopupStyle.REACTION, p_uid, 0, p_rxn)
 	popup.text_mode = true                        # §5 契约：文字桶标记（_popup_bucket 清退判据）
@@ -310,16 +340,24 @@ func _nearest_frame_reaction(p_rxn: int, p_pos: Vector2) -> DamagePopup:
 
 
 func _reaction_host_alive(p_uid: int) -> bool:
-	# R186 R2c 判据：同 uid 反应大字（bucket1）是否在窗且活跃（失效条目顺手清除）
-	var key := _mkey(p_uid, 1)
-	var entry: Dictionary = _merge_registry.get(key, {})
-	if entry.is_empty():
-		return false
-	var popup: DamagePopup = entry["popup"]
-	if is_instance_valid(popup) and popup.is_active:
-		return true
-	_merge_registry.erase(key)
+	# R186 R2c 判据：同 uid 反应大字（bucket1）或文字标签（bucket3）是否在窗且活跃
+	# （R192 补 bucket3 缺口——文字标签在窗时直击小字同样下移防叠；失效条目顺手清除）
+	for bucket in [1, 3]:
+		var key := _mkey(p_uid, bucket)
+		var entry: Dictionary = _merge_registry.get(key, {})
+		if entry.is_empty():
+			continue
+		var popup: DamagePopup = entry["popup"]
+		if is_instance_valid(popup) and popup.is_active:
+			return true
+		_merge_registry.erase(key)
 	return false
+
+
+func _rxn_stat_text(p_rxn: int) -> String:
+	# R192 收口2：实现上提 DamagePopup.reaction_stat_text 静态单源（图鉴预览同源组合）——
+	# 本壳保留调用点兼容（:247 起字唯一调用），文案逻辑勿在此处新增。
+	return DamagePopup.reaction_stat_text(p_rxn)
 
 
 func _retire_oldest_non_reaction() -> bool:

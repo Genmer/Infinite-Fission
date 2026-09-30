@@ -43,6 +43,10 @@ func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
 	_composition_sig = ""
 	_budget_spent = 0.0
 	_budget_window = 0.0
+	# R191 引擎侧硬保证：棱镜本体永不出副束（super 置 -1 后此处钉 0）——七张束卡
+	# required_weapon 锁 W4 数据侧拦截卡架/回响，直挂 attach_trait 不经门由此兜底，
+	# W5 束段指纹恒 ==1（与 laser_weapon.gd 头部「W5 校准锚束单段」注释假设一致）。
+	sub_beams_override = 0
 
 
 func attach_trait(p_trait: TraitData) -> bool:

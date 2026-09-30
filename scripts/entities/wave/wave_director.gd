@@ -38,10 +38,15 @@ var _boss_ref: Node2D = null                  # 本波 Boss 实例（boss_spawne
 var _boss_seen: bool = false                  # 本波 Boss 是否实际登场（false = Boss 数据缺失降级波）
 var _trickle_left: float = 0.0
 var _clamp_warned: bool = false               # R188 档3：钳制一次告警闸（后续仅 DebugStats 计数）
+var _wave_enqueue_requests: int = 0           # R194：本波入队生成请求数（早清零请求守卫判据）
+var _empty_comp_counted: bool = false         # R194：本波空构成已计数闸（守卫逐帧命中不刷计数）
+var _empty_comp_errored: bool = false         # R194：空构成 push_error 会话一次闸（同 _clamp_warned 先例）
 var _escort_interval: float = BOSS_TRICKLE_INTERVAL   # 本波伴随怪节奏（start_wave 解析）
 var _escort_cap: int = BOSS_TRICKLE_CAP
 var _escort_mix: Array[EnemyData] = []                # 本波伴随敌池（空 = 最便宜敌 fallback）
 var _escort_cursor: int = 0                           # 混合轮转游标（确定性）
+var _owed_shop_waves: Array[int] = []                 # D19/R199：硬上限跳波欠账的商店行
+                                                      #（下一次自然 wave_cleared 一并补发）
 
 const HARD_CAP_BONUS := 8.0                   # wave_hard_cap = spawn_window + 8s（A3 §1.3）
 const INTER_WAVE_BUFFER := 0.6                # 波间缓冲（R26：1.0→0.6——「打完很久没怪」）
@@ -86,6 +91,10 @@ func _ready() -> void:
 
 func start_wave(p_wave: int) -> void:
 	# 读表/公式生成构成 → enqueue → 波窗口/硬上限计时 → wave_started 事件
+	# D19/R199：开局/重开回跳波号（start_wave 只会自然 +1 递进；restart_run 从 w1
+	# 重入）→ 清上一局遗留的欠账商店行（跨局不漏发不串店）。
+	if p_wave < current_wave:
+		_owed_shop_waves.clear()
 	current_wave = p_wave
 	wave_first_kill_done = false
 	_boss_wave = _is_boss_wave(p_wave)
@@ -97,6 +106,8 @@ func start_wave(p_wave: int) -> void:
 	_escort_mix.clear()
 	_escort_mix.assign(rhythm["mix"])            # assign 搬运（Dictionary 取出为 untyped Array）
 	_escort_cursor = 0
+	_wave_enqueue_requests = 0                   # R194：本波请求数归零（spawner 缺失时保持 0）
+	_empty_comp_counted = false                  # R194：空构成计数/守卫随波重臂
 	tp_budget = _tp_for_wave(p_wave)
 	window_left = _window_for_wave(p_wave)
 	_wave_elapsed = 0.0
@@ -105,6 +116,7 @@ func start_wave(p_wave: int) -> void:
 	_phase = WavePhase.SPAWNING
 	if spawner != null:
 		var composition := _roll_composition(p_wave)
+		_wave_enqueue_requests = composition.size()
 		for entry in composition:
 			spawner.enqueue(entry)
 		if _boss_wave:
@@ -130,9 +142,21 @@ func tick(p_game_delta: float) -> void:
 			spawner.tick(p_game_delta, enemy_grid)
 			window_left -= p_game_delta
 			# R92 快清快开（用户反馈「打太快怪卡挺久才出来」）：窗口内已全清（非 Boss 波
-			# ——Boss 波有伴随怪流水语义）→ 剩余窗口截断到 0.8s，不再干等整个刷怪窗
+			# ——Boss 波有伴随怪流水语义）→ 剩余窗口截断到 0.8s，不再干等整个刷怪窗。
+			# R194 零请求守卫（bug#4 RC3 静默降级可见化）：本波入队请求 == 0（构成空/
+			# 注册表空 → 无怪可刷）时不钳早清窗——走满窗 + 波间缓冲自然推波（原口径
+			# 0.8s + 1.8s ≈ 2.6s/波静默狂涨零怪）；计数 + push_error 会话一次。R92/R26
+			# 常量不动（有请求波早清语义原样）。
 			if _phase == WavePhase.SPAWNING and not _boss_wave 					and spawner.queue_empty() and spawner.active_count() == 0:
-				window_left = minf(window_left, EARLY_CLEAR_WINDOW)
+				if _wave_enqueue_requests == 0:
+					if not _empty_comp_counted:
+						_empty_comp_counted = true
+						DebugStats.count(&"wave_empty_composition")
+						if not _empty_comp_errored:
+							_empty_comp_errored = true
+							push_error("[WaveDirector] 波 %d 零生成请求（构成空/注册表空）——R92 早清钳禁用，走满窗+缓冲（诊断 counter=wave_empty_composition）" % current_wave)
+				else:
+					window_left = minf(window_left, EARLY_CLEAR_WINDOW)
 			if window_left <= 0.0:
 				window_left = 0.0
 				_phase = WavePhase.CLEARING
@@ -148,6 +172,7 @@ func tick(p_game_delta: float) -> void:
 					_trickle_left = _escort_interval
 			# 硬上限：到时未清完强制叠波（压力叠加，不清场直接开下一波）
 			if _hard_cap_left <= 0.0:
+				_record_owed_shop(current_wave)     # D19/R199：跳波不丢商店行（记欠账）
 				start_wave(current_wave + 1)
 				return
 			# 清空检测：窗口结束 + 队列排空 + 场上清空
@@ -157,6 +182,7 @@ func tick(p_game_delta: float) -> void:
 				var shop_entry := _table_entry(current_wave)
 				if shop_entry != null and shop_entry.events.has(&"SHOP"):
 					shop_requested.emit(current_wave)
+				_drain_owed_shops()                 # D19/R199：补发欠账商店行（同口同源）
 				# F-19：w2 槽2（R183 开局默认已 2——留作旧档兜底）/ w7 波后解锁槽3
 				if current_wave == SLOT2_UNLOCK_WAVE:
 					EventBus.emit_slot_unlocked(2)
@@ -170,6 +196,23 @@ func tick(p_game_delta: float) -> void:
 				start_wave(current_wave + 1)
 		_:
 			pass
+
+
+func _record_owed_shop(p_wave: int) -> void:
+	# D19/R199：硬上限跳波时，被跳波次的波表 SHOP 行不再静默丢失——记「欠账商店行」，
+	# 随下一次自然 wave_cleared 一并补发 shop_requested（战前补给/黑市排程两口由
+	# GameLoop 挂在 wave_cleared 上，自然清波照常触发、延迟不丢；本口只补波表 SHOP
+	# 行语义）。重复跳过同一波幂等去重。
+	var entry := _table_entry(p_wave)
+	if entry != null and entry.events.has(&"SHOP") and not _owed_shop_waves.has(p_wave):
+		_owed_shop_waves.append(p_wave)
+
+
+func _drain_owed_shops() -> void:
+	# D19/R199：补发欠账商店行（与当波自己的 SHOP 行同信号同口；同帧多口时消费侧
+	# PLAYING 仲裁只开一面、后发自然让位——不崩溃、不重复扣账）。
+	while not _owed_shop_waves.is_empty():
+		shop_requested.emit(_owed_shop_waves.pop_front())
 
 
 func on_enemy_killed(p_enemy: Node2D) -> void:
@@ -215,6 +258,13 @@ func _roll_composition(p_wave: int) -> Array[Dictionary]:
 			var id := StringName(String(comp.get("enemy_id", "")))
 			var count := int(comp.get("count", 0))
 			var tags := int(comp.get("tags", 0))
+			# D18/R199：表行 Boss 位不再随表行入队（此前表行 1 只 + _spawn_boss 1 只 =
+			# 每图 Boss 波实刷 2 只满血 Boss；对齐公式回退路 `if _boss_wave: return out`
+			# 守卫语义）——TAG_BOSS 敌唯一投放口收敛到 _spawn_boss（登场位/掉槽/TAG_BOSS
+			# 语义随迁；波表行 Boss 位 tags=6 的 TAG_FINAL_BOSS 收官规格由 _spawn_boss
+			# 合并保留，见 :_spawn_boss）。
+			if _is_comp_boss(id):
+				continue
 			for i in range(count):
 				out.append({"data_id": id, "wave": p_wave, "tags": tags})
 		_apply_difficulty_weave(out, p_wave)   # R72 难度织入（普通零改动）
@@ -227,15 +277,31 @@ func _roll_composition(p_wave: int) -> Array[Dictionary]:
 		return out
 	var cheapest := _cheapest_enemy()
 	if cheapest == null:
+		# R194 空构成诊断（P0-4）：注册表无敌人数据 → 本波构成必空。R198（r194-1 单源化）：
+		# 此处原复用 wave_empty_composition 与 tick 守卫侧（start_wave 后零请求）双写同名
+		# 计数器——空数据波单波计 2（回退分支 1 次 + 守卫 1 次），计数语义漂移。改独立
+		# 计数器 wave_composition_registry_empty（DebugStats.count 直创无预声明面），
+		# wave_empty_composition 单源归 tick 守卫侧（每波恰 1 次，_empty_comp_counted 旗）。
+		# push_warning 保留（逐波降级提示）。
+		DebugStats.count(&"wave_composition_registry_empty")
 		push_warning("[WaveDirector] 注册表无敌人数据，波 %d 公式构成为空（降级不崩溃）" % p_wave)
 		return out
 	var raw_count := int(tp_budget / maxf(cheapest.tp_cost, 0.01))
 	var count := mini(raw_count, WAVE_COUNT_CLAMP)
 	for i in range(count):
 		out.append({"data_id": cheapest.id, "wave": p_wave, "tags": 0})
-	# 精英散布（fallback 按 A3 §2.4 常量集；精英模板乘区在 Enemy.spawn 生效）
+	# 精英散布（fallback 按 A3 §2.4 常量集；精英模板乘区在 Enemy.spawn 生效）。
+	# N09/R199：改入带 elite_mult 模板的真精英（表内精英波同款 E5_elite 优先，与表内
+	# 精英波强度对齐）；注册表无模板精英（测试桩/降级）→ 回退旧最便宜敌挂标口径
+	#（降级不崩溃）。
 	if _is_elite_wave(p_wave):
-		out.append({"data_id": cheapest.id, "wave": p_wave, "tags": GameConst.TAG_ELITE})
+		var elite := _elite_template_enemy()
+		var elite_id: StringName = elite.id if elite != null else cheapest.id
+		out.append({"data_id": elite_id, "wave": p_wave, "tags": GameConst.TAG_ELITE})
+	# N07/R199：R72 难度织入补供——主体波表用尽后的公式 fallback 波（主图 w41 起、
+	# frost/demon/grove 主题图 w31 起、swamp w37 起）此前静默断供，高难无尽后期退化
+	# 为纯杂兵洪流；对齐表驱动分支「织入 → 压力乘区」出口次序。
+	_apply_difficulty_weave(out, p_wave)
 	if raw_count > count:
 		_apply_wave_pressure(out, float(raw_count) / float(WAVE_COUNT_CLAMP), p_wave)
 	return out
@@ -423,6 +489,38 @@ func _cheapest_enemy() -> EnemyData:
 	return best
 
 
+func _elite_template_enemy() -> EnemyData:
+	# N09/R199：fallback 精英波真精英选取——表内精英波同款 E5_elite 优先（×4.2 模板，
+	# A3 §1.2 精英恒等式锚 72×4.2=302.4；main w22/w24/w26/w28 与 endless 精英位同源）；
+	# 注册表无 E5 → 任意 elite_mult 模板真精英里 tp_cost 最低者（同价按 id 排序，
+	# 确定性）；全无（测试桩/降级）→ null，调用方回退旧口径。
+	# 假精英根因：最便宜杂兵 elite_mult={}，挂 TAG_ELITE 只有词缀+皇冠+1.55×视觉，
+	# 血/伤不吃模板（Enemy.spawn 以 elite_mult 非空为第二门）。
+	if registry == null:
+		return null
+	var e5: EnemyData = registry.get_enemy(&"E5_elite")
+	if e5 != null and not e5.elite_mult.is_empty():
+		return e5
+	var best: EnemyData = null
+	for id in registry.enemies:
+		var e: EnemyData = registry.enemies[id]
+		if e == null or e.tp_cost <= 0.0 or e.elite_mult.is_empty():
+			continue
+		if best == null or e.tp_cost < best.tp_cost or (e.tp_cost == best.tp_cost and String(e.id) < String(best.id)):
+			best = e
+	return best
+
+
+func _is_comp_boss(p_id: StringName) -> bool:
+	# D18/R199：表行敌人是否 Boss 位（TAG_BOSS 敌唯一投放口 = _spawn_boss）。
+	# 注册表缺失/悬空 id → 无法判别，保持旧入队口径（降级不崩溃，与 _find_boss_data
+	# 的 null 警告路径一致）。
+	if registry == null:
+		return false
+	var e := registry.get_enemy(p_id)
+	return e != null and (e.tags & GameConst.TAG_BOSS) != 0
+
+
 func _spawn_boss(p_wave: int) -> void:
 	# Boss 波：Boss 入列（boss_spawned 事件由 spawner 实际生成时派发）
 	var boss := _find_boss_data(p_wave)
@@ -432,10 +530,20 @@ func _spawn_boss(p_wave: int) -> void:
 	var size := Vector2(720.0, 1280.0)
 	if GameConfig.balance != null:
 		size = Vector2(GameConfig.balance.res_logic)
+	# D18/R199：Boss 唯一投放口后，波表行 Boss 位 tags 语义随迁——TAG_FINAL_BOSS 收官
+	# 规格（×5.0 登场）由行 tags=6 承载（main/frost/demon/grove 既有行为保持，swamp
+	# w30 随 N10 补齐）；无表回退路无行可读 → 维持 boss.tags | TAG_BOSS 原口径。
+	var boss_tags := int(boss.tags) | GameConst.TAG_BOSS
+	var entry := _table_entry(p_wave)
+	if entry != null:
+		for comp in entry.composition:
+			if StringName(String(comp.get("enemy_id", ""))) == boss.id:
+				boss_tags |= int(comp.get("tags", 0))
+				break
 	spawner.enqueue({
 		"data_id": boss.id,
 		"wave": p_wave,
-		"tags": boss.tags | GameConst.TAG_BOSS,
+		"tags": boss_tags,
 		"pos": Vector2(size.x * 0.5, size.y * 0.12),
 	})
 

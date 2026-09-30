@@ -10,7 +10,7 @@ rof = 11.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "A3 §3.2 L1：冷 rof 11 / 满热 14；面板 DPS（热）98"
+note = "越打越热：预热后 14 发/s，每发 7 伤，热档面板 DPS 98（停火 0.8s 热度归零）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,7 +19,7 @@ rof = 11.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "A3 §3.2 L2：冷 rof 11 / 满 14；面板 DPS（热）112"
+note = "每发 7→8 伤，热档面板 DPS 112"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
@@ -28,7 +28,7 @@ rof = 12.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "R10 质变模板 L3（小质变）：预热 1.6→1.0s（快速进入过热态）；面板 DPS（热）135"
+note = "预热 1.6s→1.0s，更快进入过热；热档面板 DPS 135"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -37,7 +37,7 @@ rof = 12.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "A3 §3.2 L4：冷 rof 12 / 满 16；面板 DPS（热）176"
+note = "每发 9→11 伤，热档 16 发/s，热档面板 DPS 176"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 13.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "R10 质变模板 L5（大质变）：超频枪管——预热 0.7s / 满热射速 19.5；面板 DPS（热）≈254"
+note = "超频枪管：预热仅 0.7s，热档 19.5 发/s，热档面板 DPS 约 254"
 
 [resource]
 script = ExtResource("1_wd")

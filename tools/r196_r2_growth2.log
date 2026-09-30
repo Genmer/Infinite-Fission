@@ -1,0 +1,127 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R196 成长与缺陷批次验收 ══════════
+── ① AFF_RANGE 武器范围词条（登记/进池/消费端） ──
+PASS | ①夹具：AFF_RANGE 入注册表（.tres 数据底座产出）
+PASS | ①登记：add_range 入 DataValidator.ADD_POOL_IDS（第 16 员追加）
+PASS | ①数值：value=0.18 / stack_max=3 / required_forms=[3] 近战架
+PASS | ①门：第 1 关 ADD 池不受大关门（trait_allowed 真）
+PASS | ①进池：第 1 关 ADD 类目候选含 AFF_RANGE
+PASS | ①消费端：挂 1 层挥砍半径 ×1.18（150→177）
+PASS | ①消费端：满 3 层 ×1.54（150→231）
+PASS | ①消费端：环绕轨道半径 90→106.2（×1.18，置于 copy 分支后本体/复制体同享）
+── ② 超质变叠层（超帽可叠 / ×0.7 加算 / 卡面注记） ──
+PASS | ②常量：OVERCAP_VALUE_MULT=0.7 / OVERCAP_EXT_MAX=5（单源 trait_stack）
+PASS | ②文案：GameConst.OVERCAP_NOTE 在（真源逐字）
+PASS | ②夹具：W1 + AFF_ATK_UP 在册
+PASS | ②超帽可叠：ADD 池 stack_max+5 层连挂全成功（原第 4 层即拒——R196 契约变更）
+PASS | ②帽外拒绝：第 9 层（>stack_max+OVERCAP_EXT_MAX）拒绝
+PASS | ②收益：逐层路 3×0.15 + 5×(0.15×0.7) = 0.975
+PASS | ②收益：add_entries 第 4 层（首个超帽层）contrib=0.105
+PASS | ②直挂消费端：AFF_HP_UP 9 层 → 血条恰 +4×25 + 5×(25×0.7)=187.5（×0.7 落血条）
+PASS | ②质变兼容：满层质变 ×1.6 触发，4 层聚合 = 3×0.24 + 1×0.168 = 0.888
+PASS | ②非 ADD 帽：ELEM 池 2 层挂满成功、第 3 层拒绝（原帽语义不变）
+PASS | ②卡面：满层目标 → card.overcap 真 + 描述含 OVERCAP_NOTE（card+data 双写）
+PASS | ②卡面：零层目标 → overcap 假 + 描述不含注记（基描述干净）
+PASS | ②上架帽：目标满 3 层时 AFF_ATK_UP 仍上架（帽放宽至 stack_max+5）
+PASS | ②上架帽：目标满 8 层（stack_max+5）时移出候选池
+── ③ 构筑面板三档落位 + 面板区 ScreenDrag 不断链 ──
+PASS | ③前置：HUD/构筑面板/设置面板句柄在
+PASS | ③默认右上：落位 x444-696×y196-328（锚/offset 逐位）
+PASS | ③右上锚：l/r=1 t/b=0，offset(-276,196,-24,328)
+PASS | ③前置：金币 pill 句柄在（GoldPill）
+PASS | ③右上零重叠：不压暂停钮/金币 pill/AUTO（持久元素）
+PASS | ③右下档：落位 x268-520×y1124-1256
+PASS | ③右下档@960×1280：面板右沿 ≤ 技能键左沿（不压关键 HUD）
+PASS | ③左下档：落位 x24-276×y1124-1256（原位逐位）
+PASS | ③循环①：2→0 回默认右上（Meta 写口 + HUD 即时重挂）
+PASS | ③循环②：0→1 落位右下
+PASS | ③循环③：1→2 落位左下原位
+PASS | ③断触①：build_root.mouse_filter == PASS（STOP 吃拖动根因已除）
+PASS | ③断触②：面板区投递 ScreenDrag(rel=12,0) → player 拖动累计不中断
+PASS | ③断触③：穿越面板连续拖动累计连续（(17,5)——无断链/无吞事件）
+── ④ 经验面值四色档位（阈值→档位→颜色） ──
+PASS | ④阈值表：XP_TIER_THRESHOLDS == [3.0, 8.0, 20.0]（单源 pickup）
+PASS | ④映射：比 2.9→白 / 3.0→绿 / 7.9→绿 / 8.0→金 / 19.9→金 / 20.0→七彩
+PASS | ④降级：基线≤0 恒白档（旧调用/无通胀路径不崩）
+PASS | ④色源：白 fff1b8 / 绿 2ed573(SUCCESS) / 金 ffc93c(XP) 单源 PopPalette
+PASS | ④色源：越界钳制（-1→白档色 / 9→占位色不崩）
+PASS | ④实件：wave1 基线 1.0 投 30 面值 → 七彩档（≥20）
+PASS | ④实件：merge_value 面值 40、基线取 max 保持 1.0 → 仍七彩
+PASS | ④实件：5/1.0 → 绿档（<8）
+PASS | ④实件：合并爬档 55/1.0 → 重分档七彩（满池合并珠随面值爬档）
+PASS | ④通胀锚：exp_inflation_per_wave=1.085（balance_tables 真源连通）
+── ⑤ 图鉴反应锁（reaction_seen 标记 + 存档兼容） ──
+PASS | ⑤读口：未标记 is_reaction_seen 假
+PASS | ⑤文案：解锁关提示单源 GameConst.reaction_note().unlock 非空（含关数）
+PASS | ⑤锁定行：降透明 0.55 + 锁徽贴纸（ui_lock 非 emoji 字面量）+「未触发」小字
+PASS | ⑤标记：mark 首见真 + 幂等（二标假）
+PASS | ⑤读口：标记后 is_reaction_seen 真
+PASS | ⑤解锁行：modulate 恢复 1.0、无 RxnLockBadge/RxnLockNote（行集合不变仅样式）
+PASS | ⑤落盘：codex/reaction_seen 含 RXN_FIR_ICE + settings/values 含 panel_pos
+PASS | ⑤旧档兼容：缺 reaction_seen 键 → 空表（降级不崩）
+PASS | ⑤旧档兼容：缺 panel_pos 键 → 读口回默认 0（SETTINGS_DEFAULTS 回退）
+PASS | ⑤旧档兼容：settings 段结构不变（其余键原值保留）
+PASS | ⑤写口归一：panel_pos=7 → clamp 2；负值 → clamp 0
+PASS | ⑤写口归一②：-3 → 0
+── ⑦ 手枪：多重装填实发可辨 + 穿透逐目标贯穿（修复后契约） ──
+PASS | ⑦A：_pellet_count==2（聚合链生效）
+PASS | ⑦A：实发 2 弹
+PASS | ⑦A：两弹可辨（速度散角>0.1°——不再像素重合）
+PASS | ⑦A：无背向弹（全弹偏角<90°）
+PASS | ⑦B：_pierce_count==2（1+1）
+PASS | ⑦B：实发 1 弹且方向朝前（偏角<30°——无「往后面射」）
+PASS | ⑦B：首敌命中（实伤>0）
+PASS | ⑦B：★贯穿第 2 敌成立（pierce=2 → E1 1 击 + E2 受伤——修复前 E2 恒零伤）
+PASS | ⑦B：金丝雀满血（预算恰尽——无超发）
+PASS | ⑦C：首敌被杀（hp=10 < 14）
+PASS | ⑦C：命中即杀时贯穿第 2 敌成立（击杀门控基线不回归）
+PASS | ⑦D：暂停面板属性行含「弹丸 2」（多重装填可视化，has_method 守卫口径）
+PASS | ⑦D：近战武器不列「弹丸 0」误导段（显示不能乱）
+── ⑥ 武器准入门（矩阵/逐关上架/图鉴三态/echo 同门/首发守卫） ──
+PASS | ⑥矩阵：W1/W2/W3→0 · W4/W5→1 · W6/W7→2 · W8/W9→3 · W10→4
+PASS | ⑥矩阵：未登记 id → 0 恒开放（新武器入库漏登记不上锁）
+PASS | ⑥无局全开：map_index==-1 → 全武器 weapon_allowed 真
+PASS | ⑥第1关上架集：恰等于矩阵允许集−已持有（越门武器 0 命中）
+PASS | ⑥第2关上架集：恰等于矩阵允许集−已持有（越门武器 0 命中）
+PASS | ⑥第3关上架集：恰等于矩阵允许集−已持有（越门武器 0 命中）
+PASS | ⑥第4关上架集：恰等于矩阵允许集−已持有（越门武器 0 命中）
+PASS | ⑥第5关上架集：恰等于矩阵允许集−已持有（越门武器 0 命中）
+PASS | ⑥文案同步：第1关「初始武器批」/第2关脉冲光束/第3关微型导弹/第4关环绕力场/第5关回旋刃
+PASS | ⑥锁定句：W10 →「通关『翡翠树海』后开放」（MapTable 真源）；W1 → 初始批句
+PASS | ⑥写口：mark_weapon_codex 后 is_weapon_unlocked 翻真（获得解锁语义不变）
+PASS | ⑥图鉴三态：第1关行集合 10 行（行数口径不变）
+PASS | ⑥图鉴三态：未获得且门外 6 行「未解锁」态（？？？+锁徽+压暗）
+PASS | ⑥[定案 P6] 获得优先于门：门外已获得 W8 行应为已获得态（显示名+无锁徽+不压暗）
+PASS | ⑥进度门：通关晴空草原 → weapon_allowed_progress(W4) 真 / W8 仍假
+PASS | ⑥首发候选：已获得∧门外 W8 仍入选（获得优先于门——老档无损）
+PASS | ⑥echo：双持不空手（槽 0/1 均装配）
+PASS | ⑥echo：双武器均 weapon_allowed（第1关门内集）且 ≠W1（门内池排除首发）
+PASS | ⑥槽位门独立：槽满（无空槽）→ 武器候选空（与门开关无关）
+WARNING: [Meta] 首发武器未解锁（W10_boomerang）——忽略
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | ⑥首发守卫：未解锁 W10 写口被拒（custom_weapon 不变）
+PASS | ⑥首发守卫：已获得后放行（获得优先于门——老档无损）
+── ⑧ 图标资源审计（贴纸在位/互异/emoji 字面量闸门） ──
+PASS | ⑧贴纸：ui_lock/ui_gem/ui_trophy 非空
+PASS | ⑧贴纸：三枚程序贴纸均含可见像素（alpha>0）
+PASS | ⑧武器图标：全 10 枚非空且含可见像素
+PASS | ⑧武器图标：像素两两互异（无重图）
+PASS | ⑧消费接线：menu_screen 引用 ui_lock + ui_gem（R196 T2 替换面）
+PASS | ⑧消费接线：hud 引用 ui_lock（R196 T3 替换面）
+PASS | ⑧文案：解锁提示删 🏆 前缀词义保留（「　通关「%s」解锁」）
+PASS | ⑧文案：成就 toast 删 🏆/💎（主体保留「成就达成 ×%d」）
+PASS | ⑧emoji 闸门：scripts/autoload 全 .gd 零 >0xFFFF 码点（Android 缺字根因永久闸）
+PASS | ⑧零污染：headless save_path == meta_save_test.cfg（测试档隔离）
+────────────────────────────────────────
+汇总：PASS 102 / FAIL 0（共 102 项）
+验收汇总：102/102 通过
+WARNING: 20 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 15 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 29 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 4 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 8 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

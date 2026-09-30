@@ -7,10 +7,13 @@ extends RefCounted
 # ── 主菜单 ────────────────────────────────────────────────────────
 const LOGO := "INFINITE FISSION"
 const SUBTITLE := "∞ 链式裂变乐园"
+# R199（P08）：第 3 行补「拖动屏幕移动」操作说明（真源 game_const.gd.TUTORIAL_MOVE_MENU
+# ——新文案真源纪律）。行数保持 3 不增：menu_screen 菜单行按 636+26i 定位，第 4 行
+# （y714~736）与「继续上次进度」钮（y722 起）重叠，故操作说明并入既有行块。
 const MENU_LINES: Array[String] = [
 	"反应堆今天也在打喷嚏。",
 	"防御机器人「哨兵-9」决定用弹幕帮它冷静一下。",
-	"出发吧——链式反应，一根也不许 runaway！",
+	GameConst.TUTORIAL_MOVE_MENU,
 ]
 const START_BUTTON := "出发！"
 

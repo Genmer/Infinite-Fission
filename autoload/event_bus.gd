@@ -22,6 +22,7 @@ signal boss_phase_changed(phase: int, enraged: bool)       # 夜间R19：Boss �
 signal player_hit(damage: float, source_uid: int)          # 简化路径受击（Q-16）
 signal player_died()                                       # 死亡优先级最高（E-16 仲裁输入）
 signal level_up(new_level: int)                            # 升级请求（GameLoop 仲裁）
+signal level_up_batch(levels: int)                         # R189 连升批广播（巨批逐级 emit 收敛）
 signal xp_gained(amount: float)
 signal wave_started(wave: int)
 signal wave_cleared(wave: int)
@@ -41,6 +42,8 @@ signal burn_devour_proc(pos: Vector2)                       # 烈焰吞噬乘区
 signal knockback_hit(pos: Vector2)                           # 强击退生效（表现层专用：击退小字，R7）
 signal poison_cloud_cast(pos: Vector2, radius: float)        # 毒云领域施放（表现层专用：绿环展开，R10）
 signal poison_cloud_tick(pos: Vector2, radius: float)        # 毒云每跳（表现层专用：毒圈持续/绿雾，R10）
+signal poison_cloud_end()                                    # 毒云领域结束（表现层专用：立即入渐隐，R199 H01）
+signal burn_spread_ignited(pos: Vector2)                     # 燎原传火点燃（表现层专用：原点橙环；R199 F17 前曾冒用 reaction_triggered 污染图鉴/成就计数）
 signal kill_blast(pos: Vector2, radius: float)               # 死亡新星击杀爆炸（表现层专用：橙红爆炸环，R13）
 signal missile_blast(pos: Vector2, radius: float)             # R80 导弹命中/空爆（强化版四层爆 + 震屏 + 低音）
 signal bullet_bounced(pos: Vector2)                           # 弹幕边界反弹（表现层专用：清脆 tick 音效，R95）
@@ -53,6 +56,7 @@ signal card_chosen(card_id: StringName, target_kind: int)  # 选卡应用完成�
 signal laser_subbeam_spawned(owner_kind: int)               # 副激光生成（owner_kind：0=本体/1=复制体——R183 束数折减断言通道）
 signal mirror_formed(text: String)                          # 棱镜镜面生成/重掷（HUD toast；文案「棱镜映照：镜面承接了 X」）
 signal w8_detonated(pos: Vector2, target_uid: int)          # W8 蓄能满档引爆事件（target_uid——CHARGE_BURST 大字按同帧该敌结算聚合起字）
+signal crystal_shield_request(dr: float, duration: float)   # R192 结晶族反应：玩家晶盾减伤请求（Player grant 唯一消费——减伤闸在 take_contact_damage 唯一漏斗；纯会话态零存档）
 
 var _dispatch_count: Dictionary = {}        # StringName(事件) -> int(本帧计数)
 const STORM_WARN_THRESHOLD := 128           # 同事件同帧派发上限（§六.4）
@@ -136,6 +140,14 @@ func emit_player_died() -> void:
 func emit_level_up(new_level: int) -> void:
 	_track_dispatch(&"level_up")
 	level_up.emit(new_level)
+
+
+func emit_level_up_batch(levels: int) -> void:
+	# R189 连升合并广播：巨批连升（gain_xp 巨额经验）单信号入账——逐级 emit 的
+	# 每级信号税（4+ 订阅者 × 4.8 万级 ≈ 单帧 200ms+）是爆发帧超预算主头；
+	# 消费方（GameLoop._on_level_up_batch）与逐级仲裁逐位同口径
+	_track_dispatch(&"level_up_batch")
+	level_up_batch.emit(levels)
 
 
 func emit_xp_gained(amount: float) -> void:
@@ -241,6 +253,16 @@ func emit_poison_cloud_tick(pos: Vector2, radius: float) -> void:
 	poison_cloud_tick.emit(pos, radius)
 
 
+func emit_poison_cloud_end() -> void:
+	_track_dispatch(&"poison_cloud_end")
+	poison_cloud_end.emit()
+
+
+func emit_burn_spread_ignited(pos: Vector2) -> void:
+	_track_dispatch(&"burn_spread_ignited")
+	burn_spread_ignited.emit(pos)
+
+
 func emit_skill_cast(pos: Vector2, character_id: String) -> void:
 	skill_cast.emit(pos, character_id)
 
@@ -284,6 +306,11 @@ func emit_mirror_formed(text: String) -> void:
 func emit_w8_detonated(pos: Vector2, target_uid: int) -> void:
 	_track_dispatch(&"w8_detonated")
 	w8_detonated.emit(pos, target_uid)
+
+
+func emit_crystal_shield_request(p_dr: float, p_duration: float) -> void:
+	_track_dispatch(&"crystal_shield_request")
+	crystal_shield_request.emit(p_dr, p_duration)
 
 
 # ── 计数 / 风暴防护 / 订阅纪律 ─────────────────────────────────────

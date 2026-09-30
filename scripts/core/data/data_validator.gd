@@ -16,6 +16,7 @@ const SEV_WARNING := "warning"
 const ADD_POOL_IDS: Array[StringName] = [
 	&"add_atk", &"add_rof", &"add_cdr", &"add_crit", &"add_critdmg",
 	&"add_spd", &"add_hp", &"add_skillcdr", &"add_pickup", &"add_size", &"add_pierce", &"add_pellets", &"add_xp", &"add_knock", &"add_gold",
+	&"add_range",   # R196 武器范围池（AFF_RANGE 广域印刻）：环绕轨道半径与挥砍范围 +18%/层（第 16 员，追加不重排）
 ]
 # 独立乘区池 id 全集（§三.5 + A3 §4.3；vuln 为目标侧易伤区，A2 §1.8）
 const MULT_POOL_IDS: Array[StringName] = [
@@ -164,8 +165,9 @@ func validate_enemy(e: EnemyData) -> Array:
 	for i in range(e.resist.size()):
 		_err(out, StringName("resist[%d]" % i), e.resist[i] < -0.8 or e.resist[i] > 0.8, "resist[%d] ∈ [-0.8, 0.8]" % i)
 	_err(out, &"immune_mask", e.immune_mask & ~(GameConst.IMMUNE_FREEZE | GameConst.IMMUNE_CHILL | GameConst.IMMUNE_BURN | GameConst.IMMUNE_SHOCK) != 0, "immune_mask 已知位组合（IMMUNE_* 位）")
-	_err(out, &"elem_immune", e.elem_immune & ~(GameConst.ELEM_IMMUNE_FIR | GameConst.ELEM_IMMUNE_ICE | GameConst.ELEM_IMMUNE_LTG) != 0,
-		"elem_immune 仅允许 ELEM_IMMUNE_FIR/ICE/LTG 位组合")
+	_err(out, &"elem_immune", e.elem_immune & ~(GameConst.ELEM_IMMUNE_FIR | GameConst.ELEM_IMMUNE_ICE | GameConst.ELEM_IMMUNE_LTG
+		| GameConst.ELEM_IMMUNE_HYD | GameConst.ELEM_IMMUNE_ANE | GameConst.ELEM_IMMUNE_GEO | GameConst.ELEM_IMMUNE_DEN) != 0,
+		"elem_immune 仅允许 ELEM_IMMUNE_FIR/ICE/LTG/HYD/ANE/GEO/DEN 位组合（R192 白名单拓宽，非绕过）")
 	_err(out, &"tags", e.tags & ~(GameConst.TAG_ELITE | GameConst.TAG_BOSS) != 0, "tags 仅 TAG_ELITE/TAG_BOSS 位")
 	_err(out, &"hitbox_r", e.hitbox_r <= 0.0 or e.hitbox_r > 64.0, "hitbox_r ∈ (0, 64]")
 	if e.behavior == GameConst.EnemyBehavior.RANGED:
@@ -411,19 +413,106 @@ func validate_balance(bt: BalanceTables) -> Array:
 		cat_sum += int(bt.category_weights[k])
 	_nf(out, "category_weights", cat_sum <= 0, "category_weights 权重和 > 0")
 	_nf(out, "cd_rxn", bt.cd_rxn <= 0.0, "cd_rxn > 0（F-34）")
-	_nf(out, "element_decay_lambda", bt.element_decay_lambda.size() != 3, "element_decay_lambda 恰好 3 项（FIR/ICE/LTG）")
+	_nf(out, "element_decay_lambda", bt.element_decay_lambda.size() != 7, "element_decay_lambda 恰好 7 项（FIR/ICE/LTG/HYD/ANE/GEO/DEN——漏改＝整个字段静默回退仅告警，比报错更险）")
 	for i in range(bt.element_decay_lambda.size()):
 		_nf(out, "element_decay_lambda", bt.element_decay_lambda[i] <= 0.0, "element_decay_lambda[%d] > 0（F-22）" % i)
 	for k in [&"burn", &"freeze", &"shock"]:
 		_nf(out, "element_states", not bt.element_states.has(String(k)), "element_states 缺状态 %s（§2.10 契约键）" % String(k))
-	var bad_rxn := false
+	var bad_coef := false
+	var bad_resist_delta := false
+	var bad_span := false
 	for k in bt.reaction_table:
 		var rule: Dictionary = bt.reaction_table[k]
-		if rule.has("coef") and float(rule["coef"]) <= 0.0:
-			bad_rxn = true
-	_nf(out, "reaction_table", bad_rxn, "reaction_table 系数 > 0（§2.4）")
+		if rule.has("coef") and (float(rule["coef"]) <= 0.0 or float(rule["coef"]) > 2.0):
+			bad_coef = true
+		if rule.has("resist_delta") and (float(rule["resist_delta"]) < -0.8 or float(rule["resist_delta"]) > 0.8):
+			bad_resist_delta = true
+		for span_key in ["radius", "duration", "delay"]:
+			if rule.has(span_key) and float(rule[span_key]) <= 0.0:
+				bad_span = true
+	_nf(out, "reaction_table", bad_coef, "reaction_table coef ∈ (0, 2.0]（§2.4 + R192 χ≤2.0 上限——r_rxn_ratio=50 告警线推导依赖）")
+	_nf(out, "reaction_table", bad_resist_delta, "reaction_table resist_delta ∈ [-0.8, 0.8]（对齐运行时抗性钳）")
+	_nf(out, "reaction_table", bad_span, "reaction_table radius/duration/delay > 0")
+	_check_reaction_sources(out, bt)
 	_nf(out, "event_storm_threshold", bt.event_storm_threshold <= 0, "event_storm_threshold > 0（§六.4）")
 	return out
+
+
+func _check_reaction_sources(out: Array, bt: BalanceTables) -> void:
+	# R192 反应四源键集双射闸（wire T3；M1 恰 3 时即激活，扩容后动态成立）：
+	# ReactionType 枚举成员集 == reaction_table 键集 == reaction_note 可枚举键集
+	# == REACTION_LOOKS 整型键集。另守：每键 note 7 字段非空（name/recipe/elements/
+	# effect/unlock/mult_fmt/sample）、mult_fmt token 键 ⊆ rule 键（{key_pc:spec} 剥
+	# _pc 后缀比对）、elements 恰 2。任一缺项 → _nf 告警（字段级回退语义，不拒启动）
+	# ——半接线启动期报红，不可静默。
+	var enum_strs: Array = []
+	var enum_ints := {}
+	for mid in GameConst.ReactionType.keys():
+		enum_strs.append(String(mid))
+		enum_ints[int(GameConst.ReactionType[mid])] = true
+	var table_strs: Array = []
+	for k in bt.reaction_table:
+		table_strs.append(String(k))
+	var looks_ints := {}
+	for lk in DamagePopup.REACTION_LOOKS:
+		looks_ints[int(lk)] = true
+	# ① 枚举 ↔ reaction_table 双射
+	var miss_table: Array = []
+	for rid: String in enum_strs:
+		if not table_strs.has(rid):
+			miss_table.append(rid)
+	var extra_table: Array = []
+	for tid: String in table_strs:
+		if not enum_strs.has(tid):
+			extra_table.append(tid)
+	_nf(out, "reaction_table", not miss_table.is_empty() or not extra_table.is_empty(),
+		"reaction_table 键集 != ReactionType 枚举成员（缺: %s 多: %s）"
+			% [", ".join(miss_table), ", ".join(extra_table)])
+	# ② 枚举 ↔ reaction_note 可枚举键集 + 7 字段 + token ⊆ rule + elements==2
+	var rxn_token_rx := RegEx.new()
+	rxn_token_rx.compile("\\{([A-Za-z_][A-Za-z0-9_]*):[^}]*\\}")
+	var miss_note: Array = []
+	var bad_note: Array = []
+	for rid: String in enum_strs:
+		var note: Dictionary = GameConst.reaction_note(rid)
+		if note.is_empty():
+			miss_note.append(rid)
+			continue
+		var fields_ok := true
+		for fkey in ["name", "recipe", "elements", "effect", "unlock", "mult_fmt", "sample"]:
+			var v: Variant = note.get(fkey)
+			if v == null or (v is String and (v as String).is_empty()) \
+					or (v is Array and (v as Array).is_empty()):
+				fields_ok = false
+		if (note.get("elements", []) as Array).size() != 2:
+			fields_ok = false
+		if not fields_ok:
+			bad_note.append(rid)
+			continue
+		var rule: Dictionary = bt.reaction_table.get(rid, {})
+		for m: RegExMatch in rxn_token_rx.search_all(String(note.get("mult_fmt", ""))):
+			var tkey := m.get_string(1)
+			if tkey.ends_with("_pc"):
+				tkey = tkey.trim_suffix("_pc")
+			if not rule.has(tkey):
+				bad_note.append(rid)
+				break
+	_nf(out, "reaction_note", not miss_note.is_empty(),
+		"reaction_note 缺枚举成员条目（缺: %s）" % ", ".join(miss_note))
+	_nf(out, "reaction_note", not bad_note.is_empty(),
+		"reaction_note 7 字段非空/elements==2/mult_fmt token ⊆ rule 键违例（%s）" % ", ".join(bad_note))
+	# ③ 枚举 ↔ REACTION_LOOKS 整型键集双射（表现层漏件＝哑不崩但 rxn_codex 假绿，启动期报红）
+	var miss_looks: Array = []
+	for rid: String in enum_strs:
+		if not looks_ints.has(int(GameConst.ReactionType[rid])):
+			miss_looks.append(rid)
+	var extra_looks: Array = []
+	for li: int in looks_ints:
+		if not enum_ints.has(li):
+			extra_looks.append(str(li))
+	_nf(out, "reaction_looks", not miss_looks.is_empty() or not extra_looks.is_empty(),
+		"REACTION_LOOKS 键集 != ReactionType 枚举成员（缺: %s 多: %s）"
+			% [", ".join(miss_looks), ", ".join(extra_looks)])
 
 
 func check_references(registry: DataRegistry) -> Array:
@@ -618,8 +707,10 @@ func _validate_level_array_f(seg: Dictionary, p_key: String, p_min: float, p_max
 	if not seg.has(p_key):
 		return
 	var lv: Variant = seg[p_key]
-	var domain_txt := ("[%g, %g]" % [p_min, p_max]) if p_inclusive_min \
-		else ("(%g, %g]" % [p_min, p_max])
+	# 域文案用 %s+str()：Godot 4.3 String % 不支持 %g（variant_op 报 unsupported format
+	# character——启动期逐 _levels 键刷引擎噪声；域文案仅入错误清单展示，无断言依赖）
+	var domain_txt := ("[%s, %s]" % [str(p_min), str(p_max)]) if p_inclusive_min \
+		else ("(%s, %s]" % [str(p_min), str(p_max)])
 	if lv is Array:
 		for i in range((lv as Array).size()):
 			var v := float((lv as Array)[i])

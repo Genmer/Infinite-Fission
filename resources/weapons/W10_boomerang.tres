@@ -10,7 +10,7 @@ rof = 2.6
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "R78 回旋刃 L1：定距甩满 → 翻转加速返航；碰到弹开不消失，同敌 0.4s 一跳——双程贯穿收割"
+note = "定距甩出后翻转加速返航：去回双程都能命中，碰到弹开不消失，同敌 0.4s 一跳——每把 13 伤 × 2.6 把/s"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,7 +19,7 @@ rof = 2.6
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "L2：面板 DPS 39（双程≈78）"
+note = "每把 13→15 伤，面板 DPS 39（双程约 78）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
@@ -28,7 +28,7 @@ rof = 3.1
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "L3 小质变：投掷节奏加快（rof 2.8→3.1）——回旋刃命中不耗穿透，出刀密度即清场密度"
+note = "投掷节奏 2.6→3.1 把/s——回旋刃命中不耗穿透，出刀密度即清场密度"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -37,7 +37,7 @@ rof = 3.1
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "L4：面板 DPS 56（双程贯穿实际更高）"
+note = "每把 15→18 伤，面板 DPS 56（双程贯穿实际更高）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 3.1
 cd = 0.0
 pierce = 1
 pellets = 2
-note = "L5 大质变：双刃齐掷（14×2，两条独立回旋轨迹，全程贯穿）"
+note = "双刃齐掷：一次甩出 2 把（各 14 伤），两条独立回旋轨迹全程贯穿"
 
 [resource]
 script = ExtResource("1_wd")

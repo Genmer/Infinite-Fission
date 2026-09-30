@@ -1,0 +1,72 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 机制解锁节奏自测 ══════════
+── 无局口径：门控全开（菜单/测试基线不受影响） ──
+PASS | 无局：map_index = -1
+PASS | 无局：元素/感电/遗物/质变/诅咒全部开放
+── 大关门控位（节奏表逐关断言） ──
+PASS | 第1关草原：全部未解锁（纯基础构筑）
+PASS | 第2关冰原：火/冰元素 + 遗物开放；感电/质变/诅咒未解锁
+PASS | 第3关魔域：感电开放；质变/诅咒未解锁
+PASS | 第4关树海：满层质变开放；诅咒未解锁
+PASS | 第5关沼泽：赌徒诅咒开放
+── 元素词条细粒度门（ELEM 池按元素） ──
+PASS | 夹具：ELE_IGNITE(火)/ELE_SHOCK(雷)/AFF_ATK_UP 存在
+PASS | 第1关：火/冰/雷词条均不上架；ADD 池不受门控
+PASS | 第2关：火词条上架；雷词条不上架
+PASS | 第3关：雷词条上架
+PASS | 夹具：SYN_BURN_DEVOUR / SYN_FROST_EXEC / SYN_FIRST_STRIKE 存在
+PASS | 第1关：点燃/寒滞条件乘区不上架（死卡门）；其他条件乘区不受限
+PASS | 第2关：点燃/寒滞条件乘区上架
+── 遗物细粒度门（常规遗物第 2 关 / 赌徒诅咒终关） ──
+PASS | 第1关：全部遗物不上架（类目关闭）
+PASS | 第2关：常规遗物上架；赌徒未上架
+PASS | 第5关：赌徒上架
+── 大关新机制文案（选关行 / 开局横幅共用） ──
+PASS | 五大关：intro 文案全部非空
+PASS | 越界：intro 空串（不崩溃）
+── 卡池联动（CardGenerator 消费门控） ──
+PASS | 注册表：ELE_IGNITE / REL_GAMBLER 入册
+PASS | 第1关：ELEM 候选空（无元素卡上架）
+PASS | 第1关：遗物候选空（类目门关闭）
+PASS | 第2关：ELEM 候选 = 火/冰（含点燃，不含感电）
+PASS | 第2关：遗物候选非空（类目开启）
+PASS | 第3关：ELEM 候选含感电
+PASS | 第5关：遗物候选含赌徒硬币
+── 质变挂载门（WeaponBase.attach_trait ×1.6） ──
+PASS | 夹具：W1_pistol / AFF_ATK_UP 存在
+PASS | 第1关草原：挂满层不触发质变（value_mult 恒 1）
+PASS | 第4关树海：挂满层触发质变（value_mult ×1.6）
+── 吞噬特效冒烟（ElementalFxLayer 内聚池） ──
+PASS | 吞噬特效：触发后 1 槽激活
+PASS | 吞噬特效：节流期内二次触发被拦（仍 1 槽）
+PASS | 吞噬特效：节流窗后可再触发（2 槽）
+PASS | 吞噬特效：生命期后归还（0 槽激活）
+── R192 新元素门（water_unlocked idx≥3 / final_elem_unlocked idx≥4） ──
+PASS | 无局：water/final_elem 全开（菜单/测试口径）
+PASS | 第1关：water/final_elem 均未解锁
+PASS | 第2关：water/final_elem 均未解锁
+PASS | 第3关：water/final_elem 均未解锁
+PASS | 第4关：water 解锁；final_elem 未解锁
+PASS | 第5关：water/final_elem 全解锁
+── R192 新元素卡门矩阵（idx0/1/2 全闭 · idx3 仅 HYDRO · idx4 全开） ──
+PASS | 夹具：四张新元素卡在册（ELE_HYDRO/ELE_ANEMO/ELE_GEO/ELE_DENDRO）
+PASS | 第1关：新四卡全部不上架（ELEM match 显式分支——无兜底静默上架）
+PASS | 第2关：新四卡全部不上架（ELEM match 显式分支——无兜底静默上架）
+PASS | 第3关：新四卡全部不上架（ELEM match 显式分支——无兜底静默上架）
+PASS | 第4关：仅 ELE_HYDRO 上架（ANE/GEO/DEN 第 5 关起）
+PASS | 第5关：新四卡全部上架
+PASS | 第5关：ELEM 池 8 卡全开放（4 旧 + 4 新；权重三源 10→14 属数据侧另验）
+── R192 MAP_INTROS：第 4/5 关行含新元素卡与新反应名 ──
+PASS | 第1~3关 intro 原文不动（起点 / 元素一期·碎裂初见 / 感电卡·过载·超导）
+PASS | 第4关 intro：含水元素卡段（新反应：蒸发 · 冻结 · 感电）
+PASS | 第5关 intro：含草/风/岩元素卡段（燃烧·激化·绽放·扩散族·结晶族）
+── R192 播报：开局横幅每局恰一次 ──
+PASS | 第4关开局：mechanics_intro 恰发 1 次（无回环双增）
+PASS | 第4关开局：横幅文本含水元素卡新反应段（真源 MAP_INTROS）
+────────────────────────────────────────
+汇总：PASS 51 / FAIL 0（共 51 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 12 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

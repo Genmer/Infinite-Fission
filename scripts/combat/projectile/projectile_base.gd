@@ -26,6 +26,9 @@ var _boom_origin: Vector2 = Vector2.ZERO         # R78 出手点（定距甩满�
 var _boom_range: float = 340.0                   # R78 甩满距离（spawn range 注入）
 var _boom_icd: Dictionary = {}                   # R78 同敌接触内冷 {uid: 剩余秒}
 const BOOM_HIT_ICD := 0.4                        # R78 多次接触结算间隔（平衡值）
+# R191 用户反馈「回旋武器太小快看不见」：金色新月刃表现层放大倍率 ×5.0
+# （纯表现——命中盒不变：碰撞半径走 hitbox_r×size_mult，与 sprite scale 完全解耦）
+const BOOM_VIS_MULT := 5.0
 var generation: int = 0                       # 分裂代数（≤3，E-01）
 var hitbox_radius: float = 6.0
 var element: int = GameConst.Element.KIN
@@ -48,6 +51,11 @@ var panel_snapshot: Dictionary = {}           # 武器面板快照 {base_atk, cr
 var trait_stack: TraitStack = null            # 本弹词条宿主（M-10 运行时栈副本）
 var damage_pipeline: RefCounted = null        # 注入（结算入口；DamagePipelineStub 或包 1 真件）
 var hits_this_frame: Dictionary = {}          # target_uid -> true（帧聚合，E-03）
+# R196 FIX-2 生命周期级逐目标已命中表（同 _hit_exclusions/_boom_icd 池化 Dictionary 先例）：
+# target_uid -> true——弹体一生一目标一条（RC3b：弹敌重叠接触带内逐 tick 重击同一存活
+# 敌人耗光穿透预算，「再多贯穿 1 名敌人」从不发生）；回旋刃豁免不查不录（R78 接触节拍
+# + G11 双程贯穿依赖同敌多次结算）
+var _hit_uids: Dictionary = {}
 var enemy_grid: SpaceGrid = null              # 注入（碰撞查询）
 var pool: ProjectilePool = null               # 注入（回收归属）
 # 包 3 收口：ElementalSystem 真件类型收紧（§4.4 ⑤ 附着通道）
@@ -159,6 +167,7 @@ func spawn(p_params: Dictionary) -> void:
 	_conv_done = 0.0
 	_read_form_params(p_params)
 	hits_this_frame.clear()
+	_hit_uids.clear()                             # R196 FIX-2：生命周期命中表随池取出清零（原地 clear，禁分配）
 	_bounces_done = 0
 	_pierce_hits = 0
 	killed_target = false                     # 包 3 收口：击杀证据复位
@@ -340,6 +349,19 @@ func _submit_hit(p_target: Node2D) -> void:
 	if hits_this_frame.has(t_uid):
 		return                                # E-03 帧聚合：一帧一目标一条
 	hits_this_frame[t_uid] = true
+	# R196 FIX-2 生命周期级逐目标去重（有意契约变更）：帧去重后、死亡短路前——
+	# 已命中目标整弹生命周期内不再结算（直接 return：不耗穿透预算/不落伤/不计
+	# _pierce_hits/不派发词条）。原帧级去重挡不住接触带（弹 6+敌 14≈20px、120Hz 下
+	# ≈8 tick）内逐 tick 重击同一存活敌人——pierce=2 时 E1 承伤 28=2×14、同线 E2 零伤；
+	# 现语义 pierce=N 恰贯穿 N 名不同敌人（AFF_PIERCE 卡面「可再多贯穿 1 名敌人」达成）。
+	# 回旋刃豁免（不查不录）：R78 同敌接触内冷 0.4s 一跳 + G11 命中不耗穿透/去回双程
+	# 皆贯穿，依赖同敌多次结算（verify_feedback G11 锚 hp 逐触递减）。
+	# bounce 后不清表（默认拍板：回场弹对回程同敌零重击）。
+	# 清零口：spawn（池取出）+ _reset_state（归还）原地 clear——R188 红线禁每帧分配。
+	if not _boomerang:
+		if _hit_uids.has(t_uid):
+			return
+		_hit_uids[t_uid] = true
 	if bool(p_target.get("dead")):
 		return                                # E-06 死亡短路
 	# R72 反弹盾（秘纹守卫）：就绪期来弹折返攻玩家——本次命中取消（不落血/不耗穿透；
@@ -708,9 +730,9 @@ func _draw() -> void:
 	var prev := Vector2.ZERO
 	for i in range(1, 6):
 		var k := float(i) / 5.0
-		var pt := back * (20.0 * k) + side * (10.0 * k * k)   # 微弯外扫
+		var pt := back * (28.0 * k) + side * (14.0 * k * k)   # 微弯外扫（R191 随 ×5.0 刃体等比放宽）
 		draw_line(prev, pt, Color(PopPalette.GOLD.r, PopPalette.GOLD.g, PopPalette.GOLD.b,
-			(1.0 - k) * 0.45), 3.0 * (1.0 - k * 0.6))
+			(1.0 - k) * 0.45), 4.0 * (1.0 - k * 0.6))
 		prev = pt
 
 
@@ -790,6 +812,7 @@ func _reset_state() -> void:
 	killed_target = false                     # 包 3 收口：击杀证据清零
 	last_hit_pos = Vector2.ZERO
 	hits_this_frame.clear()
+	_hit_uids.clear()                            # R196 FIX-2：生命周期命中表随归还清零（池复用防串弹）
 	_reset_form_state()
 	is_clean = true
 	_vis_variant = -1                           # R188 档0：缓存失效（池复用清零口径）
@@ -833,8 +856,11 @@ func _resolve_visual_variant() -> int:
 		return _VIS_MISSILE_W7
 	if wid == &"W2_gatling":
 		return _VIS_TRACER
+	# 镜面判读走 Variant 真值：is_mirror_image 仅 BallisticWeapon 声明（ballistic_weapon.gd:46），
+	# Homing/其余宿主 get() 缺属性即 null——bool(Variant) 入参 null 抛
+	# 「Nonexistent 'bool' constructor」运行期错，此处不得包 bool()
 	if weapon_ref != null and is_instance_valid(weapon_ref) \
-			and bool(weapon_ref.get("is_mirror_image")):
+			and weapon_ref.get("is_mirror_image"):
 		return _VIS_MIRROR
 	# R187 W1 黄金弹（TH_BANK_SHOT 阈值驱动通用视觉）：宿主声明该质变且本弹
 	# 累计反弹达线 → 金染升格（必暴/弹片结算归 W1 组 EF_BANK 处理器）
@@ -849,12 +875,19 @@ func _resolve_visual_variant() -> int:
 
 
 func _plain_fill() -> Color:
-	# 元素差异着色（火=派生橙 / 冰=淡冰蓝 / 其余=玩家蓝）——命中盒无关，纯表现
+	# 元素差异着色（火=表橙 / 冰=表冰蓝 / 雷=表电紫 / 水/风/岩/草=表色 / 其余=玩家蓝）
+	# ——命中盒无关，纯表现；R192 取色单源 PopPalette.ELEMENT_COLORS（星形电花路径
+	# :901 派生自动跟随）
 	match element:
 		GameConst.Element.FIR:
-			return PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)      # 派生橙（点燃火苗同源）
+			return PopPalette.ELEMENT_COLORS[GameConst.Element.FIR]
 		GameConst.Element.ICE:
-			return PopPalette.PLAYER.lerp(Color.WHITE, 0.5)        # 淡冰蓝
+			return PopPalette.ELEMENT_COLORS[GameConst.Element.ICE]
+		GameConst.Element.LTG:
+			return PopPalette.ELEMENT_COLORS[GameConst.Element.LTG]
+		GameConst.Element.HYD, GameConst.Element.ANE, GameConst.Element.GEO, \
+		GameConst.Element.DEN:
+			return PopPalette.ELEMENT_COLORS[element]
 		_:
 			return PopPalette.PLAYER
 
@@ -867,10 +900,10 @@ func _apply_visual_variant(p_variant: int, p_scale_f: float) -> void:
 			_sprite.rotation = 0.0
 			_sprite.scale = Vector2(p_scale_f, p_scale_f)
 		_VIS_BOOM:
-			# G4 回旋刃：金色新月刃 ×3.4 表现层放大（命中盒不变），自旋见 tick
+			# G4 回旋刃：金色新月刃 ×5.0 表现层放大（命中盒不变，BOOM_VIS_MULT），自旋见 tick
 			_sprite.texture = TextureFactory.boomerang_tex()
 			_sprite.rotation = 0.0
-			_sprite.scale = Vector2(p_scale_f * 3.4, p_scale_f * 3.4)
+			_sprite.scale = Vector2(p_scale_f * BOOM_VIS_MULT, p_scale_f * BOOM_VIS_MULT)
 		_VIS_MISSILE_W6, _VIS_MISSILE_W7:
 			_sprite.texture = TextureFactory.missile_tex()
 			# R26/R35 弹体放大：W7 集束主火箭 ×4.6 / W6 微导 ×3.2（命中盒不变）

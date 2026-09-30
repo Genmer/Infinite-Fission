@@ -66,6 +66,7 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		var data := _resolve_data(entry)
 		if data == null:
 			spawn_queue.pop_front()          # 悬空数据：丢弃该请求 + 告警（AC-13.3 口径）
+			DebugStats.count(&"spawn_dropped")   # R194 双诊断（P0-4）：悬空丢弃可观测化（原口径仅 push_warning 静默）
 			push_warning("[EnemySpawner] 敌数据缺失（%s），丢弃该生成请求"
 				% str(entry.get("data_id", "")))
 			continue

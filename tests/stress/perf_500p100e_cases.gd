@@ -46,6 +46,7 @@ var _rng := RandomNumberGenerator.new()
 var _popup_uid: int = 1
 var _fails: int = 0
 var _over_count: int = 0                       # 超阈帧计数（长尾诊断）
+var _all_stage_sum: Dictionary = {}            # QA：全帧各阶段耗时和（ms）——常量税定位
 var _over_stage_sum: Dictionary = {}           # 超阈帧各阶段耗时和（ms）
 var _over_stage_max: Dictionary = {}           # 超阈帧各阶段耗时峰值（ms）
 
@@ -183,6 +184,8 @@ func _measure() -> void:
 		var t0 := Time.get_ticks_usec()
 		_gl._physics_process(DT)
 		_frame_us[i] = float(Time.get_ticks_usec() - t0) / 1000.0
+		for k in _gl.stage_probe_us:
+			_all_stage_sum[k] = float(_all_stage_sum.get(k, 0.0)) + float(_gl.stage_probe_us[k]) / 1000.0
 		if _frame_us[i] >= BUDGET_MS:
 			for k in _gl.stage_probe_us:
 				_over_stage_sum[k] = float(_over_stage_sum.get(k, 0.0)) + float(_gl.stage_probe_us[k]) / 1000.0
@@ -193,6 +196,7 @@ func _measure() -> void:
 				i + 1, MEASURE_FRAMES, _recent_avg(i, 1200), _proj_active(),
 				_gl.spawner.active_count(), _rss_mb()])
 	# 超阈帧分布诊断（长尾定位：分离力 10Hz 相位 = frame % 12）
+	print("[perf][QA] 全帧各阶段均值：%s" % _fmt_stage(_all_stage_sum, float(MEASURE_FRAMES)))
 	if _over_count > 0:
 		print("[perf] 超阈帧 %d 个（%.1f%%）超阈帧内各阶段：均值 %s ms | 峰值 %s ms" % [
 			_over_count, float(_over_count) / float(MEASURE_FRAMES) * 100.0,

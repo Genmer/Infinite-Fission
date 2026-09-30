@@ -34,7 +34,7 @@ func aggregate_add(entries: Array[Dictionary], pool_caps: Dictionary) -> void:
 			total += _effective_add(e)
 		var cap = pool_caps.get(pid)
 		if cap != null and total > float(cap):
-			# F4 池级保险丝（正常游玩不可达，触发即记审计）
+			# F4 池级保险丝（运行期 stack_max=99 卡 FALLBACK_ATK/GAMBLER_CURSE 约 40 层起可达钳值——旧注「正常游玩不可达」已过期勘误；触发即记审计，钳制行为零变化）
 			total = float(cap)
 			if audit != null:
 				audit.clamped_add.append(pid)

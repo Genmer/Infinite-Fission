@@ -35,6 +35,8 @@ var _resolve_ctr: int = 0                     # 每帧结算计数器（订阅 d
 var _kill_inject_left: int = 4                # 击杀注入余量（DeathPop 复用证据 ≥2 次）
 var _storm_uid: int = 0                        # 风暴结算独立 source_uid（管线幂等键分流）
 var _storm_cursor: int = 0                     # 目标轮转游标
+var _diag: Dictionary = {}                     # R189：真实语境分账（段名 → {game, settle, per_resolve}）
+var _nodes_end_pre_diag: int = 0               # R189：分账段前节点数（⑤ 平台期取样口径）
 
 
 func _drive_storm_settles() -> void:
@@ -236,6 +238,9 @@ func _measure() -> void:
 					inball += 1
 			print("[storm][diag] player=%s 近距敌(<120)=%d 球内弹(<140)=%d" % [str(pp), near, inball])
 	await _flush_frames(tree, 30)
+	_nodes_end_pre_diag = _count_nodes(tree.get_root())   # R189：分账段前取样（诊断段
+	                                                    # 驱动 720 物理帧会漂移节点计数）
+	_settle_diagnosis()
 	_cost_breakdown()
 	var peak_resolve := 0
 	var over_form := 0
@@ -259,14 +264,69 @@ func _measure() -> void:
 	print("[storm] 断言① 风暴形态 ≥ %d 结算/帧：%s" % [STORM_FORM, "PASS" if form_ok else "FAIL"])
 	if not form_ok:
 		_fails += 1
-	# ② 风暴满载 P95 判定线
-	# R188 裁定（perf 风暴档锚）：8.3ms 预算线在本轮为遥测预算线（非失败断言）——
-	# 每结算全链 ~110µs（消费链 popup/粒子/手感未减负）×300/帧 = P95 超线，
-	# 消费链减负移交评审/修复环；形态断言（①）保持硬闸门。
-	print("[storm] 断言② P95 < %.1f ms（遥测预算线）：%s" % [
-		BUDGET_MS, "达线" if p95 < BUDGET_MS else "超线（WARN）"])
-	if p95 >= BUDGET_MS:
-		print("[storm] WARN：P95=%.3f ms > 预算 %.1f ms（结算链消费方未减负——见移交清单）" % [p95, BUDGET_MS])
+	# ② 风暴满载判定线（R189 重锚：真闸门 + 文档回写）
+	# 原门「P95 < 8.3 ms（全帧，含 300 真管线结算注入）」经真实语境分账证实结构性
+	# 不可达：管线九步+take_result 对半永生真目标实测 54~95µs/结算（跨机器负载波动
+	# 1.75×）→ 300/帧纯管线地板 16~29ms > 8.3ms 总预算线。
+	# ② 门改锚「结算链消费方放大倍率」（硬闸，跨机器波动稳健——分子分母同帧同机器
+	# 实测，机器噪声同比例消去）：跳字/手感/统计消费链相对管线地板的放大 ≤ 2.5×。
+	# 基准 2.25×（R188 原实现）→ 本次 1.67×（R189 合并期文字排版推迟至 tick 后）。
+	# 消费链任一劣化（跳字排版回退/统计逐次刷新/手感放大）超线即 FAIL。
+	# 游戏帧/管线地板/各段绝对值打印为遥测，回写依据见 docs/design/R188_IDLE_PERF.md §4.8-8。
+	var full: Dictionary = _diag.get("全消费方", {})
+	var bare: Dictionary = _diag.get("断开全部", {})
+	var ratio := float(full.get("per_resolve", 0.0)) / maxf(float(bare.get("per_resolve", 1.0)), 0.001)
+	print("[storm] 断言② 结算链消费方放大 %.2f× ≤ 2.50×（管线地板 %.1f µs/结算，全链 %.1f µs/结算，游戏帧 %.2f ms）：%s"
+		% [ratio, float(bare.get("per_resolve", 0.0)), float(full.get("per_resolve", 0.0)),
+			float(full.get("game", 0.0)), "PASS" if ratio <= 2.5 else "FAIL"])
+	if ratio > 2.5:
+		_fails += 1
+
+
+func _settle_diagnosis() -> void:
+	# R189 真实风暴语境分账（修正 burst 静态口径的池状态失真）：主测量后 3×240 帧，
+	# 分别在全消费方 / 断开跳字 / 断开全部 damage_resolved 消费方下运行——
+	# 每帧分别计时「游戏帧」与「结算驱动」两段，给出结算链真实成本归属。
+	# 量测结论（2026-09-25）：管线九步（含 take_result）对半永生真目标 ~54µs/结算
+	# ——300 结算/帧的纯管线地板 ~16.3ms，高于 8.3ms 总预算线（8.3ms 门在
+	# 「真管线 ×300/帧 叠加满载游戏帧」形态下结构性不可达，详见设计文档 §4.8-8
+	# 回写）——② 门改锚「消费链放大倍率」（回归门），游戏帧 P95 另测另报。
+	var bus := _gl.get_node("/root/EventBus") as Node
+	var saved: Array = []
+	for c in bus.damage_resolved.get_connections():
+		saved.append(c["callable"])
+	var pm_cb: Callable = _gl.popup_manager.on_damage_resolved
+	var feel_cb: Callable = _gl.game_feel.on_damage_resolved
+	var segs := {
+		"全消费方": [],
+		"断开跳字": [pm_cb],
+		"断开全部": [pm_cb, feel_cb],
+	}
+	for seg_name in segs:
+		var drop: Array = segs[seg_name]
+		for cb in drop:
+			bus.damage_resolved.disconnect(cb)
+		var game_us := 0.0
+		var settle_us := 0.0
+		for i in range(240):
+			_maintain_load()
+			var t0 := Time.get_ticks_usec()
+			_gl._physics_process(DT)
+			var t1 := Time.get_ticks_usec()
+			_drive_storm_settles()
+			var t2 := Time.get_ticks_usec()
+			game_us += float(t1 - t0)
+			settle_us += float(t2 - t1)
+		_diag[seg_name] = {"game": game_us / 240.0 / 1000.0,
+			"settle": settle_us / 240.0 / 1000.0,
+			"per_resolve": settle_us / 240.0 / float(STORM_FORM)}
+		print("[storm][diag] %s：游戏帧 %.3f ms + 结算驱动 %.3f ms（%.1f µs/结算）| 活跃跳字 %d | 跳字池 free %d" % [
+			seg_name, _diag[seg_name]["game"], _diag[seg_name]["settle"],
+			_diag[seg_name]["per_resolve"],
+			_gl.popup_manager.active_popups,
+			int((_gl.pools[&"popup"] as ObjectPool).stats()["free"]) if _gl.pools.has(&"popup") else -1])
+		for cb in drop:
+			bus.damage_resolved.connect(cb)
 
 
 func _report() -> void:
@@ -305,7 +365,7 @@ func _report() -> void:
 	if not fx_ok:
 		_fails += 1
 	# ⑤ 平台期（迷你 soak）：后半程节点数差 ≤ 基线+10、RSS 增幅 < 3%
-	var nodes_end := _count_nodes(tree.get_root())
+	var nodes_end := _nodes_end_pre_diag          # R189：取分账段前样本（诊断段物理帧不构成驻留漂移证据）
 	var node_ok := absi(nodes_end - _nodes_half) <= 20    # 30s 迷你窗口瞬态允差（soak 180s 全程口径 ≤基线+10 归 soak 属主）
 	var rss_ok := (_rss_mb() - _rss_start()) / maxf(_rss_start(), 1.0) < 0.03
 	print("[storm] 断言⑤ 平台期：节点差 %d（≤20 迷你窗允差）%s | RSS 增幅 %.2f%%（<3%%）%s" % [

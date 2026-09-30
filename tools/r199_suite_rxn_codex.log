@@ -1,0 +1,60 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 图鉴反应页自测 ══════════
+── reaction_note 文案单源（GameConst 全键；R192 动态枚举） ──
+PASS | reaction_note 全键 name/recipe/effect/unlock/mult_fmt/sample 非空 + elements 配对
+PASS | reaction_note 字段封闭集（name/recipe/elements/effect/unlock/mult_fmt/sample 恰 7——无存档键来源）
+PASS | reaction_note 坏 id 空字典（不崩）
+PASS | reaction_note 名称/配方口径
+PASS | reaction_note 旧三键样张单源（碎裂1284 / 过载976 / 超导）
+PASS | 效果句含真条件（双槽/2s CD/免疫拒附）且无难度门文案（全键）
+PASS | 效果句优先级头部相对序（碎裂<过载<超导——扩序不翻头部）
+── 三源同锁 + 数值真源（探针 B1-B7 移植；R192 动态口径） ──
+PASS | B1 [追加保序] ReactionType 字面序锁（碎裂0/过载1/超导2）+ size == reaction_table 行数
+PASS | B2 reaction_table 键集 == 枚举成员 id 集（20 键——页面条目数数据真源）
+PASS | B3 碎裂 coef=2.0（×点燃剩余 DOT 总额）
+PASS | B4 过载 coef=1.2 radius=90（120%ATK 爆炸）
+PASS | B5 超导 resist_delta=-0.3 duration=6s
+PASS | B6 cd_rxn=2.0（条件文案：同反应 2s 内不重复触发）
+PASS | B7 REACTION_LOOKS 键集 == 枚举值集（20 项——字体预览条目数同锁）
+PASS | B8 reaction_note 可枚举键集 == 枚举成员集（四源双射套件侧守望；坏 id 才空）
+── R186 反应字型参数（探针 C1-C9 移植） ──
+PASS | C1 反应字号 54 = roundi(30×1.8)
+PASS | C2 反应描边 12px
+PASS | C3 三反应字型 variant = 0/1/2
+PASS | C4 填充/描边双色 = PopPalette.RXN_* 单源
+PASS | C5 [R192 翻转] LOOKS 无 text 键；name 单源 REACTION_NAMES；fmt 碎裂/过载=dmg、超导=pct
+PASS | C6 三字型字重/斜体：0=900直立 1=900斜体 2=700斜体
+PASS | C7 三字型惰性缓存同实例（重复调用同对象）
+PASS | C8 字型链 Arial Black 打头 + CJK 兜底
+PASS | C9 非法 variant 钳 0（§5 契约）
+── 页构建：4 页签 + 反应页 3 行（探针 A 组移植，A1 基线翻转） ──
+PASS | A0 Boot：GameLoop 就绪 + registry 已注入 MenuScreen
+PASS | A1 [翻转基线] 图鉴页签恰 4 枚 = 怪物/武器/词条/反应
+PASS | A1b 页签几何：宽 126 · 「反应」末沿 486+126=612（右距 36 不变）
+PASS | A2 图鉴面板打开且怪物页条目 >0
+PASS | A3 武器页条目 = registry 武器数（10）
+PASS | A4 词条页条目 = registry 词条数（71）
+PASS | A5 「反应」页签重建出全枚举条目（ReactionType 序；冰草标注行至多 +1）
+── 页签显隐互斥（图鉴 4 页签 vs 成就页签/翻页） ──
+PASS | 切成就：图鉴 4 页签全部隐藏 + 成就 4 页签显示 + 翻页显示
+PASS | 切图鉴：图鉴 4 页签全部显示（:462 字典遍历自动继承）+ 成就页签/翻页隐藏
+── 行级断言：名称单源 / 副文案 / 预览五项 override / 样张（R192 表驱动全键） ──
+PASS | D0 反应页行数 == 枚举全键（冰草标注行至多 +1）
+PASS | 行级：名称单源 + 副文案含 effect/unlock + 预览五项参数 + 样张==实机组合（20 行全过）
+PASS | 行级：预览双色 RXN_* 与字型 0/1/2 逐行对位（碎裂/过载/超导）
+PASS | 行级：效果句 autowrap 开 + 右缘 ≤414px（不压预览区）
+── 倍率运行时读表（禁硬编码：置 3.5 → 行文含 3.5 → 还原 2.0 → 复原） ──
+PASS | 倍率跟随表值：coef=3.5 → 碎裂行倍率文本含 3.5
+PASS | 还原 coef=2.0 后倍率复原（含 2.0 不含 3.5）
+── 无存档层改动（Meta 四 codex_* 字段名不变；反应页零写入） ──
+PASS | 反应页开合前后 Meta codex_* / achievements_done 集合 size 不变（零写入）
+── 反应触发真条件（探针 D1-D4 移植；页面条件文案与此同源口径） ──
+PASS | D1 单槽附着不触发（双元素共存才反应）
+PASS | D2 火+电 = 过载（RXN_FIR_LTG，1.2×快照）+ 双槽清零
+PASS | D3 cd_rxn=2s 内复检不重复触发（无难度门/波次门）
+PASS | D4 三元素共存 → 碎裂（RXN_FIR_ICE=0）优先且一帧一反应（仅 cd[0] 落闸）
+────────────────────────────────────────
+汇总：PASS 44 / FAIL 0（共 44 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

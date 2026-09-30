@@ -10,7 +10,7 @@ rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L1：校准锚束 tick_atk 7 × 5 跳/s（单体 DPS 35 不动）；镜面 1 面 × mirror_ratio 0.40（R187 退役折射——锚束+万镜回廊）"
+note = "主束每跳 7 伤 × 5 跳/s；棱镜映照出 1 面镜，镜面复制主束 40% 伤害"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,7 +19,7 @@ rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L2：锚束 tick_atk 9 × 5 跳/s；镜面 1 面 × 0.45（R187 万镜回廊逐级表）"
+note = "主束每跳 7→9 伤，镜面复制 40%→45%"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
@@ -28,7 +28,7 @@ rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L3：锚束 tick_atk 11 × 5 跳/s；镜面 2 面 × 0.50（镜数等级曲线 [1,1,2,2,3]）"
+note = "主束每跳 9→11 伤，镜面 1→2 面（各复制 50%）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -37,7 +37,7 @@ rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L4：锚束 tick_atk 14 × 5 跳/s；镜面 2 面 × 0.55（R187）"
+note = "主束每跳 11→14 伤，镜面复制 50%→55%"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 5.0
 cd = 1.0
 pierce = 1
 pellets = 1
-note = "A3 §3.5 L5：锚束 tick_atk 15 × 5 跳/s；镜面 3 面 × 0.60（TH_MIRROR_CHOIR ≥3 面 +0.1，有效帽 0.7）"
+note = "主束每跳 14→15 伤，镜面 2→3 面（各复制 60%）；镜面满 3 面时复制率再 +10%"
 
 [resource]
 script = ExtResource("1_wd")

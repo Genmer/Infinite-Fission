@@ -36,15 +36,46 @@ const HURT_FLASH_TIME := 0.12                 # E6 受击白闪时长 s
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_ui()
+	# R195 适配：安全区接入（底座组 SafeAreaHelper 单点引用，不复写）。守卫外
+	# （桌面窗口化/headless）insets 恒零 → offset 写 0 = 默认窗逐位恒等；真机延迟
+	# ≥1 帧重读兜首帧 transform 未定型，size_changed/重获焦点由 helper 重放回调。
+	_apply_safe_area()
+	if SafeAreaHelper.enabled(get_window()):          # 守卫外恒零→零协程悬挂（headless 全绿面）
+		_apply_safe_area_deferred()                # 真值环境延迟重读（SafeAreaHelper 契约）
+	SafeAreaHelper.bind_reread(get_window(), _apply_safe_area)
 	EventBus.boss_spawned.connect(_on_boss_spawned)
 	EventBus.enemy_killed.connect(_on_enemy_killed)
 	EventBus.state_changed.connect(_on_state_changed)
+	EventBus.boss_phase_changed.connect(_on_boss_phase_changed)   # C15(R199)：相位点点亮
+
+
+func _apply_safe_area() -> void:
+	# R195 安全区应用（消费式契约=SafeAreaHelper.insets 注释）：根 FULL_RECT
+	# offset 左/上取正、右/下取负；血条组左上锚随根让位，banner 全宽拉伸随根域。
+	# 仅 realize/size_changed/焦点事件驱动，非每帧路径（R188 纪律）。
+	var ins := SafeAreaHelper.insets(get_window())
+	_root.offset_left = ins.position.x
+	_root.offset_top = ins.position.y
+	_root.offset_right = -ins.size.x
+	_root.offset_bottom = -ins.size.y
+
+
+func _apply_safe_area_deferred() -> void:
+	# realize 后延迟 ≥1 帧重读（首帧查询为未 realize 真值——SafeAreaHelper 契约）；
+	# 协程即发即续，不阻塞 _ready（调用方已守卫 enabled 才进来；二次应用幂等）
+	await SafeAreaHelper.read_deferred(get_window())
+	_apply_safe_area()
 
 
 func tick(p_raw_delta: float) -> void:
 	# 每帧拉取 Boss HP 比例 + 相位点刷新 + 横幅衰减（⑧ UI 阶段，raw 通道）
 	if boss == null or not is_instance_valid(boss):
 		return
+	# C15(R199)：相位点每帧跟随 Boss 实际阶段（脏检查在 _sync_phase 内——无跨越零贴图
+	# 写）。此前 _sync_phase 全仓零调用、相位点恒空心环；_on_boss_spawned 置
+	# _last_phase=-1 后的首次刷新即由本行走通
+	var bp_v: Variant = boss.get("boss_phase")
+	_sync_phase(int(bp_v) if bp_v != null else 1)
 	var max_hp: float = boss.get("max_hp")
 	var hp: float = boss.get("hp")
 	var pct := 0.0 if max_hp <= 0.0 else clampf(hp / max_hp, 0.0, 1.0)
@@ -125,6 +156,13 @@ func _on_state_changed(p_state: int) -> void:
 		_root.visible = false
 		_banner.visible = false
 		_banner_left = 0.0
+
+
+func _on_boss_phase_changed(p_phase: int, p_enraged: bool) -> void:
+	# C15(R199)：相位切换/狂暴广播 → 相位点同步（发信点 enemy.gd:1015/:1018/:1040，
+	# 此前全仓唯一消费在 game_loop 音效侧）。狂暴广播 phase=0 是音效侧区分口径，而狂暴
+	# 仅在阶段 3 入段后发生（enemy._enter_boss_phase ≥3 分支）——按 3 同步防相位点回灭
+	_sync_phase(3 if p_enraged else p_phase)
 
 
 # ── 程序化 UI 组装（方向 C 贴纸风） ────────────────────────────────
@@ -215,11 +253,16 @@ func _build_ui() -> void:
 		_phase_dots.append(dot)
 
 	# 登场预警横幅（果冻 pop）
+	# R195 适配分区：全宽标签拉伸锚（anchor_l=0/anchor_r=1、y 不变；720×1280 恒等，
+	# 宽视口下满宽居中——全库第 11 处全宽标签）
 	_banner = StickerTheme.label_sticker(Label.new(), 34, PopPalette.ENEMY, 12, Color.WHITE, true)
 	_banner.name = "BossBanner"
 	_banner.text = ""
-	_banner.size = Vector2(720.0, 46.0)
-	_banner.position = Vector2(0.0, 336.0)
+	_banner.anchor_right = 1.0
+	_banner.offset_left = 0.0
+	_banner.offset_right = 0.0
+	_banner.offset_top = 336.0
+	_banner.offset_bottom = 382.0
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.visible = false
 	_root.add_child(_banner)

@@ -61,9 +61,16 @@ func _celebrate(p_pos: Vector2) -> void:
 			Vector2(cos(ang), sin(ang)) * speed,
 			LIFE_TIME * rng.randf_range(0.8, 1.0)))
 	# 顶部全宽落雨（跨屏铺开、初速向下小——保证「全屏」覆盖观感）
+	# r195-5（R198）量纲修正：本节点挂 GameLoop 世界（game_loop.gd:1366-1368 前置组装），
+	# piece 坐标属 720×1280 世界逻辑域——落雨带恒用世界设计域宽 720（同 cloud_backdrop
+	# DESIGN_CANVAS 兜底口径），不再读 viewport 实宽：get_visible_rect 是画布域，与世界
+	# 域量纲错配（3:4 画布 960 宽时 720 世界可见带 [-120,840] ⊇ [0,720] 落雨带全覆盖；
+	# EXPAND 延伸区画布实宽 ≠ 世界宽，R195 收口 final_transform 教训同源）。叮字钳制
+	# （_spawn_ding 内 20~700/260~1120）仍为 720×1280 设计域版面位（不受本修正影响）
+	var rain_w := 720.0                          # 世界设计域宽（720×1280 逻辑域，恒定）
 	for i in range(RAIN_COUNT):
 		_pieces.append(_make_piece_data(rng,
-			Vector2(rng.randf_range(0.0, 720.0), rng.randf_range(-80.0, -10.0)),
+			Vector2(rng.randf_range(0.0, rain_w), rng.randf_range(-80.0, -10.0)),
 			Vector2(rng.randf_range(-60.0, 60.0), rng.randf_range(60.0, 200.0)),
 			LIFE_TIME * rng.randf_range(0.85, 1.0)))
 	_spawn_ding(p_pos)

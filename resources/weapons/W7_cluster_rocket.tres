@@ -10,7 +10,7 @@ rof = 0.3125
 cd = 3.2
 pierce = 1
 pellets = 1
-note = "A3 §3.7 L1（R27/R36 后口径）：主/子弹头 38；sub_count 5；blast_r 110"
+note = "每 3.2s 一枚集束火箭：弹头 38 伤，爆炸散出 5 枚自动寻的子弹头，爆炸半径 110"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,7 +19,7 @@ rof = 0.3125
 cd = 3.2
 pierce = 1
 pellets = 1
-note = "A3 §3.7 L2：sub_count 5→6；群体 DPS 43/目标"
+note = "子弹头 5→6 枚，群体 DPS 43/目标"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
@@ -28,7 +28,7 @@ rof = 0.3125
 cd = 3.2
 pierce = 1
 pellets = 1
-note = "A3 §3.7 L3：atk 14→17；群体 DPS 53/目标"
+note = "弹头 38→46 伤，群体 DPS 53/目标"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -37,7 +37,7 @@ rof = 0.3125
 cd = 3.2
 pierce = 1
 pellets = 1
-note = "A3 §3.7 L4：sub_count 6→8；群体 DPS 74/目标"
+note = "子弹头 6→8 枚，群体 DPS 74/目标"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 0.3846
 cd = 2.6
 pierce = 1
 pellets = 1
-note = "A3 §3.7 L5：atk 22；cd 3.2→2.6s；群体 DPS 75.4/目标"
+note = "弹头 54→68 伤，发射间隔 3.2s→2.6s，群体 DPS 75.4/目标"
 
 [resource]
 script = ExtResource("1_wd")

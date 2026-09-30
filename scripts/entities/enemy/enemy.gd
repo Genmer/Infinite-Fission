@@ -21,7 +21,7 @@ var contact_dmg: float = 8.0
 var exp_value: float = 3.0
 var behavior: int = GameConst.EnemyBehavior.CHASE
 var hitbox_r: float = 14.0                    # 碰撞半径快照（data.hitbox_r；投射物窄相判定读取）
-var resist: Array[float] = [0.0, 0.0, 0.0, 0.0]  # KIN/FIR/ICE/LTG 快照（超导 −30% 实时改写）
+var resist: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # KIN..DEN 8 元素快照（超导 −30% 实时改写；R192 追加不重排——旧档 4 项 .tres 越界位 get_resist 回 0.0 中性）
 var immune_mask: int = 0
 var elem_immune: int = 0                      # 元素伤害免疫位（R22 P1：bit = 1 << Element）
 var elemental: ElementalState = null          # 状态容器（M-11 注入；包 3 收紧：register_host 挂 ElementalState）
@@ -242,6 +242,23 @@ const BOSS_SWELL_MAX := 0.35                  # TelegraphSwell 膨胀上限（×
 const BLINK_OFFSET := 24.0                    # 落点随机偏移上限 px（防贴脸重合）
 const BLINK_CRUISE_MULT := 0.85               # 巡航追速倍率（「追不太上」的错觉）
 const BLINK_FREEZE_CD := 2.0                  # 读条被冻结打断后的施法冷却 s（§3.3 反制）
+
+# ── N01/R199 Boss 设计出场波（波表首次登场位；hp_base 即该波设计所见血量） ─────
+# 真源 = 五图波表 Boss 行首现位（R199_RELEASE_SWEEP §G2）：boss1=草原/寒霜/树海 w10、
+# boss2=魔域/沼泽 w10、boss3=草原 w30、E17=寒霜 w15、E18=魔域 w20、E19=树海 w25、
+# E20=沼泽 w30。Enemy.spawn 对 TAG_BOSS/TAG_FINAL_BOSS 改按 pow(growth, w−出场波)
+# 差值成长（.tres 的 hp_base 已含出场波成长，spawn 再乘一层 = 双重成长——E6_boss1@w10
+# 曾 ×3.33 / E6_boss3@w30 ×32）；无尽轮换位（如 E6_boss1@w35）按差值缩放不失真。
+# 表未收录的 Boss id（测试桩/自定义）保持旧全额口径；普通敌路径零改动。
+const BOSS_DEBUT_WAVE: Dictionary = {
+	&"E6_boss1": 10,
+	&"E6_boss2": 10,
+	&"E6_boss3": 30,
+	&"E17_frost_sovereign": 15,
+	&"E18_demon_lord": 20,
+	&"E19_grove_warden": 25,
+	&"E20_swamp_hydra": 30,
+}
 static var _flash_shader: Shader = null
 
 
@@ -290,7 +307,12 @@ func spawn(p_data: EnemyData, p_wave: int, p_tags: int) -> void:
 	var dmg_growth := 1.06 if bal == null else bal.dmg_growth_per_wave
 	var spd_growth := 0.008 if bal == null else bal.spd_growth_per_wave
 	var exp_growth := 1.085 if bal == null else bal.exp_inflation_per_wave
-	max_hp = data.hp_base * pow(hp_growth, w - 1.0) * e_hp
+	# N01/R199：Boss 血量去双重波次成长——hp_base 已是设计出场波血量（BOSS_DEBUT_WAVE），
+	# 改按「实际波 − 设计出场波」差值成长；出场波未收录的 Boss id 与普通敌保持旧口径。
+	var hp_exp := w - 1.0
+	if (tags & (GameConst.TAG_BOSS | GameConst.TAG_FINAL_BOSS)) != 0 and BOSS_DEBUT_WAVE.has(data.id):
+		hp_exp = maxf(w - float(BOSS_DEBUT_WAVE[data.id]), 0.0)
+	max_hp = data.hp_base * pow(hp_growth, hp_exp) * e_hp
 	hp = max_hp
 	speed = data.spd_base * (1.0 + spd_growth * (w - 1.0)) * e_spd
 	contact_dmg = data.dmg_base * pow(dmg_growth, w - 1.0) * e_dmg
@@ -709,6 +731,17 @@ func _draw() -> void:
 	draw_string(font, Vector2(-30.0, -34.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.76, 0.28))
 
 
+static var live_count: int = 0                 # R189c：在树活敌数（顿帧密集场「敌 >N」判据——§4.4 设计口径）
+
+
+func _enter_tree() -> void:
+	live_count += 1
+
+
+func _exit_tree() -> void:
+	live_count = maxi(live_count - 1, 0)
+
+
 func is_boss() -> bool:
 	return (tags & GameConst.TAG_BOSS) != 0
 
@@ -733,23 +766,27 @@ func _on_died() -> void:
 
 func _death_element_tint() -> Color:
 	# G5 死因元素染色：死亡瞬间元素槽最高者决定迸色（阈值 25——挂零元素不染）；
-	# 火=派生橙（点燃火苗同源）/ 冰=淡冰蓝（冰弹同源）/ 雷=电紫（连锁同族）
+	# base 全部取色表单源 PopPalette.ELEMENT_COLORS（派生 lerp 结构保留）：
+	# 火=表橙偏金 / 冰=表冰蓝提亮 / 雷=表电紫 / 水/风/岩/草=表色直读（R192 八元素）
 	if elemental == null:
 		return Color.WHITE
 	var best := GameConst.Element.KIN
 	var best_gauge := 25.0
-	for e in range(4):
+	for e in range(elemental.gauges.size()):
 		var g := float(elemental.gauges[e])
 		if g > best_gauge:
 			best_gauge = g
 			best = e
 	match best:
 		GameConst.Element.FIR:
-			return PopPalette.ENEMY.lerp(PopPalette.XP, 0.55)
+			return PopPalette.ELEMENT_COLORS[GameConst.Element.FIR].lerp(PopPalette.XP, 0.55)
 		GameConst.Element.ICE:
-			return PopPalette.PLAYER.lerp(Color.WHITE, 0.5)
+			return PopPalette.ELEMENT_COLORS[GameConst.Element.ICE].lerp(Color.WHITE, 0.5)
 		GameConst.Element.LTG:
-			return PopPalette.SHOCK.lerp(Color.WHITE, 0.2)
+			return PopPalette.ELEMENT_COLORS[GameConst.Element.LTG].lerp(Color.WHITE, 0.2)
+		GameConst.Element.HYD, GameConst.Element.ANE, GameConst.Element.GEO, \
+		GameConst.Element.DEN:
+			return PopPalette.ELEMENT_COLORS[best]
 		_:
 			return Color.WHITE
 
@@ -1614,7 +1651,7 @@ func _reset_state() -> void:
 	exp_value = 3.0
 	behavior = GameConst.EnemyBehavior.CHASE
 	hitbox_r = 14.0
-	resist = [0.0, 0.0, 0.0, 0.0]
+	resist = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	immune_mask = 0
 	elem_immune = 0
 	elemental = null
@@ -2447,7 +2484,7 @@ func _tick_status_tint(p_burning: bool, p_chilled: bool, p_frozen: bool, p_shock
 		var breath := 0.38 + 0.1 * sin(_anim_t * 6.2)
 		tint = tint.lerp(PopPalette.ENEMY.lerp(PopPalette.XP, 0.45), breath)   # 橙红呼吸
 	if p_chilled:
-		tint = tint.lerp(PopPalette.PLAYER.lerp(Color.WHITE, 0.45), 0.55)      # 寒滞冰蓝（加强）
+		tint = tint.lerp(PopPalette.ELEMENT_COLORS[GameConst.Element.ICE].lerp(Color.WHITE, 0.45), 0.55)   # 寒滞冰蓝（加强；base 表色单源）
 	if p_frozen:
 		tint = tint.lerp(PopPalette.PLAYER.lerp(Color.WHITE, 0.6), 0.88)       # 冻结重冰蓝封冻
 	if p_shocked:

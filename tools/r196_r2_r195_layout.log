@@ -1,0 +1,529 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R195 多尺寸适配矩阵 ══════════
+PASS | R195 前置：Boot 进入 MENU + 致命清单空
+PASS | R195 前置：菜单全宽标签句柄齐（Logo/副标/公告行/name_tag/footer）
+── R195 默认窗（540×960）EXPAND≡KEEP ──
+PASS | R195 默认窗：vis==(720,1280)（scale 0.75，桌面零影响）
+── R195 矩阵 @720x1280 基准16:9 ──
+PASS | R195 @720x1280 基准16:9：visible_rect 输出（A2 逐尺寸断言）
+PASS | R1 MENU/Logo @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 MENU/副标 @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 MENU/name_tag @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 MENU/footer @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 MENU/StartButton @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R2 MENU @720x1280 基准16:9：@Label@1341 与 @Label@1342 不相交
+PASS | R2 MENU @720x1280 基准16:9：@Label@1344 与 @Label@1345 不相交
+PASS | R2 MENU @720x1280 基准16:9：@Label@1345 与 StartButton 不相交
+PASS | R3 MENU/Logo @720x1280 基准16:9：横向居中（≤2px）
+PASS | R3 MENU/副标 @720x1280 基准16:9：横向居中（≤2px）
+PASS | R3 MENU/公告0 @720x1280 基准16:9：横向居中（≤2px）
+PASS | R3 MENU/公告1 @720x1280 基准16:9：横向居中（≤2px）
+PASS | R3 MENU/公告2 @720x1280 基准16:9：横向居中（≤2px）
+PASS | R3 MENU/name_tag @720x1280 基准16:9：横向居中（≤2px）
+PASS | R3 MENU/footer @720x1280 基准16:9：横向居中（≤2px）
+PASS | R6 MENU @720x1280 基准16:9：dim.size==visible_rect
+PASS | R1 PLAYING/HpPanel @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBadge @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/LevelText @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/WaveText @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/KillText @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/TimeText @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/GoldText @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/PauseButton @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/AutoToggle @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/SkillButton @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/TargetBar @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/BossBanner @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/StateLabel @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBanner @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/BuildPanel @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R2 PLAYING @720x1280 基准16:9：@Panel@1285 与 @Panel@1286 不相交
+PASS | R2 PLAYING @720x1280 基准16:9：KillText 与 TimeText 不相交
+PASS | R2 PLAYING @720x1280 基准16:9：TimeText 与 @Label@1292 不相交
+PASS | R2 PLAYING @720x1280 基准16:9：KillText 与 @Label@1292 不相交
+PASS | R2 PLAYING @720x1280 基准16:9：PauseButton 与 AutoToggle 不相交
+PASS | R2 PLAYING @720x1280 基准16:9：WaveText 与 PauseButton 不相交
+PASS | R2 PLAYING @720x1280 基准16:9：WaveText 与 AutoToggle 不相交
+PASS | R2 白名单对 @720x1280 基准16:9 PLAYING：钉存在（ReviveBadge∩@Panel@1285，贴纸叠贴）
+PASS | R2 白名单对 @720x1280 基准16:9 PLAYING：钉存在（R187Readout∩@Panel@1285，贴纸叠贴）
+PASS | R3 PLAYING/BossBanner @720x1280 基准16:9：横向居中（≤2px）
+PASS | R3 PLAYING/StateLabel @720x1280 基准16:9：横向居中（≤2px）
+PASS | R3 PLAYING/ReviveBanner @720x1280 基准16:9：横向居中（≤2px）
+PASS | R3 PLAYING/WaveToast(重触发) @720x1280 基准16:9：横向居中（≤2px）
+PASS | R3 PLAYING/BossBarBanner @720x1280 基准16:9：横向居中（≤2px）
+PASS | R4 @720x1280 基准16:9：技能钮贴 vis 底带 82px（±2）
+PASS | R4 @720x1280 基准16:9：构筑面板贴 vis 顶带 196px（±2，R196 POS0 右上默认落位）
+PASS | R6 PLAYING @720x1280 基准16:9：dim.size==visible_rect
+PASS | R7 @720x1280 基准16:9：AUTO 钮 56×64 不缩水
+PASS | R7 @720x1280 基准16:9：AUTO 胶囊 56×64 不缩水
+PASS | R7 @720x1280 基准16:9：暂停钮 72×72 不缩水
+PASS | R5 @720x1280 基准16:9：spawn 采样 24 点全部 ∉ 设计域（expand 顶延展渐显入场合规）
+PASS | R1 PAUSED/PauseCard @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R6 PAUSED @720x1280 基准16:9：dim.size==visible_rect
+PASS | R1 SETTINGS/SettingsCard @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R2 白名单对 @720x1280 基准16:9 SETTINGS：钉存在（SettingsCard∩SettingsGlyph，贴纸叠贴）
+PASS | R6 SETTINGS @720x1280 基准16:9：dim.size==visible_rect
+PASS | R1 LEVEL_UP/title @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 LEVEL_UP/reroll @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R2 LEVEL_UP @720x1280 基准16:9：@Label@1314 与 RerollButton 不相交
+PASS | R3 LEVEL_UP/选卡标题 @720x1280 基准16:9：横向居中（≤2px）
+PASS | R6 LEVEL_UP @720x1280 基准16:9：dim.size==visible_rect
+PASS | R1 SHOP/ShopCard @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 SHOP/refresh_btn @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R1 SHOP/leave_btn @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R2 SHOP @720x1280 基准16:9：ShopRefreshButton 与 ShopLeaveButton 不相交
+PASS | R6 SHOP @720x1280 基准16:9：dim.size==visible_rect
+PASS | R1 GAME_OVER/ReportCard @720x1280 基准16:9：界内（⊆vis+2px）
+PASS | R6 GAME_OVER @720x1280 基准16:9：dim.size==visible_rect
+── R195 矩阵 @720x1440 18:9 ──
+PASS | R195 @720x1440 18:9：visible_rect 输出（A2 逐尺寸断言）
+PASS | R1 MENU/Logo @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 MENU/副标 @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 MENU/name_tag @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 MENU/footer @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 MENU/StartButton @720x1440 18:9：界内（⊆vis+2px）
+PASS | R2 MENU @720x1440 18:9：@Label@1341 与 @Label@1342 不相交
+PASS | R2 MENU @720x1440 18:9：@Label@1344 与 @Label@1345 不相交
+PASS | R2 MENU @720x1440 18:9：@Label@1345 与 StartButton 不相交
+PASS | R3 MENU/Logo @720x1440 18:9：横向居中（≤2px）
+PASS | R3 MENU/副标 @720x1440 18:9：横向居中（≤2px）
+PASS | R3 MENU/公告0 @720x1440 18:9：横向居中（≤2px）
+PASS | R3 MENU/公告1 @720x1440 18:9：横向居中（≤2px）
+PASS | R3 MENU/公告2 @720x1440 18:9：横向居中（≤2px）
+PASS | R3 MENU/name_tag @720x1440 18:9：横向居中（≤2px）
+PASS | R3 MENU/footer @720x1440 18:9：横向居中（≤2px）
+PASS | R6 MENU @720x1440 18:9：dim.size==visible_rect
+PASS | R1 PLAYING/HpPanel @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBadge @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/LevelText @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/WaveText @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/KillText @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/TimeText @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/GoldText @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/PauseButton @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/AutoToggle @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/SkillButton @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/TargetBar @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/BossBanner @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/StateLabel @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBanner @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/BuildPanel @720x1440 18:9：界内（⊆vis+2px）
+PASS | R2 PLAYING @720x1440 18:9：@Panel@1285 与 @Panel@1286 不相交
+PASS | R2 PLAYING @720x1440 18:9：KillText 与 TimeText 不相交
+PASS | R2 PLAYING @720x1440 18:9：TimeText 与 @Label@1292 不相交
+PASS | R2 PLAYING @720x1440 18:9：KillText 与 @Label@1292 不相交
+PASS | R2 PLAYING @720x1440 18:9：PauseButton 与 AutoToggle 不相交
+PASS | R2 PLAYING @720x1440 18:9：WaveText 与 PauseButton 不相交
+PASS | R2 PLAYING @720x1440 18:9：WaveText 与 AutoToggle 不相交
+PASS | R2 白名单对 @720x1440 18:9 PLAYING：钉存在（ReviveBadge∩@Panel@1285，贴纸叠贴）
+PASS | R2 白名单对 @720x1440 18:9 PLAYING：钉存在（R187Readout∩@Panel@1285，贴纸叠贴）
+PASS | R3 PLAYING/BossBanner @720x1440 18:9：横向居中（≤2px）
+PASS | R3 PLAYING/StateLabel @720x1440 18:9：横向居中（≤2px）
+PASS | R3 PLAYING/ReviveBanner @720x1440 18:9：横向居中（≤2px）
+PASS | R3 PLAYING/WaveToast(重触发) @720x1440 18:9：横向居中（≤2px）
+PASS | R3 PLAYING/BossBarBanner @720x1440 18:9：横向居中（≤2px）
+PASS | R4 @720x1440 18:9：技能钮贴 vis 底带 82px（±2）
+PASS | R4 @720x1440 18:9：构筑面板贴 vis 顶带 196px（±2，R196 POS0 右上默认落位）
+PASS | R6 PLAYING @720x1440 18:9：dim.size==visible_rect
+PASS | R7 @720x1440 18:9：AUTO 钮 56×64 不缩水
+PASS | R7 @720x1440 18:9：AUTO 胶囊 56×64 不缩水
+PASS | R7 @720x1440 18:9：暂停钮 72×72 不缩水
+PASS | R5 @720x1440 18:9：spawn 采样 24 点全部 ∉ 设计域（expand 顶延展渐显入场合规）
+PASS | R1 PAUSED/PauseCard @720x1440 18:9：界内（⊆vis+2px）
+PASS | R6 PAUSED @720x1440 18:9：dim.size==visible_rect
+PASS | R1 SETTINGS/SettingsCard @720x1440 18:9：界内（⊆vis+2px）
+PASS | R2 白名单对 @720x1440 18:9 SETTINGS：钉存在（SettingsCard∩SettingsGlyph，贴纸叠贴）
+PASS | R6 SETTINGS @720x1440 18:9：dim.size==visible_rect
+PASS | R1 LEVEL_UP/title @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 LEVEL_UP/reroll @720x1440 18:9：界内（⊆vis+2px）
+PASS | R2 LEVEL_UP @720x1440 18:9：@Label@1314 与 RerollButton 不相交
+PASS | R3 LEVEL_UP/选卡标题 @720x1440 18:9：横向居中（≤2px）
+PASS | R6 LEVEL_UP @720x1440 18:9：dim.size==visible_rect
+PASS | R1 SHOP/ShopCard @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 SHOP/refresh_btn @720x1440 18:9：界内（⊆vis+2px）
+PASS | R1 SHOP/leave_btn @720x1440 18:9：界内（⊆vis+2px）
+PASS | R2 SHOP @720x1440 18:9：ShopRefreshButton 与 ShopLeaveButton 不相交
+PASS | R6 SHOP @720x1440 18:9：dim.size==visible_rect
+PASS | R1 GAME_OVER/ReportCard @720x1440 18:9：界内（⊆vis+2px）
+PASS | R6 GAME_OVER @720x1440 18:9：dim.size==visible_rect
+── R195 矩阵 @720x1560 19.5:9 ──
+PASS | R195 @720x1560 19.5:9：visible_rect 输出（A2 逐尺寸断言）
+PASS | R1 MENU/Logo @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 MENU/副标 @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 MENU/name_tag @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 MENU/footer @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 MENU/StartButton @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R2 MENU @720x1560 19.5:9：@Label@1341 与 @Label@1342 不相交
+PASS | R2 MENU @720x1560 19.5:9：@Label@1344 与 @Label@1345 不相交
+PASS | R2 MENU @720x1560 19.5:9：@Label@1345 与 StartButton 不相交
+PASS | R3 MENU/Logo @720x1560 19.5:9：横向居中（≤2px）
+PASS | R3 MENU/副标 @720x1560 19.5:9：横向居中（≤2px）
+PASS | R3 MENU/公告0 @720x1560 19.5:9：横向居中（≤2px）
+PASS | R3 MENU/公告1 @720x1560 19.5:9：横向居中（≤2px）
+PASS | R3 MENU/公告2 @720x1560 19.5:9：横向居中（≤2px）
+PASS | R3 MENU/name_tag @720x1560 19.5:9：横向居中（≤2px）
+PASS | R3 MENU/footer @720x1560 19.5:9：横向居中（≤2px）
+PASS | R6 MENU @720x1560 19.5:9：dim.size==visible_rect
+PASS | R1 PLAYING/HpPanel @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBadge @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/LevelText @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/WaveText @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/KillText @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/TimeText @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/GoldText @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/PauseButton @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/AutoToggle @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/SkillButton @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/TargetBar @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/BossBanner @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/StateLabel @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBanner @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/BuildPanel @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R2 PLAYING @720x1560 19.5:9：@Panel@1285 与 @Panel@1286 不相交
+PASS | R2 PLAYING @720x1560 19.5:9：KillText 与 TimeText 不相交
+PASS | R2 PLAYING @720x1560 19.5:9：TimeText 与 @Label@1292 不相交
+PASS | R2 PLAYING @720x1560 19.5:9：KillText 与 @Label@1292 不相交
+PASS | R2 PLAYING @720x1560 19.5:9：PauseButton 与 AutoToggle 不相交
+PASS | R2 PLAYING @720x1560 19.5:9：WaveText 与 PauseButton 不相交
+PASS | R2 PLAYING @720x1560 19.5:9：WaveText 与 AutoToggle 不相交
+PASS | R2 白名单对 @720x1560 19.5:9 PLAYING：钉存在（ReviveBadge∩@Panel@1285，贴纸叠贴）
+PASS | R2 白名单对 @720x1560 19.5:9 PLAYING：钉存在（R187Readout∩@Panel@1285，贴纸叠贴）
+PASS | R3 PLAYING/BossBanner @720x1560 19.5:9：横向居中（≤2px）
+PASS | R3 PLAYING/StateLabel @720x1560 19.5:9：横向居中（≤2px）
+PASS | R3 PLAYING/ReviveBanner @720x1560 19.5:9：横向居中（≤2px）
+PASS | R3 PLAYING/WaveToast(重触发) @720x1560 19.5:9：横向居中（≤2px）
+PASS | R3 PLAYING/BossBarBanner @720x1560 19.5:9：横向居中（≤2px）
+PASS | R4 @720x1560 19.5:9：技能钮贴 vis 底带 82px（±2）
+PASS | R4 @720x1560 19.5:9：构筑面板贴 vis 顶带 196px（±2，R196 POS0 右上默认落位）
+PASS | R6 PLAYING @720x1560 19.5:9：dim.size==visible_rect
+PASS | R7 @720x1560 19.5:9：AUTO 钮 56×64 不缩水
+PASS | R7 @720x1560 19.5:9：AUTO 胶囊 56×64 不缩水
+PASS | R7 @720x1560 19.5:9：暂停钮 72×72 不缩水
+PASS | R5 @720x1560 19.5:9：spawn 采样 24 点全部 ∉ 设计域（expand 顶延展渐显入场合规）
+PASS | R1 PAUSED/PauseCard @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R6 PAUSED @720x1560 19.5:9：dim.size==visible_rect
+PASS | R1 SETTINGS/SettingsCard @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R2 白名单对 @720x1560 19.5:9 SETTINGS：钉存在（SettingsCard∩SettingsGlyph，贴纸叠贴）
+PASS | R6 SETTINGS @720x1560 19.5:9：dim.size==visible_rect
+PASS | R1 LEVEL_UP/title @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 LEVEL_UP/reroll @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R2 LEVEL_UP @720x1560 19.5:9：@Label@1314 与 RerollButton 不相交
+PASS | R3 LEVEL_UP/选卡标题 @720x1560 19.5:9：横向居中（≤2px）
+PASS | R6 LEVEL_UP @720x1560 19.5:9：dim.size==visible_rect
+PASS | R1 SHOP/ShopCard @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 SHOP/refresh_btn @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R1 SHOP/leave_btn @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R2 SHOP @720x1560 19.5:9：ShopRefreshButton 与 ShopLeaveButton 不相交
+PASS | R6 SHOP @720x1560 19.5:9：dim.size==visible_rect
+PASS | R1 GAME_OVER/ReportCard @720x1560 19.5:9：界内（⊆vis+2px）
+PASS | R6 GAME_OVER @720x1560 19.5:9：dim.size==visible_rect
+── R195 矩阵 @720x1600 20:9 ──
+PASS | R195 @720x1600 20:9：visible_rect 输出（A2 逐尺寸断言）
+PASS | R1 MENU/Logo @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 MENU/副标 @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 MENU/name_tag @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 MENU/footer @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 MENU/StartButton @720x1600 20:9：界内（⊆vis+2px）
+PASS | R2 MENU @720x1600 20:9：@Label@1341 与 @Label@1342 不相交
+PASS | R2 MENU @720x1600 20:9：@Label@1344 与 @Label@1345 不相交
+PASS | R2 MENU @720x1600 20:9：@Label@1345 与 StartButton 不相交
+PASS | R3 MENU/Logo @720x1600 20:9：横向居中（≤2px）
+PASS | R3 MENU/副标 @720x1600 20:9：横向居中（≤2px）
+PASS | R3 MENU/公告0 @720x1600 20:9：横向居中（≤2px）
+PASS | R3 MENU/公告1 @720x1600 20:9：横向居中（≤2px）
+PASS | R3 MENU/公告2 @720x1600 20:9：横向居中（≤2px）
+PASS | R3 MENU/name_tag @720x1600 20:9：横向居中（≤2px）
+PASS | R3 MENU/footer @720x1600 20:9：横向居中（≤2px）
+PASS | R6 MENU @720x1600 20:9：dim.size==visible_rect
+PASS | R1 PLAYING/HpPanel @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBadge @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/LevelText @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/WaveText @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/KillText @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/TimeText @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/GoldText @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/PauseButton @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/AutoToggle @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/SkillButton @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/TargetBar @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/BossBanner @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/StateLabel @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBanner @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/BuildPanel @720x1600 20:9：界内（⊆vis+2px）
+PASS | R2 PLAYING @720x1600 20:9：@Panel@1285 与 @Panel@1286 不相交
+PASS | R2 PLAYING @720x1600 20:9：KillText 与 TimeText 不相交
+PASS | R2 PLAYING @720x1600 20:9：TimeText 与 @Label@1292 不相交
+PASS | R2 PLAYING @720x1600 20:9：KillText 与 @Label@1292 不相交
+PASS | R2 PLAYING @720x1600 20:9：PauseButton 与 AutoToggle 不相交
+PASS | R2 PLAYING @720x1600 20:9：WaveText 与 PauseButton 不相交
+PASS | R2 PLAYING @720x1600 20:9：WaveText 与 AutoToggle 不相交
+PASS | R2 白名单对 @720x1600 20:9 PLAYING：钉存在（ReviveBadge∩@Panel@1285，贴纸叠贴）
+PASS | R2 白名单对 @720x1600 20:9 PLAYING：钉存在（R187Readout∩@Panel@1285，贴纸叠贴）
+PASS | R3 PLAYING/BossBanner @720x1600 20:9：横向居中（≤2px）
+PASS | R3 PLAYING/StateLabel @720x1600 20:9：横向居中（≤2px）
+PASS | R3 PLAYING/ReviveBanner @720x1600 20:9：横向居中（≤2px）
+PASS | R3 PLAYING/WaveToast(重触发) @720x1600 20:9：横向居中（≤2px）
+PASS | R3 PLAYING/BossBarBanner @720x1600 20:9：横向居中（≤2px）
+PASS | R4 @720x1600 20:9：技能钮贴 vis 底带 82px（±2）
+PASS | R4 @720x1600 20:9：构筑面板贴 vis 顶带 196px（±2，R196 POS0 右上默认落位）
+PASS | R6 PLAYING @720x1600 20:9：dim.size==visible_rect
+PASS | R7 @720x1600 20:9：AUTO 钮 56×64 不缩水
+PASS | R7 @720x1600 20:9：AUTO 胶囊 56×64 不缩水
+PASS | R7 @720x1600 20:9：暂停钮 72×72 不缩水
+PASS | R5 @720x1600 20:9：spawn 采样 24 点全部 ∉ 设计域（expand 顶延展渐显入场合规）
+PASS | R1 PAUSED/PauseCard @720x1600 20:9：界内（⊆vis+2px）
+PASS | R6 PAUSED @720x1600 20:9：dim.size==visible_rect
+PASS | R1 SETTINGS/SettingsCard @720x1600 20:9：界内（⊆vis+2px）
+PASS | R2 白名单对 @720x1600 20:9 SETTINGS：钉存在（SettingsCard∩SettingsGlyph，贴纸叠贴）
+PASS | R6 SETTINGS @720x1600 20:9：dim.size==visible_rect
+PASS | R1 LEVEL_UP/title @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 LEVEL_UP/reroll @720x1600 20:9：界内（⊆vis+2px）
+PASS | R2 LEVEL_UP @720x1600 20:9：@Label@1314 与 RerollButton 不相交
+PASS | R3 LEVEL_UP/选卡标题 @720x1600 20:9：横向居中（≤2px）
+PASS | R6 LEVEL_UP @720x1600 20:9：dim.size==visible_rect
+PASS | R1 SHOP/ShopCard @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 SHOP/refresh_btn @720x1600 20:9：界内（⊆vis+2px）
+PASS | R1 SHOP/leave_btn @720x1600 20:9：界内（⊆vis+2px）
+PASS | R2 SHOP @720x1600 20:9：ShopRefreshButton 与 ShopLeaveButton 不相交
+PASS | R6 SHOP @720x1600 20:9：dim.size==visible_rect
+PASS | R1 GAME_OVER/ReportCard @720x1600 20:9：界内（⊆vis+2px）
+PASS | R6 GAME_OVER @720x1600 20:9：dim.size==visible_rect
+── R195 矩阵 @720x1680 21:9 ──
+PASS | R195 @720x1680 21:9：visible_rect 输出（A2 逐尺寸断言）
+PASS | R1 MENU/Logo @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 MENU/副标 @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 MENU/name_tag @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 MENU/footer @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 MENU/StartButton @720x1680 21:9：界内（⊆vis+2px）
+PASS | R2 MENU @720x1680 21:9：@Label@1341 与 @Label@1342 不相交
+PASS | R2 MENU @720x1680 21:9：@Label@1344 与 @Label@1345 不相交
+PASS | R2 MENU @720x1680 21:9：@Label@1345 与 StartButton 不相交
+PASS | R3 MENU/Logo @720x1680 21:9：横向居中（≤2px）
+PASS | R3 MENU/副标 @720x1680 21:9：横向居中（≤2px）
+PASS | R3 MENU/公告0 @720x1680 21:9：横向居中（≤2px）
+PASS | R3 MENU/公告1 @720x1680 21:9：横向居中（≤2px）
+PASS | R3 MENU/公告2 @720x1680 21:9：横向居中（≤2px）
+PASS | R3 MENU/name_tag @720x1680 21:9：横向居中（≤2px）
+PASS | R3 MENU/footer @720x1680 21:9：横向居中（≤2px）
+PASS | R6 MENU @720x1680 21:9：dim.size==visible_rect
+PASS | R1 PLAYING/HpPanel @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBadge @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/LevelText @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/WaveText @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/KillText @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/TimeText @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/GoldText @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/PauseButton @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/AutoToggle @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/SkillButton @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/TargetBar @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/BossBanner @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/StateLabel @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBanner @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 PLAYING/BuildPanel @720x1680 21:9：界内（⊆vis+2px）
+PASS | R2 PLAYING @720x1680 21:9：@Panel@1285 与 @Panel@1286 不相交
+PASS | R2 PLAYING @720x1680 21:9：KillText 与 TimeText 不相交
+PASS | R2 PLAYING @720x1680 21:9：TimeText 与 @Label@1292 不相交
+PASS | R2 PLAYING @720x1680 21:9：KillText 与 @Label@1292 不相交
+PASS | R2 PLAYING @720x1680 21:9：PauseButton 与 AutoToggle 不相交
+PASS | R2 PLAYING @720x1680 21:9：WaveText 与 PauseButton 不相交
+PASS | R2 PLAYING @720x1680 21:9：WaveText 与 AutoToggle 不相交
+PASS | R2 白名单对 @720x1680 21:9 PLAYING：钉存在（ReviveBadge∩@Panel@1285，贴纸叠贴）
+PASS | R2 白名单对 @720x1680 21:9 PLAYING：钉存在（R187Readout∩@Panel@1285，贴纸叠贴）
+PASS | R3 PLAYING/BossBanner @720x1680 21:9：横向居中（≤2px）
+PASS | R3 PLAYING/StateLabel @720x1680 21:9：横向居中（≤2px）
+PASS | R3 PLAYING/ReviveBanner @720x1680 21:9：横向居中（≤2px）
+PASS | R3 PLAYING/WaveToast(重触发) @720x1680 21:9：横向居中（≤2px）
+PASS | R3 PLAYING/BossBarBanner @720x1680 21:9：横向居中（≤2px）
+PASS | R4 @720x1680 21:9：技能钮贴 vis 底带 82px（±2）
+PASS | R4 @720x1680 21:9：构筑面板贴 vis 顶带 196px（±2，R196 POS0 右上默认落位）
+PASS | R6 PLAYING @720x1680 21:9：dim.size==visible_rect
+PASS | R7 @720x1680 21:9：AUTO 钮 56×64 不缩水
+PASS | R7 @720x1680 21:9：AUTO 胶囊 56×64 不缩水
+PASS | R7 @720x1680 21:9：暂停钮 72×72 不缩水
+PASS | R5 @720x1680 21:9：spawn 采样 24 点全部 ∉ 设计域（expand 顶延展渐显入场合规）
+PASS | R1 PAUSED/PauseCard @720x1680 21:9：界内（⊆vis+2px）
+PASS | R6 PAUSED @720x1680 21:9：dim.size==visible_rect
+PASS | R1 SETTINGS/SettingsCard @720x1680 21:9：界内（⊆vis+2px）
+PASS | R2 白名单对 @720x1680 21:9 SETTINGS：钉存在（SettingsCard∩SettingsGlyph，贴纸叠贴）
+PASS | R6 SETTINGS @720x1680 21:9：dim.size==visible_rect
+PASS | R1 LEVEL_UP/title @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 LEVEL_UP/reroll @720x1680 21:9：界内（⊆vis+2px）
+PASS | R2 LEVEL_UP @720x1680 21:9：@Label@1314 与 RerollButton 不相交
+PASS | R3 LEVEL_UP/选卡标题 @720x1680 21:9：横向居中（≤2px）
+PASS | R6 LEVEL_UP @720x1680 21:9：dim.size==visible_rect
+PASS | R1 SHOP/ShopCard @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 SHOP/refresh_btn @720x1680 21:9：界内（⊆vis+2px）
+PASS | R1 SHOP/leave_btn @720x1680 21:9：界内（⊆vis+2px）
+PASS | R2 SHOP @720x1680 21:9：ShopRefreshButton 与 ShopLeaveButton 不相交
+PASS | R6 SHOP @720x1680 21:9：dim.size==visible_rect
+PASS | R1 GAME_OVER/ReportCard @720x1680 21:9：界内（⊆vis+2px）
+PASS | R6 GAME_OVER @720x1680 21:9：dim.size==visible_rect
+── R195 矩阵 @960x1280 3:4平板 ──
+PASS | R195 @960x1280 3:4平板：visible_rect 输出（A2 逐尺寸断言）
+PASS | R1 MENU/Logo @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 MENU/副标 @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 MENU/name_tag @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 MENU/footer @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 MENU/StartButton @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R2 MENU @960x1280 3:4平板：@Label@1341 与 @Label@1342 不相交
+PASS | R2 MENU @960x1280 3:4平板：@Label@1344 与 @Label@1345 不相交
+PASS | R2 MENU @960x1280 3:4平板：@Label@1345 与 StartButton 不相交
+PASS | R3 MENU/Logo @960x1280 3:4平板：横向居中（≤2px）
+PASS | R3 MENU/副标 @960x1280 3:4平板：横向居中（≤2px）
+PASS | R3 MENU/公告0 @960x1280 3:4平板：横向居中（≤2px）
+PASS | R3 MENU/公告1 @960x1280 3:4平板：横向居中（≤2px）
+PASS | R3 MENU/公告2 @960x1280 3:4平板：横向居中（≤2px）
+PASS | R3 MENU/name_tag @960x1280 3:4平板：横向居中（≤2px）
+PASS | R3 MENU/footer @960x1280 3:4平板：横向居中（≤2px）
+PASS | R6 MENU @960x1280 3:4平板：dim.size==visible_rect
+PASS | R1 PLAYING/HpPanel @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBadge @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/LevelText @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/WaveText @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/KillText @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/TimeText @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/GoldText @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/PauseButton @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/AutoToggle @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/SkillButton @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/TargetBar @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/BossBanner @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/StateLabel @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBanner @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 PLAYING/BuildPanel @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R2 PLAYING @960x1280 3:4平板：@Panel@1285 与 @Panel@1286 不相交
+PASS | R2 PLAYING @960x1280 3:4平板：KillText 与 TimeText 不相交
+PASS | R2 PLAYING @960x1280 3:4平板：TimeText 与 @Label@1292 不相交
+PASS | R2 PLAYING @960x1280 3:4平板：KillText 与 @Label@1292 不相交
+PASS | R2 PLAYING @960x1280 3:4平板：PauseButton 与 AutoToggle 不相交
+PASS | R2 PLAYING @960x1280 3:4平板：WaveText 与 PauseButton 不相交
+PASS | R2 PLAYING @960x1280 3:4平板：WaveText 与 AutoToggle 不相交
+PASS | R2 白名单对 @960x1280 3:4平板 PLAYING：钉存在（ReviveBadge∩@Panel@1285，贴纸叠贴）
+PASS | R2 白名单对 @960x1280 3:4平板 PLAYING：钉存在（R187Readout∩@Panel@1285，贴纸叠贴）
+PASS | R3 PLAYING/BossBanner @960x1280 3:4平板：横向居中（≤2px）
+PASS | R3 PLAYING/StateLabel @960x1280 3:4平板：横向居中（≤2px）
+PASS | R3 PLAYING/ReviveBanner @960x1280 3:4平板：横向居中（≤2px）
+PASS | R3 PLAYING/WaveToast(重触发) @960x1280 3:4平板：横向居中（≤2px）
+PASS | R3 PLAYING/BossBarBanner @960x1280 3:4平板：横向居中（≤2px）
+PASS | R4 @960x1280 3:4平板：技能钮贴 vis 底带 82px（±2）
+PASS | R4 @960x1280 3:4平板：构筑面板贴 vis 顶带 196px（±2，R196 POS0 右上默认落位）
+PASS | R6 PLAYING @960x1280 3:4平板：dim.size==visible_rect
+PASS | R7 @960x1280 3:4平板：AUTO 钮 56×64 不缩水
+PASS | R7 @960x1280 3:4平板：AUTO 胶囊 56×64 不缩水
+PASS | R7 @960x1280 3:4平板：暂停钮 72×72 不缩水
+PASS | R5 @960x1280 3:4平板：spawn 采样 24 点全部 ∉ 设计域（expand 顶延展渐显入场合规）
+PASS | R1 PAUSED/PauseCard @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R6 PAUSED @960x1280 3:4平板：dim.size==visible_rect
+PASS | R1 SETTINGS/SettingsCard @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R2 白名单对 @960x1280 3:4平板 SETTINGS：钉存在（SettingsCard∩SettingsGlyph，贴纸叠贴）
+PASS | R6 SETTINGS @960x1280 3:4平板：dim.size==visible_rect
+PASS | R1 LEVEL_UP/title @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 LEVEL_UP/reroll @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R2 LEVEL_UP @960x1280 3:4平板：@Label@1314 与 RerollButton 不相交
+PASS | R3 LEVEL_UP/选卡标题 @960x1280 3:4平板：横向居中（≤2px）
+PASS | R6 LEVEL_UP @960x1280 3:4平板：dim.size==visible_rect
+PASS | R1 SHOP/ShopCard @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 SHOP/refresh_btn @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R1 SHOP/leave_btn @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R2 SHOP @960x1280 3:4平板：ShopRefreshButton 与 ShopLeaveButton 不相交
+PASS | R6 SHOP @960x1280 3:4平板：dim.size==visible_rect
+PASS | R1 GAME_OVER/ReportCard @960x1280 3:4平板：界内（⊆vis+2px）
+PASS | R6 GAME_OVER @960x1280 3:4平板：dim.size==visible_rect
+── R195 矩阵 @540x960 桌面默认窗 ──
+PASS | R195 @540x960 桌面默认窗：visible_rect 输出（A2 逐尺寸断言）
+PASS | R1 MENU/Logo @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 MENU/副标 @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 MENU/name_tag @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 MENU/footer @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 MENU/StartButton @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R2 MENU @540x960 桌面默认窗：@Label@1341 与 @Label@1342 不相交
+PASS | R2 MENU @540x960 桌面默认窗：@Label@1344 与 @Label@1345 不相交
+PASS | R2 MENU @540x960 桌面默认窗：@Label@1345 与 StartButton 不相交
+PASS | R3 MENU/Logo @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R3 MENU/副标 @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R3 MENU/公告0 @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R3 MENU/公告1 @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R3 MENU/公告2 @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R3 MENU/name_tag @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R3 MENU/footer @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R6 MENU @540x960 桌面默认窗：dim.size==visible_rect
+PASS | R1 PLAYING/HpPanel @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBadge @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/LevelText @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/WaveText @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/KillText @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/TimeText @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/GoldText @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/PauseButton @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/AutoToggle @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/SkillButton @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/TargetBar @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/BossBanner @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/StateLabel @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/ReviveBanner @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 PLAYING/BuildPanel @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R2 PLAYING @540x960 桌面默认窗：@Panel@1285 与 @Panel@1286 不相交
+PASS | R2 PLAYING @540x960 桌面默认窗：KillText 与 TimeText 不相交
+PASS | R2 PLAYING @540x960 桌面默认窗：TimeText 与 @Label@1292 不相交
+PASS | R2 PLAYING @540x960 桌面默认窗：KillText 与 @Label@1292 不相交
+PASS | R2 PLAYING @540x960 桌面默认窗：PauseButton 与 AutoToggle 不相交
+PASS | R2 PLAYING @540x960 桌面默认窗：WaveText 与 PauseButton 不相交
+PASS | R2 PLAYING @540x960 桌面默认窗：WaveText 与 AutoToggle 不相交
+PASS | R2 白名单对 @540x960 桌面默认窗 PLAYING：钉存在（ReviveBadge∩@Panel@1285，贴纸叠贴）
+PASS | R2 白名单对 @540x960 桌面默认窗 PLAYING：钉存在（R187Readout∩@Panel@1285，贴纸叠贴）
+PASS | R3 PLAYING/BossBanner @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R3 PLAYING/StateLabel @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R3 PLAYING/ReviveBanner @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R3 PLAYING/WaveToast(重触发) @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R3 PLAYING/BossBarBanner @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R4 @540x960 桌面默认窗：技能钮贴 vis 底带 82px（±2）
+PASS | R4 @540x960 桌面默认窗：构筑面板贴 vis 顶带 196px（±2，R196 POS0 右上默认落位）
+PASS | R6 PLAYING @540x960 桌面默认窗：dim.size==visible_rect
+PASS | R7 @540x960 桌面默认窗：AUTO 钮 56×64 不缩水
+PASS | R7 @540x960 桌面默认窗：AUTO 胶囊 56×64 不缩水
+PASS | R7 @540x960 桌面默认窗：暂停钮 72×72 不缩水
+PASS | R5 @540x960 桌面默认窗：spawn 采样 9 点全部 ∉ 设计域（expand 顶延展渐显入场合规）
+PASS | R1 PAUSED/PauseCard @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R6 PAUSED @540x960 桌面默认窗：dim.size==visible_rect
+PASS | R1 SETTINGS/SettingsCard @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R2 白名单对 @540x960 桌面默认窗 SETTINGS：钉存在（SettingsCard∩SettingsGlyph，贴纸叠贴）
+PASS | R6 SETTINGS @540x960 桌面默认窗：dim.size==visible_rect
+PASS | R1 LEVEL_UP/title @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 LEVEL_UP/reroll @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R2 LEVEL_UP @540x960 桌面默认窗：@Label@1314 与 RerollButton 不相交
+PASS | R3 LEVEL_UP/选卡标题 @540x960 桌面默认窗：横向居中（≤2px）
+PASS | R6 LEVEL_UP @540x960 桌面默认窗：dim.size==visible_rect
+PASS | R1 SHOP/ShopCard @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 SHOP/refresh_btn @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R1 SHOP/leave_btn @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R2 SHOP @540x960 桌面默认窗：ShopRefreshButton 与 ShopLeaveButton 不相交
+PASS | R6 SHOP @540x960 桌面默认窗：dim.size==visible_rect
+PASS | R1 GAME_OVER/ReportCard @540x960 桌面默认窗：界内（⊆vis+2px）
+PASS | R6 GAME_OVER @540x960 桌面默认窗：dim.size==visible_rect
+── R195 超限钳制与回退位 ──
+PASS | 钳制前置：aspect=expand → _stretch_clamp_armed==true
+PASS | 钳制①：720×1800 → aspect==KEEP（超限回落）
+PASS | 钳制①：vis==(720,1280) 且 origin.y≈260（居中黑边）
+PASS | 钳制②：720×1680 → aspect==EXPAND + vis==(720,1680) 满屏
+PASS | 钳制③：KEEP↔EXPAND 运行时双向切换可逆（KEEP→EXPAND→KEEP）
+PASS | 钳制④：720×1280 直驱钳制 → 恒 EXPAND（不误回落）
+── R195 safe-area 契约 ──
+PASS | safe①：headless 守卫 → enabled()==false
+PASS | safe②：守卫外 insets 恒零 Rect2()
+PASS | safe③：映射等价（左/上 inset=变换后原点钳零）
+PASS | safe④：映射等价（右/下 inset=vis.end−area.end）
+PASS | safe⑤：负值钳零（area 越出画布 → inset 恒 ≥0）
+PASS | safe⑥：helper 源级守卫（mobile + 全屏模式）
+PASS | safe⑦：helper 源级换算+钳零（affine_inverse × Rect2 + maxf）
+PASS | safe⑧：helper 源级时序（延迟 1 帧读 + size_changed/focus_entered 重读）
+PASS | safe⑨：八屏 FULL_RECT 根 SafeAreaHelper 接入（缺=[]）
+PASS | safe⑩：combat/entities 零视口/窗口尺寸读取（逻辑域 720×1280 钉死维持）
+PASS | safe⑪：GameConfig.balance.res_logic==(720,1280)
+────────────────────────────────────────
+汇总：PASS 510 / FAIL 0（共 510 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

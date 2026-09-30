@@ -25,6 +25,16 @@ var _last_flush: Dictionary = {}              # end_frame 增量基线（累计�
 var _balance_fallback: BalanceTables = null   # GameConfig 未就绪兜底（schema 默认值即合法值）
 
 
+func reset_run_alarms() -> void:
+	# R198（R192-low4）：告警双闸每局复位。pipeline 为进程级单实例（GameLoop.
+	# _boot_build_actors 建立后跨局复用），原「一局一次」注释实为「进程一次」——闸置位后
+	# 次局同条件超告警线不再广播（诊断可见性静默丢失）。R_alarm/R_rxn 双闸一并复位，
+	# 语义更正为以局为界：start_run/continue_run 两条进局路径调用（restart_run 经
+	# start_run 天然覆盖）。
+	_alarm_emitted = false
+	_rxn_alarm_emitted = false
+
+
 func _init() -> void:
 	_stats = {
 		"settles": 0, "reaction_settles": 0, "dropped_dupe": 0,

@@ -1,0 +1,47 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══ 燎原传火 × R192 反应计数/图鉴 探针 ══
+SCRIPT ERROR: Parse Error: Function "_is_comp_boss()" not found in base self.
+          at: GDScript::reload (res://scripts/entities/wave/wave_director.gd:241)
+SCRIPT ERROR: Compile Error: 
+          at: GDScript::reload (res://scripts/combat/weapon/weapon_base.gd:-1)
+SCRIPT ERROR: Compile Error: 
+          at: GDScript::reload (res://scripts/entities/player/player.gd:-1)
+SCRIPT ERROR: Parse Error: Function "_is_comp_boss()" not found in base self.
+          at: GDScript::reload (res://scripts/entities/wave/wave_director.gd:241)
+SCRIPT ERROR: Compile Error: 
+          at: GDScript::reload (res://scripts/loop/game_loop.gd:-1)
+ERROR: Failed to load script "res://scripts/loop/game_loop.gd" with error "Compilation failed".
+   at: load (modules/gdscript/gdscript.cpp:2936)
+SCRIPT ERROR: Invalid call. Nonexistent function 'new' in base 'GDScript'.
+          at: GameLoop._boot_build_actors (res://scripts/loop/game_loop.gd:1397)
+SCRIPT ERROR: Invalid call. Nonexistent function 'setup' in base 'Nil'.
+          at: GameLoop._boot_build_presentation (res://scripts/loop/game_loop.gd:1476)
+SCRIPT ERROR: Invalid assignment of property or key 'advance_blocked' with value of type 'bool' on a base object of type 'Nil'.
+          at: GameLoop.start_run (res://scripts/loop/game_loop.gd:834)
+SCRIPT ERROR: Invalid assignment of property or key 'input_enabled' with value of type 'bool' on a base object of type 'Nil'.
+          at: GameLoop._physics_process (res://scripts/loop/game_loop.gd:185)
+SCRIPT ERROR: Invalid assignment of property or key 'input_enabled' with value of type 'bool' on a base object of type 'Nil'.
+          at: GameLoop._physics_process (res://scripts/loop/game_loop.gd:185)
+SCRIPT ERROR: Invalid assignment of property or key 'input_enabled' with value of type 'bool' on a base object of type 'Nil'.
+          at: GameLoop._physics_process (res://scripts/loop/game_loop.gd:185)
+SCRIPT ERROR: Invalid assignment of property or key 'input_enabled' with value of type 'bool' on a base object of type 'Nil'.
+          at: GameLoop._physics_process (res://scripts/loop/game_loop.gd:185)
+SCRIPT ERROR: Invalid assignment of property or key 'input_enabled' with value of type 'bool' on a base object of type 'Nil'.
+          at: GameLoop._physics_process (res://scripts/loop/game_loop.gd:185)
+SCRIPT ERROR: Invalid assignment of property or key 'input_enabled' with value of type 'bool' on a base object of type 'Nil'.
+          at: GameLoop._physics_process (res://scripts/loop/game_loop.gd:185)
+SCRIPT ERROR: Invalid assignment of property or key 'input_enabled' with value of type 'bool' on a base object of type 'Nil'.
+          at: GameLoop._physics_process (res://scripts/loop/game_loop.gd:185)
+SCRIPT ERROR: Invalid assignment of property or key 'input_enabled' with value of type 'bool' on a base object of type 'Nil'.
+          at: GameLoop._physics_process (res://scripts/loop/game_loop.gd:185)
+PROBE | 传火本体：邻居被点燃（e2.burn_timer>0） = true（3.0）
+PROBE | 前置：目标无冰元素（无碎裂可能） = true
+PROBE | reaction_triggered 广播：rxn_events=[]
+PROBE | 真反应通道未走：e1.reaction_cd.size() 前后 = 0 → 0（含 RXN_FIR_ICE=false）
+PROBE | Meta._run_reactions：before=0 after=0（Δ=0）
+PROBE | 图鉴碎裂「已触发」：before=true after=true
+P1 | PASS | 燎原传火本体生效（层2词条行为正常）
+P2 | INFO | 传火未广播伪反应事件（rxn_events=[]）
+P3 | INFO | 计数未受传火影响
+P4 | INFO | before 已 seen（测试档残留，P4 本轮不可判）

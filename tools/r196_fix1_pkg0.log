@@ -1,0 +1,160 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 包 0 基座自测 ══════════
+[pkg0] end_frame 门控微探针：开启态均值 239.235 µs / 关闭态均值 0.074 µs → 下降 100.0%（门槛 ≥90%）：PASS
+── GameConst ──
+PASS | next_uid 递增且非零
+PASS | HIT_NO_CRIT 掩码 = REACTION|DOT
+PASS | UID 位宽 2^20（幂等键位拼接约束）
+PASS | ConditionId.NONE = 10（封闭枚举 11 值——R72 增 TARGET_HP_BELOW/PLAYER_HP_ABOVE）
+── ModifierStack ──
+PASS | 加算聚合：跨 ID 线性求和 = 0.5
+PASS | Flat 未超比例钳制 = 10
+PASS | 乘区段 ×1.5×1.4 = 2.1
+PASS | B_spec 公式例：(100×1.5+10)×2.1 = 336
+PASS | 双乘区均入名额、防御层恒空
+PASS | 同实例重入去重：×1.5 两次 → 乘区 1.5
+PASS | 100 × 1.5 = 150（而非 225）
+PASS | 防御层审计记录 1 条
+PASS | F3 衰减：T(5)@δ=0.92 ≤ 4.3 且 > 4.0
+PASS | F3 首层全额 T(1) = c
+PASS | F3 严格边际递减 T(5) < 5c
+PASS | 诅咒负贡献全额：−0.1×3 = −0.3
+PASS | F4 池钳：Σ ≤ cap_add_atk=2.0 + 审计
+PASS | Flat 比例钳制：80 → 50 + 审计
+PASS | 单区钳制：agg=min(3,2)=2 → M=3.0
+PASS | 名额截断：10 区 → 8 区 + 截断审计 2 条
+PASS | top-8 乘积 = min(贡献 0.3~1.0 连乘, 8.0)
+PASS | 截断区为贡献最小的两区
+PASS | 同值 priority 决胜：bbb(9) 胜出
+PASS | 整体钳制：∏=64 → 8.0 + compressed 审计
+PASS | Local 池：Σ=0.6 钳到 cap 0.5 → L=1.5
+PASS | Local 池独立连乘：1.08×1.2
+── EventBus ──
+PASS | 订阅后收到派发（2 次，末值 5）
+PASS | 派发计数 = 2
+PASS | 退订后不再接收
+PASS | 退订后计数仍累计 = 3
+PASS | end_frame 清零本帧计数
+WARNING: [EventBus] 事件风暴：level_up 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 风暴计数：130 次派发全计数
+PASS | 风暴告警恰好一次（阈值 128）
+PASS | 阈值内不再告警
+ERROR: [EventBus] 订阅数未回落（泄漏嫌疑）：当前 8 > 基线 7
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | 订阅未回落 → 断言报错一次
+PASS | 退订后回落基线 → 无新报错
+ERROR: [EventBus] 非 Node 订阅者被拦截（E-12）：level_up ← RefCounted::on_level_up
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | RefCounted 订阅者被拦截（E-12）
+PASS | 断开后不再拦截
+PASS | damage_resolved 派发计数
+── GameConfig ──
+PASS | cfg 常量：player_base_hp = 60
+PASS | cfg 常量：hp_growth_per_wave = 1.12
+PASS | cfg 常量：player_pickup_radius = 120（B_spec Q-13）
+PASS | cfg 常量：缺键回退默认值
+PASS | 池容量：projectile = 820（R188 档0 800 弹锚扩容——640→820，软/硬上限不动）
+PASS | 池容量：enemy = 128
+PASS | 池容量：popup = 80
+PASS | 池容量：particle = 64
+PASS | 池容量：laser = 12（架构 §5.1 表）
+PASS | 池容量：xp = 160（架构 §5.1 表）
+PASS | balance 加载成功且非致命
+PASS | balance：cap_prod = 8.0（F-16）
+PASS | balance：cap_mul_count = 8（名额）
+PASS | balance：r_alarm_ratio = 500（×500 告警线）
+PASS | balance：decay_delta_max = 0.92（F-21）
+PASS | balance：软 1500 / 硬 2000
+PASS | 帧号推进（幂等键公共帧标识）
+── ObjectPool ──
+PASS | 预热：free=3 / live=0 / capacity=5
+PASS | 取出 3 个互不相等
+PASS | 取出后：live=3 / free=0 / hits=3
+PASS | 容量内懒增长 2 个
+PASS | 满池丢弃：null + misses=1
+PASS | EventBus.pool_exhausted 转发
+PASS | 归还契约：_reset_state 被调用（probe=0）
+PASS | 归还后机械清理：visible=false
+PASS | 归还后：live=4 / free=1
+ERROR: [ObjectPool:test_pool] 拒绝归还（重复归还或外来节点）：@Node2D@3
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | 重复归还被拦截：free 仍为 1 + 计数
+PASS | 复取命中空闲栈（同一实例）
+ERROR: [ObjectPool:test_pool] 池污染（@Node2D@3）：visible=true（应隐藏）
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | 池污染断言：篡改节点取出时被拦截
+── ProjectilePool ──
+PASS | 硬闸门池：取出 2 弹（懒增长）
+PASS | 硬上限触达：FORCED 回收最老（取回 p1）
+PASS | FORCED 回收原因经 meta 传递
+PASS | 软上限：第 2 发请求被丢弃（null+计数）
+PASS | 释放后可再取
+── 特化池 ──
+PASS | EnemyPool.acquire → Enemy（真件收紧）
+PASS | EnemyPool 归还往返
+PASS | PopupPool.acquire → Node2D（DamagePopup 占位类型）
+PASS | LaserBeamPool.acquire → Node2D（LaserBeam 占位类型）
+PASS | XPPool.acquire → XpShard（真件收紧）
+── ParticlePool ──
+PASS | burst：发射器占用（live=1）
+PASS | burst：发射器可见 + one_shot
+PASS | burst：scene_id 经 meta 传递
+PASS | 满池抢占：低让高（live 仍 1 + preempted=1）
+PASS | 满池低优先级：请求丢弃（misses=2）
+PASS | 播放完成 → 自动归还（live=0）
+── SpaceGrid ──
+PASS | 基础查询：命中且仅命中近邻
+PASS | 多桶查询：覆盖范围内两个目标
+PASS | 边界桶：左上出屏余量内可查
+PASS | 边界钳制：远出屏坐标落入边缘桶可查
+PASS | 最近邻查询：n2
+PASS | 最近邻排除原目标：n3（547px < n1 的 693px）
+PASS | 空范围最近邻 → null
+PASS | 扇形查询：+x 方向 90° 扇内含 n2
+PASS | 每帧重建：旧条目清除
+PASS | 每帧重建：新条目可查
+── DataValidator ──
+PASS | 负射速被拦截（upgrade_table[1].rof）
+PASS | upgrade_table ≠ 5 项被拦截
+PASS | δ=0.95 > 0.92 被拦截（F-21）
+PASS | 缺 id 被拦截
+PASS | MULT 缺 cap_pool_p 被拦截（F-14）
+PASS | ADD 缺 pool_id 被拦截
+PASS | 封闭枚举外 pool_id 被拦截（A2 §1.9）
+PASS | 合法 TraitData 通过校验
+PASS | balance 致命：res_logic 错被拦截
+PASS | balance 致命：pool_prewarm.enemy=0 被拦截
+PASS | balance 致命：cap_prod ≤ 0 被拦截
+PASS | balance 默认值全合法
+PASS | 遗物悬空事件名被拦截
+── DataRegistry ──
+PASS | load_all 返回耗时秒（AC-13.4）
+PASS | GameFeelConfig 从 data/gamefeel 骨架加载
+PASS | GameFeelConfig：hit_stop_ms = [0,30,50,120]
+PASS | GameFeelConfig：shake_trauma = [0.15,0.4,0.5,1.0]
+PASS | 报告：total ≥ 1 且 rejected = 0
+PASS | get_game_feel 单件入口
+PASS | get_weapon 未命中返回 null（fail-fast）
+PASS | trait_ids_by_pool（ADD）= 17 条内容词条（原 16 条 + R196 AFF_RANGE 广域印刻）
+PASS | 波表加载：30 波 entries（pkg3 内容落地）
+PASS | validate_all：坏词条进入 rejected 清单
+PASS | 错误清单含文件名 + 字段名（AC-13.2/13.3）
+── DebugStats ──
+PASS | 计数器通道：count/get_counter
+PASS | frame_report 键：p50/p95/p99/stage_breakdown
+PASS | 阶段分解含 test_stage
+PASS | 分位数：P50 = 10ms
+PASS | 分位数：P95 = 20ms
+PASS | 池快照聚合（frame_report.pools）
+PASS | assert_pools_clean：干净池通过
+PASS | assert_zero_instantiations：纯预热通过（AC-14.1）
+PASS | 生长池：runtime_instantiate = 1
+ERROR: [DebugStats] AC-14.1 违例：池 grow_pool 运行期实例化 1 次
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | assert_zero_instantiations：生长池拦截（AC-14.1 违例）
+PASS | export_csv 落盘
+────────────────────────────────────────
+汇总：PASS 129 / FAIL 0（共 129 项）
+════════════════════════════════════════

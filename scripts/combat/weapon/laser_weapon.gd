@@ -29,6 +29,15 @@
 # ── R183 复制体接线口（player.gd _make_weapon_copy 消费，共享组）──────
 #   copy.sub_beams_override = 0   # 复制体强制只出主束（W4 折减定案）
 #   copy.copy_tint = true         # 复制体灰染（束色 RARITY_NORMAL）
+# ── R195 穿透接线（2026-09-30）────────────────────────────────────
+# · _pierce_count() 逐字镜像 ballistic（L 表 pierce + Add_Pierce 衰减聚合）——
+#   预算口径 N=pierce=可命中总数（弹体 pierce_left 同源）；AFF_PIERCE 自本批起
+#   激光可购（required_forms [0,1]），L 表 pierce=1 不动（平衡非目标）。
+# · _spawn_beam 主束传 N、副束/折射束恒 1（束侧 _hit_budget 三重门同源）；
+#   _on_tick_post 主束每拍回写 beam.pierce（仿 R191 tick_atk 逐拍回写先例——
+#   运行中购卡即时生效；聚合值走 _pierce_cache 面板缓存，逐帧零分配——R188
+#   每帧分配红线）。pause 面板穿透列经 pause_overlay.gd:566 has_method
+#   守卫自动转正（零改动）。
 class_name LaserWeapon
 extends WeaponBase
 
@@ -56,6 +65,7 @@ var _scorch_sweep_left: float = 0.0            # 灼焦目标池死亡 uid 清�
 # R183 复制体折减口（player.gd _make_weapon_copy 接线；正数/0 = 强制副束数，-1 = 按词条栈）
 var sub_beams_override: int = -1
 var copy_tint: bool = false                    # 复制体灰染（束色 RARITY_NORMAL）
+var _pierce_cache: int = -1                    # 穿透预算缓存（-1=脏；失效点同 _panel_cache）
 
 
 func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
@@ -63,6 +73,7 @@ func setup(p_data: WeaponData, p_player: Node2D, p_deps: Dictionary) -> void:
 	active_beams.clear()
 	tick_accumulator = 0.0
 	_main_beam = null
+	_pierce_cache = -1
 	_focus_enabled = bool(data.laser.get("focus_ramp", false)) if data != null else false
 	_focus_uid = 0
 	_focus_time = 0.0
@@ -109,6 +120,12 @@ func _on_tick_post(p_game_delta: float) -> void:
 	if _main_beam != null and _main_beam.is_live():
 		_main_beam.set_origin(muzzle_position())
 		_main_beam.set_aim(aim)
+		# R191 逐拍回写：常驻束（lifetime=0）不重建而镜面 meta_atk_pct（ratio）mid-run
+		# 随 apply_state 变化——每拍刷新每跳 ATK（仿 _refresh_sub_beams tick_rate 回写先例）
+		_main_beam.tick_atk = _tick_atk()
+		# R195 逐拍回写：运行中购买 AFF_PIERCE 穿透预算即时生效（仿上方 R191 先例——
+		# 常驻束不重建，预算随栈聚合 add_pierce 逐拍刷新）
+		_main_beam.pierce = _pierce_count()
 		# R91 聚焦爬坡：主束当前命中目标与上次一致 → 计时累积；换目标保留/归零
 		var hit_uid := _main_beam.last_hit_uid
 		if hit_uid > 0 and hit_uid == _focus_uid:
@@ -150,8 +167,8 @@ func _spawn_beam(p_origin: Vector2, p_dir: Vector2, p_depth: int, p_dmg_mult: fl
 	# 结算跳数；2026-08-31 修复：此前 add_rof 仅 BallisticWeapon 消费，激光抽到射速卡
 	# 是死卡。用户口径澄清：射速=束内结算跳频；冷却(AFF_CDR)=脉冲间隔 cd 缩短）。
 	# W4 主束常驻化：.tres 删 tick_rate → 缺省回退 L 表 rof（8/8/9/9/9）。
-	var tick_rate := clampf(_leveled_param("tick_rate", get_stat(&"rof"))
-		* (1.0 + _add_rof()) * _player_rof_mult(), 0.5, 30.0)
+	# R199 D13：基准式拆出为 _base_tick_rate()（refresh_fire_interval 回刷口同源复用）
+	var tick_rate := _base_tick_rate()
 	if is_sub:
 		# TH_PRISM_CHOIR（sub_beam_count≥3 → 副束跳频 +2/s；数据声明驱动）
 		tick_rate = clampf(tick_rate + _choir_tick_bonus(), 0.5, 30.0)
@@ -167,8 +184,11 @@ func _spawn_beam(p_origin: Vector2, p_dir: Vector2, p_depth: int, p_dmg_mult: fl
 		"dir": p_dir,
 		"depth": p_depth,
 		"dmg_mult": p_dmg_mult,
-		"tick_atk": get_current_atk(),
+		"tick_atk": _tick_atk(),
 		"tick_rate": tick_rate,
+		# R195 穿透预算：主束 = _pierce_count()（预算口径 N=pierce 可命中总数），
+		# 副束/折射束恒 1（束侧 _hit_budget depth==0 ∧ ¬sub_beam ∧ ¬overlap_fallback 门同源防御）
+		"pierce": _pierce_count() if (p_depth == 0 and not is_sub) else 1,
 		"beam_length": float(data.laser.get("beam_length", 560.0)),
 		"beam_width": float(data.laser.get("beam_width", 14.0)),
 		# 脉冲寿命 s（0=常驻——W4 删 pulse_duration 后缺省 0=常驻主束定案；W5 口径不变）
@@ -441,20 +461,92 @@ func _cdr_focus_keep() -> float:
 
 
 func _lag_bonus() -> float:
-	# MEC_BEAM_LAG：每存活副束主束跳频 +0.5/s（未挂载 = 0；钳制在消费侧 [0.5,30]）
-	if not _has_trait(&"MEC_BEAM_LAG"):
+	# MEC_BEAM_LAG：每存活副束主束跳频 +value/s ×层数（未挂载/无存活副束 = 0）。
+	# R199 F02：旧实现 LAG_TICK_PER_SUB(0.5) 常数 + _has_trait 存在性判断——既不乘
+	# data.value 也不乘层数（金卡卡面「+1.3 跳/s」实发 +0.5；stack_max=2 第二层零效果）。
+	# 改读挂载条目 value×layers（品质缩放沿 card_generator value×scale 链路）；value≤0
+	#（桩夹具零声明）回落 LAG_TICK_PER_SUB 旧口径，存量断言零位移。钳制在消费侧 [0.5,30]。
+	if trait_stack == null:
 		return 0.0
-	return LAG_TICK_PER_SUB * float(_alive_sub_beams().size())
+	for tb in trait_stack.traits:
+		if tb.data != null and tb.data.id == &"MEC_BEAM_LAG":
+			var per_sub := float(tb.data.value)
+			if per_sub <= 0.0:
+				per_sub = LAG_TICK_PER_SUB
+			return per_sub * float(tb.layers) * float(_alive_sub_beams().size())
+	return 0.0
 
 
 func _main_tick_rate() -> float:
 	# 主束跳频终值（BEAM_LAG 动态重算口；钳 [0.5,30]）
-	var base := clampf(_leveled_param("tick_rate", get_stat(&"rof"))
-		* (1.0 + _add_rof()) * _player_rof_mult(), 0.5, 30.0)
+	var base := _base_tick_rate()
 	var lag := _lag_bonus()
 	if lag <= 0.0:
 		return base
 	return clampf(base + lag, 0.5, 30.0)
+
+
+func refresh_fire_interval() -> void:
+	# R199 D13：rof 变更回刷常驻束跳频。束 tick_rate 只在 _spawn_beam 瞬间定格（束体
+	# lifetime=0 常驻不重建），过载咆哮/双生回响/改造者·枢 CDR 折算（player.rof_mult/
+	# comp_rof_mult/map_rof_mult——player.refresh_weapon_intervals 逐武器鸭子调本口）
+	# 与 AFF_ROF 挂卡在增益期对激光族此前零收益。对齐 :325 BEAM_LAG 回写先例（只写
+	# tick_rate，束内 _tick_left 下拍自然按新间隔续走）；事件驱动调用（挂卡/技能启停/
+	# 升级），非逐帧路径——R188 每帧分配红线不适用。
+	super()
+	_refresh_beam_tick_rates()
+
+
+func _refresh_beam_tick_rates() -> void:
+	# 常驻束跳频重导出（口径同 _spawn_beam 逐束分派：主束含 BEAM_LAG、副束含 CHOIR、
+	# 折射束纯基准；非 live 束跳过——回收序在 _reset_state 清 weapon 前安全）
+	for beam in active_beams:
+		if beam == null or not is_instance_valid(beam) or not beam.is_live():
+			continue
+		if beam == _main_beam:
+			beam.tick_rate = _main_tick_rate()
+		elif beam.sub_beam:
+			beam.tick_rate = clampf(_base_tick_rate() + _choir_tick_bonus(), 0.5, 30.0)
+		else:
+			beam.tick_rate = _base_tick_rate()
+
+
+func _base_tick_rate() -> float:
+	# 跳频基准（不含 BEAM_LAG/CHOIR 修饰——_spawn_beam 既有公式拆出复用）
+	return clampf(_leveled_param("tick_rate", get_stat(&"rof"))
+		* (1.0 + _add_rof()) * _player_rof_mult(), 0.5, 30.0)
+
+
+func _tick_atk() -> float:
+	# 每跳基础 ATK = L 表 base_atk × (1+meta_atk_pct)（R191 修复：此前 _spawn_beam 裸
+	# get_current_atk() 使 meta_atk_pct 在激光伤害路径零消费——镜面 W4 恒按 100% 源强度
+	# 出束，违背 R187「镜面伤害=源面板×mirror_ratio」；面板式对齐弹道路径先例
+	# weapon_base.build_panel_snapshot）。meta=0 夹具数值不变（存量断言零位移）。
+	return get_current_atk() * (1.0 + meta_atk_pct)
+
+
+func _invalidate_panel() -> void:
+	# R195 红线配套：主束逐拍回写 _pierce_count() 走每帧 _on_tick_post 路径，聚合值
+	# 随面板缓存（_pierce_cache）挂同一失效链（weapon_base 挂卡/质变/升级、mirror、
+	# player 广播全部虚派发到本覆写）——每帧零分配，购卡/升级当拍即失效重算。
+	super()
+	_pierce_cache = -1
+
+
+func _pierce_count() -> int:
+	# R195 穿透预算 N（逐字镜像 ballistic_weapon.gd:256-261）：pierce = L 表值 +
+	# Add_Pierce 线性层（穿透弹头 AFF_PIERCE 自本批起激光可购——F3 衰减聚合与弹体
+	# 同式）；预算口径 N=pierce=可命中总数（弹体 pierce_left 同源，pkg2:464-469 锁定）。
+	# pause 面板穿透列经 pause_overlay.gd:566 has_method("_pierce_count") 守卫自动转正。
+	# R195 红线：本函数在 _on_tick_post 每帧消费——aggregate_panel() 每调新建
+	# Dictionary（trait_stack.gd:144），不可逐帧直调；聚合值走 _pierce_cache
+	#（失效链同 _panel_cache，见 _invalidate_panel 覆写），逐帧零分配。
+	if _pierce_cache < 0:
+		var extra := 0
+		if trait_stack != null:
+			extra = int(round(float(trait_stack.aggregate_panel().get("add_pierce", 0.0))))
+		_pierce_cache = maxi(int(get_stat(&"pierce")) + extra, 0)
+	return _pierce_cache
 
 
 func _choir_tick_bonus() -> float:

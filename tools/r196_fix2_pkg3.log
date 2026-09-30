@@ -1,0 +1,150 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 包 3 武器/词缀/元素自测 ══════════
+── TraitStack 核心 ──
+PASS | 挂载：同 ID 第 1 次成功
+PASS | 挂载：同 ID 第 2 次叠层成功（layers=2）
+PASS | 挂载：stack_max=3 内第 3 次仍成功（layers=3），第 4~8 层超帽延伸成功（layers=8），第 9 次拒绝 + 计数
+PASS | 挂载：12 词条可挂满，第 13 条拒绝（MAX_TRAITS）
+PASS | F3 衰减：decay_sum(10, 3, 0.85) = 25.725
+PASS | 面板聚合：add_atk 2 层线性 = 20 + add_entries 每层一条（R14 直接叠加）
+PASS | 整数线性池：add_pierce 2 层 = 2.0（线性全额）
+PASS | 冷却推进：advance_cooldowns 0.2 → 0.3
+PASS | copy_runtime：实例独立 + 词条数一致 + 定义引用共享（E-13）
+PASS | copy_runtime：运行时状态重置（cooldown=0 / frame 标记清零）+ 层数保留
+PASS | copy_for_split：默认仅继承 inheritable 词条（含可继承乘区）
+PASS | copy_for_split：ECHO 扩展至乘区词条（TH_FRACTAL_ECHO，定义复制子代自评）
+── 派发序 / 链式熔断 ──
+PASS | 六事件派发顺序 = 挂载序（真件栈全序列 A→B→C × 6 事件）
+PASS | 链式：深度 3 内逐层链式执行（SPAWN→TICK→HIT）
+PASS | 链式深度熔断：第 4 层（深度 4 > 3）未执行 + 熔断计数 +1
+PASS | chain_fused 事件派发：depth=4
+PASS | 熔断后链深恢复：再次派发正常执行且不叠加熔断
+PASS | 同事件重入拦截：递归派发被拦（runs 不增长）+ 无熔断
+── 投射物真件事件通道 ──
+PASS | 投射物路径：ON_SPAWN→ON_TICK 经真件栈按挂载序派发
+PASS | E-03 词条帧闸门：同帧内 ON_HIT/ON_EXPIRE 不重复触发（无 :2/:5 条目）
+PASS | 词条闸门不拦截结算：敌人命中扣血 10
+PASS | 穿透耗尽回收：pierce 1→0（PIERCE_DEPLETED）
+── BallisticWeapon 开火参数 ──
+PASS | 开火：try_fire 成功且发出 1 丸
+PASS | spawn 参数重写：velocity = UP×600（aim 回退 + 速度口径）
+PASS | spawn 参数重写：lifetime = range/speed×1.5 = 1.5
+PASS | spawn 参数重写：pierce=2（表值）/ bounces=0 / generation=0 / team=0
+PASS | spawn 参数重写：hitbox=6 / element=KIN / weapon_uid 绑定
+PASS | spawn 参数重写：panel_snapshot（base_atk=10 / crit_rate=0）
+PASS | 运行时栈注入：TraitStack 真件、实例独立、定义引用共享（E-13）
+PASS | 加算重写：Add_Pellets +2 → 3 丸（共享散射锥）
+PASS | 加算重写：Add_Spd +18% → 弹速 708
+PASS | 加算重写：Add_Pierce +1 → pierce 3（线性层）
+PASS | 加算重写：射程不变 → lifetime = 600/708×1.5
+PASS | 散射锥：3 丸均匀分布 −26°/0°/+26°（spread_deg 半锥角）
+PASS | 射速节拍：rof=5 → 118 tick（0.983s）恰 5 发
+PASS | 射速封顶：rof=90 → clamp 30 → 冷却 1/30（性能双护栏）
+── HomingWeapon 开火参数 ──
+PASS | 无目标：try_fire 拒绝且不消耗节拍（冷却保持 0）+ 池空
+PASS | 有目标：try_fire 成功发出 1 弹
+PASS | 八键注入：target_uid 锁定 + 初速 = 朝向×speed_init
+PASS | 八键注入：turn_rate/speed_max/accel/arm_delay/blast/falloff 全量落参
+PASS | 集束回调：sub_count>0 → impact_hook 挂接（包 3 收口）
+PASS | 子弹头：sub_count=2 → 2 枚 generation=1 寻的弹
+PASS | 子弹头：初速 180 / 加速 600 / 延时 0.4 / 出生点=爆点 / 均匀散射 ±180°
+PASS | 子弹头：单次调度（sub_warheads_left 清零）
+PASS | 子弹头：回调幂等（池存活数不变）
+PASS | W6 微型导弹：sub_count=0 → impact_hook 不挂接
+── LaserWeapon 主束与深度硬闸 ──
+PASS | 主束：try_fire 维持常驻光束
+PASS | 主束常驻化：无 pulse_duration → beam.lifetime == 0（R187 新契约）
+PASS | 主束参数：depth=0 / dmg_mult=1 / tick_atk=10 / tick_rate=8（rof 口径）
+PASS | 主束参数：灼焦 5 层 cap / 8% 每层 / 折射 1 束 ×0.6 ×深度 2
+PASS | 深度硬闸：depth 3 → 拒绝返回 null + 计数 + chain_fused(3, laser_refract)
+PASS | 深度硬闸优先：数据 refract_depth=3 仍被引擎 MAX=2 拒绝
+── LaserBeam 灼焦叠层（R187 目标侧单池） ──
+PASS | 灼焦叠层：持续照射 0.26s → 1 层（1 层/0.25s）
+PASS | 灼焦跳伤：1 层 Local 池 ×1.08 → 2 跳共 21.6
+PASS | 灼焦叠层：0.52s → 2 层
+PASS | 灼焦跳伤：2 层 ×1.16 → 2 跳共 23.2（累计 44.8）
+PASS | 灼焦叠层：cap 于 scorch_max_layers=5
+PASS | 灼焦跳伤：层序 [1,2,3,4,5,5,5,5] ×2 跳 → 8 tick 累计 208（5 层后 14/跳）
+PASS | 结算节拍：8 跳/s × 8 tick × 2 跳 = settle_count 16
+PASS | 跳字节流：≤15Hz/目标 → 8 tick 内至多 8 条放行（AC-04.2）
+── LaserBeam 折射分叉（深度 ≤2） ──
+PASS | 折射：主束首触 → 1 条 depth=1 子束
+PASS | 折射乘区：子束 dmg_mult = 父×ratio = 0.6
+PASS | 折射：子束首触 → 应生成 depth=2 孙束（深度 2 ≤ 上限）
+PASS | 折射乘区：孙束 dmg_mult = ratio² = 0.36（二段伤害口径）
+PASS | 折射深度熔断：孙束再折射（depth 3 > 2）被拒 + chain_fused + 无第 4 束
+PASS | 折射伤害：主束全额 10/跳
+PASS | 折射伤害：子束 ×0.6 = 6/跳
+PASS | 折射伤害：孙束 ×0.36 = 3.6/跳
+── 体积极限质变（效果单元） ──
+PASS | 体积极限（单元）：size 2.7 < 3.0 → 不触发冲击波
+PASS | 体积极限（单元）：size 4.0 ≥ 3.0 → 冲击波命中近旁敌（40%ATK = 4）
+PASS | 体积极限（单元）：冲击波半径外（150px > 36+网格保守余量）不波及
+PASS | 体积极限（单元）：nova 计数 +1
+── 体积极限质变（引擎路径验收） ──
+PASS | 体积累计（引擎）：MEC_SIZE_STACK 7 层 → 1.18^7 ≈ 3.186
+PASS | 引擎命中：主目标受直击 10
+PASS | 引擎路径：size_mult≥3.0 命中应触发 TH_SIZE_NOVA 冲击波（次级目标 −40%ATK=4）
+── 分裂三重闸门 / 分裂继承 ──
+PASS | 分裂闸门一：代数 3（再分裂 →4 超 ≤3）拒绝 + 计数
+PASS | 分裂闸门二：单次 9 > 8 拒绝 + 计数
+PASS | 分裂闸门三：全场存活 ≥ 软上限 → 拒绝 + 计数
+PASS | ON_EXPIRE 分裂：母弹消亡 → 2 枚 generation=1 子代（count=2）
+PASS | 分裂继承 F-13：ATK 面板 40%（10 → 4.0）
+PASS | 分裂继承：元素继承 / 元素附着不继承（attach_value=0）
+PASS | 分裂继承：夹角 ±28°（spread_deg，均匀分布）
+PASS | 分裂继承 E-01：仅 inheritable 词条下传（分裂词条自身不复制，防指数裂变）
+── 反弹增伤乘区 ──
+PASS | 条件自评：AFTER_BOUNCE（hit_flags=IS_BOUNCE）→ 注入 ×1.4 乘区
+PASS | 条件自评：未反弹 → 该乘区不注入（contrib 0 条件拦截）
+PASS | 反弹乘区（引擎）：反弹后命中伤害 = 10×(1+1.4) = 24
+PASS | 基线：未反弹直击伤害 10（乘区不注入）
+── ElementalState 状态单元 ──
+PASS | 附着：FIR 60 < 100 → 无状态触发（返回 NONE，槽内累计）
+PASS | 点燃：FIR 满槽 → TRIGGER_BURN（层 1 / 3s / 快照 200）
+PASS | 状态自评：burn 期 is_state_active(FIR)=true（SYN_BURN_DEVOUR 输入）
+PASS | 点燃层上限：第 5 层后第 6 次满槽附着拒绝（层保持 5）
+PASS | DOT 节拍：未到期不消费，0.5s 后恰一跳
+PASS | 燃尽：burn_timer 到期 → 层清零（重复附着重新累计）+ 状态失效
+PASS | λ 比例衰减：60×(1−λ) → FIR 39 / ICE 42 / LTG 36
+PASS | 寒滞：ICE 满槽 → TRIGGER_CHILL（移速 0.6 + 易伤 ×1.25）
+PASS | 完全冻结：二次满槽 → TRIGGER_FREEZE（定身 speed 0）
+PASS | 感电：LTG 满槽 → TRIGGER_SHOCK（层 2 覆写传导 4 目标）
+PASS | 免疫：IMMUNE_BURN → 点燃不触发
+PASS | 免疫：IMMUNE_SHOCK → 感电不触发
+PASS | 免疫：IMMUNE_FREEZE → 二次满槽仅寒滞（不冻结）
+── ElementalSystem 附着-衰减-反应 ──
+PASS | 宿主挂载：register_host → ElementalState 注入
+PASS | 附着通道：apply_attach 60 → 槽内累计 60（未满不触发）
+PASS | 碎裂：2.0× 点燃剩余 DOT（0.15×200×1层×6跳=180 → 360 落血）
+PASS | 碎裂消耗：双槽清空 + 燃尽（timer/层清零）
+PASS | 过载：120%ATK（快照 100×1.2 = 120）主目标落血
+PASS | 过载扩散：半径 90 内次级目标同额结算 / 圈外不波及
+PASS | 超导：全抗 −30%（0.3→0.0 / 0.1→−0.2 / 0→−0.3，可击破至负值）
+PASS | 超导到期：6s 后恢复 +0.3（回到 0.3/0.1/0.0）
+PASS | 反应 CD：触发后 reaction_cd = 2s，期内同反应不再触发
+PASS | 反应 CD：2s 内重附双槽不触发
+PASS | 反应 CD：cd_rxn=2s 过期后可再次触发
+PASS | 反应优先级：三槽齐备 → 仅碎裂触发（一帧一反应）
+PASS | 一帧一反应：剩余单槽（LTG）不成对 → 不再触发
+PASS | 感电连锁：满槽 → 160px 内最近 3 目标各受 35%×100 = 35
+PASS | 感电连锁：源目标去重 / 540px 外不传导
+PASS | DOT 跳伤：15%ATK×1 层 = 30/跳 ×2 跳 = 60 落血
+PASS | 反应强化注册：attach_trait(ELE_REACTION_VOID) → ×1.8 聚合
+PASS | 碎裂 ×反应强化：360 × 1.8 = 648 落血
+── OrbitWeapon 环绕力场 ──
+PASS | 谐振轨道：挂载即聚合直读（R69）orbs = 表值2+round(1.45)×1 = 3
+PASS | 力场常驻：再次 try_fire 不重复调度
+PASS | 环绕周期判定：命中 → hit_cd 0.25s → 周期再击（40 tick 恰 2 次 ×10）
+── ArcSlash 周期挥斩 / 消弹格挡 ──
+PASS | 挥斩：扇形内命中（0°/30° 各 −10）
+PASS | 挥斩：扇形外（90° 超 ±60° 半角）不判定
+PASS | 消弹格挡：弧内敌方弹 → OnExpire(NULLIFIED) 统一收束（2 弹回收）
+PASS | 消弹格挡：弧外弹保留存活
+PASS | 挥斩窗口：0.34s 判定窗 → 窗口外无判定（visible 复位）
+PASS | 挥斩去重：同窗同目标单次（A/B 不再扣血）
+PASS | 单斩上限：max_targets=2 → 恰 2 个目标受伤
+────────────────────────────────────────
+汇总：PASS 128 / FAIL 0（共 128 项）
+════════════════════════════════════════

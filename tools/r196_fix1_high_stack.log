@@ -1,0 +1,66 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 高位叠层审计 ══════════
+── ① 千层线性（100/1000 层聚合 ±1e-9 + 逐层增量） ──
+PASS | ①a 1000 层逐层挂载全成功，layers/layer_values 同步 1000
+PASS | ①b 1000 层 aggregate_panel = 150.0（绝对误差 <1e-9，无隐藏饱和）
+PASS | ①c stacked_add_total 与面板同源 150.0
+PASS | ①d 第 1001 层增量恰 +0.15（逐层仍按层生效）
+PASS | ①e 100 层 aggregate_panel = 15.0（±1e-9）
+── ② attach 门 stack_max 封顶（真卡帽 / 99 帽载体） ──
+PASS | ②a 真卡 AFF_ATK_UP attach×10 → 恰 8 层（stack_max+超帽延伸 5），第 9 层拒绝
+PASS | ②b 运行期 stack_max=99 载体（FALLBACK 口径）attach×200 → 恰 104 层硬帽（stack_max+5）
+── ③ F4 池钳 2.0 + clamped_add 记账 + FALLBACK dmg(40)==dmg(99) ──
+PASS | ③a F4 帽真源 add_atk = 2.0
+PASS | ③b 99×0.05=4.95 → F4 钳 2.0 + audit.clamped_add 记账（饱和可见非隐式）
+PASS | ③c FALLBACK dmg(40) == dmg(99) == 300（1+F4 帽 2.0）
+PASS | ③d 99 层审计可见（clamped_add）且 R_alarm 不误报
+── ④ 诅咒全额线性 + 终值钳 0（无 NaN/Inf 泄漏） ──
+PASS | ④a 诅咒 99 层线性全额 −9.9（不衰减/不钳——惩罚语义按层全额）
+PASS | ④b 诅咒 1000 层叠层面全额 −100（无 NaN）
+PASS | ④c 诅咒 99 层 → S 转负、终值钳 0（有限、无 NaN、无误告警）
+── ⑤ 乘区护栏（cap_pool/top-8/cap_prod 8.0/crit 1.0/cdr 0.6/rof 30） ──
+PASS | ⑤a 单区钳：contrib 5.0/cap_pool 2.0 → merged_M = 3.0
+PASS | ⑤b 乘区名额 top-8（20 区 → 8 入）+ cap_prod 钳 8.0 + 审计 compressed
+PASS | ⑤c add_crit 1000 层 → crit_rate 钳 cap_crit_rate=1.0
+PASS | ⑤d add_skillcdr 1000 层 → 技能急速钳 0.6
+PASS | ⑤e BALLISTIC add_rof 1000 层 → 节拍钳 1/30 s（cap_rof_per_weapon=30）
+── ⑥ R186 每击谐振预算网格 + 120Hz 帧粒度 soak ──
+PASS | ⑥a 激活拉满存款 0.6（20/s×0.01×3 网格化快照）
+PASS | ⑥b 满 60 击直减 0.6 → CD 119.4（snappedf 网格无浮点漂移）
+PASS | ⑥c 计费遥测 credits==60 / seconds==0.60
+PASS | ⑥d 存款枯竭第 61 击不直减（<1 击预算整击丢弃）
+PASS | ⑥e tick(1s) 回充 0.2（20 击/s 口径）
+PASS | ⑥f 继续回充钳存款帽 0.6
+PASS | ⑥g 同帧 120 击恰 +60 计费 / CD 119.4→118.8（回充-消耗循环无漂移）
+PASS | ⑥h 技能就绪不计费（存款留存）
+PASS | ⑥i 120k×(1/120s) tick soak：预算恰回帽 0.6、计费零增、无 NaN
+── ⑦ R183 反应乘区注册表（千次循环归 1.0/同 uid 覆写/局清） ──
+PASS | ⑦a 清空后 reaction_mult = 1.0
+PASS | ⑦b 同 uid 重注册覆盖（4.7，非连乘 8.46）
+PASS | ⑦c 1000 注册/注销循环 → 表空 + 聚合归 1.0（注销泄漏回归锁）
+PASS | ⑦d 注销口精确移除 + 幻影 uid 静默
+PASS | ⑦e 局清空回 1.0（start_run/continue_run 两口同源）
+── ⑧ 详情面板叠层显示（+15%×2→+30% 等，依赖 :524 正则修复） ──
+PASS | ⑧a +15%×2 → 「+30%」（金色高亮），不再渲染「+0.3…」
+PASS | ⑧b +25×4 → 「+100」，不再渲染「1005」
+PASS | ⑧c +8%×3 → 「+24%」
+PASS | ⑧d +1×2 → 「+2」
+PASS | ⑧e 1 层描述逐字不变（不改写）
+PASS | ⑧f 负值（-10%）描述逐字不变（eff≤0 早退不改写）
+── ⑨ 聚合成本线性标度（比值 ∈[5,15]）+ copy_full 混品级保真 ──
+N= 100 | aggregate_panel  190.330 µs/次
+N=1000 | aggregate_panel 1770.374 µs/次
+PASS | ⑨a 成本随层数线性标度（1000 层/100 层比值 ∈[5,15]——O(总层数) 无超线性爆炸；禁写死绝对 µs）
+PASS | ⑨b copy_full 混品级保真：源 37.5 → 克隆 37.5（±1e-9）且逐层条目 150 保真
+── ⑩ 存档现版绿口径（layers 往返/stack_max 钳/满层质变 ×1.6） ──
+PASS | ⑩a layers 往返保真：存 3 = 落盘回读 3 = 恢复实挂 3，聚合 0.45→0.45
+PASS | ⑩b 恢复受 stack_max 钳：存 99 → 回读恰 8（注册表基件帽 3+超帽延伸 5 生效，不越帽）
+PASS | ⑩c-预 满层挂载质变 value_mult==1.6（0.15×3×1.6=0.72）
+PASS | ⑩c 恢复后满层质变再触发：3 层 + value_mult==1.6 + 聚合 0.72
+────────────────────────────────────────
+汇总：PASS 45 / FAIL 0（共 45 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

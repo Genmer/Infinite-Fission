@@ -4,7 +4,10 @@
 class_name GameConst
 extends RefCounted
 
-enum Element { KIN, FIR, ICE, LTG }                       # 伤害/附着元素
+enum Element { KIN, FIR, ICE, LTG, HYD, ANE, GEO, DEN }   # 伤害/附着元素
+# R192 元素扩容：KIN..LTG=0..3 现役序禁动（λ/免疫位/敌 resist 按下标直索引，只追加不重排）；
+# 追加 HYD=4（水）/ ANE=5（风）/ GEO=6（岩）/ DEN=7（草）——新四元素全走纯反应载体，
+# 满槽钳制 GAUGE_MAX 保留为反应燃料（无 _trigger 臂不触发；旧三元素满槽清零语义不变）。
 
 const MAX_WEAPON_SLOTS := 7                   # 槽位数组绝对上限（Player.MAX_SLOTS 同源；R185 起金卡不越帽，难度帽 5/6/6 恒在其内）
 enum PoolClass { ADD, MULT, LOCAL, MECH, ELEM }           # 词条池归类（B_spec §2.5）
@@ -64,6 +67,14 @@ const PLAYER_SIDE_POOLS: Array[StringName] = [&"add_hp", &"add_xp", &"add_pickup
 	&"add_skillcdr", &"add_gold"]   # 玩家侧词条池（全局生效）：卡面【通用】前缀 + 构筑详情
 	                                # 「通用词条」段的归类真源（R80：此前错挂武器段误导归因）
 
+# R196 超质变叠层注记（文案真源：词条卡/黑市/详情经卡描述带出，UI 禁手抄；用户口径原文）
+const OVERCAP_NOTE := "超出质变等级的层数收益降低 30%"
+
+# ── R199（P08）拖动操作教学文案真源（lore 菜单行 / HUD 战斗内首局一次性提示共用
+#    单源，UI 禁手抄——移动是唯一输入与生存手段，全游戏此前无一处告知） ──
+const TUTORIAL_MOVE_MENU := "战斗内拖动屏幕移动飞船——出发吧，链式反应，一根也不许 runaway！"
+const TUTORIAL_MOVE_BATTLE := "战斗内拖动屏幕移动飞船——躲开弹幕！"
+
 # ── R187 共享系统组常量 ───────────────────────────────────────────
 # laser_subbeam_spawned 归属字段（R183 束数折减断言通道：本体可挂副束、复制体强制 0）
 const SUBBEAM_OWNER_BODY := 0                 # 副激光生成自本体武器
@@ -103,6 +114,223 @@ static func weapon_note(p_weapon_id: String) -> String:
 			return ""
 
 
+static func reaction_note(p_rxn_id: String) -> Dictionary:
+	# R191#5 图鉴「反应」页文案单源（weapon_note 同源纪律：UI 不手抄、单点改这里）。
+	# R192 起表驱动口径：键 = ReactionType 枚举成员 ID 字符串，随枚举扩容同步扩行
+	#（图鉴行建由 UI 按枚举 keys() 动态生成——本函数只按 id 查行，坏 id 返回空字典）。
+	# 字段封闭集 7 项：name 名称（单源 REACTION_NAMES，禁手抄）/ recipe 配方 /
+	# elements 配方元素序（页面双色环取色用，恰 2 项）/ effect 效果句（结算语义 + 真条件
+	# ——rxn 审计口径：无难度门、双槽附着即触发、同反应 2s 冷却、免疫怪拒附着）/
+	# unlock 解锁句（节奏真源 MechanicGate.MAP_INTROS）/ mult_fmt 倍率行模板（数值一律
+	# 不进文案——{key:spec} 取 reaction_table[key] 按 printf spec 格式化，{key_pc:spec}
+	# =值 ×100，运行时由页面 token 格式化器渲染）/ sample 图鉴预览数值样张段（R192 收口2
+	# 起仅 dmg 型渲染=反应名+本段；pct/stat 型页面走 DamagePopup.reaction_stat_text 读表
+	# 格式化、不读本字段——本字段保持非空过 validator 双射闸，勿填渲染语义）。
+	match p_rxn_id:
+		"RXN_FIR_ICE":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_FIR_ICE],
+				"recipe": "火 + 冰",
+				"elements": [GameConst.Element.FIR, GameConst.Element.ICE],
+				"effect": "引爆目标身上的点燃剩余 DOT，一次性结算（不掷暴击）\n双槽附着即触发 · 同反应 2s 冷却 · 同帧碎裂>过载>超导 · 免疫怪拒附着",
+				"unlock": "解锁：火 / 冰元素卡第 2 关起入手（碎裂初见）",
+				"mult_fmt": "结算倍率 ×{coef:.1f}",
+				"sample": "1284",
+			}
+		"RXN_FIR_LTG":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_FIR_LTG],
+				"recipe": "火 + 雷",
+				"elements": [GameConst.Element.FIR, GameConst.Element.LTG],
+				"effect": "火力雷光即时爆炸，波及半径内敌人（独立结算不掷暴击）\n双槽附着即触发 · 同反应 2s 冷却 · 同帧碎裂>过载>超导 · 免疫怪拒附着",
+				"unlock": "解锁：雷元素卡（感电）第 3 关起入手 · 过载随之可发",
+				"mult_fmt": "×{coef:.1f} · 半径 {radius:.0f}",
+				"sample": "976",
+			}
+		"RXN_ICE_LTG":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_ICE_LTG],
+				"recipe": "冰 + 雷",
+				"elements": [GameConst.Element.ICE, GameConst.Element.LTG],
+				"effect": "削减目标全抗持续一段时间，全队伤害随之提高（纯减益）\n双槽附着即触发 · 同反应 2s 冷却 · 同帧碎裂>过载>超导 · 免疫怪拒附着",
+				"unlock": "解锁：雷元素卡（感电）第 3 关起入手 · 超导随之可发",
+				"mult_fmt": "全抗 {resist_delta_pc:.0f}% · {duration:.0f}s",
+				"sample": "超导",
+			}
+		"RXN_FIR_HYD":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_FIR_HYD],
+				"recipe": "火 + 水",
+				"elements": [GameConst.Element.FIR, GameConst.Element.HYD],
+				"effect": "火遇水汽即时蒸发，按最近一次攻击快照追加一击（独立结算不掷暴击）\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：水元素卡第 4 关起入手 · 蒸发随之可发",
+				"mult_fmt": "结算倍率 ×{coef:.1f}",
+				"sample": "1560",
+			}
+		"RXN_HYD_DEN":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_HYD_DEN],
+				"recipe": "水 + 草",
+				"elements": [GameConst.Element.HYD, GameConst.Element.DEN],
+				"effect": "水草交融凝成草原核，短暂延迟后绽放爆开，波及半径内敌人\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：草元素卡第 5 关起入手 · 绽放随之可发",
+				"mult_fmt": "结算倍率 ×{coef:.1f} · 半径 {radius:.0f} · 延迟 {delay:.1f}s",
+				"sample": "1320",
+			}
+		"RXN_FIR_ANE":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_FIR_ANE],
+				"recipe": "风 + 火",
+				"elements": [GameConst.Element.ANE, GameConst.Element.FIR],
+				"effect": "风卷火势扩散：主目标受扩散一击，火附着满槽转移给周围敌人\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：风元素卡第 5 关起入手 · 扩散随之可发",
+				"mult_fmt": "×{coef:.1f} · 半径 {radius:.0f}",
+				"sample": "760",
+			}
+		"RXN_ICE_ANE":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_ICE_ANE],
+				"recipe": "风 + 冰",
+				"elements": [GameConst.Element.ANE, GameConst.Element.ICE],
+				"effect": "风卷冰晶扩散：主目标受扩散一击，冰附着满槽转移给周围敌人\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：风元素卡第 5 关起入手 · 扩散随之可发",
+				"mult_fmt": "×{coef:.1f} · 半径 {radius:.0f}",
+				"sample": "760",
+			}
+		"RXN_LTG_ANE":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_LTG_ANE],
+				"recipe": "风 + 雷",
+				"elements": [GameConst.Element.ANE, GameConst.Element.LTG],
+				"effect": "风引雷光扩散：主目标受扩散一击，雷附着满槽转移给周围敌人\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：风元素卡第 5 关起入手 · 扩散随之可发",
+				"mult_fmt": "×{coef:.1f} · 半径 {radius:.0f}",
+				"sample": "760",
+			}
+		"RXN_HYD_ANE":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_HYD_ANE],
+				"recipe": "风 + 水",
+				"elements": [GameConst.Element.ANE, GameConst.Element.HYD],
+				"effect": "风携水汽扩散：主目标受扩散一击，水附着满槽转移给周围敌人\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：风元素卡第 5 关起入手 · 扩散随之可发",
+				"mult_fmt": "×{coef:.1f} · 半径 {radius:.0f}",
+				"sample": "760",
+			}
+		"RXN_ANE_DEN":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_ANE_DEN],
+				"recipe": "风 + 草",
+				"elements": [GameConst.Element.ANE, GameConst.Element.DEN],
+				"effect": "风送草籽扩散：主目标受扩散一击，草附着满槽转移给周围敌人\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：风元素卡第 5 关起入手 · 扩散随之可发",
+				"mult_fmt": "×{coef:.1f} · 半径 {radius:.0f}",
+				"sample": "760",
+			}
+		"RXN_ICE_HYD":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_ICE_HYD],
+				"recipe": "冰 + 水",
+				"elements": [GameConst.Element.ICE, GameConst.Element.HYD],
+				"effect": "冰水激凝：目标完全定身，解冻后转为寒滞减速并陷入易伤（免疫定身怪不定身）\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：水元素卡第 4 关起入手 · 冻结随之可发",
+				"mult_fmt": "定身 {freeze_dur:.1f}s · 寒滞 {chill_dur:.1f}s",
+				"sample": "冻结",
+			}
+		"RXN_LTG_HYD":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_LTG_HYD],
+				"recipe": "雷 + 水",
+				"elements": [GameConst.Element.LTG, GameConst.Element.HYD],
+				"effect": "雷入水体连锁传导：伤害向周围敌人逐层跳跃（受连锁冷却护栏限频）\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：水元素卡第 4 关起入手 · 感电随之可发",
+				"mult_fmt": "连锁传导",
+				"sample": "感电",
+			}
+		"RXN_FIR_DEN":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_FIR_DEN],
+				"recipe": "火 + 草",
+				"elements": [GameConst.Element.FIR, GameConst.Element.DEN],
+				"effect": "火遇草即刻燃起满层烈焰，持续灼烧（快照取最近一次攻击面板）\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：草元素卡第 5 关起入手 · 燃烧随之可发",
+				"mult_fmt": "点燃 {burn_dur:.1f}s · 至多 {burn_layers_max:.0f} 层",
+				"sample": "燃烧",
+			}
+		"RXN_LTG_DEN":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_LTG_DEN],
+				"recipe": "雷 + 草",
+				"elements": [GameConst.Element.LTG, GameConst.Element.DEN],
+				"effect": "雷激草木：目标陷入易伤，全队伤害随之提高（纯减益）\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：草元素卡第 5 关起入手 · 激化随之可发",
+				"mult_fmt": "易伤 ×{vuln_mult:.2f} · {vuln_dur:.0f}s",
+				"sample": "激化",
+			}
+		"RXN_FIR_GEO":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_FIR_GEO],
+				"recipe": "岩 + 火",
+				"elements": [GameConst.Element.GEO, GameConst.Element.FIR],
+				"effect": "岩与火凝出晶护：为玩家附加减伤护体（刷新不叠加）\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：岩元素卡第 5 关起入手 · 结晶随之可发",
+				"mult_fmt": "减伤 {dr_pc:.0f}% · {dr_dur:.0f}s",
+				"sample": "结晶·火",
+			}
+		"RXN_ICE_GEO":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_ICE_GEO],
+				"recipe": "岩 + 冰",
+				"elements": [GameConst.Element.GEO, GameConst.Element.ICE],
+				"effect": "岩与冰凝出晶护：为玩家附加减伤护体（刷新不叠加）\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：岩元素卡第 5 关起入手 · 结晶随之可发",
+				"mult_fmt": "减伤 {dr_pc:.0f}% · {dr_dur:.0f}s",
+				"sample": "结晶·冰",
+			}
+		"RXN_LTG_GEO":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_LTG_GEO],
+				"recipe": "岩 + 雷",
+				"elements": [GameConst.Element.GEO, GameConst.Element.LTG],
+				"effect": "岩与雷凝出晶护：为玩家附加减伤护体（刷新不叠加）\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：岩元素卡第 5 关起入手 · 结晶随之可发",
+				"mult_fmt": "减伤 {dr_pc:.0f}% · {dr_dur:.0f}s",
+				"sample": "结晶·雷",
+			}
+		"RXN_HYD_GEO":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_HYD_GEO],
+				"recipe": "岩 + 水",
+				"elements": [GameConst.Element.GEO, GameConst.Element.HYD],
+				"effect": "岩与水凝出晶护：为玩家附加减伤护体（刷新不叠加）\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：岩元素卡第 5 关起入手 · 结晶随之可发",
+				"mult_fmt": "减伤 {dr_pc:.0f}% · {dr_dur:.0f}s",
+				"sample": "结晶·水",
+			}
+		"RXN_DEN_GEO":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_DEN_GEO],
+				"recipe": "岩 + 草",
+				"elements": [GameConst.Element.GEO, GameConst.Element.DEN],
+				"effect": "岩与草凝出晶护：为玩家附加减伤护体（刷新不叠加）\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：岩元素卡第 5 关起入手 · 结晶随之可发",
+				"mult_fmt": "减伤 {dr_pc:.0f}% · {dr_dur:.0f}s",
+				"sample": "结晶·草",
+			}
+		"RXN_ANE_GEO":
+			return {
+				"name": REACTION_NAMES[ReactionType.RXN_ANE_GEO],
+				"recipe": "风 + 岩",
+				"elements": [GameConst.Element.ANE, GameConst.Element.GEO],
+				"effect": "岩与风凝出晶护：为玩家附加减伤护体（刷新不叠加；风不扩散岩，归结晶单占）\n双槽附着即触发 · 同反应 2s 冷却 · 免疫怪拒附着",
+				"unlock": "解锁：岩元素卡第 5 关起入手 · 结晶随之可发",
+				"mult_fmt": "减伤 {dr_pc:.0f}% · {dr_dur:.0f}s",
+				"sample": "结晶·风",
+			}
+		_:
+			return {}
+
+
 static func enemy_attack_note(p_enemy_id: String) -> String:
 	# E5/R72 新形态机制一句话（图鉴行 + 首遇提示条共用；空 = 旧怪不提示）
 	match p_enemy_id:
@@ -137,7 +365,31 @@ static func difficulty_desc(p_d: int) -> String:
 			return "现行口径 · 无附赠复活"
 enum PopupStyle { NORMAL, CRIT, REACTION, DOT, HEAL, XP, IMMUNE, CHARGE_BURST }   # IMMUNE：R22 元素免疫跳字；CHARGE_BURST：R187 W8 蓄能满档引爆（独立桶——同 uid 合并不吞引爆大数字）
 enum FeelLevel { HIT, CRIT, CATALYST, BOSS_DEATH }        # GameFeel 分级（Q-12）
-enum ReactionType { RXN_FIR_ICE, RXN_FIR_LTG, RXN_ICE_LTG }  # 碎裂/过载/超导（中性 ID）
+enum ReactionType {                                                 # 反应中性 ID（唯一真源 idContract §3.3）
+	RXN_FIR_ICE, RXN_FIR_LTG, RXN_ICE_LTG,                         # 现役三名 0..2 追加不重排（R191 锁）
+	RXN_FIR_HYD, RXN_HYD_DEN,                                      # R192 具名：蒸发 / 绽放
+	RXN_FIR_ANE, RXN_ICE_ANE, RXN_LTG_ANE, RXN_HYD_ANE, RXN_ANE_DEN,   # R192 扩散族 ×5（族模板）
+	RXN_ICE_HYD, RXN_LTG_HYD, RXN_FIR_DEN, RXN_LTG_DEN,            # R192 具名：冻结 / 感电 / 燃烧 / 激化
+	RXN_FIR_GEO, RXN_ICE_GEO, RXN_LTG_GEO, RXN_HYD_GEO, RXN_DEN_GEO, RXN_ANE_GEO,   # R192 结晶族 ×6
+}   # id 惯例 = 低枚举序元素在前；结算优先级另见 ElementalSystem.RXN_ORDER（枚举序 ≠ 优先级序）
+
+# R192 反应中文名单源（枚举序 int 键 → 中文名；REACTION_LOOKS.name / reaction_note.name /
+# 图鉴行建统一引此表，禁各处手抄）。冰+草无反应成员——留白标注行见 REACTION_BLANK_NOTE。
+const REACTION_NAMES: Dictionary = {
+	ReactionType.RXN_FIR_ICE: "碎裂", ReactionType.RXN_FIR_LTG: "过载", ReactionType.RXN_ICE_LTG: "超导",
+	ReactionType.RXN_FIR_HYD: "蒸发", ReactionType.RXN_HYD_DEN: "绽放",
+	ReactionType.RXN_FIR_ANE: "扩散·火", ReactionType.RXN_ICE_ANE: "扩散·冰",
+	ReactionType.RXN_LTG_ANE: "扩散·雷", ReactionType.RXN_HYD_ANE: "扩散·水",
+	ReactionType.RXN_ANE_DEN: "扩散·草",
+	ReactionType.RXN_ICE_HYD: "冻结", ReactionType.RXN_LTG_HYD: "感电",
+	ReactionType.RXN_FIR_DEN: "燃烧", ReactionType.RXN_LTG_DEN: "激化",
+	ReactionType.RXN_FIR_GEO: "结晶·火", ReactionType.RXN_ICE_GEO: "结晶·冰",
+	ReactionType.RXN_LTG_GEO: "结晶·雷", ReactionType.RXN_HYD_GEO: "结晶·水",
+	ReactionType.RXN_DEN_GEO: "结晶·草", ReactionType.RXN_ANE_GEO: "结晶·风",
+}
+# 冰+草 反应留白标注（图鉴「反应」页枚举行循环后追加的降透明标注行；R191#4『选了没反应』
+# 误报教训——把空白变规则。数值不进文案，本行不承载任何表值）
+const REACTION_BLANK_NOTE := "冰 + 草：暂无反应（设计留白 · 如实标注，非图鉴遗漏）"
 enum TargetStrategy { NEAREST, FOREMOST, LOWEST_HP, LOCKED }  # 武器目标策略
 enum ConditionId {                                        # 乘区条件封闭枚举（§三.5）
 	TARGET_FROZEN, TARGET_BURNING, TARGET_SHOCKED, AFTER_BOUNCE,
@@ -162,6 +414,10 @@ const TAG_FINAL_BOSS := 4      # 最终 Boss（地图最终波巨 Boss——1/3 
 const ELEM_IMMUNE_FIR := 2          # 元素伤害免疫位（R22 P1：bit = 1 << Element）
 const ELEM_IMMUNE_ICE := 4          #   FIR=2 / ICE=4 / LTG=8——KIN 无位 = 物理恒有效保底
 const ELEM_IMMUNE_LTG := 8
+const ELEM_IMMUNE_HYD := 16         # R192 元素扩容续位（bit = 1 << Element 通用式直继承）：
+const ELEM_IMMUNE_ANE := 32         #   HYD=16 / ANE=32 / GEO=64 / DEN=128——新四元素
+const ELEM_IMMUNE_GEO := 64         #   免疫位与旧三位同构（elem_immune 白名单随 validator
+const ELEM_IMMUNE_DEN := 128        #   R192 拓宽；immune 怪对新元素拒附着＝拒反应燃料）
 const IMMUNE_FREEZE := 1            # 定身免疫（Boss 默认置位，F-17）
 const IMMUNE_CHILL := 2
 const IMMUNE_BURN := 4

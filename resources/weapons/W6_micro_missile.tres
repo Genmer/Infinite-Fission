@@ -10,7 +10,7 @@ rof = 1.8182
 cd = 0.55
 pierce = 1
 pellets = 1
-note = "A3 §3.6 L1：cd 0.55s；单体 DPS 32.7（rof 记 1/cd 等效射速）；R187 30% 规格：爆径 30（W7 110 的 27.3%）"
+note = "自动寻的导弹：每 0.55s 一发、每发 18 伤，单体 DPS 32.7；命中小爆炸（半径 30）并挂引信标记"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,7 +19,7 @@ rof = 1.8182
 cd = 0.55
 pierce = 1
 pellets = 1
-note = "A3 §3.6 L2：cd 0.55s；单体 DPS 40.0"
+note = "每发 18→22 伤，单体 DPS 40.0"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
@@ -28,7 +28,7 @@ rof = 2.0833
 cd = 0.48
 pierce = 1
 pellets = 1
-note = "A3 §3.6 L3：cd 0.55→0.48s；单体 DPS 45.8；R187 齐射轴 L3 双发"
+note = "发射间隔 0.55s→0.48s，一次双发齐射，单体 DPS 45.8"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -37,7 +37,7 @@ rof = 2.0833
 cd = 0.48
 pierce = 1
 pellets = 1
-note = "A3 §3.6 L4：cd 0.48s；单体 DPS 56.3"
+note = "每发 22→27 伤，单体 DPS 56.3"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 2.0833
 cd = 0.48
 pierce = 1
 pellets = 1
-note = "A3 §3.6 L5（R36 后口径）：cd 0.48s；R187 30% 规格：blast_r 级表 [30,32,34,36,38]、溅射 blast_atk_ratio 0.6、齐射 L5 三联；单体 DPS 66.7（直击不砍）"
+note = "每发 27→32 伤，一次三发齐射；爆炸半径随等级扩到 38，溅射 60% 伤害，单体 DPS 66.7"
 
 [resource]
 script = ExtResource("1_wd")

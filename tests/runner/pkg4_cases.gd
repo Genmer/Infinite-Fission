@@ -196,6 +196,9 @@ func _test_trauma_levels_and_decay() -> void:
 	var feel := _gl.game_feel
 	var shake := feel.shake
 	shake.trauma = 0.0
+	# 震屏分档断言前置（默认 true，显式钉死——R196 批新增套件曾以「写即存」
+	# 把 shake_on=false 落进测试档，跨进程污染本组断言）
+	Meta.set_setting("shake_on", true)
 	# 档位：shake_trauma=[0.15,0.4,0.5,1.0]（pkg0 锁定）
 	var tra: Array[float] = feel.feel_config.shake_trauma
 	_check("档位真源：shake_trauma=[0.15,0.4,0.5,1.0]",
@@ -363,14 +366,22 @@ func _test_card_flow() -> void:
 		if gen._roll_rarity(5) == 3:
 			gold += 1
 	_check("稀有度权重分布合理（金卡 500 抽 ≤55，w<10 基础权重 6%）", gold <= 55, "gold=%d" % gold)
-	# 池过滤：叠层上限（AFF_ATK_UP stack_max=3，§6.4 至上限移出池）
+	# 池过滤：叠层上限（R196 有意契约变更——原「满 stack_max=3 移出池」：ADD 池上架帽
+	# 放宽至 stack_max + TraitStack.OVERCAP_EXT_MAX = 3+5 = 8，与 attach 拒绝线同口径
+	# card_generator.gd:472-475；非 ADD 池保持原帽）
 	var atk := _gl.registry.get_trait(&"AFF_ATK_UP")
 	_check("夹具：AFF_ATK_UP 存在（stack_max=3）", atk != null and atk.stack_max == 3)
 	var weapon: WeaponBase = player.weapon_slots[0]
 	for i in range(atk.stack_max):
 		weapon.attach_trait(atk)
 	var add_pool := gen._trait_candidates("ADD", player, [])
-	_check("叠层上限过滤：满层 ID 移出候选池", not add_pool.has(&"AFF_ATK_UP"))
+	# R196 有意契约变更（原「满层 ID 移出候选池」）：满 3 层（质变层）仍上架，帽放宽至 stack_max+5
+	_check("叠层上限过滤：满 stack_max 层 ID 仍上架（ADD 池帽放宽至 stack_max+5）",
+		add_pool.has(&"AFF_ATK_UP"))
+	for i in range(TraitStack.OVERCAP_EXT_MAX):
+		weapon.attach_trait(atk)                    # 续挂至 3+5=8 满帽
+	var add_pool_full := gen._trait_candidates("ADD", player, [])
+	_check("叠层上限过滤：满 stack_max+5 层 ID 移出候选池", not add_pool_full.has(&"AFF_ATK_UP"))
 	# 同批去重
 	var dup := gen._trait_candidates("ADD", player, [&"AFF_HP_UP"] as Array[StringName])
 	_check("同批货架去重（picked 过滤）", not dup.has(&"AFF_HP_UP"))

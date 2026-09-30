@@ -672,10 +672,12 @@ func _test_topology_fan_cofocus() -> void:
 func _test_rhythm_traits() -> void:
 	print("── 节奏词条（BEAM_LAG / TH_PRISM_CHOIR / SPECTRA） ──")
 	# MEC_BEAM_LAG：每存活副束主束跳频 +0.5/s
+	# R199 F02：消费端改读挂载 data.value×层数（旧 LAG_TICK_PER_SUB 常数不读值）——
+	# 夹具 value 1.0→0.5 对齐 .tres 真源（MEC_BEAM_LAG.tres value=0.5），期望 10.5 不变
 	var data := _make_weapon_data({"base_atk": 11.0, "rof": 9.0})
 	var w := _make_weapon(data, Vector2(100, 640))
 	_attach(w, _make_trait_data("MEC_BEAM_LAG", GameConst.PoolClass.MECH, &"",
-		&"EF_MECH", 1.0))
+		&"EF_MECH", 0.5))
 	_prism_enemies(Vector2(100, 640))
 	w.try_fire()
 	_check("BEAM_LAG：无副束主束跳频==L 表 rof 9", _approx(w._main_beam.tick_rate, 9.0))

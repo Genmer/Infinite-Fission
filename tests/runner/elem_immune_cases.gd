@@ -101,6 +101,17 @@ func _test_immune_expansion() -> void:
 		int(e11.get("immune_mask")) & GameConst.IMMUNE_CHILL != 0
 			and int(e11.get("immune_mask")) & GameConst.IMMUNE_FREEZE != 0)
 	e11.queue_free()
+	# R192：水免疫位（16）拒附着（is_elem_immune 通用式 elem_immune & (1<<p_element) 自动继承）
+	var e16 := _make_mob(&"E2_runner", Vector2(300.0, 500.0))
+	e16.max_hp = 1000000.0
+	e16.hp = 1000000.0
+	e16.set("elem_immune", GameConst.ELEM_IMMUNE_HYD)
+	e16.elemental = ElementalState.new()
+	e16.elemental.immune_mask = int(e16.get("immune_mask"))
+	_gl.elemental.apply_attach(e16, GameConst.Element.HYD, 50.0)
+	_check("附着拒绝：水免疫怪（位 16）HYD 槽不涨",
+		float(e16.elemental.gauges[GameConst.Element.HYD]) == 0.0)
+	e16.queue_free()
 
 
 # ── 火免疫（E4 爆虫） ─────────────────────────────────────────────
@@ -158,18 +169,24 @@ func _test_ice_immune_frostling() -> void:
 	(_gl.pools[&"enemy"] as EnemyPool).release(e)
 
 
-# ── 跳字元素配色 ──────────────────────────────────────────────────
+# ── 跳字元素配色（R192 色批：原神七色系——期望硬编码防漂移，0.03 容差） ──
 func _test_popup_element_colors() -> void:
-	print("── 跳字元素配色 ──")
+	print("── 跳字元素配色（R192 七色） ──")
 	Meta.set_setting("damage_numbers_on", true)
 	var pm := _gl.popup_manager
 	pm.clear_all()                              # 清免疫测试残留跳字
 	var pos := Vector2(360.0, 400.0)
+	# 新七色（R192 §8.2：KIN 白/FIR #ef7938/ICE #9fd6e3/LTG=SHOCK #af8ec1/
+	# HYD #4cc2f1/ANE #74c2a8/GEO #fab632/DEN #a5c83b）——硬编码防色表漂移
 	var cases := {
-		GameConst.Element.FIR: Color(1.0, 0.6, 0.25),
-		GameConst.Element.ICE: Color(0.62, 0.85, 1.0),
-		GameConst.Element.LTG: PopPalette.SHOCK,
+		GameConst.Element.FIR: Color("#ef7938"),
+		GameConst.Element.ICE: Color("#9fd6e3"),
+		GameConst.Element.LTG: Color("#af8ec1"),
 		GameConst.Element.KIN: Color(1.0, 1.0, 1.0),
+		GameConst.Element.HYD: Color("#4cc2f1"),
+		GameConst.Element.ANE: Color("#74c2a8"),
+		GameConst.Element.GEO: Color("#fab632"),
+		GameConst.Element.DEN: Color("#a5c83b"),
 	}
 	for element in cases:
 		var r := DamageResult.new()
@@ -183,13 +200,16 @@ func _test_popup_element_colors() -> void:
 	var ok_all := true
 	var detail := ""
 	for p in pm._active_list:
+		if not cases.has(p.element):
+			continue                            # 其他用例残留跳字不入本段判据
 		var expected: Color = cases[p.element]
 		var actual: Color = p._label.self_modulate
 		if (absf(actual.r - expected.r) + absf(actual.g - expected.g)
 				+ absf(actual.b - expected.b)) > 0.03 and p.element != GameConst.Element.KIN:
 			ok_all = false
 			detail = "%s %s" % [str(p.element), str(actual)]
-	_check("跳字配色：FIR 橙 / ICE 冰蓝 / LTG 紫 / KIN 白", ok_all, detail)
+	_check("跳字配色：FIR 橙 / ICE 冰蓝 / LTG 紫 / HYD 水蓝 / ANE 翠 / GEO 金 / DEN 草绿 / KIN 白",
+		ok_all, detail)
 	pm.clear_all()
 	# 免疫跳字：样式 IMMUNE →「免疫」灰蓝
 	var ri := DamageResult.new()
@@ -204,32 +224,41 @@ func _test_popup_element_colors() -> void:
 	pm.clear_all()
 
 
-# ── 反应专属特效 ──────────────────────────────────────────────────
+# ── 反应专属特效（R192：分段独立清场——计数只对本段发射负责，防跨段残留假红） ──
+func _clear_rxn_rings(layer: Node) -> void:
+	for c in layer.get_children():
+		if str(c.name).begins_with("RxnRing"):
+			c.visible = false
+
+
+func _count_rxn_rings(layer: Node) -> int:
+	var n := 0
+	for c in layer.get_children():
+		if str(c.name).begins_with("RxnRing") and c.visible:
+			n += 1
+	return n
+
+
 func _test_reaction_fx_slots() -> void:
 	print("── 反应专属特效 ──")
 	var layer: Node = _gl.elemental_fx
 	_check("前置：FX 层就绪", layer != null)
+	# 分段清场：R192 反应矩阵扩容后其他段可能留环——本段计数只对本段发射负责
+	_clear_rxn_rings(layer)
 	# 过载：紫橙双环落场
 	EventBus.emit_reaction_triggered(GameConst.ReactionType.RXN_FIR_LTG,
 		Vector2(360.0, 600.0), 1)
-	var overload_rings := 0
-	for c in layer.get_children():
-		if str(c.name).begins_with("RxnRing") and c.visible:
-			overload_rings += 1
+	var overload_rings := _count_rxn_rings(layer)
 	_check("过载：专属紫橙双环落场", overload_rings == 2, "实得 %d" % overload_rings)
-	# 超导：冰紫雾环落场
+	# 分段清场 + 超导：冰紫雾环落场
+	_clear_rxn_rings(layer)
 	EventBus.emit_reaction_triggered(GameConst.ReactionType.RXN_ICE_LTG,
 		Vector2(360.0, 600.0), 2)
-	overload_rings = 0
-	for c in layer.get_children():
-		if str(c.name).begins_with("RxnRing") and c.visible:
-			overload_rings += 1
-	_check("超导：专属冰紫雾环落场（累计 4）", overload_rings == 4, "实得 %d" % overload_rings)
+	overload_rings = _count_rxn_rings(layer)
+	_check("超导：专属冰紫雾环落场（本段独立计数 2）", overload_rings == 2,
+		"实得 %d" % overload_rings)
 	# 推进 1s → 全部自清
 	for i in range(80):
 		layer._tick_rxn_rings(1.0 / 60.0)
-	overload_rings = 0
-	for c in layer.get_children():
-		if str(c.name).begins_with("RxnRing") and c.visible:
-			overload_rings += 1
+	overload_rings = _count_rxn_rings(layer)
 	_check("反应环：扩散淡出自清（0 残留）", overload_rings == 0)

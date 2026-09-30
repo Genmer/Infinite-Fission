@@ -7,7 +7,8 @@
 #   结晶/地图通关）不受本档影响——两条存档链互不干扰。
 # · 结构（ConfigFile 单段 run）：map_id / daily / wave / kills / elapsed / character /
 #   level / xp / hp / max_hp / gold / rerolls / free_reroll / unlocked_slots /
-#   weapons[{id, level, traits[{id, layers}]}]——全部为可序列化基本类型/容器。
+#   weapons[{id, level, traits[{id, layers}]}] / relics[{id}]（R198 二aw-1：遗物 id 集随档，
+#   旧档无键 = 空表兼容）——全部为可序列化基本类型/容器。
 class_name RunSave
 extends RefCounted
 

@@ -10,7 +10,7 @@ rof = 1.0
 cd = 3.0
 pierce = 1
 pellets = 1
-note = "蓄能改版 L1：orb_atk 10 × 2 球；裸装 DPS 33.3（接触 16.7 + 引爆 16.7）；cd = 引力脉冲节拍（pulse_cd 语义，AFF_CDR 通道）"
+note = "2 颗能量球绕体旋转（每球 10 伤）：接触蓄能 x/5，满档在敌人身上引爆——基础 DPS 33.3（接触 + 引爆各半）"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,7 +19,7 @@ rof = 1.0
 cd = 3.0
 pierce = 1
 pellets = 1
-note = "蓄能改版 L2：orb_atk 13；裸装 DPS 43.3"
+note = "每球 10→13 伤，基础 DPS 43.3"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
@@ -28,7 +28,7 @@ rof = 1.0
 cd = 3.0
 pierce = 1
 pellets = 1
-note = "蓄能改版 L3：orbs 2→3；裸装 DPS 65.0"
+note = "能量球 2→3 颗，基础 DPS 65.0"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -37,7 +37,7 @@ rof = 1.0
 cd = 3.0
 pierce = 1
 pellets = 1
-note = "蓄能改版 L4：orb_atk 17；裸装 DPS 96.3"
+note = "每球 13→17 伤，基础 DPS 96.3"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 1.0
 cd = 3.0
 pierce = 1
 pellets = 1
-note = "蓄能改版 L5：orbs 4；orbit_radius 120；裸装 DPS 113.3（×3.4，夹 W6 66.7 与 W1 132 之间）"
+note = "能量球 3→4 颗，环绕半径扩到 120，基础 DPS 113.3"
 
 [resource]
 script = ExtResource("1_wd")

@@ -10,7 +10,7 @@ description = "环绕体化为裂空剑：再命中节奏 +25%（命中冷却 -2
 pool = 3
 pool_id = &""
 effect_id = &"EF_MECH"
-value = 0.0
+value = 0.25
 value2 = 0.0
 params = {
 	"required_weapon": &"W8_orbit_field",

@@ -368,13 +368,18 @@ func _on_player_hit(_p_damage: float, _p_source_uid: int) -> void:
 			weapon.get_current_atk() * atk_ratio, false)
 
 
-func on_attack_fired() -> void:
+func on_attack_fired(p_fire_interval: float = 0.0) -> void:
 	# R186 每击谐振 push 口（WeaponBase.tick try_fire 成功位调用——开火口径计费：一枪=一击，
 	# 霰弹 9 丸仍 1 击；不走 damage_resolved：结算侧幂等键折叠同帧多弹丸、AOE_SECONDARY
 	# 与直击不可区分且属风暴告警通道，设计案 §0 裁定）。守卫链：持有 → 玩家可用 →
 	# 技能冷却中（就绪不计费不耗预算，存款留给下轮）→ 预算足额（<1 击预算整击丢弃）。
 	# 预算扣减走 snappedf 整击网格：纯浮点连减会在满存款第 60 击处漂移出 0.00999… 假残量
 	#（<cdp 被误丢第 60 击），网格化保证「满存款恰 60 击用尽」语义精确。
+	# R198（二aw-2 口径 9）慢速武器间隔折算补偿：cdp_eff = cdp × clampf(开火间隔 ×
+	# rate_per_sec, 1.0, fire_mult_max)——0.5s 武器单击计 10 击预算、0.1s 武器 2 击（两者
+	# 每秒收益同为 20 击 ≈0.2s，与射速解耦）；下限 1.0 = 快速武器收益不低于改前；上限
+	# fire_mult_max（.tres 新键默认 10.0）= 超慢速武器单击计费帽。预算守卫仍按 cdp
+	#（<1 击预算丢整击——慢击慢付，存款不足时宁可下拍再计），扣减网格仍按 cdp 防浮点漂移。
 	var data := _owned_effect(&"REL_EF_ATTACK_CDR")
 	if data == null or player == null or not is_instance_valid(player):
 		return
@@ -384,10 +389,13 @@ func on_attack_fired() -> void:
 	var cdp := float(data.params.get("cd_per_attack", 0.01))
 	if cdp <= 0.0 or _atk_cdr_budget < cdp:
 		return
-	_atk_cdr_budget = maxf(snappedf(_atk_cdr_budget - cdp, cdp), 0.0)
-	player.set("skill_cd_left", maxf(cd_left - cdp, 0.0))
+	var rate := float(data.params.get("rate_per_sec", 20.0))
+	var fire_mult_max := float(data.params.get("fire_mult_max", 10.0))
+	var cdp_eff := cdp * clampf(p_fire_interval * rate, 1.0, fire_mult_max)
+	_atk_cdr_budget = maxf(snappedf(_atk_cdr_budget - cdp_eff, cdp), 0.0)
+	player.set("skill_cd_left", maxf(cd_left - cdp_eff, 0.0))
 	attack_cdr_credits += 1
-	attack_cdr_seconds += cdp
+	attack_cdr_seconds += cdp_eff
 	DebugStats.count(&"relic_attack_cdr")
 
 

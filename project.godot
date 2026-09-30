@@ -9,6 +9,8 @@ config_version=5
 config/name="Infinite Fission"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
+; R194：Android 返回手势不退出游戏（引擎级键，不进 Meta.settings/存档）
+config/quit_on_go_back=false
 
 [autoload]
 
@@ -24,7 +26,14 @@ window/size/viewport_height=1280
 window/size/window_width_override=540
 window/size/window_height_override=960
 window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
+; R195 适配底座：keep→expand（超宽/超长窗延伸画布替代黑边；运行期窗口高宽比>2.34 由
+; GameLoop 表现层钳制回落 KEEP 居中黑边，阈值 2.34 为 game_loop 内代码常量不设键）。
+; 整体回退=本行单行改回 "keep" 即现状黑边（headless 默认窗 540×960 下 EXPAND≡KEEP）。
+window/stretch/aspect="expand"
+; R194：横屏唯一修口——4.3 导出器只读此项目设置写 activity screenOrientation
+;（枚举 0=landscape/1=portrait，Main::setup 默认 SCREEN_LANDSCAPE；export_presets.cfg
+; 的 screen/orientation 是 3.x 遗留死键，4.3 从不读取，已独立 commit 删除）
+window/handheld/orientation=1
 
 [physics]
 
@@ -33,3 +42,4 @@ common/physics_ticks_per_second=120
 [rendering]
 
 renderer/rendering_method="forward_plus"
+textures/vram_compression/import_etc2_astc=true

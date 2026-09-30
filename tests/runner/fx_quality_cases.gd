@@ -19,6 +19,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_setting_roundtrip()
 	_test_popup_scaling()
 	_test_reaction_popup()
+	_test_codex_preview_scale()
 	_test_particle_scaling()
 	_test_rocket_blast_fx()
 	_teardown_game_loop()
@@ -131,11 +132,11 @@ func _test_reaction_popup() -> void:
 	r.element = GameConst.ReactionType.RXN_FIR_ICE
 	pm.on_damage_resolved(r)
 	var p0: DamagePopup = pm._active_list[0]
-	_check("R186 碎裂大字：54px 字号 + 12px 描边 + 数值直读",
+	_check("R186 碎裂大字：54px 字号 + 12px 描边 + 「中文名+数字」（R192 名+值纯函数）",
 		pm.active_popups == 1
 		and p0._label.get_theme_font_size("font_size") == DamagePopup.FONT_SIZE_REACTION
 		and p0._label.get_theme_constant("outline_size") == DamagePopup.OUTLINE_PX_REACTION
-		and p0._label.text == "12")
+		and p0._label.text == "碎裂12")
 	_check("R186 碎裂大字：双色通道（暖雪白填充/绯红描边）+ 乘色退位 + 专属字型",
 		p0._label.get_theme_color("font_color") == PopPalette.RXN_FILL_SHATTER
 		and p0._label.get_theme_color("font_outline_color") == PopPalette.RXN_LINE_SHATTER
@@ -159,11 +160,11 @@ func _test_reaction_popup() -> void:
 	_check("R186 升格：直击小字原地换过载大字（active 不涨 / 数值并入 12+8）",
 		pm.active_popups == 2 and p1.style == GameConst.PopupStyle.REACTION
 		and absf(p1.merged_value - 20.0) <= 0.001)
-	_check("R186 升格：过载双色（爆裂橙填充/暗电紫描边）+ 斜体 900 字型",
+	_check("R186 升格：过载双色（爆裂橙填充/暗电紫描边）+ 斜体 900 字型 + merge 后文本==名+新值",
 		p1._label.get_theme_color("font_color") == PopPalette.RXN_FILL_OVERLOAD
 		and p1._label.get_theme_color("font_outline_color") == PopPalette.RXN_LINE_OVERLOAD
 		and p1._label.get_theme_font("font") == StickerTheme.font_reaction(1)
-		and p1._label.text == "20")
+		and p1._label.text == "过载20")
 	# ③ 直击遇反应大字在窗（R2c）：不吞大字，新起小字下移 +20px
 	var rr2 := DamageResult.new()
 	rr2.final_value = 9.0
@@ -184,14 +185,42 @@ func _test_reaction_popup() -> void:
 		and small.style == GameConst.PopupStyle.NORMAL
 		and small.position == Vector2(300.0, 420.0)
 		and small._label.get_theme_font_size("font_size") == DamagePopup.FONT_SIZE)
-	# ④ 超导文字标签（R3）：RXN_ICE_LTG 无 DamageResult 通道 → 纯文字「超导」
+	# ④ 超导文字标签（R3）：RXN_ICE_LTG 无 DamageResult 通道 → 纯文字「超导-30%」
+	# （R192：起字时读表一次性格式化 rxn_stat；merged_value 恒 0.0——bucket3 拒值契约）
 	pm.on_reaction_triggered(GameConst.ReactionType.RXN_ICE_LTG, Vector2(320.0, 420.0), 610004)
 	var p4: DamagePopup = pm._active_list[-1]
-	_check("R186 超导标签：纯文字 + 冰晶白/靛紫双色 + 斜体 700 字型",
-		pm.active_popups == 5 and p4._label.text == "超导"
+	_check("R186 超导标签：纯文字「超导-30%」+ 冰晶白/靛紫双色 + 斜体 700 字型 + merged_value 恒 0",
+		pm.active_popups == 5 and p4._label.text == "超导-30%"
+		and absf(p4.merged_value) <= 0.001
 		and p4._label.get_theme_color("font_color") == PopPalette.RXN_FILL_SUPER
 		and p4._label.get_theme_color("font_outline_color") == PopPalette.RXN_LINE_SUPER
 		and p4._label.get_theme_font("font") == StickerTheme.font_reaction(2))
+	# ④c [R192] bucket3 拒值（§4.d 文字桶无 merge 入口）：同 uid 反应数值并入禁入文字标签
+	var before_b3 := int(pm.active_popups)
+	var rv3 := DamageResult.new()
+	rv3.final_value = 100.0
+	rv3.target_uid = 610004
+	rv3.pos = Vector2(320.0, 420.0)
+	rv3.popup_style = GameConst.PopupStyle.REACTION
+	rv3.element = GameConst.ReactionType.RXN_FIR_ICE
+	pm._rxn_frame_stamp = -1                  # 放行帧闸（聚焦桶位判据本身）
+	pm.on_damage_resolved(rv3)
+	_check("R192 bucket3 拒值：文字标签不吞值（text/merged_value 不变）+ 数值走独立 bucket1 起字",
+		int(pm.active_popups) == before_b3 + 1
+		and p4._label.text == "超导-30%" and absf(p4.merged_value) <= 0.001,
+		"active=%d" % int(pm.active_popups))
+	# ④d [R192] R2c 补缺口：直击遇存活 bucket3 文字标签 → 新起小字下移 +20px（防叠扩到文字桶）
+	var rd4 := DamageResult.new()
+	rd4.final_value = 5.0
+	rd4.target_uid = 610004
+	rd4.pos = Vector2(320.0, 420.0)
+	rd4.popup_style = GameConst.PopupStyle.NORMAL
+	pm.on_damage_resolved(rd4)
+	var small4: DamagePopup = pm._active_list[-1]
+	_check("R192 直击让行（bucket3）：文字标签不被吞，小字下移 offset==(0,20)",
+		small4 != null and small4.style == GameConst.PopupStyle.NORMAL
+		and small4.position == Vector2(320.0, 440.0),
+		"pos=%s" % (str(small4.position) if small4 != null else "-"))
 	# ④b 碎裂/过载禁走 reaction_triggered 起字（管线 settle 已派生，二次会翻倍）
 	var before := int(pm.active_popups)
 	pm.on_reaction_triggered(GameConst.ReactionType.RXN_FIR_ICE, Vector2(320.0, 420.0), 610005)
@@ -296,6 +325,29 @@ func _test_reaction_popup() -> void:
 	pm.baseline_provider = provider_prev
 	Meta.set_setting("damage_numbers_on", numbers_prev)
 	Meta.set_setting("fx_quality", 2)
+
+
+# ── R192 图鉴预览缩放（visual 批1：CODEX_PREVIEW_SCALE 单源 + pivot 居中适配 140×78 格） ──
+func _test_codex_preview_scale() -> void:
+	print("── R192 图鉴预览 scale == CODEX_PREVIEW_SCALE ──")
+	var menu = _gl.menu_screen
+	if menu == null:
+		_check("前置：MenuScreen 就绪（GameLoop 子树）", false)
+		return
+	menu._on_lobby_pressed("codex")
+	menu._on_codex_tab("反应")
+	var prev: Label = null
+	for c in menu._panel_list.get_children():
+		if not c.is_queued_for_deletion():
+			prev = (c as Control).get_node_or_null("RxnPreview") as Label
+			break
+	_check("R192 预览缩放：prev.scale == CODEX_PREVIEW_SCALE(0.5) 且 pivot_offset==size×0.5（居中适配格）",
+		prev != null and is_equal_approx(prev.scale.x, DamagePopup.CODEX_PREVIEW_SCALE)
+		and is_equal_approx(prev.scale.y, DamagePopup.CODEX_PREVIEW_SCALE)
+		and is_equal_approx(prev.pivot_offset.x, prev.size.x * 0.5)
+		and is_equal_approx(prev.pivot_offset.y, prev.size.y * 0.5),
+		"scale=%s" % (str(prev.scale) if prev != null else "-"))
+	menu._on_panel_close()
 
 
 func _test_particle_scaling() -> void:

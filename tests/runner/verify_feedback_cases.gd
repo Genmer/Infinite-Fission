@@ -88,9 +88,12 @@ func run(p_tree: SceneTree) -> void:
 	_test_p2_daily()
 	_test_p2_characters()
 	_test_settings()
+	_test_r194_fx_opacity()
 	_test_round2_feedback()
 	_test_round5_early_xp()
 	_test_round7_audit()
+	_test_r191_shared_ui()
+	_test_r199_g7()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -112,6 +115,29 @@ func _boot_game_loop() -> void:
 	_check("Boot：完成且进入 MENU", _gl.boot_ready and _gl.state == GameConst.GameStatus.MENU)
 	_check("Boot：子系统齐全", _gl.player != null and _gl.card_generator != null
 		and _gl.hud != null and _gl.pause_overlay != null and _gl.spawner != null)
+
+
+func _test_r191_shared_ui() -> void:
+	# R191#1 共享 UI：StickerTheme 全局 tooltip 换装（一处生效全 UI 子树自动继承）
+	print("── R191 共享 UI（tooltip 全局样式） ──")
+	var th: Theme = StickerTheme.theme()
+	_check("R191：tooltip 面板条目（TooltipPanel 有 panel StyleBox）",
+		th.has_stylebox("panel", "TooltipPanel"), "")
+	var tsb: StyleBoxFlat = th.get_stylebox("panel", "TooltipPanel") as StyleBoxFlat
+	_check("R191：tooltip 白实底（bg_color==PANEL 且 a>=1.0）",
+		tsb != null and (tsb.bg_color == PopPalette.PANEL) and tsb.bg_color.a >= 1.0,
+		"bg=%s" % str(tsb.bg_color) if tsb != null else "no-stylebox")
+	_check("R191：tooltip 字色 = INK（TooltipLabel font_color）",
+		th.has_color("font_color", "TooltipLabel")
+		and (th.get_color("font_color", "TooltipLabel") == PopPalette.INK), "")
+	_check("R191：tooltip 字号 ≥20 + 字体挂 font() + 描边 0（对齐 Label 口径）",
+		th.get_font_size("font_size", "TooltipLabel") >= 20
+		and th.get_font("font", "TooltipLabel") == StickerTheme.font()
+		and th.get_constant("outline_size", "TooltipLabel") == 0, "")
+	# R191#5：图鉴 4 页签含「反应」（页级行级断言在 test_rxn_codex.gd 独立套件）
+	_check("R191：图鉴页签 4 枚含「反应」",
+		_gl.menu_screen._codex_tabs.size() == 4
+		and _gl.menu_screen._codex_tabs.has("反应"), "")
 
 
 func _teardown_game_loop() -> void:
@@ -755,8 +781,55 @@ func _test_meta_systems() -> void:
 	_check("大厅：武器页签切换（条目 = 注册表武器数）",
 		_live_children(menu._panel_list) == menu.registry.weapons.size())
 	menu._on_lobby_pressed("ach")
-	_check("大厅：成就面板打开（条目 = 定义数 %d）" % Meta.ACHIEVEMENTS.size(),
-		_live_children(menu._panel_list) == Meta.ACHIEVEMENTS.size())
+	# R191#6 等强度适配（原断言「条目 = 定义数」随分页失效）：三断言联合覆盖——
+	# ①默认页行数 = min(页容量 24, N) 且 >0；②页签×翻页遍历累加 == N（全部页 + 三类别页
+	# 各自累加均等于 N，覆盖语义不弱化）；③定义表 id 去重后 size 不变（防生成撞档重复）
+	var ach_n := Meta.ACHIEVEMENTS.size()
+	var ach_uniq := {}
+	for a in Meta.ACHIEVEMENTS:
+		ach_uniq[String(a.id)] = true
+	_check("大厅：成就面板打开（默认页 = min(24, 定义数 %d) 且 >0）" % ach_n,
+		_live_children(menu._panel_list) == mini(24, ach_n) and ach_n > 0)
+	var ach_acc_all := 0                        # 「全部」页签翻页累加
+	var ach_acc_cats := 0                       # 三类别页签翻页累加（猎杀/进阶/收集）
+	for tab_name: String in menu._ach_tabs:
+		menu._on_ach_tab(tab_name)
+		while true:
+			if tab_name == "全部":
+				ach_acc_all += _live_children(menu._panel_list)
+			else:
+				ach_acc_cats += _live_children(menu._panel_list)
+			if menu._ach_page >= menu._ach_page_count() - 1:
+				break
+			menu._on_ach_page_next()
+	_check("大厅：成就分页遍历（全部页累加 %d + 三类别累加 %d == 定义数 %d）" % [ach_acc_all, ach_acc_cats, ach_n],
+		ach_acc_all == ach_n and ach_acc_cats == ach_n,
+		"n=%d" % ach_n)
+	_check("大厅：成就定义 id 去重后 size 不变（%d）" % ach_n,
+		ach_uniq.size() == ach_n, "uniq=%d" % ach_uniq.size())
+	menu._on_ach_tab("全部")                    # 还原默认页签（后续套件口径）
+	# R191#6 成就 toast 同帧合批：同帧连发 10 次 achievements_changed → 单条聚合 toast
+	#（文案含 ×10 与合计金额；reward 兜底 0——奖励读定义表真值）。手动推进 flush 与
+	# call_deferred 同帧等价（pending 清空后既有排程 flush 空转无害）。
+	# 先清 pending：此前套件真实解锁（wave_10 等）同帧攒下的待播项一并计入反而破坏 ×10 锚点
+	_gl.hud._ach_toast_pending.clear()
+	for i in range(10):
+		Meta.achievements_changed.emit(&"first_blood")
+	_gl.hud._flush_achievement_toast()
+	var ach_toasts: Array[Label] = []
+	for c in _gl.hud.get_children():
+		if c is Label and String(c.name) == "AchToast":
+			ach_toasts.append(c)
+	# R196 有意契约变更（原「合计 +100💎」）：成就 toast emoji 字面量移除（💎/🏆，
+	# Android 系统字体链缺字形——apk_menu_no_icons 定案），金额段改「（+%d）」纯数字
+	_check("大厅：成就 toast 同帧合批（10 连发 → 1 条，含 ×10 与合计 +100，无 💎）",
+		ach_toasts.size() == 1 and String(ach_toasts[0].text).contains("×10")
+			and String(ach_toasts[0].text).contains("+100")
+			and not String(ach_toasts[0].text).contains("💎"),
+		"n=%d txt=%s" % [ach_toasts.size(),
+			String(ach_toasts[0].text) if not ach_toasts.is_empty() else "-"])
+	for t in ach_toasts:
+		t.queue_free()                          # 测试隔离：清 toast（不残留到后续套件）
 	menu._on_lobby_pressed("records")
 	_check("大厅：记录面板打开（全局 5 + 分图标题 1 + 5 图 + 进度 1 = 12 行）",
 		_live_children(menu._panel_list) == 12)
@@ -2353,6 +2426,104 @@ func _test_settings() -> void:
 	SfxBank.I.apply_settings_volumes()
 
 
+# ── R194 fx_opacity 特效透明度（键契约/滑条联动/应用生效/枪口 TINT 不变/文案口径） ──
+func _test_r194_fx_opacity() -> void:
+	print("── R194 fx_opacity 特效透明度 ──")
+	# 快照（同 _test_settings 口径：末尾还原不留痕；headless 测试档 user://meta_save_test.cfg）
+	var saved_settings: Dictionary = Meta._settings.duplicate()
+	Meta._settings = {}
+	# ① 键契约：默认 1.0（旧档缺键读口默认表回退，零迁移）
+	_check("R194 fx：旧档缺键读口回 1.0", is_equal_approx(float(Meta.settings("fx_opacity")), 1.0),
+		str(Meta.settings("fx_opacity")))
+	# ② 写口 clampf(0.3,1.0)
+	Meta.set_setting("fx_opacity", 0.29)
+	_check("R194 fx：写口下钳 0.29→0.3", is_equal_approx(float(Meta.settings("fx_opacity")), 0.3))
+	Meta.set_setting("fx_opacity", 2.0)
+	_check("R194 fx：写口上钳 2.0→1.0", is_equal_approx(float(Meta.settings("fx_opacity")), 1.0))
+	# ③ 持久化回路（settings 段加键、结构禁改）
+	Meta.set_setting("fx_opacity", 0.4)
+	Meta._load()
+	_check("R194 fx：持久化（0.4 过 user:// 磁盘写读回路）",
+		is_equal_approx(float(Meta.settings("fx_opacity")), 0.4))
+	# ④ 滑条联动：面板开（_sync_from_meta 回填）→ 拖动 → 写口生效
+	var sp: SettingsPanel = _gl.settings_panel
+	Meta.set_setting("fx_opacity", 0.4)
+	sp.open()
+	_check("R194 fx：滑条回填（open 同步 Meta 0.4）",
+		sp._fxo_slider != null and absf(sp._fxo_slider.value - 0.4) <= 0.001,
+		"slider=%s" % str(sp._fxo_slider.value if sp._fxo_slider != null else null))
+	sp._fxo_slider.value = 0.5                    # value_changed → Meta.set_setting
+	_check("R194 fx：滑条拖动 → 写口联动（≈0.5）",
+		absf(float(Meta.settings("fx_opacity")) - 0.5) <= 0.001)
+	sp.close()
+	# ⑤ 应用生效（0.3 档）：Meta.settings_changed → GameLoop 单源应用器三步
+	Meta.set_setting("fx_opacity", 0.3)
+	_check("R194 fx：elemental_fx 根 modulate.a≈0.3（全层罩减）",
+		_gl.elemental_fx != null and absf(_gl.elemental_fx.modulate.a - 0.3) <= 0.01,
+		str(_gl.elemental_fx.modulate.a if _gl.elemental_fx != null else null))
+	_check("R194 fx：玩家本体 modulate.a==1.0（本体不随特效减淡）",
+		_gl.player.modulate.a == 1.0, str(_gl.player.modulate.a))
+	var emitters := (_gl.pools[&"particle"] as ParticlePool).get_children()
+	var emitter_ok := 0
+	for em in emitters:
+		if absf((em as GPUParticles2D).modulate.a - 0.3) <= 0.01:
+			emitter_ok += 1
+	_check("R194 fx：粒子池发射器 modulate.a≈0.3（%d/%d）" % [emitter_ok, emitters.size()],
+		emitters.size() > 0 and emitter_ok == emitters.size())
+	# ⑥ 跳字折乘：show_popup → tick → modulate.a ≈ 0.3×(1−t²)（t=0.2 → 0.288）
+	var popup: Node2D = (_gl.pools[&"popup"] as PopupPool).acquire()
+	popup.call(&"show_popup", Vector2(100.0, 100.0), 10.0, GameConst.PopupStyle.NORMAL)
+	popup.call(&"tick", 0.12)                     # t = 0.12/0.6 = 0.2
+	_check("R194 fx：跳字 tick 后 modulate.a≈0.3×(1−t²)=0.288",
+		absf(popup.modulate.a - 0.288) <= 0.01, str(popup.modulate.a))
+	(_gl.pools[&"popup"] as PopupPool).release(popup)
+	# ⑦ 枪口 TINT 不变：fx_opacity=0.3 开火 → 镜面火花 modulate==MirrorImage.TINT（精确锁，
+	#    枪口星闪/镜面火花排除于乘区——mirror_muzzle 套件 32 断言原样，此处锁跨系统互不染）
+	var w0: WeaponBase = _gl.player.weapon_slots[0]
+	var tgt: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	tgt.spawn(_fixture_enemy(&"E_R194_MUZ", 1000000.0), 1, 0)
+	tgt.global_position = _gl.player.global_position + Vector2(150.0, 0.0)
+	_gl.spawner.active.append(tgt)
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	var was_mirror: bool = bool(w0.get("is_mirror_image"))
+	w0.set("is_mirror_image", true)               # 临时置镜面位（fire 分支：ice_shard+TINT）
+	w0.set("cooldown_left", 0.0)
+	_gl.player.call(&"tick", 1.0 / 120.0, Vector2.ZERO)
+	var flash: Sprite2D = w0.get("_muzzle_flash")
+	_check("R194 fx：开火后 _muzzle_flash.modulate==MirrorImage.TINT（乘区不染枪口火花）",
+		flash != null and flash.modulate == MirrorImage.TINT,
+		str(flash.modulate if flash != null else null))
+	w0.set("is_mirror_image", was_mirror)         # 位还原
+	_gl.spawner.active.erase(tgt)
+	(_gl.pools[&"enemy"] as EnemyPool).release(tgt)
+	# ⑧ 文案口径：提示行含「卡顿时」引导 + 透明度范围，无提帧暗示（透明度非提帧手段）
+	var tip := _find_label_with(sp._card, "卡顿时优先调低特效质量")
+	_check("R194 fx：提示行含「卡顿时优先调低特效质量」",
+		tip != null, "tip=%s" % str(tip.text if tip != null else ""))
+	_check("R194 fx：提示行含透明度口径「仅观感减淡」且无提帧暗示",
+		tip != null and tip.text.contains("仅观感减淡")
+		and not tip.text.contains("提帧") and not tip.text.contains("更流畅"))
+	# ⑨ 快照还原 + static 复位：写回 1.0（settings_changed → 应用器复位 static）→ 断言 → 快照还原
+	Meta.set_setting("fx_opacity", 1.0)
+	_check("R194 fx：还原后 DamagePopup.fx_opacity==1.0（static 随应用器复位）",
+		is_equal_approx(DamagePopup.fx_opacity, 1.0), str(DamagePopup.fx_opacity))
+	DamagePopup.fx_opacity = 1.0                  # 防御性复位（断言失败时不污染后续用例）
+	Meta._settings = saved_settings
+	Meta._save()
+	SfxBank.I.apply_settings_volumes()
+
+
+func _find_label_with(p_root: Node, p_needle: String) -> Label:
+	# 子树扫描首个含 p_needle 文案的 Label（提示行查找口，不依赖节点命名）
+	if p_root is Label and (p_root as Label).text.contains(p_needle):
+		return p_root
+	for c in p_root.get_children():
+		var found := _find_label_with(c, p_needle)
+		if found != null:
+			return found
+	return null
+
+
 func _live_children(p_node: Node) -> int:
 	# queue_free 已挂但未销毁的子节点不计（无帧迭代环境下的存活计数）
 	var n := 0
@@ -3014,15 +3185,60 @@ func _test_r71_shop_fallback() -> void:
 			"lv %d→%d" % [lv0, int(up_w.get("level"))])
 	else:
 		_check("R71：购买武器强化（货架必有 weapon_up 索引）", false, "missing")
-	# ③ 金币不足 → 刷新按钮置灰（静默吞点击根修）+ 点了无副作用
+	# ③ 金币不足 → 刷新按钮隐藏（R195 有意契约变更：置灰→原位隐藏留空——用户原话
+	# 「不给刷就别显示」；can_refresh() 三口径合一单源谓词，disabled 写点删净不并存）
+	# + 点了无副作用（金量门 :393-394 语义不动：直调重掷链路依赖，零用户路径可达）
 	_gl.player.set("gold", 0)
 	shop._refresh()
 	var refresh_btn := shop._root.get_node("ShopCard/ShopRefreshButton") as Button
-	_check("R71：金币不足刷新按钮置灰禁点", refresh_btn != null and refresh_btn.disabled)
+	_check("R71→R195：金币不足刷新按钮隐藏（置灰→隐藏，R195 有意契约变更）",
+		refresh_btn != null and not refresh_btn.visible)
 	var size_before: int = shop._wares.size()
 	shop._on_refresh_pressed()
 	_check("R71：金币不足点刷新无副作用（货架原样、不扣钱）",
 		shop._wares.size() == size_before and int(_gl.player.get("gold")) == 0)
+	# ── R195 刷新钮可见性双向锁 + 黑市/战前补给双态一致（就地扩展，不建新套件） ──
+	# b) 复显：回金 ≥ refresh_cost() + has_stock 保真（weapon_up 已买走、词条全叠满场景
+	# 下唯一保底货是维修包——set hp 低于上限激活 heal 行，确定性强保证，不依赖随机货架）
+	_gl.player.set("hp", 1.0)
+	_gl.player.set("gold", shop.refresh_cost())
+	shop._refresh()
+	_check("R195 复显：回金 ≥refresh_cost + 有货（维修包激活）→ visible 恢复（双向锁上行）",
+		refresh_btn != null and refresh_btn.visible,
+		"visible=%s gold=%d cost=%d stock=%s" % [str(refresh_btn.visible if refresh_btn != null else false),
+			int(_gl.player.get("gold")), shop.refresh_cost(), str(shop.has_stock())])
+	# c) 双态一致：金不足 + 战前补给开店（p_pre_boss=true）→ 仍隐藏且标题「战前补给」
+	#（谓词零 _pre_boss 分支的实证断言——黑市/战前补给单源一致）
+	_gl.player.set("gold", 0)
+	shop.open(_gl.player, 5, true)
+	_check("R195 双态：战前补给开店（金不足）→ 刷新钮隐藏 且 标题==「战前补给」",
+		refresh_btn != null and not refresh_btn.visible
+		and shop._title != null and shop._title.text == "战前补给",
+		"visible=%s title=%s" % [str(refresh_btn.visible if refresh_btn != null else false),
+			str(shop._title.text if shop._title != null else "<null>")])
+	# d) 行区重建扫描（is_queued_for_deletion 防护，r194:444-446 先例）：live 行数 ==
+	# 非空货架行数，且每行含价签按钮（双态开关后 _list 重建无残影/无丢行）
+	var live_rows := 0
+	var stocked_rows := 0
+	for ware in shop._wares:
+		if not ware.is_empty():
+			stocked_rows += 1
+	var row_btn_ok := true
+	for row in shop._list.get_children():
+		if (row as Node).is_queued_for_deletion():
+			continue
+		live_rows += 1
+		var has_price := false
+		for child in (row as Control).get_children():
+			var btn := child as Button
+			if btn != null and btn.text.ends_with("金币"):
+				has_price = true
+				break
+		if not has_price:
+			row_btn_ok = false
+	_check("R195 行区：开店态 live 行==非空货架行且行行带价签",
+		live_rows == stocked_rows and stocked_rows >= 1 and row_btn_ok,
+		"live=%d stocked=%d btn_ok=%s" % [live_rows, stocked_rows, str(row_btn_ok)])
 	shop.close()
 	_gl.call(&"quit_to_menu")
 
@@ -3371,6 +3587,11 @@ func _test_r72_content() -> void:
 	_release_r72_enemy(thorn_e)
 	# ⑧ 新词条条件乘区：处决线 / 壁垒线 / 感电特攻
 	var fw3: WeaponBase = _gl.player.weapon_slots[0]
+	# R189 栈位保障：R71 枯竭复现把共享 slots[0] 词条栈叠满 12 帽且不清理（其后
+	# 无 start_run 复位），⑧ 的三连 attach 会在第 12 帽后静默被拒（MAX_TRAITS）
+	# ——快照既有词条后清栈再挂，断言后还原（与 R71 前状态一致，后续用例零感知）。
+	var fw3_saved: Array[TraitBase] = fw3.trait_stack.traits.duplicate()
+	fw3.trait_stack.traits.clear()
 	var saved_hp2: float = _gl.player.get("hp")
 	var saved_max2: float = _gl.player.get("max_hp")
 	var overkill: TraitData = _gl.registry.get_trait(&"MEC_OVERKILL")
@@ -3412,6 +3633,7 @@ func _test_r72_content() -> void:
 	for tb in fw3.trait_stack.traits.duplicate():
 		if tb.data.id in [overkill.id, bulwark.id, arc.id]:
 			fw3.trait_stack.traits.erase(tb)
+	fw3.trait_stack.traits.assign(fw3_saved)    # R189：还原清栈前词条（快照保序保引用）
 	_gl.player.set("max_hp", saved_max2)
 	_gl.player.set("hp", saved_hp2)
 	# ⑨ 图鉴自动跟进：词条页数据源 = 注册表扫描（新词条零接线可见）
@@ -3750,7 +3972,11 @@ func _test_f3_e11() -> void:
 				has_hint = true
 	_check("F3：成对模式卡面行内提示（⇄ 同一行）", has_hint)
 	ui.close()
-	ui.open(cards6.slice(0, 3) if false else [cards6[0], cards6[1], cards6[2]], false)
+	# R199：原行 `ui.open([cards6[0], ...])` 传无类型 Array 字面量撞 open(Array[Dictionary])
+	# 形参类型闸，SCRIPT ERROR 中断 _test_f3_e11——静默丢「F3 普通模式 + E11×2」共 3 条
+	# 断言（假绿，与已登记 C02/H04 同族但未登记）。改类型化数组（同 :3345 先例）令断言真实执行。
+	var cards3: Array[Dictionary] = [cards6[0], cards6[1], cards6[2]]
+	ui.open(cards3, false)
 	var no_hint := true
 	for btn in ui._buttons:
 		if btn.visible:
@@ -3763,6 +3989,11 @@ func _test_f3_e11() -> void:
 	# E11：分档结算——地狱局写 "#2" 键、普通键不受扰、结晶乘区
 	var save_map_records: Dictionary = Meta.map_records.duplicate()
 	var crystals0: int = Meta.crystals
+	# R199：普通键「不受扰」原写死 ==0，但同套件前置用例会留下 world_grass 正常键记录
+	# （本断言因 :3975 SCRIPT ERROR 中断从未真实跑过，恢复执行即假红）——改对照结算前
+	# 基线快照；best_level 一并基线对照（地狱局 level=5 高于常规基线，误写普通键必被检出）。
+	var wg_wave0: int = int(Meta.map_records.get("world_grass", {}).get("best_wave", 0))
+	var wg_lvl0: int = int(Meta.map_records.get("world_grass", {}).get("best_level", 1))
 	Meta.set_run_map(&"world_grass")
 	Meta.set_run_difficulty(GameConst.Difficulty.HELL)
 	Meta._run_max_wave = 12
@@ -3772,7 +4003,9 @@ func _test_f3_e11() -> void:
 	_check("E11：地狱局记录写分档键 map#2（普通键不混）",
 		Meta.map_records.has("world_grass#2")
 			and int(Meta.map_records["world_grass#2"]["best_wave"]) == 12
-			and int(Meta.map_records.get("world_grass", {}).get("best_wave", 0)) == 0)
+			and int(Meta.map_records.get("world_grass", {}).get("best_wave", 0)) == wg_wave0
+			and int(Meta.map_records.get("world_grass", {}).get("best_level", 1)) == wg_lvl0,
+		str(Meta.map_records))
 	_check("E11：地狱结算结晶 ×1.6（≥ 基值 18×1.6=28）",
 		Meta.crystals - crystals0 >= 28, "gain=%d" % (Meta.crystals - crystals0))
 	# 还原（测试档卫生）
@@ -3863,6 +4096,14 @@ func _test_g4_boomerang() -> void:
 		proj != null and bool(proj.get("_boomerang")), "")
 	_check("G6：回旋弹体有拖尾绘制（_draw 就位）",
 		proj != null and proj.has_method(&"_draw"), "")
+	# R191#7 表现层放大锚点（视觉/命中解耦：scale_f = effective_radius/(TEX_SIZE×0.5)
+	# = 7/32，弹体侧 ×BOOM_VIS_MULT 5.0——命中盒仍 hitbox_r=7.0 不变）
+	var bscale: Sprite2D = null
+	if proj != null:
+		bscale = proj.get("_sprite") as Sprite2D
+	_check("G4：W10 弹体视觉放大 ×5.0（_sprite.scale.x ≈ 7.0/32.0×5.0）",
+		bscale != null and is_equal_approx(bscale.scale.x, 7.0 / 32.0 * 5.0),
+		"scale.x=%s" % str(bscale.scale.x) if bscale != null else "no-sprite")
 	if proj == null:
 		return
 	var speed0: float = proj.velocity.length()
@@ -4165,7 +4406,9 @@ func _test_r86_r89_r90() -> void:
 	for i in range(60):                          # 1s @60fps（0.55s 一发 → ≥1 发）
 		for d: Node in _gl.player.get_children():
 			if String(d.name).begins_with("NoahDrone") and is_instance_valid(d):
-				d.call(&"_process", 0.016)
+				# R198 契约变更：SummonDrone._process 改名 tick（副本 game_delta，player.gd:1344）——
+				# 旧 `_process` 直调已不存在（SCRIPT ERROR 中断本段→R93 断言丢失+清场不执行）
+				d.call(&"tick", 0.016)
 	var live_after: int = int((_gl.pools[&"projectile"] as ProjectilePool).stats()["live"])
 	_check("R93：僚机主动开火（真弹入池）", live_after > live_before,
 		"%d→%d" % [live_before, live_after])
@@ -4176,7 +4419,7 @@ func _test_r86_r89_r90() -> void:
 			break
 	if drone0 != null:
 		for i in range(10 * 60):
-			drone0.call(&"_process", 0.016)
+			drone0.call(&"tick", 0.016)          # R198 契约变更：同上 _process → tick
 			if not is_instance_valid(drone0):
 				break
 		_check("R93：僚机 10s 寿命自回收（闪烁预警后离场）",
@@ -4474,4 +4717,252 @@ func _test_r94_star_chain() -> void:
 			w_v.queue_free()
 	_gl.spawner.active.erase(tgt)
 	(_gl.pools[&"enemy"] as EnemyPool).release(tgt)
+	_gl.call(&"quit_to_menu")
+
+
+func _test_r199_g7() -> void:
+	# R199-G7 界面可读性与商店组随修验收（P05/P06/F15/P07/F12/F13/F14/C15）。
+	# 只锁本组修的几何/包装/接线；文案内容零改动（源在 tres/GameConst）。量测一律
+	# StickerTheme 实测行高（体检 18pt≈54px 宿主相关——禁拍值），并补 Label 行距
+	# (n−1)×line_spacing（get_multiline_string_size 不含行距，n = 需求高 ÷ 实测行高）。
+	print("── R199-G7 界面可读性与商店 ──")
+	_gl.call(&"start_run")
+	var font: Font = StickerTheme.font()
+	var ui := CardSelectUI.new()
+	_gl.add_child(ui)
+
+	# ── P05/P06/F15：选卡卡面描述自适应扩容 ──
+	# ① 短卡几何逐位恒等（基准 180/58/264 不漂移——R195 校准红线不回退）
+	var short_cards: Array[Dictionary] = []
+	for i in range(3):
+		short_cards.append({"kind": CardGenerator.CardKind.TRAIT, "id": &"R199S%d" % i,
+			"rarity": 0, "value_scale": 1.0, "display_name": "s%d" % i, "description": "d"})
+	ui.open(short_cards, false)
+	var b0: Button = ui._buttons[0]
+	var d0: Label = b0.get_node_or_null("CardDesc") as Label
+	_check("R199-G7 P05：短卡几何逐位恒等（卡 180/描述 58/栈顶 264）",
+		b0.size.y == 180.0 and d0 != null and d0.size.y == 58.0 and b0.position.y == 264.0,
+		"h=%.1f d=%.1f y=%.1f" % [b0.size.y, d0.size.y if d0 != null else -1.0,
+		b0.position.y])
+	ui.close()
+	# ② 受控 3 行卡（80 字描述 + 品质注记）：整卡可见 + 卡体扩高≤帽 + 栈无重叠
+	var deco_cards: Array[Dictionary] = []
+	for i in range(3):
+		deco_cards.append({"kind": CardGenerator.CardKind.TRAIT, "id": &"R199D%d" % i,
+			"rarity": 2, "value_scale": 1.9, "display_name": "g%d" % i,
+			"description": "测".repeat(80)})
+	ui.open(deco_cards, false)
+	var p05_fit := true
+	var f15_cap := true
+	var stack_ok := true
+	var prev_bottom := -1.0
+	for btn in ui._buttons:
+		if not btn.visible:
+			continue
+		var dl: Label = btn.get_node_or_null("CardDesc") as Label
+		if dl == null:
+			continue
+		var fs := dl.get_theme_font_size("font_size")
+		var n := dl.get_line_count()
+		var rendered := float(n) * font.get_height(fs) \
+			+ float(maxi(n - 1, 0)) * float(dl.get_theme_constant("line_spacing"))
+		if rendered > dl.size.y + 0.5:
+			p05_fit = false             # 描述+品质注记整卡可见（尾行不入裁切段）
+		if dl.size.y < 3.0 * font.get_height(fs) - 1.0:
+			f15_cap = false             # 描述区 ≥3 行承载
+		if btn.size.y < 180.0 or btn.size.y > 250.0:
+			stack_ok = false            # 卡体扩高且在设计帽内
+		if prev_bottom >= 0.0 and btn.position.y < prev_bottom + 3.5:
+			stack_ok = false            # 变高栈重排：相邻卡不重叠（间隙 ≥4）
+		prev_bottom = btn.position.y + btn.size.y
+	_check("R199-G7 P05：3 行卡描述+品质注记整卡可见（实测含行距 ≤ 框高）", p05_fit)
+	_check("R199-G7 F15：描述区 ≥3 行承载 + 卡体扩高≤帽 + 变高栈不重叠", f15_cap and stack_ok)
+	ui.close()
+	# ③ 成对模式 ⇄ 尾注整行可见（F3 已锁文本在；本条锁可见性——尾行不入裁切段）
+	var dual_cards: Array[Dictionary] = []
+	for i in range(6):
+		dual_cards.append({"kind": CardGenerator.CardKind.TRAIT, "id": &"R199P%d" % i,
+			"rarity": 0, "value_scale": 1.0, "display_name": "n%d" % i, "description": "d"})
+	ui.open(dual_cards, true)
+	var p06_ok := true
+	for btn2 in ui._buttons:
+		if not btn2.visible:
+			continue
+		var dl2: Label = btn2.get_node_or_null("CardDesc") as Label
+		if dl2 == null:
+			continue
+		if not String(dl2.text).contains("同一行"):
+			p06_ok = false
+		var fs2 := dl2.get_theme_font_size("font_size")
+		var n2 := dl2.get_line_count()
+		var rendered2 := float(n2) * font.get_height(fs2) \
+			+ float(maxi(n2 - 1, 0)) * float(dl2.get_theme_constant("line_spacing"))
+		if rendered2 > dl2.size.y + 0.5:
+			p06_ok = false
+	_check("R199-G7 P06：成对 ⇄ 尾注整行可见（尾行落框内非裁切段）", p06_ok)
+	# ④ 真实紫卡全内容可见 + 圆点让位
+	var cg: CardGenerator = _gl.card_generator
+	var primary: WeaponBase = null
+	for w in _gl.player.weapon_slots:
+		if w != null and is_instance_valid(w):
+			primary = w
+			break
+	var real_cards: Array[Dictionary] = []
+	for tid in [&"ELE_IGNITE", &"MEC_BOUNCE", &"AFF_PIERCE"]:
+		var c := cg._make_trait_card(tid, 8, primary)
+		c["rarity"] = 2
+		cg._apply_rarity_values([c])
+		real_cards.append(c)
+	ui.open(real_cards, false)
+	var real_ok := true
+	for btn3 in ui._buttons:
+		if not btn3.visible:
+			continue
+		var dl3: Label = btn3.get_node_or_null("CardDesc") as Label
+		var dots3: Control = btn3.get_node_or_null("RarityDots") as Control
+		if dl3 == null:
+			continue
+		var fs3 := dl3.get_theme_font_size("font_size")
+		var n3 := dl3.get_line_count()
+		var rendered3 := float(n3) * font.get_height(fs3) \
+			+ float(maxi(n3 - 1, 0)) * float(dl3.get_theme_constant("line_spacing"))
+		if rendered3 > dl3.size.y + 0.5:
+			real_ok = false
+		if dots3 != null and dots3.position.y < dl3.position.y + dl3.size.y - 0.5:
+			real_ok = false             # 层级圆点让位下移，不叠描述
+	_check("R199-G7 P05：真实紫卡全内容可见 + 圆点让位不叠描述", real_ok)
+	ui.close()
+	ui.free()
+
+	# ── P07：图鉴描述 autowrap 扩高（最长风域整行可读） ──
+	var td_a: TraitData = _gl.registry.get_trait(&"ELE_ANEMO")
+	var row: Control = _gl.menu_screen._make_codex_row(TextureFactory.type_icon(1, 1),
+		true, String(td_a.display_name), String(td_a.description))
+	var dsc: Label = null
+	for ch: Variant in row.get_children():
+		if ch is Label and (ch as Label).position.y > 30.0:
+			dsc = ch
+	var raw_need: float = font.get_multiline_string_size(String(td_a.description),
+		HORIZONTAL_ALIGNMENT_LEFT, 500.0, 13, -1, 7).y
+	var n_row := maxi(1, roundi(raw_need / maxf(font.get_height(13), 1.0)))
+	var need_row := raw_need + float(n_row - 1) \
+		* (float(dsc.get_theme_constant("line_spacing")) if dsc != null else 3.0)
+	_check("R199-G7 P07：图鉴行 autowrap + 实测需求扩高（长描述整行可读）",
+		dsc != null and dsc.autowrap_mode != TextServer.AUTOWRAP_OFF
+		and need_row <= dsc.size.y + 0.5
+		and float(row.custom_minimum_size.y) >= 34.0 + need_row - 0.5,
+		"need=%.1f box=%.1f row=%.1f" % [need_row,
+		dsc.size.y if dsc != null else -1.0, float(row.custom_minimum_size.y)])
+	row.free()
+
+	# ── F12/F13/F14：黑市词条行对齐卡架口径（_make_trait_ware 直调——确定性） ──
+	var shop := _gl.shop_ui
+	# F12 计数型：金卡「+4」（round 终值——通用重写会写非整数 +3.8）
+	var pierce_w := shop._make_trait_ware(_gl.registry.get_trait(&"AFF_PIERCE"),
+		primary, 3, 0)
+	var pd := String((pierce_w.get("data") as TraitData).description)
+	_check("R199-G7 F12：黑市穿透金卡「+4」（round 终值，非通用 +3.8）",
+		pd.contains("+4") and not pd.contains("+3.8"), pd)
+	# F12 护盾：除法间隔语义（8/2.6≈3.1s、5.5/2.6≈2.1s——与实际充能间隔一致）
+	var shield_w := shop._make_trait_ware(_gl.registry.get_trait(&"MEC_SHIELD"),
+		primary, 3, 0)
+	var sd := String((shield_w.get("data") as TraitData).description)
+	_check("R199-G7 F12：黑市格挡金卡「3.1s/2.1s」（除法间隔语义）",
+		sd.contains("3.1s") and sd.contains("2.1s"), sd)
+	# F12 死亡新星：value 直乘终值（0.3/0.45 ×2.6 → 78%/117%）
+	var blast_w := shop._make_trait_ware(_gl.registry.get_trait(&"MEC_KILL_BLAST"),
+		primary, 3, 0)
+	var bd := String((blast_w.get("data") as TraitData).description)
+	_check("R199-G7 F12：黑市死亡新星金卡「78%/117%」（value 直乘终值）",
+		bd.contains("78%") and bd.contains("117%"), bd)
+	# F12 虚空反应：直乘口径（1.8×2.6=4.68，卡面 ×4.7——非 ×N 式 1+(N−1)×scale）
+	var void_w := shop._make_trait_ware(_gl.registry.get_trait(&"ELE_REACTION_VOID"),
+		primary, 3, 0)
+	var vd: TraitData = void_w.get("data")
+	_check("R199-G7 F12：黑市虚空金卡 value ×4.68 + 卡面「×4.7」（直乘口径）",
+		absf(vd.value - 4.68) <= 0.001 and String(vd.description).contains("×4.7"),
+		String(vd.description))
+	# F12' 元素裂变 lv2 随品质同缩（params 深复制——注册表真源不落改，E-08）
+	var anemo_w := shop._make_trait_ware(_gl.registry.get_trait(&"ELE_ANEMO"),
+		primary, 3, 0)
+	var ad: TraitData = anemo_w.get("data")
+	var reg_anemo: TraitData = _gl.registry.get_trait(&"ELE_ANEMO")
+	_check("R199-G7 F12：黑市风附金卡 lv2=78（30×2.6）+ 卡面「→78/跳」，注册表不落改",
+		absf(float(ad.params.get("value_lv2", 0.0)) - 78.0) <= 0.01
+		and String(ad.description).contains("→78/跳")
+		and absf(float(reg_anemo.params.get("value_lv2", 0.0)) - 30.0) <= 0.01,
+		"lv2=%.1f desc=%s" % [float(ad.params.get("value_lv2", 0.0)),
+		String(ad.description)])
+	# F13 MULT 池上限随品质缩放（背水协议 cap 0.6：紫 1.9× → 1.14、金 2.6× → 1.56）
+	var fury_w2 := shop._make_trait_ware(_gl.registry.get_trait(&"SYN_LOWHP_FURY"),
+		primary, 2, 0)
+	var fd: TraitData = fury_w2.get("data")
+	_check("R199-G7 F13：黑市背水紫卡 cap_pool_p 1.14（0.6×1.9 随品质缩）",
+		absf(fd.cap_pool_p - 1.14) <= 0.001, "cap=%.3f" % fd.cap_pool_p)
+	var fury_w3 := shop._make_trait_ware(_gl.registry.get_trait(&"SYN_LOWHP_FURY"),
+		primary, 3, 0)
+	var fd3: TraitData = fury_w3.get("data")
+	_check("R199-G7 F13：黑市背水金卡 cap_pool_p 1.56（0.6×2.6——卡面 ×2.6 如实）",
+		absf(fd3.cap_pool_p - 1.56) <= 0.001, "cap=%.3f" % fd3.cap_pool_p)
+	# F14 满层质变预告 + 超帽注记（质变门第 4 关起：Meta map 暂切 world_grove idx3）
+	var map_save: StringName = Meta.run_map_id()
+	Meta.set_run_map(&"world_grove")
+	var tw2: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W1_pistol"))
+	var pierce_t: TraitData = _gl.registry.get_trait(&"AFF_PIERCE")   # ADD 池 stack_max=2
+	var f14_ms_ok := false
+	var f14_oc_ok := false
+	var f14_prefix_ok := false
+	if tw2 != null and tw2.attach_trait(pierce_t):
+		var ware_ms := shop._make_trait_ware(pierce_t, tw2, 0, 0)
+		var msd := String((ware_ms.get("data") as TraitData).description)
+		f14_ms_ok = bool(ware_ms.get("milestone")) and msd.contains("满层质变")
+		if tw2.attach_trait(pierce_t):        # 2 层 = stack_max → 超帽层（ADD 池放行）
+			var ware_oc := shop._make_trait_ware(pierce_t, tw2, 0, 0)
+			var oc_d: TraitData = ware_oc.get("data")
+			f14_oc_ok = bool(ware_oc.get("overcap")) \
+				and String(oc_d.description).contains(GameConst.OVERCAP_NOTE)
+			var row2: Control = shop._make_ware_row(0, ware_ms)
+			for ch2: Variant in row2.get_children():
+				if ch2 is Label and String((ch2 as Label).text).begins_with("◆质变◆"):
+					f14_prefix_ok = true
+			row2.free()
+	_check("R199-G7 F14：满层前沿质变 ◆ 预告（判据 cur+1≥stack_max 对齐卡架）", f14_ms_ok)
+	_check("R199-G7 F14：超帽层 OVERCAP_NOTE（GameConst 真源）+ 双写进 data 副本",
+		f14_oc_ok)
+	_check("R199-G7 F14：黑市行名 ◆质变◆ 前缀（对齐卡架 :673-674）", f14_prefix_ok)
+	Meta.set_run_map(map_save)
+	# 清场：投手枪副武器 + 挂载随节点回收（主武器不动）
+	for si in range(_gl.player.weapon_slots.size()):
+		var sw: WeaponBase = _gl.player.weapon_slots[si]
+		if sw != null and is_instance_valid(sw) and sw != primary:
+			_gl.player.weapon_slots[si] = null
+			sw.queue_free()
+
+	# ── C15：BossBar 相位点点亮（连接 boss_phase_changed + tick 每帧跟随） ──
+	var bar := _gl.hud.get_node_or_null("BossBar") as BossBar
+	if bar == null:
+		bar = BossBar.new()
+		_gl.add_child(bar)
+	var boss := _spawn_r72_enemy(&"E6_boss1", Vector2(400.0, 300.0))
+	boss.tags = GameConst.TAG_BOSS
+	EventBus.emit_boss_spawned(boss)
+	_check("R199-G7 C15 前置：血条登场 + 相位点基线同步（spawn 首刷走 tick）",
+		bar.boss == boss and bar._last_phase == int(boss.boss_phase),
+		"last=%d boss_phase=%s" % [bar._last_phase, str(boss.get("boss_phase"))])
+	var ring_tex: Texture2D = bar._phase_dots[0].texture
+	EventBus.emit_boss_phase_changed(2, false)
+	_check("R199-G7 C15：boss_phase_changed(P2) → 相位点 1 实心（缓存纹理判别）",
+		bar._last_phase == 2 and bar._phase_dots[0].texture != ring_tex,
+		"last=%d" % bar._last_phase)
+	bar._last_phase = -1
+	bar.tick(1.0 / 60.0)
+	_check("R199-G7 C15：tick() 内相位点跟随 Boss 实际阶段（脏检查复位后重刷）",
+		bar._last_phase == int(boss.boss_phase), "last=%d" % bar._last_phase)
+	EventBus.emit_boss_phase_changed(0, true)
+	_check("R199-G7 C15：狂暴广播（phase=0 音效口径）按 P3 同步不回灭",
+		bar._last_phase == 3 and bar._phase_dots[0].texture == bar._phase_dots[1].texture,
+		"last=%d" % bar._last_phase)
+	EventBus.emit_enemy_killed(boss)             # 死亡链内归还（勿二次 release）
+	bar._root.visible = false
+	bar.boss = null
 	_gl.call(&"quit_to_menu")

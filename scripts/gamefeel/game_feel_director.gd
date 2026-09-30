@@ -34,6 +34,7 @@ const CA_QUALITY_INTENSITY := [0.0, 0.5, 1.0]  # 色差强度档乘数：低档�
 const CA_QUALITY_WINDOW := [1.0, 0.5, 1.0]     # 色差衰减窗口档缩放：中档缩窗（衰减更快）
 const CRIT_STOP_DENSE_WINDOW := 1.0            # CRIT 顿帧密集场判定窗口 s（raw 通道时钟）
 const CRIT_STOP_DENSE_LIMIT := 6               # 窗口内 CRIT 顿帧申请达限 → 自动关（密集场近连续顿帧）
+const CRIT_STOP_DENSE_ENEMY_MIN := 40          # R189c：密集场敌数门（§4.4「敌 >N 自动关」——非密集战顿帧保留）
 
 var _crit_stop_times: Array[float] = []        # CRIT 顿帧申请时刻滚动窗（raw elapsed；密集场判据）
 
@@ -243,7 +244,10 @@ func _crit_stop_dense() -> bool:
 	while not _crit_stop_times.is_empty() \
 			and _raw_elapsed - float(_crit_stop_times[0]) > CRIT_STOP_DENSE_WINDOW:
 		_crit_stop_times.pop_front()
-	var dense := _crit_stop_times.size() >= CRIT_STOP_DENSE_LIMIT
+	# R189c：判据补设计原文「敌 >N」（评审#11：仅按申请频率时缺省档暴击混战期顿帧
+	# 整体消失可感）——频率达限 **且** 在树活敌 ≥ 门限才判密集；Enemy.live_count 静态计数。
+	var dense := _crit_stop_times.size() >= CRIT_STOP_DENSE_LIMIT \
+		and Enemy.live_count >= CRIT_STOP_DENSE_ENEMY_MIN
 	if not dense:
 		_crit_stop_times.append(_raw_elapsed)
 	return dense

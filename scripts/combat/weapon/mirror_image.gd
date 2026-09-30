@@ -83,6 +83,12 @@ func apply_state(p_ratio: float) -> void:
 		inner.trait_stack = stack
 		trait_stack = stack                      # 拷贝源=棱镜自身栈（copy_full 逐层品级）
 	_tempo_mult = _read_tempo_mult()
+	# R191 面板缓存失效：换栈/重铺强度后 _panel_cache 若不失效，build_panel_snapshot
+	# 返回旧栈聚合（失效点此前仅 setup/质变/挂卡/升级四处，apply_state 漏网——
+	# 棱镜挂 crit 类卡后镜面面板仍报旧值的缺陷修复）
+	if inner != null and is_instance_valid(inner):
+		inner._invalidate_panel()
+	_invalidate_panel()
 
 
 func tick(p_game_delta: float) -> void:
@@ -167,13 +173,20 @@ func _hold_shell_cadence() -> void:
 
 func _read_tempo_mult() -> float:
 	# MEC_MIRROR_TEMPO 层数直读（自身栈=棱镜栈副本——「全灌镜子」专精分叉；
-	# 本体 MirrorWeapon 不消费该词条故仅镜面加速）
+	# 本体 MirrorWeapon 不消费该词条故仅镜面加速）。
+	# R199 F03：每层攻速改读挂载条目 data.value（品质缩放沿 card_generator value×scale
+	# 链路——金卡 0.39 与卡面一致）；旧 TEMPO_PER_LAYER(0.15) 常数使金卡与白卡无差别。
+	# value≤0（桩夹具零声明）回落旧常数，存量断言零位移。
 	var mult := 1.0
 	if trait_stack == null:
 		return mult
 	for tb in trait_stack.traits:
 		if tb.data != null and tb.data.id == &"MEC_MIRROR_TEMPO":
-			mult += TEMPO_PER_LAYER * float(tb.layers)
+			var per_layer := float(tb.data.value)
+			if per_layer <= 0.0:
+				per_layer = TEMPO_PER_LAYER
+			mult += per_layer * float(tb.layers)
+			break
 	return mult
 
 

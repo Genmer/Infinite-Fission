@@ -1,0 +1,1171 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 用户反馈逐项验收 ══════════
+PASS | Boot：完成且进入 MENU
+PASS | Boot：子系统齐全
+── 升级回满血 ──
+PASS | 升级触发（lv+1）
+PASS | 升级回满血（hp == max_hp）
+── 新武器卡装配链 ──
+PASS | 解锁槽 2 后：未持有武器上架（候选 ≥1）
+PASS | 武器卡字段（kind=WEAPON / 名含霰弹枪）
+PASS | 装配 = 真件 WeaponBase（不再污染槽位——add_weapon 工厂链）
+PASS | 装配武器 = 霰弹枪 W3 且 Lv1
+PASS | 真件面板可用（base_atk > 0）
+PASS | 构筑面板签名刷新（新 uid 入签名）
+── 武器卡槽位守卫 ──
+PASS | 已解锁槽全占 → 武器卡不上架（候选 = 0）
+PASS | 解锁空槽 2 → 恢复上架（候选 ≥1）
+── 稀有度数值缩放 ──
+　（跳过金断言：fixed_rarities 命中其他词条 AFF_CRIT_DMG）
+PASS | 注册表共享资源不落改（原值仍 0.15）
+PASS | 前置：源卡 MEC_ORBIT_SWORD 源 rarity=2（紫源——机制同金源）
+PASS | R38：白 roll 源紫卡 data.rarity 落 0（副本，不落改源）
+PASS | R38：挂载层 max_rarity=0（白色 buff 白色字体）
+PASS | R38：data.rarity=3 → max_rarity=3（MULT 金名通道）
+── R60 卡面文案与整数缩放 ──
+PASS | R60：全量词条/遗物描述无「A3 §x」黑话（27 处已清）
+PASS | R60：侦察协议蓝卡 ×3.0 → ×3.8（非尾注 ×1.4 口径）
+PASS | R60：侦察协议金卡 ×3.0 → ×6.2
+PASS | R60：冰渊裁决蓝卡主数字 ×1.5 → ×1.7
+PASS | R60：冰渊裁决叠层合并注释 ×2.0 → ×2.4（同式同步）
+PASS | R60：背水协议条件阈值 HP<35% 不被缩放
+PASS | R60：背水协议效果数字 ×1.6 → ×1.8
+PASS | R60：带符号 +15% 金卡仍重写 +39%（带符号%分支回归护栏）
+PASS | R67：背水金卡 value ×2.6（0.6→1.56）且池上限同缩（cap 0.6→1.56）
+PASS | R67：背水金卡实际乘区贡献 1.56（×2.56——不再被 cap 截回 ×1.6）
+PASS | R68：背水金卡条件阈值 0.35→0.56（每档 +7%）
+PASS | R68：金卡描述 HP<35% 重写为 HP<56%
+PASS | R68：注册表 .tres 未被写穿（真源 pct 仍 0.35——深拷贝纪律）
+PASS | R68：hp_pct=0.55 金卡触发（0.55<0.56）贡献 1.56
+PASS | R68：白卡阈值不品质化（仍 0.35——白=基准档）
+PASS | R68：同血量 0.55 白卡不触发（0.55>0.35——宽窗口是高级卡专属）
+PASS | R60：反弹蓝卡 value 2.8 → bounces_left=3（round 对齐卡面 +3）
+PASS | R60：反弹白卡 value 2.0 → bounces_left=2（白行为不变）
+PASS | R60：分裂蓝卡 2 层枚数 ≥ 层 1 枚数+1（不升层减枚）
+── 精通连升与文案 ──
+PASS | 紫精通卡 roll 到（连升通道）
+PASS | 文案含等级区间（Lv3→Lv5）
+PASS | level_boosts = 2
+PASS | 应用后连升 2 级（lv +2）
+PASS | R85：L1 精通强制金 → 钳回蓝（+1 不连升）
+PASS | R85：精通卡无金档（L4 强制金 → 钳紫连升）
+── 命中迸裂 ──
+PASS | 注册表：MEC_HIT_BURST 已加载
+PASS | 迸裂：半径内邻敌真实落血（真件管线 9b）
+PASS | 迸裂：半径外不波及
+PASS | 迸裂遥测计数（hit_burst_triggered）
+── E7 远程开火 ──
+PASS | 注册表：E7_spitter 已加载（behavior=RANGED）
+PASS | 射程内驻停开火（敌弹入池 free -1）
+PASS | 敌弹实体可见（team=1 敌方弹）
+── 死亡元素释放 ──
+PASS | LTG 槽 80 → 死亡释放感电残弧（≥1 跳广播）
+── 左下角 buff 详情 ──
+PASS | 点击 → 进入 PAUSED
+PASS | 构筑详情卡可见
+PASS | 构筑详情卡内容 ≥2（玩家属性行 + ≥1 武器区块）
+PASS | 玩家属性行：含 个人属性/生命上限/磁吸/技能冷却/经验/金币（R18 全属性）
+PASS | 叠层可视化：词条行显示「2/3 层」
+PASS | 叠层可视化：≥2 层首个数值改写为当前生效值（金色高亮）
+PASS | 前置：金品层挂入
+PASS | 品级徽记：金品词条名字行带「◆金」+「3/3 层」（R31）
+PASS | 暂停卡隐藏（双卡互斥）
+PASS | toggle → 切回暂停卡
+PASS | PAUSED 中再点 → 切回详情卡
+PASS | 继续 → PLAYING
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── 爆炸残留兜底 ──
+PASS | burst 后发射器取出（live +1）
+PASS | 寿命内 reap 不误收
+PASS | 超时强制归还（finished 未触发也不残留——爆炸残留修复）
+── 状态表现件 ──
+PASS | 感电：双电弧挂件就位
+PASS | 感电：垂直落雷挂件就位（去圆球化）
+PASS | 点燃：余烬光晕 + 火苗 ×4（燃烧可见性）
+PASS | 冰冻：冰晶放大可见（冻结档 base×1.5）
+── 数值/数据调优 ──
+PASS | Boss 巨大化（视觉倍率 3.8 ≈ 1/4 屏）
+PASS | 最终 Boss（视觉倍率 5.0 ≈ 1/3 屏 + TAG_FINAL_BOSS）
+PASS | 精英巨大化（视觉倍率 1.55 + E2 精英倍率就位）
+PASS | 冰原 w12 编入冰霜仔精英（tags=1）
+PASS | 冰原 w20 最终 Boss 标签（tags=6）
+PASS | Boss1 弹幕密度（ring count 14 / cd 6.0）
+PASS | E7 经验梯度（exp_base 10）
+PASS | Boss1 经验（600）
+PASS | 波表已织入 E7 喷吐者
+PASS | 金卡率 6% 档（500 抽 ≤55）
+── 文案与文档 ──
+PASS | 谐振轨道描述无 W8 黑话
+PASS | 扩大印刻描述说明碰撞半径
+PASS | META_ROADMAP.md 规划文档存在（大厅/成就/图鉴/股市/养成）
+── 大厅/图鉴/成就/记录 ──
+PASS | Meta autoload 就绪（Meta != null）
+PASS | 图鉴：武器未解锁（初始）
+PASS | 图鉴：card_chosen(WEAPON) → 武器解锁
+PASS | 图鉴：card_chosen(TRAIT) → 词条解锁
+PASS | 记录：最高波次 12
+PASS | 记录：单局击杀 1
+PASS | 记录：局数 +1（0→1）
+PASS | 成就：wave_10 解锁
+PASS | 成就：first_blood 解锁
+PASS | 持久化：user://meta_save.cfg 已落盘
+PASS | 大厅：registry 已注入
+PASS | 大厅：七入口按钮就位（图鉴/成就/记录/角色/养成/每日/设置——P2 每日 + P3 设置各 +1）
+PASS | 大厅：图鉴面板打开且条目 >0
+PASS | 大厅：武器页签切换（条目 = 注册表武器数）
+PASS | 大厅：成就面板打开（默认页 = min(24, 定义数 131) 且 >0）
+PASS | 大厅：成就分页遍历（全部页累加 131 + 三类别累加 131 == 定义数 131）
+PASS | 大厅：成就定义 id 去重后 size 不变（131）
+PASS | 大厅：成就 toast 同帧合批（10 连发 → 1 条，含 ×10 与合计 +100，无 💎）
+PASS | 大厅：记录面板打开（全局 5 + 分图标题 1 + 5 图 + 进度 1 = 12 行）
+PASS | 大厅：返回关闭面板
+── 多地图与新怪 ──
+PASS | MapTable：5 张地图（含翠毒沼泽）
+PASS | MapTable：首关加载注册表主表（30 波）
+PASS | MapTable：寒霜冰原旁路波表（20 波）
+PASS | 新怪：E8 恶魔小鬼（CHASE 追击）
+PASS | 新怪：E9 冰霜仔（ICE 抗 60% + 冻结免疫）
+PASS | 新怪：E10 林间飞雀（疾冲走位分型）
+PASS | 新怪：E11 水泡怪（RANGED 远程）
+WARNING: [GameLoop] 地图未解锁（world_frost）——拒绝启动
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 选图：未解锁拒绝启动（仍 MENU）
+PASS | 解锁链：首关恒解锁
+PASS | 解锁链：第二关初始锁定
+PASS | 解锁链：通关首关 → 第二关解锁
+PASS | 解锁链：next_map_id（grass→frost）
+PASS | 选图：启动进入 PLAYING
+PASS | 选图：当前地图 = 寒霜冰原
+PASS | 选图：波表已切换（id=frost）
+PASS | 主题：HUD 图名注入
+PASS | 主题：云层色调 = 冰原淡青
+PASS | 分图记录：world_frost best_wave=12
+PASS | 通关标记：wave_cleared(20) → 冰原通关
+PASS | 解锁链：第三关（魔域）随之解锁
+PASS | 大厅：选关面板 5 张地图卡 + R72 难度选择行
+── 翠毒沼泽生态 ──
+PASS | MapTable：5 张地图（沼泽殿后）
+PASS | 沼泽波表（30 波 + id=swamp——R9 阶梯 10/15/20/25/30）
+PASS | 新怪注册：E12_bogslime（behavior=0）
+PASS | 新怪注册：E14_boguard（behavior=0）
+PASS | 新怪注册：E16_marshmaw（behavior=0）
+PASS | 新怪注册：E13_bogspitter（behavior=1）
+PASS | 沼泽卫士：全抗 40%（护盾装甲口径）
+PASS | 毒爆：半径内玩家掉血（contact ×0.6）
+PASS | 主表远程密度（E7 出场波次 ≥6）
+PASS | 解锁链：树海通关 → 沼泽解锁
+── 角色与局外养成 ──
+PASS | CharacterTable：10 角色（R186 +2——通关门3/购买2/挑战2/分档门2/初始1）
+PASS | 解锁矩阵：哨兵恒解锁 / 通关门(薇拉·磐·莽)全开
+PASS | 解锁矩阵：购买门(岚80/零160)不随通关解锁
+PASS | 购买：结晶不足（岚 80 vs 0💎）→ 前置锁定
+PASS | 购买：100💎 买岚(80) → 成功 + 余额 20
+PASS | 购买：余额不足买零(160) → false 且不解锁
+PASS | 购买：重复购买岚 → false（已解锁幂等）
+WARNING: [Meta] 角色未解锁（zero）——拒绝选用
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 选择守卫：锁定零 set_character_id 拒绝（保持哨兵）
+PASS | 选择守卫：已购岚 set_character_id 放行
+PASS | R186：未通关——fission 锁定 / echo 锁定（分档门派生，零存档字段）
+PASS | R186：新角色数值（echo 55 血 / fission 65 血 · cd 120 · random_dual/no_skill 键）
+PASS | R186：has_skill 契约（fission 无技能 / echo·哨兵有技能——G1 消费口）
+PASS | R186：普通通关（草原 10 波）→ fission 解锁 / echo 仍锁定
+PASS | R186：hard_cleared 剥 #N 后缀查 final_wave（#1 键 15 波≥15 → true）且不污染普通门
+PASS | R186：困难通关 → echo 解锁 / fission 仍锁定（普通门不吃 #1 键）
+PASS | R186：地狱(#2)分档记录兼认困难门
+WARNING: [Meta] 首发武器未解锁（W2_gatling）——忽略
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | R186：未解锁 W2 设首发 → 忽略（空 = 手枪兜底）
+PASS | R186：已解锁 W2 设首发 → 写档可读回
+PASS | R186：mark_weapon_codex 幂等（新写 true / 重复 false）且不计抽卡口径
+PASS | R186：首次普通通关结算 → fissioner_unlocked 恰发一次
+PASS | R186：已解锁再结算 → 不重复发
+PASS | 解锁链：薇拉解锁（草原） / 磐回落锁定（冰原未清）
+PASS | 角色：薇拉血量 45 + 养成加成
+PASS | 角色：攻击修正入武器（meta_atk_pct = 养成 + 0.25）
+PASS | 技能：过载咆哮 rof_mult=2
+PASS | 技能：射速面板吃 rof_mult（interval 减半）
+PASS | 技能：增益到期 rof_mult 回 1
+PASS | 角色：磐血量 95 + 养成（增强 -5% 攻口径）
+PASS | 角色：零血量 65 + 养成
+PASS | 技能：时滞力场 → 全场静止 2.5s
+PASS | 技能：毒沼绽放 → 全屏 150% 攻结算
+PASS | 养成：初始 Lv0
+PASS | 养成：购买成功（20💎）
+PASS | 养成：等级 1 + 余额 180
+PASS | 养成：血量加成 +10
+PASS | 养成：结晶不足拒绝（atk 需 30）
+PASS | 养成：局结算结晶产出（+21）
+PASS | 大厅：角色面板（条目 = 角色数，R186 10 角色）
+PASS | 大厅：养成面板（结晶头 + 8 升级 + 注释 = 10 行（2026-08-31 增「预案推演」））
+── 战地黑市与音效 ──
+PASS | 金币：击杀掉账 +7
+PASS | 行情：系数 ∈ [0.7, 1.3]
+PASS | 黑市：开店可见
+PASS | 黑市：治疗包购买回血
+PASS | 黑市：金币扣减
+PASS | 黑市：刷新扣费
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 黑市：出击 → PLAYING（含宽限）
+PASS | 游侠：瞬步位移 + 无敌
+PASS | 音效：8 种程序化音色就绪
+── 成就奖励/复活/词缀 ──
+PASS | 成就奖励：wave_30 达成（+80，连带 wave_20 +40）
+PASS | 复活：充能就位（1 次）
+PASS | 复活：致死伤害 → 满血存活 + 3s 无敌（R186 E2 r2 同步）
+PASS | 复活：耗尽后正常死亡仲裁（E-16 不受扰）
+PASS | 词缀：world_grass → 无词缀
+PASS | 词缀：world_frost → ice_resist
+PASS | 词缀：world_demon → spd_mult
+PASS | 词缀：world_grove → xp_mult
+PASS | 词缀：world_swamp → hp_mult
+PASS | 词缀文案：霜冻之地
+PASS | 词缀：spawner 应用移速 +10%
+── P0 修复：护盾链 + W4 脉冲 ──
+PASS | 护盾链：attach_trait 成功（无崩溃）
+PASS | 护盾链：interval=8.0 首充 8s 未就绪
+PASS | 护盾链：2 层 → interval=5.5
+PASS | 护盾链：充满 → shield_ready
+PASS | 护盾链：格挡 → HP 不掉 + 进入再充能
+PASS | W4 主束：常驻 lifetime==0（R187 常驻化定案接线）
+PASS | W4 主束：0.5s 后仍存活（常驻不收束）
+PASS | W5 对照：无脉冲键 → 常驻（lifetime=0）
+PASS | 卡池：每局 randomize 改写 RNG 流
+PASS | 词条目标：第二把武器装配成功
+PASS | 词条目标：40 次发牌覆盖 ≥2 把武器（不再全砸主武器）
+PASS | 技能：全角色 CD 全员 120s（R186 10 角色含 fission/echo）
+PASS | 数据：W4 laser.pulse_duration 死键真删（R187 常驻口径）
+PASS | 数据：W5 无 pulse_duration（常驻口径）
+── 每图专属 Boss ──
+PASS | 数据加载：E17~E20 四专属 Boss 入注册表
+PASS | schema：boss 段四键齐 + TAG_BOSS + hp≈16000（boss2 同波位 ±10%）
+PASS | validator：全量校验 0 剔除（4 Boss 存活于注册表）
+PASS | 贴图：boss4~7 非空 + 96px 画布 + 相互/对 boss1~3 互异
+PASS | 贴图：4 新 Boss 怒相变体就位（angry 缓存独立）
+PASS | 分型判定：E17~E20 spawn 实体 _kind = boss4~7
+PASS | 视觉接线：sprite 贴图 = 分型缓存同实例
+PASS | 巨型化：TAG_FINAL_BOSS → x5.0 档（hitbox 口径基准）
+PASS | 波表接入：4 图 final 波 composition 编入本图专属 Boss（R9 阶梯 15/20/25/30）
+PASS | 引擎选取：_find_boss_data 表内 Boss 优先（每图 final 波选对）
+PASS | 主表轮换：w10/20/30 仍 = boss1/2/3（rotation 不回归）
+PASS | F-19 伴怪闸：w20 节奏 ×1/2.5s 场上≤12 + 未登场闸开（不回归）
+── 双词缀（祝福/诅咒） ──
+PASS | 双词缀：5 图 bless/curse 键齐全
+PASS | 双词缀：旧 mod_id 键保留（兼容断言）
+PASS | 双词缀注入：5 图诅咒 mods + 祝福字段（gold/rof/xp/回血）
+PASS | 诅咒·泥沼：敌 HP +10%
+PASS | 诅咒·虫群：非 Boss HP +8%（叠加 110 → 118.8）
+PASS | 诅咒·虫群：Boss 免除
+PASS | 诅咒·毒肤：敌接触伤 +8%（10 → 10.8）
+PASS | 诅咒·霜甲：敌冰抗 +20%
+PASS | 诅咒·疾魔：敌移速 +10%（60 → 66）
+PASS | 祝福·丰饶：金币掉账 +10%（10 → 11）
+PASS | 祝福·寒晶：gain_xp ×1.10（差分比）
+PASS | 祝福·狂热：射速 interval /1.06
+PASS | 祝福·滋养：波清回血 2% max_hp
+PASS | 祝福·滋养：满血不溢出
+PASS | 祝福·滋养：无祝福不回血
+PASS | 菜单展示：双词缀两行小字（5 祝 + 5 诅）
+── 分图无尽延伸 ──
+PASS | 无尽表：5 表 endless_entries ≥5 条
+PASS | 无尽表：index 自主体段末连续（entries.size()+1）
+PASS | 无尽表消费：w21 构成源自 endless_entries（48 只入队）
+PASS | 无尽表消费：w21 TP/窗口取表值（60.4 / 26.2）
+PASS | 无尽 Boss：w25 逢 5 + 表内轮换 E6_boss1
+PASS | 无尽 Boss：w30 本图专属 E17_frost_sovereign
+PASS | 表尽回退：w45 TP = 110×1.03^15 / 窗口 33
+PASS | Boss 回退轮换：per-map 池（grass w50→boss2 / frost·grove w40→boss1 / demon·swamp w40→boss2）
+PASS | 主表不回归：无表 w35 公式 TP 110×1.03^5
+PASS | 主表无尽段：w31 表驱动（主体段 30 波 + endless 10 条分表存储）
+PASS | Meta 无尽深度：frost 27 波 → 深度 12（R9 阶梯 final 15）
+PASS | Meta 无尽深度：未记录图默认 0
+PASS | HUD：无尽段波次号递增（41）
+── R62 无尽继续入口 ──
+PASS | R62：清完 final 波开启收尾窗
+PASS | R62：收尾窗内驱动器开波闸关闭
+PASS | R62：闸住时 BUFFER 到点不开 final+1 波（深度误记根因拔除）
+PASS | R62：收尾窗结束进入 GAME_OVER（胜利屏）
+PASS | R62：通关屏「继续挑战·无尽」出口可见
+PASS | R62：通关屏重开按钮让位（无尽占主槽）
+PASS | R62：Meta 延迟结算（GAME_OVER 后 total_runs 不变）
+PASS | R62：无尽继续成功回 PLAYING
+PASS | R62：自 final+1 波续打（w11）
+PASS | R62：无尽态置位（后续清波不再胜利）
+PASS | R62：HUD 波次徽标切无尽口径（无尽 1）
+PASS | R62：无尽波次入局内存档（w11——大厅可继续无尽局）
+PASS | R62：无尽局清波不再开胜利窗
+PASS | R62：无尽局死亡结算恰好一次（total_runs +1）
+PASS | R62：结晶单次产出（不双记）
+PASS | R62：无尽深度入账（13 波 − final 10 = 3）
+PASS | R62：每日局通关屏不出无尽出口
+PASS | R62：每日局重开按钮回归主槽
+PASS | R62：每日局 continue_endless 拒绝
+── R66 暴击谐振内冷 / 尸体收口 ──
+PASS | 内冷：扫描命中首次触发
+PASS | 内冷：触发后 30s 冷却置位
+WARNING: [EventBus] 事件风暴：damage_resolved 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 内冷：30s 内 200 连暴击零触发
+PASS | 内冷：冷却走完可再触发
+WARNING: [GameLoop] 尸体看门狗：死亡敌仍可见，强制归还 @Node2D@905（uid=243）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 看门狗：异常尸体（dead+visible）强制回收
+PASS | 看门狗：活敌不受扰
+PASS | 前置：在场碎片 2 枚
+PASS | 结算屏：进 GAME_OVER 碎片全回收（boss 尸体/掉落冻屏收口）
+── R68 彩纸冻结根修 ──
+PASS | R68：彩纸爆发满编 90 枚（64 fountain + 26 rain）
+PASS | E4：彩纸纯数据推进（无子节点——单 draw pass）
+PASS | R68：2.5s 后彩纸全清（数组空——不再有冻结半空的残留条）
+PASS | R68：_alive 复位待发（下次 Boss 死亡可再爆发）
+PASS | R68：复位后再爆发满编 90（多 Boss 复用不残留）
+── R69 品质梯审计修复 ──
+PASS | R69：AFF_PIERCE 取整梯 +1/+2/+3/+4（基值 1.45 治「蓝=白」塌缩）
+PASS | R69：AFF_MULTI 取整梯 +1/+2/+3/+4（基值 1.45 治「蓝=白」塌缩）
+PASS | R69：MEC_ORBIT_LINK 取整梯 +1/+2/+3/+4（基值 1.45 治「蓝=白」塌缩）
+PASS | R69：穿透弹头金卡卡面「+4」（round 终值，非 +3.8）
+PASS | R69：格挡力场金卡卡面「3.1s」/「2.1s」（充能 ×2.6）
+PASS | R69：格挡金卡实际充能间隔 8/2.6 ≈ 3.08s
+PASS | R69：死亡新星金卡 value 0.78（42/57/78% ATK 品质梯）
+PASS | R69：死亡新星金卡卡面「78%」/层2「117%」
+PASS | R69：虚空反应金卡 value ×4.68 + 卡面「×4.7」（直乘口径）
+── R70 技能急速终值行 + 加特林深色弹条 ──
+PASS | R70：技能急速 2 层聚合终值 -24%（skill_haste_pct）
+PASS | R70 前置：详情卡打开（PAUSED）
+PASS | R70：详情卡「技能急速 -24%」终值行可见
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | R70：曳光条中段弹体深色（藏青基调，亮底可读——均亮度 <0.5）
+PASS | R70：曳光条画布加厚 56×12（宽高比 >4 保持横条读感）
+── R71 黑市货架兜底 + 刷新按钮反馈 ──
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | R71 前置：武器侧候选全部叠满（枯竭复现，无溢出）
+PASS | R71：枯竭货架仍有 ≥3 件可买（武器强化 + 治疗包兜底——不再「没刷出东西」）
+PASS | R71：武器强化兜底货上架（词条池枯竭不断货）
+PASS | R71：购买武器强化 → 目标武器 +1 级
+PASS | R71→R195：金币不足刷新按钮隐藏（置灰→隐藏，R195 有意契约变更）
+PASS | R71：金币不足点刷新无副作用（货架原样、不扣钱）
+PASS | R195 复显：回金 ≥refresh_cost + 有货（维修包激活）→ visible 恢复（双向锁上行）
+PASS | R195 双态：战前补给开店（金不足）→ 刷新钮隐藏 且 标题==「战前补给」
+PASS | R195 行区：开店态 live 行==非空货架行且行行带价签
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R72 难度三档（困难 ×3 / 地狱 ×9 + 复活 + 成对抉择） ──
+PASS | R72：HP/攻击乘区 1/3/9（困难 ×3，地狱再 ×3）
+PASS | R72：附赠复活 0/1/3
+PASS | R72：成对抉择判定（地狱必触发 / 困难 5% 边界 / 普通永不）
+PASS | R72：地狱局 spawner 难度注入（出生管线乘区生效点）
+PASS | R72：地狱开局复活 = 应急协议 + 3
+PASS | R72：普通局 E1 出生（数值采样）
+PASS | R72：地狱局 E1 出生（数值采样）
+PASS | R72：地狱敌 HP = 普通 ×9（出生管线难度乘区）
+PASS | R72：地狱敌接触伤 = 普通 ×9
+PASS | R72：成对模式 6 卡可见（candidate_count）
+PASS | R72：点行内任一张 → 同行两张一起选中
+PASS | R72：第二行选择映射正确（槽 7 → 卡 2/3）
+PASS | R72：普通模式单选协议（数组单元素——向后兼容）
+PASS | R72：局内存档携带难度档（继续局保持 ×3 口径）
+── R72 新形态敌六种（盾/反弹/法术/预判/闪现自爆×2） ──
+PASS | R72：E25_phase_bomber 注册可查 + 形象贴图非空
+PASS | R72：E26_shield_lancer 注册可查 + 形象贴图非空
+PASS | R72：E27_warden_orb 注册可查 + 形象贴图非空
+PASS | R72：E28_hexcaster 注册可查 + 形象贴图非空
+PASS | R72：E29_longbowhawk 注册可查 + 形象贴图非空
+PASS | R72：E30_hellfire_revenant 注册可查 + 形象贴图非空
+PASS | R72：壁垒枪兵快照 正面减伤 0.85
+PASS | R72：正面命中伤害 ≈ 背后 ×0.15（盾面判向）
+PASS | R72：秘纹守卫就绪反弹（team 翻 1 + 伤害 ×0.6）
+PASS | R72：冷却期不反弹（伤害照常）
+PASS | R72：冷却走完恢复反弹
+PASS | R72：咒术师施法 → 法术圈挂世界层
+PASS | R72：法术圈引爆 圈内玩家掉血（contact_dmg 口径）
+PASS | R72：圈外引爆 玩家不掉血
+PASS | R72：长弓隼卫提前量（玩家右移 → 弹道右倾）
+PASS | R72：狱焰归魂 爆面 150 / 引信 0.55（地狱强化口径）
+PASS | R72：普通局波表零改动（新形态不出现）
+PASS | R72：困难局每波混入 ≥2 只新形态
+PASS | R72：地狱局伴随 ≥4 只新形态 + 高波精英化
+SCRIPT ERROR: Invalid call. Nonexistent function '_enemy_attack_note' in base 'CanvasLayer (MenuScreen)'.
+          at: _test_r72_new_enemies (res://tests/runner/verify_feedback_cases.gd:3505)
+── R72 内容扩展（遗物 6 件 + 词条 3 条） ──
+PASS | R72：遗物 REL_THORNS 注册可查
+PASS | R72：遗物 REL_KILL_FRENZY 注册可查
+PASS | R72：遗物 REL_DOUBLE_TAP 注册可查
+PASS | R72：遗物 REL_GLASS_CANNON 注册可查
+PASS | R72：遗物 REL_CRIT_LIFESTEAL 注册可查
+PASS | R72：遗物 REL_TIMELORD 注册可查
+PASS | R72：词条 MEC_OVERKILL 注册可查
+PASS | R72：词条 SYN_BULWARK 注册可查
+PASS | R72：词条 ELE_ARC_SURGE 注册可查
+PASS | R72：时之沙激活 → 技能冷却 120→96 / 在途 60→48
+PASS | R72：玻璃大炮激活 → 最大生命 100→75
+PASS | R72：连杀狂热激活
+PASS | R72：3 连杀 → 狂热 +24%（3 层 ×8%）
+PASS | R72：狂热窗口 3s 过后清零
+PASS | R72：双重节拍激活
+PASS | R72：双重节拍 15% 概率注入 ×2 乘区（200 掷扫描必中）
+PASS | R72：汲血刻印激活
+PASS | R72：暴击 → 回血 2% 最大生命（10→11.5）
+PASS | R72：汲血内冷 0.6s 内不重复回血
+PASS | R72：荆棘王座激活
+PASS | R72：受击反击 → 近旁敌人掉血（settle_aoe 真结算）
+PASS | R72：处决协议 目标 HP<30% → ×1.5 乘区生效
+PASS | R72：壁垒协议 玩家 HP>70% → ×1.4 乘区生效
+PASS | R72：链隙电弧 感电目标 → ×1.5 乘区生效
+PASS | R72：词条注册表含新三条（图鉴扫描自动收录）
+── E1 难度风险回报（困难 ×1.5 / 地狱 ×2.5） ──
+PASS | E1：收益乘区 1/1.5/2.5
+PASS | E1：地狱同面值经验入账 = 普通 ×2.5（升级回路不受扰）
+PASS | E1：地狱金币掉账 ≥ 基值 ×2.4（×2.5 乘区落账）
+WARNING: [GameLoop] 非法状态迁移拒绝：1 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── E2 复活演出（revive_burst 通道 + 清弹缓冲 + 最高档顿帧） ──
+PASS | E2 前置：复活成功且满血 + 3s 无敌（R186）
+PASS | R186·E2：复活走专用通道（payload = 玩家位 + 扣减后余量）
+PASS | R186·E2：清弹缓冲 260px 内至多 24 颗（涟漪逐颗）
+PASS | R186·E2：260px 外敌弹不受扰（保留存活）
+PASS | R186·E2：青弧置位（3.0s 倒数双字段）
+PASS | R186·E2：respawn 后青弧清零（跨局不残留）
+PASS | R186·E2：小弹量对照（5 颗帽内全额清除）
+PASS | R186·E2：次数耗尽拒绝复活（不误发演出）
+── E3 升级波纹（选卡确认金色扩散环） ──
+PASS | E3：选卡确认 → 波纹件挂载（≥1）
+PASS | E3：波纹推进后自清（0.6s 模拟）
+PASS | E3：0.5s 生命周期到点自清（queue_free 已请求）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── E5 新怪首遇提示条（跨局一次） ──
+PASS | E5：首遇出队 → 提示条（首次遭遇 + 机制一句话）
+PASS | E5：meta 标记落账（跨局记忆）
+PASS | E5：二次遭遇不再提示
+PASS | E5：旧怪无提示文案（零打扰）
+── E6 Boss 血条打击反馈（白残影 + 受击白闪） ──
+PASS | E6 前置：血条登场
+PASS | E6：掉血瞬间 → 受击白闪激活 + 残影段出现
+PASS | E6：0.66s 后白闪熄灭（填充回珊瑚色）
+PASS | E6：残影追平真实血量（速读归零）
+── E7 敌弹零分配缓冲 + E8 地狱云层氛围 ──
+PASS | E7：敌弹快照缓冲复用（同数组实例——零每帧分配）
+PASS | E8：地狱云层红移（r>1 且 g<1）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | E8：普通云层原色（无难度染色）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── E9 连杀 combo 跳字（1.2s 窗口 + 档位色阶） ──
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | E9 前置：4 连杀无跳字
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | E9：5 连杀 → ×5 跳字显示（白色档）
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | E9：20 连杀 → 金色档位色（G9 起尾缀奖励行）
+PASS | E9：窗口过期连击清零
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── F2 受击方向指示（最近敌方向红弧） ──
+PASS | F2 前置：指示器挂载且复位后隐藏
+PASS | F2：受击触发指示器（可见 + 指向正右）
+PASS | F2：弧光随时间衰减
+PASS | F2：0.45s 后自熄（visible=false）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── F3 成对提示 + E11 分档记录 ──
+PASS | F3：成对模式卡面行内提示（⇄ 同一行）
+SCRIPT ERROR: Invalid type in function 'open' in base 'CanvasLayer (CardSelectUI)'. The array of argument 1 (Array) does not have the same element type as the expected typed array argument.
+          at: _test_f3_e11 (res://tests/runner/verify_feedback_cases.gd:3974)
+── G1 连杀音调 + G5 元素死亡迸色 ──
+PASS | G1：音调乘子钳制域 [0.25, 2.0]
+PASS | G5：雷死→电紫染色（b 分量最高）
+PASS | G5：火死→橙红染色（r 分量最高）
+PASS | G5：无元素→白（不染色）
+── G4 回旋刃 W10 ──
+PASS | G4：W10 注册可加载
+PASS | G4：W10 回旋标记 + L5 双刃（质变在表）
+PASS | G6：W10 三条阈值质变钩子（巨刃新星/永动回旋/暴击碎屑）
+PASS | G8：W10 首获发新武器横幅（含一句话）
+PASS | G8：W10 再获不发横幅（一次不打扰）
+PASS | G4：装备 W10
+PASS | G4：W10 入槽且为 BALLISTIC 形态
+PASS | G4：发射产出回旋弹体（带 boomerang 标记）
+PASS | G6：回旋弹体有拖尾绘制（_draw 就位）
+PASS | G4：W10 弹体视觉放大 ×5.0（_sprite.scale.x ≈ 7.0/32.0×5.0）
+PASS | R78：出程定距甩满才翻转（固定距离，phase 0→1）
+PASS | G4：回程返航到手自回收
+PASS | R78：回旋刃穿透免疫 + 接触节拍（内冷 0.4s 一跳）
+── G9 连杀奖励 ──
+PASS | G9：×10 档发奖（入账 + 跳字含奖励行）
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | G9：档内击杀不重发（tier_paid 不变）
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+SCRIPT ERROR: Invalid access to property or key 'gold_drop' on a base object of type 'Nil'.
+          at: GameLoop._on_enemy_killed_drop_xp (res://scripts/loop/game_loop.gd:1982)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | G9：×20 档二段发奖
+PASS | G9：窗口过期档位复位
+PASS | G10：连杀峰值 ≥20 记入 HUD
+PASS | G10：结算行含最高连杀
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+── G10 难度开局横幅 ──
+PASS | G10：困难开局收口难度横幅（数值/复活/奖励——R186 三源合并消费口径）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R80 时之砂/详情归段/导弹空爆 ──
+PASS | R80 前置：无遗物技能冷却 = 角色基线（120s）
+PASS | R80 前置：时之砂激活
+PASS | R80：时之沙激活 → 冷却 ×0.8（96s）
+PASS | R80：挂卡重算后时之沙仍生效（不再回 120s）
+PASS | R80 前置：W6 装备
+PASS | R80：技能急速/时之沙不动武器节拍（射速归因澄清）
+PASS | R80：详情含「通用词条」独立段
+PASS | R80：通用段含技能急速（全局生效标注）
+ERROR: [ObjectPool:homing] 拒绝归还（重复归还或外来节点）：@Node2D@3430
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | R80：导弹寿命尽 → 原地空爆（missile_blast 信号）
+PASS | R83：导弹爆生成专用件（radius 注入 + 自绘协议）
+PASS | R83：爆炸件 0.72s 寿命自清（queue_free 排队）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R81 名称卫生 ──
+PASS | R81：词条/遗物资源名零【】前缀（防双前缀回归）
+PASS | R81：点金裸名（卡面前缀运行期拼接）
+── R82 技能急速真实链 ──
+PASS | R82 前置：卡生成（通用前缀 + TRAIT 类）
+PASS | R82：挂卡后技能冷却基线 ×0.88（-12% 相对口径）
+PASS | R82：skill_haste_pct 口径一致
+PASS | R82：生效显形横幅（前后值直给）
+PASS | R82：施放后倒计时 = 新基线（HUD 数字源）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R86/R89/R90 大字/法术伤害/僚机 ──
+PASS | R89：法术圈圈内引爆掉血（contact×ratio 直落）
+PASS | R90：诺亚技能生成僚机
+PASS | R93：僚机主动开火（真弹入池）
+PASS | R93：僚机 10s 寿命自回收（闪烁预警后离场）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R87/R88 元素染色/难度门控/槽位帽 ──
+PASS | R183：普通难度帽 5（w 解锁第 6 槽被拒）
+PASS | R185：帽内已满金卡无槽可解（grant 拒绝）
+PASS | R185：金卡 = 提前解锁帽内下一槽（2→3、帽仍 5）
+PASS | R183：地狱帽 6（unlock 6 通）
+PASS | R185：地狱 6/6 帽内已满金卡拒绝
+PASS | R183：金卡 apply → 槽 +1
+PASS | R185：槽位金卡每批 5% 口径（300 批命中 ≤30）
+PASS | R88：解锁门可查询（与 map_records 联动）
+PASS | R87：dominant_element 默认中性
+PASS | R87：挂火附魔 → dominant_element=FIR（化身染色源）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R183 槽位画满/上锁样式/难度默认 ──
+PASS | R183：普通开局默认解锁 2
+PASS | R183：难度默认 2/3/3 与帽 5/6/6（真源）
+PASS | R183：HUD 按帽画满 5 槽（普通）
+PASS | R183：未解锁槽位 🔒 上锁样式（5-2=3 个）
+PASS | R183：w31 保底解锁第 6 槽（地狱帽 6）
+PASS | R183：普通帽 5 截断第 6 槽解锁
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R91 棱镜/激光差异化（R187 新契约重写） ──
+PASS | R91：W4 开聚焦（focus_ramp）/ W5 无（分光定位）
+PASS | R91：W5 refract 五键退役（refract_beams/ratio/depth/两 levels 全删）
+PASS | R91：W5 镜面键在册（mirrors_count_levels / mirror_ratio_levels）
+PASS | R91：W4 装备
+PASS | R91：主束生成
+PASS | R91：W4 主束常驻（lifetime == 0）
+PASS | R91：同目标 3s → 聚焦 ×1.45
+PASS | R91：8s 封顶 ×2
+PASS | R91：换目标归零重聚（×1.15）
+PASS | R91：W5 装备
+PASS | R91：W5 校准锚束单束（try_fire 后束段 == 1）
+PASS | R91：W5 锚束无折射分叉（refract_beams == 0）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R92 快清快开 ──
+PASS | R92：窗口内全清 → 剩窗截断 ≤0.8s（SPAWNING 期）
+PASS | R92：快清后 ~2.8s 内开下一波（不再干等整窗）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R94 金边五角星爆链 ──
+PASS | R94：五角星贴图生成（110px）
+PASS | R94：homing 池接线（W6 导弹为真 HomingProjectile）
+PASS | R94：W6 命中 → missile_blast 信号 ≥1（真链）
+PASS | R94：顶层 BlastStarFx 生成（z100 + 双子节点）
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@897
+   at: push_error (core/variant/variant_utility.cpp:1092)
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── P2 伤害数字分级 ──
+PASS | 分级基准：主武器面板 base_atk × crit_mult（>0）
+PASS | 分级音色：紫「叮」/ 金重击已入 sfx_bank
+PASS | 量级分档：0.5×/2×/4×/8× → 白/蓝/紫/金四档判定
+PASS | 档位 0：字号 ×1（30px）
+PASS | 档位 1：字号 ×1.15（35px）
+PASS | 档位 2：字号 ×1.35（41px）
+PASS | 档位 3：字号 ×1.6（48px）
+PASS | 档位配色：蓝/紫/金 = 稀有度三色（调色板单源）
+PASS | 金档重音 + 轻震动（trauma 复用 hit 档）
+PASS | 暴击量级档：紫档字号 = 40 × 1.35
+PASS | DOT 不吃量级档（配色/字号沿旧）
+PASS | 基准缺失 → 分级安全关闭（全白现状字号）
+── P2 BGM 环境音 ──
+PASS | BGM：SfxBank 单例 + pad 层就绪
+PASS | BGM：8s 循环（4 小节）+ LOOP_FORWARD
+PASS | BGM：循环点无缝（首尾样本差 0 < 2500）
+PASS | BGM：战斗态起播（pad 播放中）
+PASS | BGM：Boss 存活期第二循环解锁（脉冲层播放中）
+PASS | BGM：菜单暂停（双层 stream_paused）
+PASS | R79：战斗 3 套变体 + 大厅 2 套装载
+PASS | R79：战斗套切换换流（资源变更）
+PASS | R79：换套后四件等长锁相保持（16s）
+PASS | R79：第三套装载（循环索引可达）
+PASS | R75：六轨全部装载（.res 循环资源）
+PASS | R75：贝斯/琶音轨与 pad 等长锁相（16s 循环）
+PASS | R75b：强度 0（前期）= pad+贝斯+琶音，踩镲/高琶收起
+PASS | R75b：强度 1（中期）踩镲层进
+PASS | R75b：强度 2（后期）高八度琶音进
+PASS | R75b：w1 → 强度 0
+PASS | R75b：w7 → 强度 1
+PASS | R75b：w15 → 强度 2
+PASS | R75：大厅曲播放 + 战斗五轨收起
+PASS | R75：离菜单大厅曲停（结算/暂停静默口径）
+── P2 每日挑战 ──
+PASS | 每日：同日期种子恒同
+PASS | 每日：跨日种子必变
+PASS | 每日：同日词缀组合恒同（全玩家同日同配置）
+PASS | 每日：祝福 1 条来自祝福池
+PASS | 每日：跨日词缀轮换（12 日 ≥3 种组合）
+PASS | 每日：daily_best 写读（波次取最大 15 / 击杀取最大 300）
+PASS | 每日：daily 局结算 → daily_best 更新（波次 21）
+PASS | 每日：daily 局不混常规记录（total_runs/best_wave 不变）
+PASS | 每日：daily_records 持久化写读
+PASS | 每日：大厅面板当日三词缀展示（2 诅 + 1 祝）
+PASS | 每日：出发挑战按钮就位
+── P2 角色扩展 ──
+PASS | 角色表：薇拉/诺亚就位（cd 120s / 毒云 / 僚机）
+PASS | 解锁门：薇拉 499 杀锁定 / 诺亚无成就锁定
+PASS | 解锁门：薇拉 500 杀解锁
+PASS | 解锁门：诺亚成就「深入敌阵」达成解锁
+PASS | 角色：薇拉血量 55 + 养成加成
+PASS | 技能·毒云：挂场即跳（敌掉血）+ 减速 20% 生效
+PASS | 技能·毒云：0.5s 节拍持续结算（2s 内 ≥3 跳）
+PASS | 技能·毒云：6s 到期停跳 + 减速还原
+PASS | 技能·毒云：到期后不再结算
+PASS | 角色：诺亚血量 50 + 养成加成
+PASS | 诺亚：环绕武器装配（真件 OrbitWeapon）
+PASS | R183·僚机：随机复制 2 把当前武器（= 手枪 ×2）
+PASS | R183·僚机：护航舰随行（R93 舰体保留）
+PASS | R183·僚机：不占真实槽位（weapon_slots 无副本）
+PASS | R183·僚机：武器下全部 buff 拷贝（词条/层数/逐层数值）
+PASS | R183·僚机：等级同步（副本 = 同源等级）
+PASS | R183·僚机：ELE 反应乘区副本注册（施放期多源抬升）
+PASS | R183·僚机：持续期保持（5s 时副本仍在）
+PASS | R183·僚机：10s 到期回收（副本清空 + 实例释放）
+PASS | R183·僚机：ELE 反应乘区随副本注销回落（P1 泄漏锁死）
+PASS | R186 对账：哨兵开局角色门强制手枪（custom 键休眠不泄漏）
+PASS | R186 对账：fission 开局装 custom 首发（W5）
+PASS | R186 对账：fission→sentinel 换角 → 手枪回收且 W5 清除（仅 1 把在装）
+PASS | R186 echo：开局随机双武装（排除 W1 + 每日种子确定性）
+PASS | 大厅：选人面板 10 格（R186 +2）
+── P3 设置页 ──
+PASS | 设置：默认音量 sfx=0.8 / bgm=0.6
+PASS | 设置：默认开关 震屏/伤害数字 = true
+PASS | 设置：写口越界钳制（5.0→1.0 / -0.5→0.0）
+PASS | 设置：未知键忽略（读口 null）
+PASS | 设置：持久化（0.25 过 user:// 磁盘写读回路）
+PASS | 设置：换算端点（0→-60dB / 1→0dB）
+PASS | 设置：音量接线满档 = 既有基准档（sfx -14 / pad -18）
+PASS | 设置：音量接线静音档（0 → 基准再 -60dB）
+PASS | 设置：震屏开 → CRIT trauma 叠加（>0）
+PASS | 设置：震屏关 → trauma 恒 0（入口短路）
+PASS | 设置：震屏关不伤打击感（顿帧仍生效）
+PASS | 设置：伤害数字关 → 跳字入口短路（0 活跃）
+PASS | 设置：伤害数字开 → 跳字恢复
+PASS | 设置：大厅入口按钮就位（文本「设置」）
+PASS | 设置：暂停面板「设置」按钮就位
+PASS | 设置：面板初始关闭
+PASS | 设置：open() → 可见
+PASS | 设置：close() → 隐藏（关闭恢复原界面）
+PASS | 设置：滑条拖动 → 写口生效（0.5）
+PASS | 设置：开关点击 → shake_on 翻转
+PASS | 设置：开关再点 → 复位原值
+── R194 fx_opacity 特效透明度 ──
+PASS | R194 fx：旧档缺键读口回 1.0
+PASS | R194 fx：写口下钳 0.29→0.3
+PASS | R194 fx：写口上钳 2.0→1.0
+PASS | R194 fx：持久化（0.4 过 user:// 磁盘写读回路）
+PASS | R194 fx：滑条回填（open 同步 Meta 0.4）
+PASS | R194 fx：滑条拖动 → 写口联动（≈0.5）
+PASS | R194 fx：elemental_fx 根 modulate.a≈0.3（全层罩减）
+PASS | R194 fx：玩家本体 modulate.a==1.0（本体不随特效减淡）
+PASS | R194 fx：粒子池发射器 modulate.a≈0.3（64/64）
+PASS | R194 fx：跳字 tick 后 modulate.a≈0.3×(1−t²)=0.288
+PASS | R194 fx：开火后 _muzzle_flash.modulate==MirrorImage.TINT（乘区不染枪口火花）
+PASS | R194 fx：提示行含「卡顿时优先调低特效质量」
+PASS | R194 fx：提示行含透明度口径「仅观感减淡」且无提帧暗示
+PASS | R194 fx：还原后 DamagePopup.fx_opacity==1.0（static 随应用器复位）
+── 二轮反馈（BGM/刷新/质变/烧伤/存档/图标） ──
+PASS | BGM：16s 音乐化循环（4 和弦 × 4s）
+PASS | BGM：采样率 22050（去混叠）
+PASS | BGM：循环点首尾样本归零（和弦包络起止 0）
+PASS | 刷新：开局次数 = 2（基础）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 刷新：选卡界面打开（LEVEL_UP）
+PASS | 刷新：本局首次免费（次数不扣）
+PASS | 刷新：货架已重发（界面仍开）
+PASS | 刷新：候选内容变化（重 roll 生效）
+PASS | 刷新：第二次消耗 1 次（2→1）
+PASS | 刷新：选卡后回 PLAYING
+PASS | 刷新：每 5 波 +1（5 波节点）
+PASS | 刷新：非 5 倍数波不授予
+PASS | 刷新：收尾回菜单（下一用例干净开局）
+PASS | 质变：挂满层触发里程碑广播（×1.6）
+PASS | 质变：value_mult = 1.6（挂至 stack_max）
+PASS | 质变：add_entries 单层贡献 ×1.6
+PASS | 质变：满层后再挂拒绝（无重复广播）
+PASS | 质变门：草原局挂满层不质变（value_mult = 1，无广播）
+PASS | 烧伤：低快照保底 ≥1（0.6 → 1）
+PASS | 点燃蔓延：燃烧者死亡 → 邻敌直接点燃（满槽）
+PASS | 技能图标：sentinel 64px 贴图就绪
+PASS | 技能图标：veles 64px 贴图就绪
+PASS | 技能图标：bulwark 64px 贴图就绪
+PASS | 技能图标：ranger 64px 贴图就绪
+PASS | 技能图标：zero 64px 贴图就绪
+PASS | 技能图标：mank 64px 贴图就绪
+PASS | 技能图标：vera 64px 贴图就绪
+PASS | 技能图标：noah 64px 贴图就绪
+PASS | 技能图标：HUD 技能键图标节点就绪
+PASS | 存档：暂停回菜单后落盘（RunSave 存在）
+PASS | 存档：波次/等级/金币入档
+PASS | 存档：武器构筑入档（1 把 + 词条层数）
+PASS | 存档：继续后回到 PLAYING（第 7 波）
+PASS | 存档：玩家数值恢复（等级/金币/刷新）
+PASS | 存档：武器等级与词条层恢复（Lv3 + AFF_ATK_UP×1）
+── 五轮反馈（早期经验加速） ──
+PASS | 早期经验：balance 真源默认 {mult:1.25, until_wave:6}
+PASS | 早期经验：第 1 波 ×1.25
+PASS | 早期经验：第 5 波仍 ×1.25
+PASS | 早期经验：第 6 波起回落 1.0
+PASS | 早期经验：非局波次（0）不加速
+PASS | 早期经验：击杀掉落经验球 +1
+PASS | 早期经验：球面值 = 基值 × 1.25（掉落侧折算）
+── 七轮反馈（护盾溢出/属性展示/死卡审计） ──
+PASS | 护盾条：满充能填充宽度 ≤ 111（不溢出 148 面板）
+PASS | 属性展示：详情卡属性行含 攻击/暴击/间隔 三段
+PASS | 死卡接线：弹速池/体积池挂卡后乘数 > 1（衰减聚合）
+PASS | 夹具：AFF_SKILL_HASTE 就位（add_skillcdr 池）
+PASS | 死卡接线：技能急速挂卡 → 技能冷却基线缩短
+PASS | 死卡接线：拾取半径词条 → 磁吸半径增长
+PASS | 形态门：手枪货架无谐振轨道（§5.12 P0 根修）
+PASS | 形态门：环绕武器货架有谐振轨道
+PASS | 形态门：非弹道武器无弹丸数/穿透卡
+PASS | 黑市遗物：w8 清空 → 排程消费并开店（LEVEL_UP + 可见）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 夹具：AFF_XP_GAIN 就位（add_xp 池）
+PASS | 经验倍率卡：挂卡后 10 经验入账 > 10（×1.15）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 夹具：MEC_BOUNCE / SYN_BOUNCE_SPEC 就位
+PASS | 反弹组合门：未持「边界反弹」时「反弹谱变」不上架
+PASS | 反弹组合门：持有「边界反弹」后「反弹谱变」上架
+PASS | 反弹动作：带预算子弹【射程无限】（寿命抬到 20s 上限，打空必达边界）
+PASS | 夹具：霰弹枪装配成功
+PASS | 元素弹色：手枪弹全部 KIN（无跨武器串扰）
+PASS | 元素弹色：霰弹弹全部 FIR（火附魔生效）
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@697
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@698
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@699
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@700
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@701
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@702
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@703
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@704
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@705
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@706
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@707
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@708
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@709
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@710
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@711
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@712
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@713
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@714
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@715
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@716
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@717
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@718
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@719
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@720
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@721
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@722
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@723
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@724
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@725
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@726
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@727
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@728
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@729
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@730
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@731
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@740
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@741
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@742
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@743
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@744
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@745
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@746
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@747
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@748
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@749
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@750
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@751
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@752
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@753
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@754
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@755
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@756
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@757
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@758
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@759
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@760
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@761
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@762
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@763
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@764
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@765
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@766
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@767
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@768
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@769
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@770
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@771
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@772
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@773
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@774
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@775
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@776
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@777
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@778
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@779
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@780
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@781
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@782
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@783
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@784
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@785
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@786
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@787
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@788
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@789
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@790
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@791
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@792
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@793
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@794
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@795
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@796
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@797
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@798
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@799
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@800
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@801
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@802
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@803
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@804
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@805
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@806
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@807
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@808
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@809
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@810
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@811
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@812
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@813
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@814
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@815
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@816
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@817
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@818
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@819
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@820
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | 通用前缀：经验萃取卡含【通用】（不再挂武器名）
+PASS | 自导反弹：导弹带预算（射程无限 + 预算注入）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 冰原通关：w15 清空 → 冰原已通关标记
+PASS | 冰原通关：魔域随之解锁
+── 七轮反馈完 ──
+── R191 共享 UI（tooltip 全局样式） ──
+PASS | R191：tooltip 面板条目（TooltipPanel 有 panel StyleBox）
+PASS | R191：tooltip 白实底（bg_color==PANEL 且 a>=1.0）
+PASS | R191：tooltip 字色 = INK（TooltipLabel font_color）
+PASS | R191：tooltip 字号 ≥20 + 字体挂 font() + 描边 0（对齐 Label 口径）
+PASS | R191：图鉴页签 4 枚含「反应」
+────────────────────────────────────────
+验收汇总：PASS 647 / FAIL 0（共 647 项）
+WARNING: 1 RID of type "CanvasItem" was leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2483)
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

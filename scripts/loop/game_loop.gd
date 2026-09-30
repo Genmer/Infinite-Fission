@@ -29,6 +29,11 @@ const SCENE_XP_SHARD := "res://scenes/combat/pickups/xp_shard.tscn"   # B.1 经�
 const SEPARATION_INTERVAL := 0.1              # 10Hz（架构 §2.11 敌间分离力口径）
 const SEPARATION_MAX_STEP := 4.0              # 单敌单次推移上限 px
 const RESUME_GRACE_S := 0.5                   # 暂停恢复输入忽略期 s（防误触，用户反馈 2026-08-29）
+const GAME_DELTA_CLAMP_S := 0.25              # R194：单帧游戏 delta 钳制上限 s（巨 delta 分帧消化——
+                                              # 防断点/卡顿补账一帧吞掉整段波窗口经硬上限连环叠波）
+const STRETCH_ASPECT_RATIO_MAX := 2.34        # R195 适配底座：窗口高宽比超限钳制阈值（代码常量
+                                              # 不设设置键；21:9≈2.3333 整档留 EXPAND，>2.34
+                                              # 回落 KEEP 居中黑边；IGNORE/INTEGER 写死禁用）
 
 # 状态机（复用 GameConst.GameStatus：BOOT/MENU/PLAYING/PAUSED/LEVEL_UP/GAME_OVER）
 # 合法迁移矩阵（冻结；非法迁移 change_state 拒绝 + 计数）。
@@ -52,6 +57,27 @@ var frame_stamp: int = 0                      # GameConfig.advance_frame 同步�
 var rejected_transitions: int = 0             # 非法迁移拒绝计数（测试/遥测）
 var dropped_level_ups: int = 0                # GameOver 状态升级请求丢弃计数（E-16）
 var pending_level_ups: int = 0                # 多级连升排队（A3 §6.2：排队弹卡）
+# R188-perf 档3 连升合并：排队帽（超出部分并入当前批同分布自动抽卡——4.8 万张选卡
+# 冻结的结构性修复；idle 自动选卡计时器只消化真实弹窗批）
+const PENDING_LEVEL_UP_CAP: int = 3
+var merged_overflow_level_ups: int = 0        # 连升合并溢出批计数（遥测观测口）
+# R189 溢出批分帧消化：收口帧只挂批不抽卡，PLAYING 逐帧按时间预算抽卡
+const MERGED_OVERFLOW_BUDGET_MS := 35.0       # 单帧抽卡预算（§4.8-9 单帧 ≤50ms 子预算——
+                                              # 实测卡均 ~1.4ms：生成 0.74 + 应用 0.6）
+var _merged_overflow_draining: bool = false   # 溢出批消化中（persist-defer 归属标记）
+
+# ── R188-idle 挂机自动驱动（消费 Meta.settings("auto_select_on"/"auto_restart_mode")） ──
+const AUTO_CARD_WINDOW_S := 0.5               # 选卡展示窗 s（0.5s 描金 + pkg4 LEVEL_UP 文案断言口径）
+const AUTO_SHOP_WINDOW_S := 0.8               # 黑市自动出击窗 s
+const AUTO_RESTART_WINDOW_S := 3.0            # 结算自动重开倒计时 s
+const AUTO_RETRY_CAP: int = 4                 # 自动选卡防重入门（is_open 翻 false 重置）
+var _auto_card_left: float = -1.0             # ≥0 = 选卡自动倒计时挂起
+var _auto_shop_left: float = -1.0             # ≥0 = 商店自动出击倒计时挂起
+var _auto_restart_left: float = -1.0          # ≥0 = 重开倒计时挂起（GAME_OVER 帧序分支）
+var _auto_card_shown_index: int = -1          # 本窗已描金候选（重复置金幂等）
+var _auto_card_retries: int = 0               # choose 真链失败重试计数（帽内重试）
+var _auto_shop_seen_purchases: int = -1       # 商店采购计数基线（变化 = 玩家手动操作）
+var _auto_shop_seen_refresh: int = 0          # 商店刷新计数基线（变化 = 玩家手动操作）
 var boot_ready: bool = false                  # Boot 完成（MENU 可进）
 var boot_fatal: Array = []                    # 致命错误清单（非空 → 停留 BOOT）
 
@@ -84,6 +110,8 @@ var sfx: SfxBank = null                       # 程序化音效库（表现层�
 var elemental_fx: ElementalFxLayer = null     # 方向 C：元素签名特效层（连锁闪电/碎裂环/DOT 火星）
 var camera: Camera2D = null                   # 集成包 A：震屏偏移宿主（trauma² 映射应用位）
 var confetti: ConfettiBurst = null            # 方向 C：Boss 死亡彩纸屑（actors 段前置订阅）
+var _stretch_clamp_armed: bool = false        # R195：超限钳制已挂（boot 时 aspect=expand 才armed——
+                                              # 项目设置 keep 回退位下钳制函数全程零触发=现状黑边）
 var pools: Dictionary = {}                    # {projectile, enemy, popup, particle, laser, xp}
 var resume_grace_left: float = 0.0
 var _victory_pending_left: float = 0.0        # 通关结算延迟窗（R15：给磁吸碎片收集时间）
@@ -103,6 +131,9 @@ var _homing_pool: ProjectilePool = null           # R94：homing 场景池（此
 var _boot_elapsed_ms: float = 0.0             # Boot 耗时（AC：<3s 预算遥测）
 var _separation_left: float = SEPARATION_INTERVAL   # E-10 分离力 10Hz 相位
 var _free_reroll_used: bool = false            # 本局首次「换一批」免费位（一次性刷新方向）
+var _card_rarity_floor: int = -1               # R199-N13：本局选卡流稀有度保底留存（首 roll
+                                               # 消费 take_rarity_floor 后由本类持有，换一批
+                                               # 复传；<0 无——relic_handler 侧消费即焚）
 var _active_daily_seed: int = -1               # R186：本局每日种子留存（echo 重开重 roll 的确定性源）
 var _run_intro_lines: PackedStringArray = []   # R186：开场横幅唯一收口（难度/大关/随机武装/fission 宣告
                                                # 三源合并为至多一条 toast——消费点 emit 后立即清空）
@@ -118,6 +149,10 @@ func _ready() -> void:
 		push_error("[GameLoop] 致命配置，拒绝进入 MENU：%s" % str(boot_fatal))
 		return
 	_boot_load_data()
+	if not boot_fatal.is_empty():
+		return                                   # R194 空表闸：_boot_load_data 内置位 + 已建 boot_error 屏
+		                                         # ——中止后续 boot 段，状态停留 BOOT（唯一合法迁移 BOOT→MENU
+		                                         # 永不可达）= 拒绝入局
 	_boot_build_pools()
 	_boot_build_grids()
 	_boot_build_actors()
@@ -140,8 +175,9 @@ func _physics_process(p_raw_delta: float) -> void:
 			var _probe_t0 := Time.get_ticks_usec() if stage_probe_enabled else 0
 			if stage_probe_enabled:
 				stage_probe_us.clear()
-			# ① 输入采样：相对拖动由 Player._unhandled_input 自采（E-15 单指针锁定），
-			#    GameLoop 本层透传零向量 = 玩家消费自采样（包 2 落地口径）。
+			# ① 输入采样：相对拖动由 Player._unhandled_input 自采——E-15 单指针锁定亦由
+			#    Player 采样层承担（R194 修正：原注释把锁定读成 GameLoop 承担，失实——
+			#    GameLoop 从不持有指针锁，本层仅透传零向量 = 玩家消费自采样，包 2 落地口径）。
 			#    暂停恢复宽限期内吞掉拖动输入（防误触，raw 通道倒计时）
 			frame_order.append(&"input")
 			if resume_grace_left > 0.0:
@@ -169,6 +205,11 @@ func _physics_process(p_raw_delta: float) -> void:
 				stage_probe_us[&"grid_projectile"] = Time.get_ticks_usec() - _probe_t0
 				_probe_t0 = Time.get_ticks_usec()
 			# ⑤ 敌 AI + 元素 tick + 帧末反应检测（E-07；倒序遍历——自爆/结算可在 tick 内回收）
+			# R189c 定稿：敌段 LOD（隔帧 tick 实验）整体移除——安静环境 800p 实测两种
+			# 形态均净负：2×delta 补账把帧时间打成双峰（P95 9.46 FAIL/超阈帧 6.6%）；
+			# 1×delta 半帧率 + 豁免谓词每敌每帧 8 次动态访问，开销 ≈ tick 本身（P95
+			# 8.94 FAIL/超阈帧 5.7%）。全帧率对照：avg 2.112 / P95 4.421 PASS / 超阈帧
+			# 0.4%，优于 R187 历史基线（avg 3.114 / P95 5.887）。数据存 tracker 二ay。
 			frame_order.append(&"enemy")
 			var eidx := spawner.active.size() - 1
 			while eidx >= 0:
@@ -195,6 +236,8 @@ func _physics_process(p_raw_delta: float) -> void:
 			if stage_probe_enabled:
 				stage_probe_us[&"wave"] = Time.get_ticks_usec() - _probe_t0
 				_probe_t0 = Time.get_ticks_usec()
+			# R189：连升溢出批分帧消化（抽卡时间预算内——不改战斗帧序语义）
+			_tick_merged_overflow()
 			# ⑦ GameFeel（raw 通道）→ 顿帧申请出口（time_scale 唯一变更点）
 			# R26：磁吸态碎片在选卡/暂停期继续飞向玩家（Boss 巨额经验连环选卡时
 			# 「球冻半空」终解——磁吸=收割演出，吸收走 pending 升级队列安全）
@@ -223,8 +266,14 @@ func _physics_process(p_raw_delta: float) -> void:
 			set_time_scale(game_feel.desired_time_scale(), &"gamefeel")
 			frame_order.append(&"ui")
 			_tick_ui(p_raw_delta)
+			# R188-idle：挂机自动出口驱动（选卡展示窗/商店出击窗——raw 通道，模态期可走）
+			_tick_auto_idle(p_raw_delta)
+		GameConst.GameStatus.GAME_OVER:
+			# R188-idle：帧序新增分支（原 `_:` pass）——重开倒计时（mode 1/2）raw 通道
+			# 驱动 + 每帧刷新结算卡面秒数；mode 0/每日局不挂起即零成本 pass 等价
+			_tick_auto_restart(p_raw_delta)
 		_:
-			pass                                  # BOOT/MENU/GAME_OVER：无战斗帧序
+			pass                                  # BOOT/MENU：无战斗帧序
 	if pipeline != null:
 		pipeline.end_frame()
 	EventBus.end_frame()                          # 事件风暴计数清零（§六.4）
@@ -239,6 +288,14 @@ func change_state(p_new: int) -> bool:
 		push_warning("[GameLoop] 非法状态迁移拒绝：%d → %d" % [state, p_new])
 		return false
 	state = p_new
+	# R189：溢出批分帧消化批中断收口——离局迁移（GAME_OVER/MENU）把未消化残余清零
+	# 并强制结清成就/落盘抑制态（否则结算侧 _check_achievements/_save 被抑制挂起，
+	# 结算记录不落盘；重开/续档路径由 _reset_run_state/serialize 同名清零位覆盖）
+	if _merged_overflow_draining and (p_new == GameConst.GameStatus.GAME_OVER
+			or p_new == GameConst.GameStatus.MENU):
+		_merged_overflow_draining = false
+		merged_overflow_level_ups = 0
+		Meta.cancel_persist_defer()
 	get_tree().paused = (p_new == GameConst.GameStatus.PAUSED
 		or p_new == GameConst.GameStatus.LEVEL_UP)
 	# R18 残留根修：进 LEVEL_UP/PAUSED/GAME_OVER → 全场碎片立即转磁吸飞行态——
@@ -321,24 +378,138 @@ func _fx_sfx_allowed() -> bool:
 
 
 func _play_reaction_sfx(p_rxn: int, _p_pos: Vector2, _p_target_uid: int) -> void:
-	# 夜间R15：元素反应音（按反应类型分音色——碎裂/过载/超导）
+	# 夜间R15：元素反应音（按反应类型分音色）→ R192 矩阵扩 20 臂（零新音频资产——
+	# 族级复用既有 3 条流：冲击读感=shatter / 爆发读感=overload / 减益工具读感=super）
 	if not _fx_sfx_allowed():
 		return
 	match p_rxn:
-		GameConst.ReactionType.RXN_FIR_ICE:
-			sfx.play(&"rxn_shatter")
-		GameConst.ReactionType.RXN_FIR_LTG:
-			sfx.play(&"rxn_overload")
-		GameConst.ReactionType.RXN_ICE_LTG:
-			sfx.play(&"rxn_super")
+		GameConst.ReactionType.RXN_FIR_ICE, GameConst.ReactionType.RXN_FIR_HYD, \
+		GameConst.ReactionType.RXN_HYD_DEN:
+			sfx.play(&"rxn_shatter")               # 碎裂 / 蒸发 / 绽放（冲击结算族）
+		GameConst.ReactionType.RXN_FIR_LTG, GameConst.ReactionType.RXN_FIR_ANE, \
+		GameConst.ReactionType.RXN_ICE_ANE, GameConst.ReactionType.RXN_LTG_ANE, \
+		GameConst.ReactionType.RXN_HYD_ANE, GameConst.ReactionType.RXN_ANE_DEN:
+			sfx.play(&"rxn_overload")              # 过载 / 扩散族×5（AoE 爆发族）
+		GameConst.ReactionType.RXN_ICE_LTG, GameConst.ReactionType.RXN_ICE_HYD, \
+		GameConst.ReactionType.RXN_LTG_HYD, GameConst.ReactionType.RXN_FIR_DEN, \
+		GameConst.ReactionType.RXN_LTG_DEN, GameConst.ReactionType.RXN_FIR_GEO, \
+		GameConst.ReactionType.RXN_ICE_GEO, GameConst.ReactionType.RXN_LTG_GEO, \
+		GameConst.ReactionType.RXN_HYD_GEO, GameConst.ReactionType.RXN_DEN_GEO, \
+		GameConst.ReactionType.RXN_ANE_GEO:
+			sfx.play(&"rxn_super")                 # 超导 / 冻结 / 感电 / 燃烧 / 激化 / 结晶族×6（减益工具族）
 
 
-func _on_shop_requested(p_wave: int) -> void:
+func _on_shop_requested(p_wave: int, p_pre_boss: bool = false) -> void:
 	# 战地黑市开店仲裁（M7）：PLAYING 态 → LEVEL_UP（复用弹卡态，E-16 仲裁同源）
+	# R188-idle：开店即挂自动出击窗（黑市波/战前补给三源汇总口共用；重入重置计时）。
+	# 一期固定自动跳过（不做商店购买策略——吃 shop_ui.buyable_count()/has_stock()
+	# 谓词为二期自动购买硬前置，本项只站稳不消费）
+	# R189：p_pre_boss = 战前补给态标题位（此前该源绕过本口直开 shop_ui，自动窗漏挂
+	# → 挂机态商店永不离店；现与波表/遗物排程同汇本口）
+	_auto_card_left = -1.0                       # 商店模态优先——选卡窗撤销
+	_auto_shop_seen_purchases = -1               # 采购计数基线（下帧对账重建）
+	_auto_shop_seen_refresh = -1                 # R189c：刷新基线一并重建（旧值残留 → 重开店首帧误判手动，出击窗翻倍一拍）
+	_auto_shop_left = AUTO_SHOP_WINDOW_S
 	if state != GameConst.GameStatus.PLAYING:
 		return
 	if change_state(GameConst.GameStatus.LEVEL_UP):
-		shop_ui.open(player, p_wave)
+		shop_ui.open(player, p_wave, p_pre_boss)
+
+
+# ── R188-idle 挂机自动驱动（消费 Meta.settings("auto_select_on"/"auto_restart_mode")） ──
+func _tick_auto_idle(p_raw_delta: float) -> void:
+	# LEVEL_UP/PAUSED raw 分支挂点（模态期驱动；关挂机零成本直返并撤销挂起窗）
+	if not bool(Meta.settings("auto_select_on")):
+		_auto_card_left = -1.0
+		_auto_shop_left = -1.0
+		return
+	# ① 商店自动出击窗（玩家买货/刷新/出击/关店 → 窗撤销或重置——手动操作即时取消）
+	if _auto_shop_left >= 0.0:
+		if shop_ui == null or not shop_ui.is_shop_visible() \
+				or state != GameConst.GameStatus.LEVEL_UP:
+			_auto_shop_left = -1.0               # 玩家已手动出击/关店
+		else:
+			var purchases := shop_ui.purchase_count()
+			var refreshes := shop_ui.refresh_count_used()
+			if _auto_shop_seen_purchases < 0 or _auto_shop_seen_refresh < 0:
+				# R189c：双基线任一未建 → 本帧对账重建（-1 哨兵口径）
+				_auto_shop_seen_purchases = purchases
+				_auto_shop_seen_refresh = refreshes
+			elif purchases != _auto_shop_seen_purchases or refreshes != _auto_shop_seen_refresh:
+				# 玩家手动买货/刷新 → 计时重置（不与玩家抢操作节奏）
+				_auto_shop_seen_purchases = purchases
+				_auto_shop_seen_refresh = refreshes
+				_auto_shop_left = AUTO_SHOP_WINDOW_S
+			else:
+				_auto_shop_left -= p_raw_delta
+				if _auto_shop_left <= 0.0:
+					_auto_shop_left = -1.0
+					shop_ui.close()               # closed → request_resume（回 PLAYING）
+					return
+	# ② 选卡自动窗（真实弹窗批：card_select_ui.is_open 口径——连升合并溢出批不弹卡窗，
+	# 本计时器只消化真实弹窗批）
+	if _auto_card_left >= 0.0:
+		if card_select_ui == null or not card_select_ui.is_open \
+				or state != GameConst.GameStatus.LEVEL_UP:
+			_auto_card_left = -1.0               # 界面已收（手动已选/流关闭）→ 撤销
+			_auto_card_shown_index = -1
+			_auto_card_retries = 0
+		else:
+			_auto_card_left -= p_raw_delta
+			# 展示窗首帧：策略预选描金（成对同行双亮——「自动将要选」的 0.5s 预告）
+			if _auto_card_shown_index < 0:
+				var picked := AutoIdleStrategy.pick(current_candidates, _dual_pending)
+				if picked >= 0:
+					_auto_card_shown_index = picked
+					card_select_ui.highlight_candidate(picked)
+			if _auto_card_left <= 0.0:
+				_auto_card_choose()
+
+
+func _auto_card_choose() -> void:
+	# choose 真链（与手动点击同一条 choice_made 信号链——严禁 open() 栈内同步 choose）。
+	# 防重试帽：候选空/槽位无效帽内重挂窗，超帽弃选停窗（防死循环）；is_open 翻 false
+	# 即自然重置（窗口撤销）
+	if card_select_ui == null or not card_select_ui.is_open \
+			or state != GameConst.GameStatus.LEVEL_UP:
+		_auto_card_left = -1.0
+		return
+	var picked := AutoIdleStrategy.pick(current_candidates, _dual_pending)
+	if picked < 0:
+		_auto_card_retries += 1
+		if _auto_card_retries > AUTO_RETRY_CAP:
+			_auto_card_left = -1.0
+			return
+		_auto_card_left = AUTO_CARD_WINDOW_S
+		return
+	card_select_ui.choose(picked)                 # choice_made → _on_card_choice（窗撤销）
+
+
+func _tick_auto_restart(p_raw_delta: float) -> void:
+	# GAME_OVER 帧序分支：mode∈{1,2} 且非每日局 → 3s 倒计时自动重开（mode0/每日局回退
+	# 停结算）；每帧刷新结算卡面倒计时 Label；玩家三出口任一按下 → 状态迁移侧取消
+	var mode := clampi(int(Meta.settings("auto_restart_mode")), 0, 2)
+	if mode <= 0 or Meta.is_run_daily():
+		if _auto_restart_left >= 0.0:
+			_auto_restart_left = -1.0             # 开关切走/每日局回退 → 撤销
+			if game_over_screen != null:
+				game_over_screen.cancel_auto_countdown()   # R189c：Label 残留收口（潜伏路径对齐到期分支）
+		return
+	if _auto_restart_left < 0.0:
+		_auto_restart_left = AUTO_RESTART_WINDOW_S   # 进 GAME_OVER 首帧挂起
+	_auto_restart_left -= p_raw_delta
+	if game_over_screen != null:
+		game_over_screen.set_auto_countdown(_auto_restart_left)
+	if _auto_restart_left <= 0.0:
+		_auto_restart_left = -1.0
+		if game_over_screen != null:
+			game_over_screen.cancel_auto_countdown()
+		# mode2 通关屏（无尽出口可见）先 continue_endless，失败回落 restart_run；
+		# 死亡屏/无尽出口不可见 → restart_run（continue_endless 自拒每日局，双重防线）
+		if mode == 2 and game_over_screen != null \
+				and game_over_screen.is_endless_offer_visible() and continue_endless():
+			return
+		restart_run()
 
 
 func _on_wave_cleared_collect(_p_wave: int) -> void:
@@ -407,9 +578,12 @@ func continue_endless() -> bool:
 		return false
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
+	_arm_resume_grace()                        # R199-P18：通关屏直迁 PLAYING 与暂停恢复同款
+	                                           # 输入宽限（结算屏期拖动残留不落位）
 	if _victory_settle_pending:
 		Meta.cancel_deferred_settle()
 		_victory_settle_pending = false
+	_auto_restart_left = -1.0                   # R188-idle：无尽续打 → 重开倒计时撤销
 	_endless_mode = true
 	var map_def := MapTable.get_map(current_map_id)
 	hud.endless_depth_base = int(map_def.get("final_wave", 1 << 30))
@@ -498,13 +672,14 @@ func _on_relic_shop_wave(p_wave: int) -> void:
 func _on_wave_cleared_pre_boss_shop(p_wave: int) -> void:
 	# 战前补给（R5.12-P1）：每图 final Boss 波的前一波清空 → 固定商店（不算波表 SHOP
 	# 事件位、不占黑市排程；标题走 shop_ui 战前补给态）。final 波清空走胜利结算，互斥。
+	# R189：开店改走 _on_shop_requested 汇总口（战前补给态经 p_pre_boss 透传）——
+	# 此前直开 shop_ui 漏挂挂机自动出击窗，商店永不离店（D2 验收口径）。
 	if state != GameConst.GameStatus.PLAYING or current_map_id == StringName(""):
 		return
 	var final_wave := int(MapTable.get_map(current_map_id).get("final_wave", 1 << 30))
 	if p_wave + 1 != final_wave:
 		return
-	if change_state(GameConst.GameStatus.LEVEL_UP):
-		shop_ui.open(player, p_wave, true)
+	_on_shop_requested(p_wave, true)
 
 
 func _on_build_details() -> void:
@@ -525,14 +700,24 @@ func _on_build_details() -> void:
 
 func request_resume() -> bool:
 	# 恢复申请：自 PAUSED 恢复时启动 0.5s 输入忽略期（防误触，用户反馈 2026-08-29）。
-	# input_enabled 即时同步（宽限自恢复瞬间生效）——写权仍归 ① 步每帧口径（§1.3 单写者：
-	# 本函数与 _reset_run_state 是仅有的两处帧外写点，均为"申请瞬间"语义）
+	# R199-P18：宽限置位/input_enabled 同步收敛为 _arm_resume_grace（选卡收口/无尽继续
+	# 直迁 PLAYING 同款宽限——本函数不再持有专属置位逻辑）
 	var resumed := change_state(GameConst.GameStatus.PLAYING)
 	if resumed:
-		if resume_grace_left <= 0.0:
-			resume_grace_left = RESUME_GRACE_S
-		player.input_enabled = false
+		_arm_resume_grace()
 	return resumed
+
+
+func _arm_resume_grace() -> void:
+	# R199-P18：进 PLAYING 的 0.5s 输入忽略期申请口（暂停恢复/选卡收口/无尽继续同款）。
+	# 动机：模态覆盖层（选卡/商店/暂停）开启期手指仍会累计拖动（player._unhandled_input
+	# 照常采样 _drag_accum，player.gd:288-309），直迁无宽限时残留位移在收口瞬间全额落位
+	# = 机体瞬移（300px 级，可能被拉进敌群/顶墙角）。input_enabled 即时同步（宽限自进入
+	# 瞬间生效）——写权仍归 ① 步每帧口径（§1.3 单写者：帧外写点族=「申请瞬间」语义，
+	# request_resume/_reset_run_state/本函数；每帧倒计时与放行仍归 _physics_process ①）。
+	if resume_grace_left <= 0.0:
+		resume_grace_left = RESUME_GRACE_S
+	player.input_enabled = false
 
 
 # ── R186 新角色首发（改造者自定义首发 / 回响随机双武装） ────────────
@@ -573,9 +758,10 @@ func _reconcile_starting_weapon(p_char: StringName) -> void:
 
 
 func _grant_random_dual_loadout(p_seed: int = -1) -> void:
-	# R186 回响·伊可（random_dual）：开局随机双武器，9 把（全池排除 W1——基线手枪
-	# weapon_note 空）× 2 次独立有放回抽取（P(同款)=1/9）。局部 RNG：每日局 hash 确定性
-	#（同日同配置含双武器），常规局 randomize；不触碰 card_generator/spawner RNG 流。
+	# R186 回响·伊可（random_dual）：开局随机双武器，池 = 注册表 − W1（基线手枪
+	# weapon_note 空）− 门外武器（R196 武器准入门：echo 双武装与卡池同门——池 =
+	# 门内集 − W1）× 2 次独立有放回抽取。局部 RNG：每日局 hash 确定性（同日同配置
+	# 含双武器），常规局 randomize；不触碰 card_generator/spawner RNG 流。
 	# 序：①角色门 → ②清全部槽（顺带清 boot 期预发手枪）→ ③预吞首遇横幅 + 计图鉴 + 装备
 	# → ④追加【随机武装】行（开场 toast 唯一收口，不直接 emit）。
 	if not bool(CharacterTable.get_character(player.character_id).get("random_dual", false)):
@@ -589,10 +775,13 @@ func _grant_random_dual_loadout(p_seed: int = -1) -> void:
 	var pool: Array[StringName] = []
 	for wid_v: Variant in registry.weapons.keys():
 		var sid := StringName(String(wid_v))
-		if sid != STARTING_WEAPON_ID:
-			pool.append(sid)
+		if sid != STARTING_WEAPON_ID and MechanicGate.weapon_allowed(sid):
+			pool.append(sid)                  # R196：双武装同门（池 = 门内集 − W1）
 	if pool.is_empty():
-		return                                # 注册表空（致命配置已拦）防御
+		# R196 契约变更（原 early-return = echo 角色空手开局）：池空回退双首发手枪。
+		# 门分批上架后池空只可能发生在注册表空（致命配置已拦）/门内除 W1 无货——
+		# 空手是体验缺陷非合理态，回退保武装 + 横幅文案照常收口（画 [W1,W1] 恒抽手枪）。
+		pool = [STARTING_WEAPON_ID, STARTING_WEAPON_ID]
 	var rng := RandomNumberGenerator.new()
 	if p_seed >= 0:
 		rng.seed = hash("dual|%d" % p_seed)   # 每日：同日同双武器（零全局 RNG 副作用）
@@ -623,12 +812,25 @@ func start_run(p_daily_seed: int = -1) -> bool:
 	_endless_mode = false                       # R62：新局非无尽态（continue_endless 置位）
 	_active_daily_seed = p_daily_seed           # R186：每日种子留存（echo 重开重 roll 确定性源）
 	_run_intro_lines.clear()                    # R186：开场横幅收口复位（消费点外残留防御）
+	# R198（R192-low4）：告警双闸以局为界——进局复位（R_alarm/R_rxn 广播闸跨局残留，
+	# pipeline 进程级单实例；restart_run 经本路径天然覆盖）
+	if pipeline != null and pipeline.has_method(&"reset_run_alarms"):
+		pipeline.call(&"reset_run_alarms")
 	if sfx != null:
 		sfx.bgm_roll_combat_variant()          # R79 每局随机战斗套（首播前换流）
 	_combo_count = 0                            # E9：连杀窗口复位
 	_combo_tier_paid = 0                        # G9：连杀档位同步复位
 	_combo_left = 0.0
 	_victory_settle_pending = false
+	merged_overflow_level_ups = 0               # R188-perf：连升合并溢出批随局清
+	if _merged_overflow_draining:
+		_merged_overflow_draining = false         # R189：分帧消化批中断——抑制态强制结清
+		Meta.cancel_persist_defer()
+	_auto_card_left = -1.0                      # R188-idle：挂机挂起窗全清（新局干净起步）
+	_auto_shop_left = -1.0
+	_auto_restart_left = -1.0
+	_auto_card_shown_index = -1
+	_auto_card_retries = 0
 	wave_director.advance_blocked = false        # R62：收尾窗闸复位（防御）
 	wave_director.wave_table = MapTable.load_table(current_map_id, registry)
 	Meta.set_run_map(current_map_id)
@@ -799,7 +1001,16 @@ func restart_run() -> bool:
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
 	RunSave.clear()
+	# R198（R192-low4）：重开同为进局路径——规划原注「restart_run 经 start_run 天然覆盖」
+	# 与实码不符（本函数不经 start_run：change_state + _reset_run_state + start_wave 直达），
+	# 故显式复位告警双闸（start_run/continue_run 同口径）。
+	if pipeline != null and pipeline.has_method(&"reset_run_alarms"):
+		pipeline.call(&"reset_run_alarms")
 	_reset_run_state()
+	# R199-P01（R72 难度附赠复活）：_reset_run_state → player.respawn → set_character 已把
+	# revives_left 复位为养成值——重开须按当前难度补授附赠复活（与 start_run :837 /
+	# continue_run :1780 同口径），否则困难/地狱「再来一局」后复活次数缩水（附赠清零）
+	player.revives_left += GameConst.difficulty_revives(_difficulty)
 	if not _run_intro_lines.is_empty():       # R186：重开消费开场横幅（普通角色数组空不 emit——现版零回归）
 		EventBus.emit_mechanics_intro("\n".join(_run_intro_lines))
 		_run_intro_lines.clear()
@@ -835,7 +1046,15 @@ func set_time_scale(p_value: float, p_source: StringName) -> void:
 
 func _game_delta(p_raw_delta: float) -> float:
 	# raw × time_scale（子系统唯一时间源；顿帧 ≈0 → 全部游戏计时自然冻结，E-11）
-	return p_raw_delta * time_scale
+	# R194 契约变更（P2-10 时序鲁棒）：结果 clamp ≤0.25s——巨 delta（断点/卡顿/后台恢复
+	# 后单帧补账数秒）原口径一次吞掉整段波窗口 → 硬上限直接连环叠波；钳后逐帧消化，
+	# 至多叠 1 波。1/120 正常路径（≈0.0083s）与 time_scale 缩放输出零变化（钳只在
+	# >0.25s 时触发，计时语义其余不动）。
+	var gd := p_raw_delta * time_scale
+	if gd <= GAME_DELTA_CLAMP_S:
+		return gd
+	DebugStats.count(&"game_delta_clamped")
+	return GAME_DELTA_CLAMP_S
 
 
 func _on_player_died() -> void:
@@ -860,16 +1079,43 @@ func _tick_magnetized_shards(p_raw: float) -> void:
 
 
 func _on_level_up(p_new_level: int) -> void:
-	# 升级仲裁（E-16）：GameOver 丢弃 + 计数；PLAYING 进选卡流；LEVEL_UP 中 → 排队（A3 §6.2）
+	# 升级仲裁（E-16）：GameOver 丢弃 + 计数；PLAYING 进选卡流；LEVEL_UP 中 → 排队（A3
+	# §6.2）。R188-perf 档3 连升合并：排队帽 ≤3（深局巨额经验 4.8 万次连升的结构性失控
+	# 修复），溢出批不排队——_on_card_choice 收口时同分布自动抽卡（merged_overflow）
 	match state:
 		GameConst.GameStatus.GAME_OVER:
 			dropped_level_ups += 1
 		GameConst.GameStatus.PLAYING:
 			_open_card_flow(p_new_level)
 		GameConst.GameStatus.LEVEL_UP:
-			pending_level_ups += 1
+			if pending_level_ups < PENDING_LEVEL_UP_CAP:
+				pending_level_ups += 1
+			else:
+				merged_overflow_level_ups += 1
 		_:
 			pass                                  # 其余状态（MENU 等）：升级请求不应存在，忽略
+
+
+func _on_level_up_batch(p_levels: int) -> void:
+	# R189 连升批仲裁：与逐级 _on_level_up 逐位同口径——首级开卡流（PLAYING）/
+	# 其余入排队帽 ≤3 / 帽满入溢出批；GAME_OVER 丢弃计数。单信号入账省去
+	# 巨批逐级 emit 的每级信号税（gain_xp(1e12) 爆发帧 387ms 的结构性主头）。
+	match state:
+		GameConst.GameStatus.GAME_OVER:
+			dropped_level_ups += p_levels
+		GameConst.GameStatus.PLAYING:
+			_open_card_flow(player.level - maxi(p_levels - 1, 0))   # 首级新档位（与逐级首 emit 同参）
+			var rest := maxi(p_levels - 1, 0)
+			var queued := mini(rest, PENDING_LEVEL_UP_CAP)
+			pending_level_ups += queued
+			merged_overflow_level_ups += rest - queued
+		GameConst.GameStatus.LEVEL_UP:
+			var room := maxi(PENDING_LEVEL_UP_CAP - pending_level_ups, 0)
+			var queued := mini(p_levels, room)
+			pending_level_ups += queued
+			merged_overflow_level_ups += p_levels - queued
+		_:
+			pass
 
 
 func _open_card_flow(p_new_level: int) -> void:
@@ -880,13 +1126,17 @@ func _open_card_flow(p_new_level: int) -> void:
 	# 判定留在本流程入口（换一批沿用同一模式——同一次升级内体验一致）
 	_dual_pending = GameConst.difficulty_dual_pick(_difficulty, randf())
 	var deal_n := 6 if _dual_pending else relic_handler.deal_count()
+	# R199-N13：首 roll 消费即焚的保底值留存本类（relic_handler.take_rarity_floor 取后
+	# 即清）——本流程内「换一批」复传同一保底（卡面承诺「本波下一张卡稀有度保底紫+」
+	# 对玩家实际选走的卡成立，重发批次不再洗掉保底）
+	_card_rarity_floor = relic_handler.take_rarity_floor()
 	var context := {
 		"player": player,
 		"wave": wave_director.current_wave,
 		"level": p_new_level,
 		"deal_count": deal_n,
 		"curse_last": relic_handler.curse_requested(),
-		"min_rarity_floor": relic_handler.take_rarity_floor(),
+		"min_rarity_floor": _card_rarity_floor,
 	}
 	current_candidates = card_generator.generate_candidates(context)
 	if relic_handler.consume_reroll():
@@ -894,17 +1144,26 @@ func _open_card_flow(p_new_level: int) -> void:
 		for c in current_candidates:
 			rarities.append(int(c.get("rarity", 0)))
 		var reroll_context := context.duplicate()
-		reroll_context["min_rarity_floor"] = -1       # 保底已折入首 roll 的稀有度序列
+		# R199-N13 口径保持：WORDS_TIDE 自动重随走 fixed_rarities 保序（保底已折入首 roll
+		# 稀有度序列并被 fixed_rarities 逐位固化）——floor 置 -1 勿复施，勿回归
+		reroll_context["min_rarity_floor"] = -1
 		reroll_context["fixed_rarities"] = rarities
 		current_candidates = card_generator.generate_candidates(reroll_context)
 	change_state(GameConst.GameStatus.LEVEL_UP)
 	card_select_ui.open(current_candidates, _dual_pending)
 	card_select_ui.update_reroll(player.reroll_charges, not _free_reroll_used)
+	# R188-idle：选卡展示窗挂起（0.5s 描金预告 → choose 真链；手动/自动共用同一窗口，
+	# 手动先选即撤销——open 在 change_state 之后，类型化时序与既有口径一致）
+	_auto_card_left = AUTO_CARD_WINDOW_S
+	_auto_card_retries = 0
+	_auto_card_shown_index = -1
 
 
 func _on_card_reroll() -> void:
 	# 换一批仲裁（选卡刷新机制，2026-08-31）：本局首次免费（一次性刷新）→ 之后每次消耗
-	# 1 次刷新次数；重新发牌（保底/诅咒等遗物改写不重复消费——只随首 roll）
+	# 1 次刷新次数；重新发牌（诅咒等遗物改写不重复消费；R199-N13：稀有度保底随本流程
+	# 留存复传——首 roll 已自 relic_handler 消费即焚，重发批次带同一保底，不再按无保底
+	# 白板 roll 洗掉「超频核心」承诺）
 	if state != GameConst.GameStatus.LEVEL_UP or card_select_ui == null \
 			or not card_select_ui.is_open or player == null or not is_instance_valid(player):
 		return
@@ -920,11 +1179,15 @@ func _on_card_reroll() -> void:
 		"level": player.level,
 		"deal_count": 6 if _dual_pending else relic_handler.deal_count(),
 		"curse_last": relic_handler.curse_requested(),
-		"min_rarity_floor": -1,                # 保底已折入首 roll 稀有度序列
+		"min_rarity_floor": _card_rarity_floor,   # R199-N13：传首 roll 留存保底（原写死 -1 洗掉保底）
 	}
 	current_candidates = card_generator.generate_candidates(context)
 	card_select_ui.open(current_candidates, _dual_pending)
 	card_select_ui.update_reroll(player.reroll_charges, not _free_reroll_used)
+	# R188-idle：换一批 = 玩家手动操作 → 自动窗重置（重开 0.5s 展示窗，不吞手动节奏）
+	_auto_card_left = AUTO_CARD_WINDOW_S
+	_auto_card_retries = 0
+	_auto_card_shown_index = -1
 	if sfx != null:
 		sfx.play(&"buy")
 
@@ -932,8 +1195,16 @@ func _on_card_reroll() -> void:
 func _on_card_choice(p_cards: Array) -> void:
 	# 选卡应用（CardGenerator）→ 恢复 PLAYING；连升排队继续弹（A3 §6.2）。
 	# R72 成对抉择：p_cards 为同行两张（普通模式单元素数组——协议统一为数组）
+	# R189：落盘/成就摊薄入位——批作用域自 apply_choice 前开启（单张 card_chosen 的
+	# ConfigFile 同步写 ~30-60ms 曾把收口帧顶到 50ms 线上）；无溢出批挂起时函数尾
+	# 立即结清（成就判定+落盘语义与逐张落盘一致，只是合并到选择批收口）
 	if state != GameConst.GameStatus.LEVEL_UP:
 		return
+	Meta.begin_persist_defer()
+	# R188-idle：手动/自动选卡落地 → 挂起窗即时撤销（自动链经 choose 亦走此处）
+	_auto_card_left = -1.0
+	_auto_card_shown_index = -1
+	_auto_card_retries = 0
 	var applied := 0
 	for card_v: Variant in p_cards:
 		if card_v is Dictionary and not (card_v as Dictionary).is_empty():
@@ -945,10 +1216,64 @@ func _on_card_choice(p_cards: Array) -> void:
 	if applied > 0 and player != null and is_instance_valid(player):
 		for k in range(applied):
 			_spawn_level_burst(player.global_position, 0.12 * float(k))
-	change_state(GameConst.GameStatus.PLAYING)
+	# R199-P18：选卡收口直迁 PLAYING 与暂停恢复同款 0.5s 输入宽限——选卡模态期手指
+	# 照常累计拖动（_drag_accum），无宽限时残留位移在收口瞬间全额落位 = 机体瞬移；
+	# 宽限置位后残留拖动被吞（若收口即接续连升排队回 LEVEL_UP，宽限保留待最终收口生效）
+	if change_state(GameConst.GameStatus.PLAYING):
+		_arm_resume_grace()
 	if pending_level_ups > 0:
 		pending_level_ups -= 1
 		_open_card_flow(player.level)
+	elif merged_overflow_level_ups > 0:
+		# R188-perf 档3 连升合并溢出批：同分布自动抽卡收口（不弹卡窗——逐批 roll 后
+		# 按自动选卡同策略评分取首选应用；永不选诅咒不变量由策略侧保证）。
+		# R189 分帧消化：收口帧只挂起批计数，逐帧按时间预算抽卡（_tick_merged_overflow）
+		# ——巨批同帧串行 generate+apply 曾实测单帧 72s（47,954 张 × ~1.5ms）。
+		# 抑制态保持（begin 已入位），批清零由 _tick_merged_overflow end 结清。
+		_merged_overflow_draining = true
+	if not _merged_overflow_draining:
+		Meta.end_persist_defer()
+
+
+func _apply_merged_level_ups(p_count: int) -> void:
+	# R188-perf 档3 连升合并溢出批：同分布自动抽卡（gain_xp 巨额经验 4.8 万张选卡
+	# 冻结的结构性修复——帽外升级不再排队弹窗，逐批 generate_candidates 保持 roll
+	# 分布 + AutoIdleStrategy 评分取首选；零弹窗零逐张人工交互）
+	# R189：同步巨批入口保留（测试/特殊路径）；挂机链路走 _tick_merged_overflow 分帧
+	Meta.begin_persist_defer()
+	for _i in range(maxi(p_count, 0)):
+		_apply_one_merged_level_up()
+	Meta.end_persist_defer()
+
+
+func _apply_one_merged_level_up() -> void:
+	var context := {
+		"player": player,
+		"wave": wave_director.current_wave,
+		"level": player.level,
+		"deal_count": relic_handler.deal_count(),
+		"curse_last": relic_handler.curse_requested(),
+		"min_rarity_floor": relic_handler.take_rarity_floor(),
+	}
+	var candidates := card_generator.generate_candidates(context)
+	var picked := AutoIdleStrategy.pick(candidates, false)
+	if picked < 0 or picked >= candidates.size():
+		picked = 0                              # 空货架兜底（generate 恒有 fallback 卡）
+	card_generator.apply_choice(candidates[picked], player)
+
+
+func _tick_merged_overflow() -> void:
+	# R189 溢出批分帧消化：每帧 ≤6ms 抽卡预算（§4.8-9 单帧 ≤50ms 的子预算），
+	# 批清零时 end_persist_defer 一次结清成就扫描 + 落盘。PLAYING 态逐帧调用。
+	if not _merged_overflow_draining:
+		return
+	var deadline := Time.get_ticks_usec() + int(MERGED_OVERFLOW_BUDGET_MS * 1000.0)
+	while merged_overflow_level_ups > 0 and Time.get_ticks_usec() < deadline:
+		merged_overflow_level_ups -= 1
+		_apply_one_merged_level_up()
+	if merged_overflow_level_ups <= 0:
+		_merged_overflow_draining = false
+		Meta.end_persist_defer()
 
 
 # ── Boot 各段 ─────────────────────────────────────────────────────
@@ -956,6 +1281,34 @@ func _boot_load_data() -> void:
 	# DataRegistry 启动期一次性加载（运行期零 .tres 加载，E-08）
 	registry = DataRegistry.new()
 	registry.load_all(MANIFEST_PATH)
+	# R194 空表闸（bug#4 RC3 静默降级根治）：enemies 空 / 校验报告零条目 = 数据未入包
+	#（导出缺 *.cfg 或 remap 扫描漏）——原口径 DataRegistry 仅 push_warning 静默跳类目，
+	# boot 照常进 MENU、场上恒无怪（不可见故障）。本闸走既有 config_fatal/boot_error 屏
+	# 口径（:137-140 同款：boot_fatal 置位 + _build_boot_error_screen + push_error），
+	# _ready 在本函数返回后查 boot_fatal 中止后续 boot 段 → 拒绝入局。契约变更注释 R194。
+	# R199-C10：闸谓词扩 weapons 同判（判据详见 _boot_check_empty_registry 注）。
+	# R194 修复环：闸体抽为 _boot_check_empty_registry()——registry 由本函数直
+	# DataRegistry.new() 构造，扫描层无拦截点（动态子类覆写不可达且编译不过），
+	# 抽方法供 export_data_cases.gd T4 负态直驱（裸实例 + 真实扫描终态输入）。
+	_boot_check_empty_registry()
+
+
+func _boot_check_empty_registry() -> void:
+	# R194 空表闸本体（语义不变，仅抽方法——判据/置位/诊断计数与抽出前逐行一致）
+	# R199-C10：谓词扩为 enemies/total/weapons 同判（R194 同族防线缺口）——weapons 类目
+	# 单独丢失（导出 include_filter/remap 漏一类目）原口径静默放行：boot 照常进 MENU、
+	# 首发 registry.get_weapon 全 null = 静默空手开局，全程零告警。
+	if registry.enemies.is_empty() or registry.weapons.is_empty() \
+			or int(registry.report.get("total", 0)) == 0:
+		boot_fatal = [
+			"DataRegistry 空注册表：enemies=%d / weapons=%d / report.total=%d / rejected=%d——数据文件缺失（导出 include_filter 或 remap 扫描）" % [
+				registry.enemies.size(), registry.weapons.size(),
+				int(registry.report.get("total", 0)),
+				int(registry.report.get("rejected", 0))],
+		]
+		_build_boot_error_screen()
+		DebugStats.count(&"boot_empty_registry")
+		push_error("[GameLoop] 空注册表，拒绝进入 MENU：%s" % str(boot_fatal))
 
 
 func _boot_build_pools() -> void:
@@ -1107,6 +1460,11 @@ func _boot_build_presentation() -> void:
 	backdrop.name = "CloudBackdrop"
 	_backdrop = backdrop
 	add_child(backdrop)
+	# R195 适配底座：逻辑域边界线（res_logic 四边 1px 低透明描边——expand 后平板横向
+	# 延展区可见反弹沿需界示；z=-10 压云不压弹幕，仅 size_changed 重绘）
+	var outline := PlayfieldOutline.new()
+	outline.name = "PlayfieldOutline"
+	add_child(outline)
 	var particles := ParticleDirector.new()
 	particles.name = "ParticleDirector"
 	add_child(particles)
@@ -1250,8 +1608,86 @@ func _boot_build_presentation() -> void:
 	# 仲裁订阅（E-16：死亡最高优先 / 升级弹卡排队）
 	EventBus.player_died.connect(_on_player_died)
 	EventBus.level_up.connect(_on_level_up)
+	EventBus.level_up_batch.connect(_on_level_up_batch)
 	# 每 5 波 +1 刷新次数（获取来源之二；连接序无 tags/状态依赖，位置不限）
 	EventBus.wave_started.connect(_on_wave_started_reroll_grant)
+	# R194 fx_opacity 单源应用器（fx 方案）：boot 末段初次应用（池已满量预热后）+ 设置页
+	# 拖动实时应用（仿 SfxBank 先例）。应用体三单点：A 元素特效层根 modulate.a 罩全层
+	# （ElementalFxLayer 全部池件为直接子嗣，子件渐隐与根 alpha 引擎级相乘）；B 粒子池
+	# 子发射器 modulate.a（:1375 同款遍历——池满量预热、懒增长不可达无需钩子）；
+	# C DamagePopup.fx_opacity static 折乘（helper 在 damage_popup.gd，本侧只写值）。
+	# 只乘 alpha 永不写 visible（四层爆 visible==4 锁）；枪口星闪 TINT/色差链/弹体拖尾/
+	# DeathPop/HUD 白闪/CloudBackdrop 等排除清单不接入（fx 方案排除清单）。
+	_apply_fx_opacity()
+	Meta.settings_changed.connect(_on_fx_opacity_setting_changed)
+	# R195 适配底座：aspect=expand 超限钳制挂接（表现层窗口设置读写，零战斗依赖）
+	_bind_stretch_aspect_clamp()
+
+
+func _bind_stretch_aspect_clamp() -> void:
+	# R195：boot 挂接 + 初次评估。项目设置 aspect=keep（单行整体回退位）→ 不 armed，
+	# 钳制函数全程零触发=现状黑边；aspect=expand → armed（含 boot 时已超限窗口的初次
+	# 评估；headless 默认窗 ratio≈1.78 → 不变）。
+	# ★ 引擎语义（4.3 headless 探针实证，矩阵套件驱动协议须知情）：
+	# · aspect=EXPAND 态：窗口每次 resize 均发 Window.size_changed → 本钳制正常联动；
+	# · aspect=KEEP 态：画布钉在 720×1280 基准，窗口 resize **不发** size_changed
+	#   （待发信号在切回 EXPAND 时合并冲刷）——故 KEEP 回落后恢复评估走两条路：
+	#   真机 OS resize 事件（NOTIFICATION_WM_SIZE_CHANGED 通知钩子）或套件直驱
+	#   公开函数 apply_stretch_aspect_clamp()（幂等，无副作用可重入）。
+	var win := get_window()
+	if win == null:
+		return
+	_stretch_clamp_armed = win.content_scale_aspect == Window.CONTENT_SCALE_ASPECT_EXPAND
+	if not _stretch_clamp_armed:
+		return
+	apply_stretch_aspect_clamp()
+	if not win.size_changed.is_connected(apply_stretch_aspect_clamp):
+		win.size_changed.connect(apply_stretch_aspect_clamp)
+
+
+func _notification(p_what: int) -> void:
+	# R195：真机 KEEP 回落态下的 resize 重评估口（headless 脚本改 win.size 不走
+	# DisplayServer 事件、本通知不触发=矩阵套件须直驱公开函数；真机折叠/分屏/拖窗
+	# 走 OS 事件可达）。幂等纯评估，零分配
+	if p_what == NOTIFICATION_WM_SIZE_CHANGED:
+		apply_stretch_aspect_clamp()
+
+
+func apply_stretch_aspect_clamp() -> void:
+	# R195：钳制体（公开=矩阵套件可直驱；运行期 KEEP↔EXPAND 双向切换可逆——超限回落
+	# KEEP 后，比例恢复正常即回 EXPAND）。纯枚举比较+一次浮点除，事件频率非每帧路径
+	#（R188 纪律：零分配零轮询）；幂等（同值重写引擎不重发 size_changed，探针实证收敛 2 次）
+	if not _stretch_clamp_armed:
+		return
+	var win := get_window()
+	if win == null:
+		return
+	var w := float(win.size.x)
+	var ratio := (float(win.size.y) / w) if w > 0.0 else 0.0
+	win.content_scale_aspect = (Window.CONTENT_SCALE_ASPECT_KEEP
+		if ratio > STRETCH_ASPECT_RATIO_MAX else Window.CONTENT_SCALE_ASPECT_EXPAND)
+
+
+func _apply_fx_opacity() -> void:
+	# R194：特效透明度应用体（读口 Meta.settings；归一/钳制真源在 Meta 写口——本侧
+	# 同域 clampf 仅防串档，读口缺键回默认 1.0 = 恒等）
+	var raw: Variant = Meta.settings("fx_opacity")
+	var f := 1.0
+	if raw != null:
+		f = clampf(float(raw), 0.3, 1.0)
+	if elemental_fx != null:
+		elemental_fx.modulate.a = f             # A) 层根罩全层
+	for emitter in (pools[&"particle"] as ParticlePool).get_children():
+		var gp := emitter as GPUParticles2D
+		if gp != null:
+			gp.modulate.a = f                   # B) 粒子池子发射器（池件为场景根直挂，无脚本侧 modulate 写点）
+	DamagePopup.fx_opacity = f                  # C) 跳字折乘（tick/_reset_state 消费，防池复用首帧闪帧）
+
+
+func _on_fx_opacity_setting_changed(p_key: String) -> void:
+	# R194：设置页「特效透明度」写口 → 实时应用（仅本键短路，其余键零成本）
+	if p_key == "fx_opacity":
+		_apply_fx_opacity()
 
 
 # ── 帧序支撑 ──────────────────────────────────────────────────────
@@ -1302,6 +1738,13 @@ func serialize_run() -> Dictionary:
 		if w.data != null:
 			wid = StringName(String(w.data.id))
 		weapons.append({"id": String(wid), "level": int(w.level), "traits": traits})
+	# R198（二aw-1）：遗物随档（修复「继续局丢遗物」——存档 17 键原无 relics，继续后
+	# owned 空白）。纯基本类型容器（String id），RunSave ConfigFile 透传无擦写。
+	var relics: Array[Dictionary] = []
+	if relic_handler != null and is_instance_valid(relic_handler):
+		for r in relic_handler.owned:
+			if r != null:
+				relics.append({"id": String(r.id)})
 	return {
 		"map_id": String(current_map_id),
 		"difficulty": _difficulty,               # R72：继续局保持难度档
@@ -1321,6 +1764,7 @@ func serialize_run() -> Dictionary:
 		"unlocked_slots": player.unlocked_slots,
 		"slot_bonus": player.slot_bonus,          # R185 金卡解锁计数落档（不再参与有效帽）
 		"weapons": weapons,
+		"relics": relics,                          # R198（二aw-1）：遗物 id 集随档
 	}
 
 
@@ -1340,6 +1784,9 @@ func continue_run() -> bool:
 	_difficulty = clampi(int(data.get("difficulty", 0)), 0, 2)   # R72 继续局保持难度档
 	if not change_state(GameConst.GameStatus.PLAYING):
 		return false
+	# R198（R192-low4）：继续局进局路径同样复位告警双闸（与 start_run 同口径）
+	if pipeline != null and pipeline.has_method(&"reset_run_alarms"):
+		pipeline.call(&"reset_run_alarms")
 	wave_director.wave_table = MapTable.load_table(current_map_id, registry)
 	spawner.difficulty = _difficulty
 	wave_director.difficulty = _difficulty       # R72 继续局保持织入口径
@@ -1420,6 +1867,21 @@ func _restore_run_state(p_data: Dictionary) -> void:
 					continue
 				for i in range(maxi(int(tr_entry.get("layers", 1)), 1)):
 					weapon.attach_trait(tdata)  # 层数恢复（满层质变在末次挂载自然触发）
+	# R198（二aw-1）：遗物恢复（修复「继续局丢遗物」）——activate 幂等（has_relic 拒重；
+	# 时序：进局路径 _reset_run_state 已清 owned〔boot setup / restart / quit_to_menu〕，
+	# 此处必在其后=安全）。旧档无 relics 键 → get 默认空表，零分支兼容。
+	# 位置注记（R198 实现裁定）：激活放「武器重建后、数值覆写前」——REL_EF_GLASS 的一次性
+	# max_hp −25% 代价在存档时刻已折入快照（存档值即已减 25% 的终值），覆写在后直接还原
+	# 快照值；若按「覆写完成后」激活会二次扣 25%（恢复语义=还原存档时刻状态）。
+	# REL_EF_ATTACK_CDR 常驻位 _apply_passive 自拉满每击谐振预算存款（relic_handler.gd
+	# _attack_cdr_bank_cap），REL_EF_SKILL_HASTE 的 skill_cd_relic_mult 不被 set_character
+	# 触碰（player.gd set_character 只复位 comp_rof_mult）——两常驻位先于此处生效均正确。
+	var relics: Array = p_data.get("relics", [])
+	for relic_v: Variant in relics:
+		var r_entry: Dictionary = relic_v if relic_v is Dictionary else {}
+		var rid := StringName(String(r_entry.get("id", "")))
+		if not rid.is_empty() and relic_handler != null:
+			relic_handler.activate(rid)
 	# 数值覆写（后置：set_character / 词条挂载的 max_hp / gold / 刷新次数均被快照覆盖）
 	player.set_character(StringName(String(p_data.get("character", "sentinel"))))
 	player.level = maxi(int(p_data.get("level", 1)), 1)
@@ -1433,6 +1895,15 @@ func _restore_run_state(p_data: Dictionary) -> void:
 	player.invuln_left = RESUME_GRACE_S          # 继续局保护帧（重开同口径）
 	player.input_enabled = true
 	pending_level_ups = 0
+	merged_overflow_level_ups = 0               # R188-perf：连升合并溢出批随续档清
+	if _merged_overflow_draining:
+		_merged_overflow_draining = false         # R189：分帧消化批中断——抑制态强制结清
+		Meta.cancel_persist_defer()
+	_auto_card_left = -1.0                      # R188-idle：挂机挂起窗全清
+	_auto_shop_left = -1.0
+	_auto_restart_left = -1.0
+	_auto_card_shown_index = -1
+	_auto_card_retries = 0
 	_separation_left = SEPARATION_INTERVAL
 	resume_grace_left = 0.0
 	set_time_scale(1.0, &"continue")
@@ -1541,7 +2012,22 @@ func _on_enemy_killed_drop_xp(p_enemy: Node2D) -> void:
 	if not (p_enemy is Enemy):
 		return                                  # 裸实体探针/非敌事件防御
 	var value := (p_enemy as Enemy).exp_value * relic_handler.xp_mult() * _early_xp_mult()
-	_spawn_xp_shard(p_enemy.global_position, value)
+	# R196 分档基线：exp_base × exp_inflation_per_wave^(w-1)（通胀真源 balance_tables.gd，
+	# 与敌侧 enemy.gd 同式；wave_director 缺失 → w=1 → 基线=exp_base。逐击一次的掉落事件
+	# 路径，非每帧——R188 红线不涉）。面值/基线比 → 白/绿/金/七彩（阈值单源
+	# XpShard.XP_TIER_THRESHOLDS，色源 PopPalette.XP_TIER_COLORS）
+	var bal := GameConfig.balance
+	var inflation := 1.085 if bal == null else bal.exp_inflation_per_wave
+	var w := maxi(wave_director.current_wave if wave_director != null else 1, 1)
+	# data 池归还清零（enemy.gd _reset_state 置 null）后到账的迟到击杀事件（测试 stub
+	# 重复 emit / 池化竞态）：基线降级回 exp_value 面值兜底，不崩——本行必须先于
+	# 连杀计数，异常不得中断后续 _combo_count += 1（E9/G9 计数依赖）
+	var baseline: float
+	if (p_enemy as Enemy).data != null:
+		baseline = (p_enemy as Enemy).data.exp_base * pow(inflation, float(maxi(w - 1, 0)))
+	else:
+		baseline = (p_enemy as Enemy).exp_value
+	_spawn_xp_shard(p_enemy.global_position, value, baseline)
 	# R18 残留根修：Boss/精英死亡 → 全场碎片（含刚爆出的大珠）立即磁吸——奖励即刻
 	# 飞向玩家，不再依赖 4.5s/2s 超时回归（「大怪碎片残留不消失」终解）
 	if (p_enemy as Enemy).is_boss() or (p_enemy as Enemy).is_elite():
@@ -1707,17 +2193,19 @@ func _show_combo_toast() -> void:
 	tw.tween_property(_combo_label, "modulate:a", 0.0, 0.30)
 
 
-func _spawn_xp_shard(p_pos: Vector2, p_value: float) -> void:
+func _spawn_xp_shard(p_pos: Vector2, p_value: float, p_baseline: float = 0.0) -> void:
+	# R196：p_baseline 可选参（旧调用零破坏——测试/降级路径缺省 0 → 恒白档）
 	if p_value <= 0.0:
 		return
 	var shard := (pools[&"xp"] as XPPool).acquire()
 	if shard == null:
-		# 满池合并为大面值碎片（数值守恒，架构 §5.1 XPPool 行）
+		# 满池合并为大面值碎片（数值守恒，架构 §5.1 XPPool 行）；基线同传
+		#（merge_value 内取 max 重分档）
 		if not active_shards.is_empty():
-			active_shards[0].merge_value(p_value)
+			active_shards[0].merge_value(p_value, p_baseline)
 		return
 	shard.position = p_pos
-	shard.activate(p_value)
+	shard.activate(p_value, p_baseline)
 	active_shards.append(shard)
 
 
@@ -1819,8 +2307,18 @@ func _reset_run_state() -> void:
 	active_shards.clear()
 	_separation_left = SEPARATION_INTERVAL
 	pending_level_ups = 0
+	merged_overflow_level_ups = 0               # R188-perf：连升合并溢出批随局清
+	if _merged_overflow_draining:
+		_merged_overflow_draining = false         # R189：分帧消化批中断——抑制态强制结清
+		Meta.cancel_persist_defer()
+	_auto_card_left = -1.0                      # R188-idle：挂机挂起窗全清（重开干净起步）
+	_auto_shop_left = -1.0
+	_auto_restart_left = -1.0
+	_auto_card_shown_index = -1
+	_auto_card_retries = 0
 	resume_grace_left = 0.0
 	_free_reroll_used = false                  # 刷新机制：本局首次免费位复位
+	_card_rarity_floor = -1                    # R199-N13：选卡流保底留存随局清（防跨局残留）
 	_endless_mode = false                       # R62：无尽态/延迟结算位/驱动器闸 一并复位
 	_victory_settle_pending = false
 	wave_director.advance_blocked = false

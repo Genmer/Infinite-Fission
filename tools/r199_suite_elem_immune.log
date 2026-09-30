@@ -1,0 +1,37 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 元素免疫/配色自测 ══════════
+── 火免疫（E4 爆虫） ──
+PASS | E4：FIR 免疫标注（数据）
+PASS | E4：不可点燃（immune_mask IMMUNE_BURN）
+PASS | 元素免疫：火伤打火虫 final = 0（「没用」）
+PASS | 元素免疫：免疫命中 popup_style = IMMUNE
+PASS | 物理保底：KIN 打火虫正常结算（>0 且非免疫）
+PASS | 非免疫元素：冰打火虫正常结算
+── 冰免疫（E9 冰霜仔） ──
+PASS | E9：ICE 免疫标注（数据）
+PASS | E9：不可冻结/寒滞（immune_mask 3）
+PASS | 元素免疫：冰伤打冰怪 final = 0
+PASS | 附着拒绝：免疫怪冰槽不涨
+── 免疫投放扩展（R41：主题匹配三只） ──
+PASS | E2：LTG 免疫标注
+PASS | E2：桥接 immune_mask IMMUNE_SHOCK
+PASS | E2：FIR 不免疫（单元素位）
+PASS | E24：LTG 免疫标注
+PASS | E11：ICE 免疫标注
+PASS | E11：桥接 immune_mask IMMUNE_CHILL|FREEZE
+PASS | 附着拒绝：水免疫怪（位 16）HYD 槽不涨
+── 跳字元素配色（R192 七色） ──
+PASS | 跳字配色：FIR 橙 / ICE 冰蓝 / LTG 紫 / HYD 水蓝 / ANE 翠 / GEO 金 / DEN 草绿 / KIN 白
+PASS | 跳字配色：免疫命中显示「免疫」灰蓝
+── 反应专属特效 ──
+PASS | 前置：FX 层就绪
+PASS | 过载：专属紫橙双环落场
+PASS | 超导：专属冰紫雾环落场（本段独立计数 2）
+PASS | 反应环：扩散淡出自清（0 残留）
+────────────────────────────────────────
+汇总：PASS 23 / FAIL 0（共 23 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

@@ -157,7 +157,7 @@ events = []
 [sub_resource type="Resource" id="WaveEntryData_w30boss"]
 script = ExtResource("2_wed")
 index = 30
-composition = [{"enemy_id": &"E20_swamp_hydra", "count": 1}]
+composition = [{"enemy_id": &"E20_swamp_hydra", "count": 1, "tags": 6}]
 tp_override = 6.0
 window = 26.0
 events = [&"BOSS"]
@@ -241,47 +241,53 @@ tp_override = 97.1
 window = 27.6
 events = []
 
+[sub_resource type="Resource" id="WaveEntryData_e30"]
+script = ExtResource("2_wed")
+index = 31
+composition = [{"enemy_id": &"E1_grunt", "count": 39}, {"enemy_id": &"E12_bogslime", "count": 9}, {"enemy_id": &"E15_bogleaper", "count": 7}, {"enemy_id": &"E13_bogspitter", "count": 5}, {"enemy_id": &"E14_boguard", "count": 4}, {"enemy_id": &"E16_marshmaw", "count": 2}, {"enemy_id": &"E12_bogslime", "count": 6, "tags": 1}]
+tp_override = 98.4
+window = 27.8
+events = []
+
 [sub_resource type="Resource" id="WaveEntryData_e31"]
 script = ExtResource("2_wed")
 index = 32
-composition = [{"enemy_id": &"E1_grunt", "count": 34}, {"enemy_id": &"E12_bogslime", "count": 8}, {"enemy_id": &"E15_bogleaper", "count": 6}, {"enemy_id": &"E13_bogspitter", "count": 4}, {"enemy_id": &"E14_boguard", "count": 3}, {"enemy_id": &"E12_bogslime", "count": 3, "tags": 1}]
-tp_override = 73.0
-window = 26.8
+composition = [{"enemy_id": &"E1_grunt", "count": 40}, {"enemy_id": &"E12_bogslime", "count": 10}, {"enemy_id": &"E15_bogleaper", "count": 7}, {"enemy_id": &"E13_bogspitter", "count": 5}, {"enemy_id": &"E14_boguard", "count": 4}, {"enemy_id": &"E16_marshmaw", "count": 2}, {"enemy_id": &"E12_bogslime", "count": 6, "tags": 1}]
+tp_override = 101.7
+window = 28.0
 events = []
+
 [sub_resource type="Resource" id="WaveEntryData_e32"]
 script = ExtResource("2_wed")
 index = 33
-composition = [{"enemy_id": &"E6_boss2", "count": 1}]
-tp_override = 1.0
-window = 28.0
-events = [&"BOSS"]
+composition = [{"enemy_id": &"E1_grunt", "count": 41}, {"enemy_id": &"E12_bogslime", "count": 10}, {"enemy_id": &"E15_bogleaper", "count": 8}, {"enemy_id": &"E13_bogspitter", "count": 6}, {"enemy_id": &"E14_boguard", "count": 4}, {"enemy_id": &"E16_marshmaw", "count": 2}, {"enemy_id": &"E12_bogslime", "count": 7, "tags": 1}]
+tp_override = 104.9
+window = 28.2
+events = []
+
 [sub_resource type="Resource" id="WaveEntryData_e33"]
 script = ExtResource("2_wed")
 index = 34
-composition = [{"enemy_id": &"E1_grunt", "count": 35}, {"enemy_id": &"E12_bogslime", "count": 8}, {"enemy_id": &"E15_bogleaper", "count": 6}, {"enemy_id": &"E13_bogspitter", "count": 5}, {"enemy_id": &"E14_boguard", "count": 3}, {"enemy_id": &"E16_marshmaw", "count": 1}, {"enemy_id": &"E12_bogslime", "count": 3, "tags": 1}]
-tp_override = 80.7
-window = 27.0
+composition = [{"enemy_id": &"E1_grunt", "count": 42}, {"enemy_id": &"E12_bogslime", "count": 10}, {"enemy_id": &"E15_bogleaper", "count": 8}, {"enemy_id": &"E13_bogspitter", "count": 6}, {"enemy_id": &"E14_boguard", "count": 5}, {"enemy_id": &"E16_marshmaw", "count": 2}, {"enemy_id": &"E12_bogslime", "count": 7, "tags": 1}]
+tp_override = 108.2
+window = 28.4
 events = []
+
 [sub_resource type="Resource" id="WaveEntryData_e34"]
 script = ExtResource("2_wed")
 index = 35
-composition = [{"enemy_id": &"E1_grunt", "count": 36}, {"enemy_id": &"E12_bogslime", "count": 8}, {"enemy_id": &"E15_bogleaper", "count": 6}, {"enemy_id": &"E13_bogspitter", "count": 5}, {"enemy_id": &"E14_boguard", "count": 4}, {"enemy_id": &"E12_bogslime", "count": 4, "tags": 1}]
-tp_override = 81.3
-window = 27.2
-events = []
+composition = [{"enemy_id": &"E6_boss2", "count": 1}]
+tp_override = 1.0
+window = 28.6
+events = [&"BOSS"]
+
 [sub_resource type="Resource" id="WaveEntryData_e35"]
 script = ExtResource("2_wed")
 index = 36
-composition = [{"enemy_id": &"E1_grunt", "count": 37}, {"enemy_id": &"E12_bogslime", "count": 9}, {"enemy_id": &"E15_bogleaper", "count": 7}, {"enemy_id": &"E13_bogspitter", "count": 5}, {"enemy_id": &"E14_boguard", "count": 4}, {"enemy_id": &"E16_marshmaw", "count": 1}, {"enemy_id": &"E12_bogslime", "count": 4, "tags": 1}]
-tp_override = 90.0
-window = 27.4
-events = [][sub_resource type="Resource" id="WaveEntryData_e30"]
-script = ExtResource("2_wed")
-index = 31
-composition = [{"enemy_id": &"E20_swamp_hydra", "count": 1, "tags": 6}]
-tp_override = 1.0
-window = 30.0
-events = [&"BOSS"]
+composition = [{"enemy_id": &"E1_grunt", "count": 43}, {"enemy_id": &"E12_bogslime", "count": 11}, {"enemy_id": &"E15_bogleaper", "count": 8}, {"enemy_id": &"E13_bogspitter", "count": 6}, {"enemy_id": &"E14_boguard", "count": 5}, {"enemy_id": &"E16_marshmaw", "count": 3}, {"enemy_id": &"E12_bogslime", "count": 8, "tags": 1}]
+tp_override = 111.6
+window = 28.8
+events = []
 
 
 [resource]

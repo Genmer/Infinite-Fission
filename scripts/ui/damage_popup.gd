@@ -10,7 +10,11 @@
 # R186 反应字体：style==REACTION 专属分支——1.8× 大字（54px）+ 加粗描边（12px）+ 每反应
 # 描边+填充双色（真主题双通道，替代 self_modulate 单乘色）+ 反应专属字型；element 在反应
 # 通道承载 ReactionType 中性 ID（elemental_system.gd:213 约定），先判 style 再查
-# REACTION_LOOKS（与 ELEMENT_COLORS 同值域 0/1/2，防错套）。
+# REACTION_LOOKS（与元素色同值域中性 ID，防错套）。
+# R192 反应矩阵/元素矩阵表现扩容：跳字文案纯函数化——dmg 型 = 反应名+合并值直读、stat 型 =
+# 反应名+rxn_stat 短文案段（超导-30%/激化+25%/结晶-15%/冻结1.2s；空串只显名，数值由
+# manager 起字读表格式化、禁进 const 文案表）；REACTION_LOOKS 扩 20 反应（名称单源
+# GameConst.REACTION_NAMES）；元素配色单源 PopPalette.ELEMENT_COLORS（本地副本已删）。
 class_name DamagePopup
 extends Node2D
 
@@ -20,6 +24,9 @@ var tier: int = 0                             # 量级档 0 白/1 蓝/2 紫/3 �
 var target_uid: int = 0                       # 合并窗口判据（同目标）
 var is_active: bool = false                   # 池外活跃标记
 var text_mode: bool = false                   # §5 契约：REACTION 纯文字桶标记（超导标签；manager 分桶/清退判据）
+var rxn_stat: String = ""                     # R192 stat 型反应短文案段（-30%/+25%/1.2s…——manager 起字读
+                                              # reaction_table 一次性格式化后前置入；空串 = 只显反应名。
+                                              # 池复用经 _reset_state/_clear_reaction_overrides 清空防串文案）
 
 var _label: Label = null
 var _reaction_styled: bool = false            # §5 契约：反应观感装配标志（_apply/_clear 成对翻转）
@@ -36,6 +43,7 @@ const FONT_SIZE_CRIT := 40                    # 暴击加大
 const OUTLINE_PX := 8                         # 藏青描边（贴纸感）
 const FONT_SIZE_REACTION := 54                # R186 反应大字 1.8×（roundi(30×1.8)；不吃量级档乘区）
 const OUTLINE_PX_REACTION := 12               # R186 加粗描边（贴近 8/30 贴纸比例的等比放大）
+const CODEX_PREVIEW_SCALE := 0.5              # R192 图鉴反应预览缩放（54px 样张 → 140×78 格内 0.5×；menu_screen 预览 Label 引用）
 
 # 样式配色（方向 C 调色板单源；NORMAL 白底描边 = 亮底可读贴纸字）
 const STYLE_COLORS := {
@@ -48,39 +56,203 @@ const STYLE_COLORS := {
 	GameConst.PopupStyle.IMMUNE: Color(0.62, 0.68, 0.8),   # R22 免疫：灰蓝（打不动读感）
 }
 
-# R22 元素配色（用户点名「反馈数字改为对应颜色」）：KIN 白 / FIR 橙 / ICE 冰蓝 / LTG 紫。
+# R22 元素配色（用户点名「反馈数字改为对应颜色」）：R192 起单源 PopPalette.ELEMENT_COLORS
+# （键 = Element 序 int 七键，本实体不再持本地副本）——图鉴配方环 / 死亡迸色 / 跳字同源。
 # 元素色覆盖量级色；量级信息保留在字号乘区与档音/档震（颜色读元素、大小读量级）
-const ELEMENT_COLORS := {
-	GameConst.Element.KIN: Color(1.0, 1.0, 1.0),
-	GameConst.Element.FIR: Color(1.0, 0.6, 0.25),
-	GameConst.Element.ICE: Color(0.62, 0.85, 1.0),
-	GameConst.Element.LTG: PopPalette.SHOCK,
-}
 
-# R186 反应字体规格表：element（反应通道 = ReactionType 中性 ID）→ 双色 + 字型 + 文字。
-# 仅 style==REACTION 分支查此表（与 ELEMENT_COLORS 同值域 0/1/2——先判 style 再索引，
-# 防错套）；色值单源 PopPalette.RXN_*，超导无 DamageResult 通道 → text 作纯文字标签
-# （复用 IMMUNE 纯文字先例：merged_value≤0.5 时显示）。
+# R186/R192 反应字体规格表：element（反应通道 = ReactionType 中性 ID）→ 名称 + 双色 + 字型 + 文案型。
+# 仅 style==REACTION 分支查此表（与元素色同值域中性 ID——先判 style 再索引，防错套）；
+# 色值单源 PopPalette.RXN_*（R192 扩 20 反应），名称单源 GameConst.REACTION_NAMES（UI 不手抄）。
+# fmt（R192 跳字纯函数口径）：dmg = 名+合并值直读（碎裂1284）；pct/stat = 名+rxn_stat 短文案段
+# （超导-30%=pct 百分比统计段 / 激化+25%/结晶-15%/冻结1.2s=stat；rxn_stat 空串 = 只显名——
+# 数值一律 manager 起字时读 reaction_table 一次性格式化，禁进 const 文案表；结算分支只认
+# dmg，pct 与 stat 同走「名+rxn_stat」臂）。variant 复用 0/1/2 三字型按族分配：
+# 0 直立重击（伤害转化直读）/ 1 斜体爆发·连锁（过载/感电/扩散族）/ 2 斜体减益·标签（超导/激化/冻结/燃烧/结晶族）。
 const REACTION_LOOKS: Dictionary = {
 	GameConst.ReactionType.RXN_FIR_ICE: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_FIR_ICE],
 		"fill": PopPalette.RXN_FILL_SHATTER,
 		"outline": PopPalette.RXN_LINE_SHATTER,
 		"variant": 0,
-		"text": "",
+		"fmt": "dmg",
 	},
 	GameConst.ReactionType.RXN_FIR_LTG: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_FIR_LTG],
 		"fill": PopPalette.RXN_FILL_OVERLOAD,
 		"outline": PopPalette.RXN_LINE_OVERLOAD,
 		"variant": 1,
-		"text": "",
+		"fmt": "dmg",
 	},
 	GameConst.ReactionType.RXN_ICE_LTG: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_ICE_LTG],
 		"fill": PopPalette.RXN_FILL_SUPER,
 		"outline": PopPalette.RXN_LINE_SUPER,
 		"variant": 2,
-		"text": "超导",
+		"fmt": "pct",                            # 超导百分比统计段（-30% 读表 resist_delta×100）
+	},
+	GameConst.ReactionType.RXN_FIR_HYD: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_FIR_HYD],
+		"fill": PopPalette.RXN_FILL_FIR_HYD,
+		"outline": PopPalette.RXN_LINE_FIR_HYD,
+		"variant": 0,
+		"fmt": "dmg",
+	},
+	GameConst.ReactionType.RXN_HYD_DEN: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_HYD_DEN],
+		"fill": PopPalette.RXN_FILL_HYD_DEN,
+		"outline": PopPalette.RXN_LINE_HYD_DEN,
+		"variant": 0,
+		"fmt": "dmg",
+	},
+	GameConst.ReactionType.RXN_FIR_ANE: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_FIR_ANE],
+		"fill": PopPalette.RXN_FILL_FIR_ANE,
+		"outline": PopPalette.RXN_LINE_FIR_ANE,
+		"variant": 1,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_ICE_ANE: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_ICE_ANE],
+		"fill": PopPalette.RXN_FILL_ICE_ANE,
+		"outline": PopPalette.RXN_LINE_ICE_ANE,
+		"variant": 1,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_LTG_ANE: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_LTG_ANE],
+		"fill": PopPalette.RXN_FILL_LTG_ANE,
+		"outline": PopPalette.RXN_LINE_LTG_ANE,
+		"variant": 1,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_HYD_ANE: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_HYD_ANE],
+		"fill": PopPalette.RXN_FILL_HYD_ANE,
+		"outline": PopPalette.RXN_LINE_HYD_ANE,
+		"variant": 1,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_ANE_DEN: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_ANE_DEN],
+		"fill": PopPalette.RXN_FILL_ANE_DEN,
+		"outline": PopPalette.RXN_LINE_ANE_DEN,
+		"variant": 1,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_ICE_HYD: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_ICE_HYD],
+		"fill": PopPalette.RXN_FILL_ICE_HYD,
+		"outline": PopPalette.RXN_LINE_ICE_HYD,
+		"variant": 2,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_LTG_HYD: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_LTG_HYD],
+		"fill": PopPalette.RXN_FILL_LTG_HYD,
+		"outline": PopPalette.RXN_LINE_LTG_HYD,
+		"variant": 1,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_FIR_DEN: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_FIR_DEN],
+		"fill": PopPalette.RXN_FILL_FIR_DEN,
+		"outline": PopPalette.RXN_LINE_FIR_DEN,
+		"variant": 2,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_LTG_DEN: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_LTG_DEN],
+		"fill": PopPalette.RXN_FILL_LTG_DEN,
+		"outline": PopPalette.RXN_LINE_LTG_DEN,
+		"variant": 2,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_FIR_GEO: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_FIR_GEO],
+		"fill": PopPalette.RXN_FILL_FIR_GEO,
+		"outline": PopPalette.RXN_LINE_FIR_GEO,
+		"variant": 2,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_ICE_GEO: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_ICE_GEO],
+		"fill": PopPalette.RXN_FILL_ICE_GEO,
+		"outline": PopPalette.RXN_LINE_ICE_GEO,
+		"variant": 2,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_LTG_GEO: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_LTG_GEO],
+		"fill": PopPalette.RXN_FILL_LTG_GEO,
+		"outline": PopPalette.RXN_LINE_LTG_GEO,
+		"variant": 2,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_HYD_GEO: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_HYD_GEO],
+		"fill": PopPalette.RXN_FILL_HYD_GEO,
+		"outline": PopPalette.RXN_LINE_HYD_GEO,
+		"variant": 2,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_DEN_GEO: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_DEN_GEO],
+		"fill": PopPalette.RXN_FILL_DEN_GEO,
+		"outline": PopPalette.RXN_LINE_DEN_GEO,
+		"variant": 2,
+		"fmt": "stat",
+	},
+	GameConst.ReactionType.RXN_ANE_GEO: {
+		"name": GameConst.REACTION_NAMES[GameConst.ReactionType.RXN_ANE_GEO],
+		"fill": PopPalette.RXN_FILL_ANE_GEO,
+		"outline": PopPalette.RXN_LINE_ANE_GEO,
+		"variant": 2,
+		"fmt": "stat",
 	},
 }
+
+
+# R192-low1（R198）：stat 统计段读表缺键/枚举错位告警会话一次闸（rxn 键 → true）——
+# 静态函数域的「_empty_comp_errored」先例（wave_director.gd:43 同族口径）；可观测供测试断言。
+static var _missing_stat_rule_warned: Dictionary = {}
+
+
+static func reaction_stat_text(p_rxn: int) -> String:
+	# R192 收口2：标签统计段格式化器自 popup_manager 上提为静态单源——跳字起字（manager）
+	# 与图鉴预览（menu_screen「反应名+数字」组合）共用本函数，防两处文案漂移。
+	# 读 reaction_table 一次性格式化（数值真源=表，禁写进 const 文案）：
+	# 冻结「1.2s」/ 超导「-30%」/ 结晶「-15%」/ 激化「+25%」/ 燃烧「5层」；
+	# 感电/扩散族无统计段 → 空串（只显名——链伤/扩散一击走自身伤害通道另跳数字）。
+	# R192-low1（R198）：表缺键/枚举错位（此前静默落 {} → 恒空串不可见）→ push_warning
+	# 会话一次（rxn 键闸）后仍返回空串；「表键在位而规则为空 {}」的合法无统计段
+	# （感电 RXN_LTG_HYD 等）保持静默零告警——:220 注释口径，禁误报。
+	var rule: Dictionary = {}
+	if GameConfig.balance != null:
+		var key_v: Variant = GameConst.ReactionType.find_key(p_rxn)
+		if key_v == null:
+			# 枚举错位（rxn 不在 ReactionType 值域——表键无从谈起）
+			if not _missing_stat_rule_warned.has(p_rxn):
+				_missing_stat_rule_warned[p_rxn] = true
+				push_warning("[DamagePopup] reaction_stat_text 枚举错位 rxn=%d（无表键）——返回空串（R192-low1）" % p_rxn)
+		else:
+			var key := String(key_v)
+			if not GameConfig.balance.reaction_table.has(key):
+				# 表缺键（键集双射被破坏——DataValidator 闸外的运行时残缺）
+				if not _missing_stat_rule_warned.has(key):
+					_missing_stat_rule_warned[key] = true
+					push_warning("[DamagePopup] reaction_stat_text 表缺键 %s——返回空串（R192-low1）" % key)
+			rule = GameConfig.balance.reaction_table.get(key, {})
+	if rule.has("freeze_dur"):
+		return "%ss" % String.num(float(rule["freeze_dur"]), 1)
+	if rule.has("resist_delta"):
+		return "%d%%" % roundi(float(rule["resist_delta"]) * 100.0)
+	if rule.has("dr"):
+		return "-%d%%" % roundi(float(rule["dr"]) * 100.0)
+	if rule.has("vuln_mult"):
+		return "+%d%%" % roundi((float(rule["vuln_mult"]) - 1.0) * 100.0)
+	if rule.has("burn_layers_max"):
+		return "%d层" % int(rule["burn_layers_max"])
+	return ""
 
 # 量级分档表现参数（P2 数值真源：档位阈值在 PopupManager；此处只落规格——
 # 字号乘区 白 1.0 / 蓝 +15% / 紫 +35% / 金 +60%；配色对齐稀有度四色（调色板单源））
@@ -91,6 +263,13 @@ const TIER_COLORS: Array[Color] = [
 	PopPalette.RARITY_EPIC,                      # 紫（葡萄紫）
 	PopPalette.RARITY_LEGEND,                    # 金（柠檬金）
 ]
+
+# R194 fx_opacity：特效透明度全局乘区（Meta settings 键 fx_opacity，clampf(0.3,1.0)，默认 1.0）。
+# 跨组契约：乘区 helper 先落本文件（组5·表现），GameLoop 单源应用器（组4·战斗核持有）只写本
+# static 值（Meta.settings_changed 订阅侧）；本实体仅在 tick() / _reset_state() 两处 alpha 写点
+# 折乘该系数——只乘根 modulate.a，永不写 visible/self_modulate/theme/position/scale
+# （fx_quality_cases/elem_immune_cases/verify_feedback_cases 既有锁零触碰）。
+static var fx_opacity := 1.0
 
 
 func _ready() -> void:
@@ -104,6 +283,8 @@ func _ready() -> void:
 
 
 var element: int = GameConst.Element.KIN      # 命中元素（R22：跳字元素配色）
+var _label_dirty: bool = false                # R189：合并期文字脏标记（reset_size 字形
+                                              # 排版 ~10µs/次——同帧多合并推迟到 tick 一次刷新）
 
 func show_popup(p_pos: Vector2, p_value: float, p_style: int, p_target_uid: int = 0,
 		p_tier: int = 0, p_element: int = GameConst.Element.KIN) -> void:
@@ -120,15 +301,18 @@ func show_popup(p_pos: Vector2, p_value: float, p_style: int, p_target_uid: int 
 	_bounce_left = BOUNCE_TIME
 	is_active = true
 	_refresh_label()
+	_label_dirty = false
 	visible = true
 
 
 func merge(p_value: float) -> void:
-	# 合并：数值累加 + 重置漂浮计时（E-17）+ 小幅重弹（果冻反馈）
+	# 合并：数值累加 + 重置漂浮计时（E-17）+ 小幅重弹（果冻反馈）。
+	# R189：文字刷新推迟到本帧 tick（风暴形态同帧数十次合并 × reset_size 字形排版
+	# 是结算链消费方大头；一帧只渲染一次，中间值本就不可见——显示语义不变）
 	merged_value += maxf(p_value, 0.0)
 	_life_left = MERGE_LIFE_RESET
 	_bounce_left = maxf(_bounce_left, BOUNCE_TIME * 0.6)
-	_refresh_label()
+	_label_dirty = true
 
 
 func upgrade_to_reaction(p_value: float, p_rxn: int) -> void:
@@ -148,10 +332,15 @@ func tick(p_raw_delta: float) -> void:
 	# 果冻弹跳 + 上浮 + 淡出（raw 通道；到期由管理器归还池）
 	if not is_active:
 		return
+	if _label_dirty:
+		_refresh_label()                          # R189：本帧合并值一次性排版（帧渲染前）
+		_label_dirty = false
 	_life_left -= p_raw_delta
 	var t := 1.0 - clampf(_life_left / LIFE_TIME, 0.0, 1.0)
 	position = _rise_from + Vector2(0.0, -RISE_PX * t)
-	modulate.a = clampf(1.0 - t * t, 0.0, 1.0)
+	# R194 alpha 写点①：淡出曲线 × fx_opacity 全局特效透明度（只乘根 modulate.a——
+	# _label.self_modulate / theme / position / scale 零触碰，fx_quality 既有观感锁不变）
+	modulate.a = fx_opacity * clampf(1.0 - t * t, 0.0, 1.0)
 	if _bounce_left > 0.0:
 		_bounce_left = maxf(_bounce_left - p_raw_delta, 0.0)
 		# 弹性生长 + 过冲（0.25 → 峰值 ~1.3 → 1；手绘曲线，无 Tween——池化安全）
@@ -175,11 +364,13 @@ func _reset_state() -> void:
 	style = 0
 	tier = 0
 	element = GameConst.Element.KIN
+	rxn_stat = ""                                 # R192：stat 型短文案段一并清空（防池复用串文案）
 	target_uid = 0
 	is_active = false
 	_life_left = 0.0
 	_bounce_left = 0.0
-	modulate.a = 1.0
+	modulate.a = fx_opacity                       # R194 alpha 写点②：复位即带乘区（池复用直取可见
+	                                             # 前已落 fx_opacity，防 fx_opacity<1 时首帧满亮闪帧）
 	scale = Vector2.ONE
 	position = Vector2.ZERO
 	_rise_from = Vector2.ZERO
@@ -216,9 +407,10 @@ func _refresh_label() -> void:
 	else:
 		_label.text = str(int(round(merged_value)))
 	if direct:
-		# R22 元素配色优先（颜色读元素），量级档保留字号（大小读暴击量级）
-		if ELEMENT_COLORS.has(element) and element != GameConst.Element.KIN:
-			_label.self_modulate = ELEMENT_COLORS[element]
+		# R22 元素配色优先（颜色读元素），量级档保留字号（大小读暴击量级）——
+		# R192 单源改读 PopPalette.ELEMENT_COLORS（键 = Element 序 int 七键，.has 守卫保新元素越界安全）
+		if element != GameConst.Element.KIN and PopPalette.ELEMENT_COLORS.has(element):
+			_label.self_modulate = PopPalette.ELEMENT_COLORS[element]
 		else:
 			_label.self_modulate = TIER_COLORS[clampi(tier, 0, TIER_COLORS.size() - 1)]
 		_label.add_theme_font_size_override("font_size",
@@ -233,13 +425,18 @@ func _refresh_label() -> void:
 func _apply_reaction_look() -> void:
 	# R186 反应观感装配：按 element（=ReactionType）查 REACTION_LOOKS——
 	# 双色真分通道（font_color=填充 / font_outline_color=描边，替代 self_modulate 单乘色）
-	# + 加粗描边 + 专属字型（StickerTheme.font_reaction）。R1/§5：表内带文字且
-	# merged_value≤0.5 时显示纯文字（超导标签；小值并入不翻字），否则数值直读。
+	# + 加粗描边 + 专属字型（StickerTheme.font_reaction）。
+	# R192 跳字纯函数化：文案 = f(look, merged_value, rxn_stat)——废除旧「表内带文字且
+	# merged_value≤0.5 翻字」gate。dmg 型 = 名+合并值直读（碎裂1284）；pct/stat 型 =
+	# 名+rxn_stat 短文案段（超导-30%；rxn_stat 空串只显名——分支只认 dmg）。
+	# R189 tick 每帧一次 _refresh_label 契约不变（merge/upgrade 只改数值置脏，文案重推导
+	# 幂等）；数值禁进 const 文案表。
 	if _label == null:
 		return
 	var look: Dictionary = REACTION_LOOKS.get(element, {})
 	if look.is_empty():
-		look = REACTION_LOOKS[GameConst.ReactionType.RXN_FIR_ICE]   # 坏 ID 兜底（首个反应观感）
+		push_error("[DamagePopup] REACTION_LOOKS 缺 reaction id=%d（落首个反应观感兜底）" % element)
+		look = REACTION_LOOKS[GameConst.ReactionType.RXN_FIR_ICE]   # 坏 ID 兜底（首个反应观感，禁静默）
 	var fill: Color = look["fill"]
 	var line: Color = look["outline"]
 	_reaction_styled = true
@@ -249,11 +446,10 @@ func _apply_reaction_look() -> void:
 	_label.add_theme_constant_override("outline_size", OUTLINE_PX_REACTION)
 	_label.add_theme_font_override("font", StickerTheme.font_reaction(int(look["variant"])))
 	_label.add_theme_font_size_override("font_size", FONT_SIZE_REACTION)
-	var text: String = look["text"]
-	if text != "" and merged_value <= 0.5:
-		_label.text = text
+	if String(look["fmt"]) == "dmg":
+		_label.text = String(look["name"]) + str(int(round(merged_value)))
 	else:
-		_label.text = str(int(round(merged_value)))
+		_label.text = String(look["name"]) + rxn_stat
 
 
 func _clear_reaction_overrides() -> void:
@@ -261,6 +457,7 @@ func _clear_reaction_overrides() -> void:
 	# 池复用串色防线——非 REACTION 分支与 _reset_state 都经此还原 WHITE 填充 /
 	# 藏青描边 / 8px 描边宽 / 30px 常规字号 / 常规字型
 	text_mode = false
+	rxn_stat = ""                                 # R192：stat 型短文案段一并清空（防池复用串文案）
 	_reaction_styled = false
 	if _label == null:
 		return

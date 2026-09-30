@@ -6,6 +6,9 @@
 # 数值真源：掉落值 = Enemy.exp_value（波次通胀已在 Enemy.spawn 缩放）× 遗物点金手倍率
 #（REL_MIDAS +20%，A3 §5——GameLoop 掉落侧折算，碎片值即最终入账值，数值守恒）。
 # 满池合并（架构 §5.1 XPPool 行：合并为大面值碎片）：merge_value 由 GameLoop 调用。
+# 面值分档（R196）：档=面值/基线比（基线=exp_base×exp_inflation_per_wave^(w-1)，掉落侧
+# 算好传入）：<3 白 <8 绿 <20 金 ≥20 七彩——阈值/公式单源本表，色源 PopPalette.XP_TIER_COLORS
+#（白/绿/金 _sync_visual 一次性着色；七彩 _tick_visual_anim 尾部色相回环）。
 #
 # 拾取链路重做（用户实测反馈 2026-08-29 裁定：玩家活动区=下半屏，敌死掉落全屏分布，
 # 上半屏碎片永远捡不到 → 四段行为）：
@@ -20,6 +23,8 @@ class_name XpShard
 extends Area2D
 
 var value: float = 0.0                        # 面值（已含点金手倍率；gain_xp 直收入账）
+var _baseline: float = 0.0                    # R196 分档基线（exp_base×通胀^(w-1)；0=未定→恒白档）
+var _tier: int = 0                            # R196 当前档位缓存（0 白 1 绿 2 金 3 七彩；_sync_visual 刷新）
 
 var _magnet: bool = false                     # 已进入磁吸半径（加速飞向玩家）
 var _sprite: Sprite2D = null
@@ -43,6 +48,8 @@ const HOMING_FLASH_TIME := 0.3                # 回归前亮一下时长 s
 const ABSORB_DISTANCE := 24.0                 # 吸收判定距离 px（玩家 hitbox 16 + 碎片半径 ~6 + 余量）
 const MAGNET_SPEED := 520.0                   # 磁吸飞行速度 px/s（A3 未给吸附速度——手感占位值）
 const TEX_SIZE := 44                          # 星星贴图画布边长（TextureFactory 口径）
+const XP_TIER_THRESHOLDS: Array[float] = [3.0, 8.0, 20.0]  # R196 分档阈值（面值/基线比：<3 白 <8 绿 <20 金 ≥20 七彩）
+const XP_TIER_RAINBOW := 3                    # 七彩档（超末档；色相回环，占位色不被直读）
 
 var _phase: int = PHASE_BURST                 # 行为阶段（见常量块）
 var _age: float = 0.0                         # 存活时长 s（超时回归判据）
@@ -63,10 +70,12 @@ func _ready() -> void:
 	visible = false                            # 池内不可见（activate 后可见）
 
 
-func activate(p_value: float) -> void:
+func activate(p_value: float, p_baseline: float = 0.0) -> void:
 	# 池取出后统一初始化（掉落侧：GameLoop._spawn_xp_shard 已设置 position）。
-	# 出生散射在本函数一次性完成（落点即定——tick 期位置只按下沉/追踪推进，口径可测）
+	# 出生散射在本函数一次性完成（落点即定——tick 期位置只按下沉/追踪推进，口径可测）。
+	# R196：p_baseline 可选参（旧调用零破坏）——0 → 恒白档（降级不崩）
 	value = maxf(p_value, 0.0)
+	_baseline = maxf(p_baseline, 0.0)
 	_magnet = false
 	_player_cache = null
 	_phase = PHASE_BURST
@@ -90,10 +99,24 @@ func force_magnet() -> void:
 	_magnet = true
 
 
-func merge_value(p_extra: float) -> void:
-	# 满池合并为大面值碎片（数值守恒，架构 §5.1；不重置磁吸/阶段态）
+func merge_value(p_extra: float, p_baseline: float = 0.0) -> void:
+	# 满池合并为大面值碎片（数值守恒，架构 §5.1；不重置磁吸/阶段态）。
+	# R196：基线取双方 max 后随 _sync_visual 重分档（可选参，旧调用零破坏）
 	value += maxf(p_extra, 0.0)
+	_baseline = maxf(_baseline, maxf(p_baseline, 0.0))
 	_sync_visual()
+
+
+static func xp_tier_of(p_value: float, p_baseline: float) -> int:
+	# R196 分档真源：面值/基线比 <3 白 <8 绿 <20 金 ≥20 七彩（阈值单源 XP_TIER_THRESHOLDS）；
+	# 基线≤0 → 恒白档（降级不崩——旧调用/无通胀数据路径安全）
+	if p_baseline <= 0.0:
+		return 0
+	var ratio := p_value / p_baseline
+	for i in XP_TIER_THRESHOLDS.size():
+		if ratio < XP_TIER_THRESHOLDS[i]:
+			return i
+	return XP_TIER_THRESHOLDS.size()
 
 
 func tick(p_game_delta: float) -> bool:
@@ -156,6 +179,8 @@ func tick(p_game_delta: float) -> bool:
 # ── 池归还清零契约（E-04/E-05） ───────────────────────────────────
 func _reset_state() -> void:
 	value = 0.0
+	_baseline = 0.0                             # R196 分档基线随池归还清零
+	_tier = 0
 	_magnet = false
 	_player_cache = null
 	_phase = PHASE_BURST
@@ -191,13 +216,17 @@ func _tick_visual_anim(_p_game_delta: float) -> void:
 		var bt := clampf(_age / BURST_TIME, 0.0, 1.0)
 		f = 1.0 + 0.35 * (1.0 - bt) * cos(bt * PI * 2.2)
 	elif _homing:
+		# R196 评审修复：提亮臂改「档色 × 提亮」叠加（Color 值类型逐分量相乘，零堆
+		# 分配——R188 合规）——原整帧绝对赋值把 _sync_visual 档色抹成同一亮黄，
+		# 白/绿/金档在超时回归飞行全程档位信息消失（设计承诺「拾取飞行全程可见分档」）
 		if _homing_flash > 0.0:
 			# 回归前亮一下：提亮 + 脉冲
 			var ft := _homing_flash / HOMING_FLASH_TIME
-			_sprite.modulate = Color(1.0 + 0.9 * ft, 1.0 + 0.9 * ft, 1.0 + 0.6 * ft, 1.0)
+			_sprite.modulate = PopPalette.xp_tier_color(_tier) \
+				* Color(1.0 + 0.9 * ft, 1.0 + 0.9 * ft, 1.0 + 0.6 * ft, 1.0)
 			f = 1.0 + 0.3 * ft
 		else:
-			_sprite.modulate = Color(1.15, 1.15, 1.0, 1.0)
+			_sprite.modulate = PopPalette.xp_tier_color(_tier) * Color(1.15, 1.15, 1.0, 1.0)
 			f = 1.0 + 0.08 * sin(_anim_t * 18.0)
 	elif _phase == PHASE_SINK:
 		# 下漂：轻微左右倾摆（旋转）+ 微 bob
@@ -208,6 +237,10 @@ func _tick_visual_anim(_p_game_delta: float) -> void:
 		_sprite.rotation = 0.0
 		f = 1.0 + 0.09 * sin(_anim_t * 5.2)
 	_sprite.scale = Vector2(_value_scale * f, _value_scale * (2.0 - f))
+	# R196 七彩档色相回环（仅 tier 3 逐帧改 modulate——白/绿/金档维持 _sync_visual 一次性着色；
+	# 活跃七彩碎片有界）。Color.from_hsv 值类型零堆分配，R188「禁每帧分配」合规
+	if _tier >= XP_TIER_RAINBOW:
+		_sprite.modulate = Color.from_hsv(fmod(_anim_t * 0.35, 1.0), 0.7, 1.0)
 
 
 func _pickup_radius(p_player: Node2D) -> float:
@@ -227,8 +260,12 @@ func _player() -> Node2D:
 
 
 func _sync_visual() -> void:
-	# 柠檬星星：面值越大越醒目（0.9×~1.5× 等比；方向 C 口径）
+	# 柠檬星星：面值越大越醒目（0.9×~1.5× 等比；方向 C 口径）。
+	# R196 分档着色：档色源 PopPalette.xp_tier_color（非七彩档一次性着色，后续帧不重刷；
+	# 七彩档由 _tick_visual_anim 尾部色相回环接管）
 	if _sprite == null:
 		return
 	_value_scale = 0.9 + clampf(value / 30.0, 0.0, 0.6)
 	_sprite.scale = Vector2(_value_scale, _value_scale)
+	_tier = xp_tier_of(value, _baseline)
+	_sprite.modulate = PopPalette.xp_tier_color(_tier)

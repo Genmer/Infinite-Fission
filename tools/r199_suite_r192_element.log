@@ -1,0 +1,83 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R192 七元素反应大矩阵验收 ══════════
+── ① idContract 全表：21 配对逐键对（20 键 + 冰草留白） ──
+PASS | ① RXN_FIR_ICE：表键在位 + 数值 { "coef": 2 } + 配对(FIR,ICE) + 中文名「碎裂」单源
+PASS | ① RXN_FIR_HYD：表键在位 + 数值 { "coef": 1.5 } + 配对(FIR,HYD) + 中文名「蒸发」单源
+PASS | ① RXN_HYD_DEN：表键在位 + 数值 { "coef": 1.5, "radius": 120, "delay": 0.75 } + 配对(HYD,DEN) + 中文名「绽放」单源
+PASS | ① RXN_FIR_LTG：表键在位 + 数值 { "coef": 1.2, "radius": 90 } + 配对(FIR,LTG) + 中文名「过载」单源
+PASS | ① RXN_FIR_ANE：表键在位 + 数值 { "coef": 0.8, "radius": 120, "targets": 3 } + 配对(FIR,ANE) + 中文名「扩散·火」单源
+PASS | ① RXN_ICE_ANE：表键在位 + 数值 { "coef": 0.8, "radius": 120, "targets": 3 } + 配对(ICE,ANE) + 中文名「扩散·冰」单源
+PASS | ① RXN_LTG_ANE：表键在位 + 数值 { "coef": 0.8, "radius": 120, "targets": 3 } + 配对(LTG,ANE) + 中文名「扩散·雷」单源
+PASS | ① RXN_HYD_ANE：表键在位 + 数值 { "coef": 0.8, "radius": 120, "targets": 3 } + 配对(HYD,ANE) + 中文名「扩散·水」单源
+PASS | ① RXN_ANE_DEN：表键在位 + 数值 { "coef": 0.8, "radius": 120, "targets": 3 } + 配对(ANE,DEN) + 中文名「扩散·草」单源
+PASS | ① RXN_ICE_HYD：表键在位 + 数值 { "freeze_dur": 1.2, "chill_dur": 2.5, "vuln_mult": 1.25, "vuln_dur": 3 } + 配对(ICE,HYD) + 中文名「冻结」单源
+PASS | ① RXN_LTG_HYD：表键在位 + 数值 {  } + 配对(LTG,HYD) + 中文名「感电」单源
+PASS | ① RXN_FIR_DEN：表键在位 + 数值 { "burn_layers_max": 5, "burn_dur": 3 } + 配对(FIR,DEN) + 中文名「燃烧」单源
+PASS | ① RXN_LTG_DEN：表键在位 + 数值 { "vuln_mult": 1.25, "vuln_dur": 3 } + 配对(LTG,DEN) + 中文名「激化」单源
+PASS | ① RXN_ICE_LTG：表键在位 + 数值 { "resist_delta": -0.3, "duration": 6 } + 配对(ICE,LTG) + 中文名「超导」单源
+PASS | ① RXN_FIR_GEO：表键在位 + 数值 { "dr": 0.15, "dr_dur": 6 } + 配对(FIR,GEO) + 中文名「结晶·火」单源
+PASS | ① RXN_ICE_GEO：表键在位 + 数值 { "dr": 0.15, "dr_dur": 6 } + 配对(ICE,GEO) + 中文名「结晶·冰」单源
+PASS | ① RXN_LTG_GEO：表键在位 + 数值 { "dr": 0.15, "dr_dur": 6 } + 配对(LTG,GEO) + 中文名「结晶·雷」单源
+PASS | ① RXN_HYD_GEO：表键在位 + 数值 { "dr": 0.15, "dr_dur": 6 } + 配对(HYD,GEO) + 中文名「结晶·水」单源
+PASS | ① RXN_DEN_GEO：表键在位 + 数值 { "dr": 0.15, "dr_dur": 6 } + 配对(DEN,GEO) + 中文名「结晶·草」单源
+PASS | ① RXN_ANE_GEO：表键在位 + 数值 { "dr": 0.15, "dr_dur": 6 } + 配对(ANE,GEO) + 中文名「结晶·风」单源
+PASS | ① RXN_FIR_ANE：扩散族转移元素 == 被扩元素 FIR（§3.3 同模板列）
+PASS | ① RXN_ICE_ANE：扩散族转移元素 == 被扩元素 ICE（§3.3 同模板列）
+PASS | ① RXN_LTG_ANE：扩散族转移元素 == 被扩元素 LTG（§3.3 同模板列）
+PASS | ① RXN_HYD_ANE：扩散族转移元素 == 被扩元素 HYD（§3.3 同模板列）
+PASS | ① RXN_ANE_DEN：扩散族转移元素 == 被扩元素 DEN（§3.3 同模板列）
+PASS | ① 21 配对闭包：C(7,2)=21 对中表键恰 20 键全覆盖 · 无同配对双键 · 唯一留白=冰+草
+PASS | ① 全部表键 id 形如 RXN_<元素>_<元素> 且编码配对 == RXN_PAIRS（无自创别名）
+PASS | ① id 低枚举序在前：恰 RXN_DEN_GEO 一键高序在前（设计 §3.3 行 19 原文例外）
+PASS | ① reaction_table 行数 == ReactionType 枚举行数 == 契约 20 键（键集双射）
+PASS | ① RXN_ORDER == idContract 优先级 1..20（碎裂>过载>超导 头部相对位保持）
+── ② 七元素矩阵：枚举/λ/色表/新卡/解锁关 ──
+PASS | ② Element.size()==8 且七元素枚举在位（序数 0..7 追加不重排）
+PASS | ② element_decay_lambda 恰 7 项（运行时 == .gd 默认 == 兜底 == 裁定⑤定值）
+PASS | ② PopPalette.ELEMENT_COLORS 每元素色表键在位（0..7 恰 8 键）
+PASS | ② 新四元素色值 == §2 定义表（HYD #4cc2f1 / ANE #74c2a8 / GEO #fab632 / DEN #a5c83b）
+PASS | ② 旧四色不漂移（KIN 白 / FIR #ef7938 / ICE #9fd6e3 / LTG 改色 #af8ec1）
+PASS | ② 新卡 ELE_HYDRO：在册 + element=4 + ELEM 池/EF_ELEMENTAL/value=22/三形态/2 层/稀有度 1
+PASS | ② 新卡 ELE_ANEMO：在册 + element=5 + ELEM 池/EF_ELEMENTAL/value=22/三形态/2 层/稀有度 1
+PASS | ② 新卡 ELE_GEO：在册 + element=6 + ELEM 池/EF_ELEMENTAL/value=22/三形态/2 层/稀有度 1
+PASS | ② 新卡 ELE_DENDRO：在册 + element=7 + ELEM 池/EF_ELEMENTAL/value=22/三形态/2 层/稀有度 1
+PASS | ② ELEM 池 element∈4..7 的卡恰四张新 id（无自创别名/重复注册）
+PASS | ② 解锁关：第 3 关全拒 · 第 4 关仅水 · 第 5 关风/岩/草全开 · 无局全开
+── ③ 端到端 A：同武器挂水+草新卡 → 绽放（延迟 AoE，非族新反应） ──
+PASS | ③A 前置：ELE_HYDRO + ELE_DENDRO 双新卡同武器挂载
+PASS | ③A 实弹附着：双新元素槽成对（gauges[HYD]>0 且 gauges[DEN]>0）
+PASS | ③A 绽放触发：计数 +1 · cd[RXN_HYD_DEN]=2s · 双槽清空
+PASS | ③A 绽放延迟臂：bloom_active 挂账 · bloom_timer≈0.75（R198 契约变更：延迟 1.5→0.75）
+PASS | ③A 到期爆发：χ1.5×S_snap(100) 主目标落血 150（隔离簇无副目标）
+── ③ 端到端 B：同武器挂风+水新卡 → 扩散·水（族模板反应） ──
+PASS | ③B 前置：ELE_ANEMO + ELE_HYDRO 双新卡同武器挂载
+PASS | ③B 实弹附着：风+水双槽成对
+PASS | ③B 扩散·水触发：计数 +1 · cd[RXN_HYD_ANE]=2s · 主目标双槽清空
+PASS | ③B 族模板直伤：主目标 χ0.8×S_snap(100) 落血 80
+PASS | ③B 满槽转移：至多 3 敌 gauges[HYD]==GAUGE_MAX 钳制不清零（燃料存续）
+── ③ 探针：扩散·草（RXN_ANE_DEN）转移元素 == 草（§3.3 同模板列） ──
+PASS | ③ 探针 扩散·草：邻居满槽转移的是草（gauges[DEN]==GAUGE_MAX）
+── ⑥ 旧 3 反应回归：碎裂引爆 · 过载 AoE · 超导减抗数值 ──
+PASS | ⑥ 碎裂引爆：落血 == 2.0 × 剩余 DOT 池 180 = 360（池基结算）
+PASS | ⑥ 碎裂燃尽：burn_timer==0 · burn_layers==0 · 双槽清空
+PASS | ⑥ 过载：主目标 −120（1.2×快照 100）+ AoE 邻居 −120（中心不双吃）
+PASS | ⑥ 过载：双槽清空 + cd[RXN_FIR_LTG]=2s
+PASS | ⑥ 超导减抗数值：全抗 −0.3（KIN/FIR 位实测 −0.3）
+PASS | ⑥ 超导：持续 6.0s · 账本 delta==−0.3（M0 到期按记录恢复）
+── ④⑤ 图鉴反应页动态行数 + 跳字文本（中文名+数字） ──
+PASS | ④⑤ 前置：GameLoop 就绪 + registry 已注入 MenuScreen
+PASS | ④ 图鉴反应行数 == reaction_table 行数（20 行，动态口径禁硬编码）
+PASS | ④ 冰+草留白标注行恰 1 且文案单源 REACTION_BLANK_NOTE
+PASS | ④ 行-键双射：反应行中文名集合 == REACTION_NAMES[reaction_table 键集]（逐键恰一行）
+PASS | ⑤ 跳字 dmg 型：蒸发 150 → 文本「蒸发150」（中文反应名 + 数字）
+PASS | ⑤ 跳字 dmg 型合并：+34 → 文本「蒸发184」（纯函数 f(look, merged_value)）
+PASS | ⑤ 跳字 stat 型：超导标签「超导-30%」（读表 roundi(−0.3×100)）
+PASS | ⑤ 跳字 stat 型：结晶·火标签「结晶·火-15%」（读表 dr×100）
+PASS | ⑤ 跳字 stat 型：冻结标签「冻结1.2s」（读表 freeze_dur）
+────────────────────────────────────────
+验收汇总：67/67 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

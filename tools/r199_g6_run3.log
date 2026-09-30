@@ -1,0 +1,31 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R199 G6 元素与技能通道组自测 ══════════
+PASS | D07 前置：REL_GLASS_CANNON 激活成功
+PASS | D07·DOT：基线结算恰 1 笔
+PASS | D07·DOT：燃烧跳伤 ×玻璃大炮 ≈1.4（1→1.4）
+PASS | D07·DOT：结果乘区明细含 glass_dmg（mult_product≈1.4）
+PASS | D07·连锁：基线结算恰 1 笔
+PASS | D07·连锁：感电跳伤 ×玻璃大炮 ≈1.4（10→14）
+PASS | D07·反应：基线结算恰 1 笔
+PASS | D07·反应：蒸发结算 ×玻璃大炮 ≈1.4（30→42）
+PASS | D07·毒沼绽放：全屏结算恰 1 笔（grid 单敌）
+ERROR: unsupported format character
+   at: (core/variant/variant_op.h:951)
+PASS | ratio=1.4
+PASS | D14·毒沼绽放：火免疫敌正常结算（immune=false / >0 / KIN 通道）
+PASS | D14·毒云领域：火免疫敌首跳正常结算（immune=false / >0 / KIN 通道）
+PASS | F17 前置：传火本体生效（邻居满槽点燃）
+PASS | F17：传火走独立通道 burn_spread_ignited 恰 1 发（原点位置）
+PASS | F17：reaction_triggered 零误发（不再冒用 RXN_FIR_ICE）
+PASS | F17：Meta._run_reactions 零虚增
+PASS | F17：图鉴 reaction_seen 零新点亮
+PASS | H01：毒云进行中 left 剩余时长衰减（3s 处 ≈3.0，旧口径 ≈5.5+）
+PASS | H01：技能 6s 到期特效同步自清（left≈0 / 尾帧后 inactive）
+PASS | H01：poison_cloud_end 即入渐隐窗（left 钳 ≤1.5）
+PASS | H01：结束广播后 1.6s 特效自清
+PASS | H01：player 云到期 tick 发 poison_cloud_end 恰 1 次
+PASS | H01：_reset_skill_temp_state 清毒云发 poison_cloud_end
+R199-G6 汇总：23/23 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

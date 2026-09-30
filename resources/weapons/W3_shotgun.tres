@@ -10,7 +10,7 @@ rof = 1.6
 cd = 0.0
 pierce = 1
 pellets = 7
-note = "A3 §3.3 L1：每丸 9 × 7 丸；贴脸面板 DPS 100.8"
+note = "贴脸散射：每颗弹丸 9 伤 × 7 颗，贴脸面板 DPS 100.8"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,7 +19,7 @@ rof = 1.6
 cd = 0.0
 pierce = 1
 pellets = 8
-note = "A3 §3.3 L2：每丸 9 × 8 丸；贴脸面板 DPS 115.2"
+note = "一次齐射 7→8 颗弹丸，贴脸面板 DPS 115.2"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
@@ -27,8 +27,8 @@ base_atk = 11.0
 rof = 1.6
 cd = 0.0
 pierce = 1
-pellets = 9
-note = "R10 质变模板 L3（小质变）：每丸 8→9；贴脸面板 DPS 158.4"
+pellets = 8
+note = "每颗弹丸 9→11 伤（弹丸数不变），贴脸面板 DPS 140.8"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -37,7 +37,7 @@ rof = 1.6
 cd = 0.0
 pierce = 1
 pellets = 9
-note = "A3 §3.3 L4：每丸 11 × 9 丸；贴脸面板 DPS 158.4"
+note = "一次齐射 8→9 颗弹丸，贴脸面板 DPS 158.4"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 1.6
 cd = 0.0
 pierce = 1
 pellets = 9
-note = "R10 质变模板 L5（大质变）：锥角 26°→20° + 每丸 14（击退特化）；贴脸面板 DPS 201.6"
+note = "每颗弹丸 11→14 伤并带击退，散射锥 26°收窄到 20°更密集，贴脸面板 DPS 201.6"
 
 [resource]
 script = ExtResource("1_wd")

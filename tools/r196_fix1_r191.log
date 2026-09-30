@@ -1,0 +1,152 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R191 整案验收 ══════════
+── A. tips：StickerTheme tooltip 条目 + 源级验收 ──
+PASS | A1 theme() 注册 TooltipPanel panel 条目
+PASS | A2 TooltipPanel 白实底（PANEL + a≥1）+ 内容边距 12/12/6/8
+PASS | A3 TooltipLabel：色=INK + 字号≥20 + 描边 0（对齐 Label 口径）
+PASS | A4 project.godot 无 [gui] 工程主题（全代码构建主题路线不变）
+PASS | A5 hud.gd p_tip 死路径全删（grep==0；签名收缩 + R10 过时注释同删）
+PASS | A6 pause_overlay.gd 接入 weapon_note 真源（grep≥1）
+PASS | A7 TooltipPanel/TooltipLabel 全 scripts 仅 theme.gd 命中（一处生效全 UI 继承）
+── B. GameConst.reaction_note 全键文案单源（R192 动态枚举） ──
+PASS | B1 全键 name/recipe/effect/unlock/mult_fmt/sample 非空 + elements 配对
+PASS | B2 [R192 扩容] 字段封闭集（name/recipe/elements/effect/unlock/mult_fmt/sample 恰 7——无存档键来源）
+PASS | B3 坏 id 空字典（不崩）
+PASS | B4 现役三名/配方口径（碎裂/过载/超导 · 火+冰/火+雷/冰+雷）
+PASS | B5 效果句含真条件（双槽/2s CD/免疫拒附）且无难度门文案（rxn 审计口径·全键）
+PASS | B5b 优先级句新序头部相对位（碎裂<过载<超导——扩序不翻头部）
+PASS | B6 解锁句节奏 = MechanicGate.MAP_INTROS（火冰第 2 关 / 感电第 3 关）
+PASS | B7 旧三键样张单源（碎裂1284 / 过载976 / 超导）
+── C. rxn：registry 数据 + 挂载形态门四向 + 无难度门节奏 ──
+PASS | C1 registry：ELE_IGNITE 在册且 required_forms == [0, 1, 2]（近战死卡下架）
+PASS | C1 registry：ELE_SHOCK 在册且 required_forms == [0, 1, 2]（近战死卡下架）
+PASS | C1 registry：ELE_FREEZE 在册且 required_forms == [0, 1, 2]（近战死卡下架）
+PASS | C2 registry：ELE_REACTION_VOID 无 required_forms 键（全形态保留，不设门）
+PASS | C2 registry：ELE_ARC_SURGE 无 required_forms 键（全形态保留，不设门）
+PASS | C3 ELE_ARC_SURGE 描述含「（不附着雷元素）」（防误当电元素卡——文案留 .tres 真源）
+PASS | C4 元素键位锚（IGNITE=FIR / FREEZE=ICE / SHOCK=LTG）
+PASS | C5 形态门：ELE_IGNITE 投射物三形态（弹道/激光/自导）全放行
+PASS | C6 形态门：ELE_IGNITE 近战拒绝上架（W8 附着 R186 有意拆除）
+PASS | C5 形态门：ELE_SHOCK 投射物三形态（弹道/激光/自导）全放行
+PASS | C6 形态门：ELE_SHOCK 近战拒绝上架（W8 附着 R186 有意拆除）
+PASS | C5 形态门：ELE_FREEZE 投射物三形态（弹道/激光/自导）全放行
+PASS | C6 形态门：ELE_FREEZE 近战拒绝上架（W8 附着 R186 有意拆除）
+PASS | C7 无难度门：无局口径全开（map_index = -1，结算核零难度分支）
+PASS | C8 第 2 关：火/冰开放；感电未解锁（雷第 3 关起——卡池节奏非难度锁）
+PASS | C9 第 3 关：感电开放（过载/超导随之可发生）
+PASS | Boot：start_run 就绪（玩家 + 默认武器 ≥1 + menu/hud 注入）
+── A10~A13 tips：详情卡机制句（GameConst.weapon_note 真源） ──
+PASS | A10 点击构筑 → PAUSED + 详情卡可见
+PASS | A11 武器区块数 == 已持武器数
+PASS | A12 武器 W1_pistol 区块含 weapon_note 原句（逐字相等——UI 零手抄）
+PASS | A13 机制句行 (58,62) 宽 508 + WORD_SMART + 12pt INK_SOFT + IGNORE + head 100
+PASS | A14 继续恢复 PLAYING（不滞留暂停）
+── E. mirror_laser：tick_atk meta 轴 / 缓存失效 / 束卡锁 W4 / 束染 ──
+PASS | E0 前置：W4 源 + 棱镜装配且 1 镜位指向 W4
+PASS | E1 修①：Laser._tick_atk == get_current_atk×(1+meta_atk_pct)（meta=0.5 → ×1.5）
+PASS | E2 修④：inner.copy_tint == true（bool 类型，非 Color no-op）
+PASS | E3 修②：MirrorWeapon.setup 后 sub_beams_override == 0
+PASS | E4 修①（端到端口）：镜面开火后共享 laser 池活束数 +1（源/棱镜静默隔离）
+PASS | E5 修①：镜面束 tick_atk == 源 base_atk×0.40 ±1e-6（meta=0 夹具，6×0.40=2.4）
+PASS | E6 修④传导：镜面束 gray_tint == true（R183 灰染通道）
+PASS | E7 前置：AFF_CRIT_RATE(add_crit)/AFF_ATK_UP(add_atk) 在册
+PASS | E8 修③：apply_state 后 inner 面板随新栈（crit=新聚合值且非旧值 + add_entries 非空）
+PASS | E9 修③：外壳身份壳面板同步失效（crit_rate 同新栈）
+PASS | E10 修②：直挂 SPLIT_PRISM 后棱镜活束 ==1（sub_beams_override==0 硬保证）
+PASS | E11 修②：七束卡 mount 门（W5 全 false / W4 全 true）+ params 均含 required_weapon=W4（原键保留）
+PASS | E12 修⑤：r187_rework_cases excl 显式类型化（SCRIPT ERROR 中断不再复发）
+── D. muzzle：镜面弹出生点 = 外层化身枪口 + 镜面火花 ──
+PASS | D0 前置：W2 源 + 棱镜装配且 1 镜位指向 W2
+PASS | D0b 前置：包装体入册且化身已建可见（修复前 inner 恒查无此件）
+PASS | D1 采样量 ≥30 发（30/s 钳 × 2.5s 窗）
+PASS | D2 逐发 |出生点−avatar_global(外层包装体)| ≤ 2.0px（修复前 ≈82~112px）
+PASS | D3 负例：逐发距菱形回退位 ≥52px（确已换锚非回退）
+PASS | D4 负例：逐发距玩家中心 ≥52px（非玩家中心回退）
+PASS | D5 镜面开火建常驻 MuzzleFlash 且显形
+PASS | D6 镜面火花 texture == TextureFactory.ice_shard() + modulate == MirrorImage.TINT
+PASS | D7 镜面火花 _muzzle_timer > 0（0.09s 读出口径）
+PASS | D8 镜面火花自熄（visible == false）
+PASS | D9 本体零回归：star(40, XP) + 显形 + 0.05s 计时
+PASS | D10 fx_quality=0 门：开火路径到达且火花恒隐（门不放宽）
+PASS | D11 连发后 MuzzleFlash 子节点恒 1（零逐发实例化）
+PASS | D12 前置：诺亚技能施放（_summon_copies 通道）
+PASS | D13 R183 副本零变化：在册首查命中 + weapon_muzzle_global == 化身枪口
+── G. boomerang：表现层 ×5.0（命中盒不变）+ R77/R78 零冲突 ──
+PASS | G0 前置：W10 装配
+PASS | G1 发射产出回旋弹体（_boomerang 标记）
+PASS | G2 源级：BOOM_VIS_MULT := 5.0 且 ×3.4 旧杠杆零残留
+PASS | G3 源级：TEX_SIZE := 64 分母不变（全弹体变体共享）
+PASS | G4 源级：W10_boomerang.tres hitbox_r = 7.0 不变
+PASS | G5 弹体视觉 ×5.0：_sprite.scale == 7/32×5（scale_f=effective_radius/(TEX_SIZE×0.5)）
+PASS | G6 命中盒与视觉解耦：hitbox_radius == 7.0 且 size_mult == 1（碰撞半径不动）
+PASS | G7 R78 出程定距甩满才翻转（phase 0→1，距离贴 _boom_range）
+PASS | G8 R77 返航到手自回收
+── F. achv：阶梯 ~128 / 手写保留 / 计数接线 / 分页 / toast / 单次落盘 ──
+PASS | F0 前置：大厅 registry 注入
+PASS | F1 表规模落 120~200 硬区间（裁定 ~128，架构按 500 预留）
+PASS | F2 手写 11 条原 id/原 reward 逐字保留（存档兼容 + noah 门）
+PASS | F3 新 id 全局唯一（生成撞档跳过不重复）
+PASS | F4 全表显式 reward 键（中间档 0 也写——隐性通胀口封死）
+PASS | F5 单敌阶梯 = 29×3 自洽展开 + 收集/地图四族全部在册
+PASS | F6 接线：击杀 1 → first_blood 解锁（total_kills 桶查）
+PASS | F7 接线：单敌 E1_grunt ×50 → enemy_kills_E1_grunt_50 解锁（enemy_kills 桶并入）
+PASS | F8 接线：mark_map_cleared → maps_cleared_1 解锁（地图族桶查）
+PASS | F9 接线：图鉴武器 ×5 → codex_weapons_5 解锁（收集族桶查）
+PASS | F10 接线：图鉴词条 ×10 → codex_traits_10 解锁（收集族桶查）
+PASS | F11 奖励曲线：解锁集合 == 按表活算期望集合（9 条）且结晶增量 == Σ显式 reward 100💎（隐性通胀口封死）
+PASS | F12 成就分页：默认页行数 == min(24, N)=24 且 >0
+PASS | F12a 页码 Label 落空当：x ≥ 上一页右缘+2 且右缘 ≤ 209（返回大厅左缘-2）
+PASS | F13 分页遍历累加 == N（全部 131 + 三类别 131 = 131——覆盖语义不弱化）
+PASS | F14 toast 同帧合批：10 连发 → 1 条（含 ×10 与合计 +100，无 💎）
+PASS | F14a toast 零奖励分支：reward=0 解锁无金额文案（×1 + 名在 + 无 💎）
+PASS | F14b toast 名称截断：5 连发只列前 3 名 +「等 5 项」，金额段完整（+115，无 💎）
+PASS | F15 批量单次落盘：_check_achievements 体内 _save() 恰 1 次且在解锁循环后
+PASS | F16 存档结构零改动：achievements 段仍仅 done 键（id 数组口径）
+PASS | F17a run_reactions 三档在册（targets 10/25/50）+ F1 表规模续绿（≤200）
+PASS | F17b 直调 reaction_triggered ×10 → run_reactions_10 解锁且结晶 0（中间档零通胀）
+PASS | F17c 达 50 → 25/50 档解锁 + 结晶仅终档 +30
+PASS | F17d 全表总奖励 ≤1500💎（经济封顶随新族复核）
+PASS | F17e 结算复位：_run_reactions 字段在且归零（run 作用域零存档迁移）
+── codex_rxn：4 页签 / 反应页 3 行 / 预览五项 / 倍率运行时读表 ──
+PASS | X1 图鉴页签恰 4 枚 = 怪物/武器/词条/反应
+PASS | X2 页签几何：宽 126 ·「反应」末沿 486+126=612（右距 36 不变）
+PASS | X3 反应页重建出全枚举条目（ReactionType 序；冰草标注行至多 +1）
+PASS | X4 行级：名称/效果/解锁单源 + 预览五项 override + 逐行对位 + 样张==实机组合（20 行全过）
+PASS | X5 倍率跟随表值：coef=3.5 → 碎裂行倍率文本含 3.5
+PASS | X6 还原 coef 后倍率复原（含 2.0 不含 3.5）
+PASS | X7 反应页开合前后 Meta codex_*/achievements_done 集合零写入
+── H. rxn 端到端：火+电挂载 → 附着 → 过载触发（E-03 帧闸 + CD 2s） ──
+── H1 通道单元：ON_HIT 按当发宿主元素放行（末位覆写已修） ──
+PASS | H1a 火宿主 → attach_request.element == FIR（修复前被挂载序末位覆写为雷）
+PASS | H1b 火宿主请求逐字节 == {FIR, 22.0, {}}
+PASS | H1c 雷宿主 → attach_request.element == LTG（交替发各附当发元素）
+PASS | H1d E-03 帧闸：同帧同栈二次派发零输出
+PASS | H1e 单元素回归：请求逐字节 == {FIR, 22.0, {}}
+PASS | H1f KIN 宿主放行：无附魔弹直挂通道照旧输出
+── H2 ON_SPAWN 守卫：spawn 随机元素保持（R26「每发随机取一」第三腿） ──
+PASS | H2a spawn 参数 FIR 保持 FIR（修复后被末位 LTG 整写覆写）
+PASS | H2b spawn 参数 LTG 保持 LTG
+PASS | H2c KIN 中性弹保留附魔染色（放行分支→首挂词条元素）
+── H3 武器级实弹：火+电双卡交替 ──
+PASS | H3a 双元素实弹：火/雷均出现（每发随机取一，不再恒为挂载序末位）
+PASS | H3b 16 发全部 ∈ 附魔集合（无 KIN 无杂色）
+── H4 端到端：火+电挂载 → 附着 → 过载触发（落血/清槽/CD 2s） ──
+PASS | H4a 第 1 发 ON_SPAWN 后 element == FIR
+PASS | H4b 命中 → 火槽 +22（当发元素附着上槽）
+PASS | H4c 雷槽未被错元素串写（恒 0）
+PASS | H4d 双槽成对（火=22 且 雷=22 → has_both 达成）
+PASS | H4e 过载触发：reaction_triggered 计数 +1
+PASS | H4f 过载消耗：双槽清空
+PASS | H4g 过载 CD：reaction_cd[RXN_FIR_LTG] = 2s
+PASS | H4h 过载落血：120%ATK 落血（1000 − 100×2 弹体 − 120 = 680）
+PASS | H4i 反应 CD：2s 内重附双槽不触发（同反应每敌 2s 门）
+PASS | H4j CD 过期后可再次触发（+1——普通难度全额结算，无难度门）
+────────────────────────────────────────
+验收汇总：127/127 通过
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 5 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 24 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

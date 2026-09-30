@@ -4,6 +4,8 @@
 # · 感电连锁主锯齿闪电（签名特效）：订阅 EventBus.chain_lightning（源敌→被链敌），
 #   粗白芯 + 葡萄紫辉外层双层折线，全程 0.12s、逐段抖动（顶点池轮换）+ 中点闪光。
 # · 碎裂橙色冲击小环：订阅 EventBus.reaction_triggered（rxn==RXN_FIR_ICE，管线广播）。
+# · 燎原传火原点橙环：订阅 EventBus.burn_spread_ignited（R199 F17 独立表现通道——
+#   传火不再冒用 reaction_triggered）。
 # · 点燃 DOT 火星小喷：订阅 EventBus.elemental_dot_fired（每跳结算瞬间 3 粒上飘火星）。
 # 全部对象 _ready 预建轮换复用（0 运行期实例化）；折线顶点预生成池轮换；共享贴图、
 # 无 shader、零数值副作用（纯表现层，订阅事件只读位置）。
@@ -26,7 +28,11 @@ const ZAP_COUNT := 12                         # 电花碎屑并发池（闪电�
 const ZAP_LIFE := 0.2                         # 电花碎屑时长 s
 const GLOW_COUNT := 8                         # DOT 橙光晕并发池（点燃跳伤瞬间体周闪光）
 const GLOW_LIFE := 0.18                       # 橙光晕时长 s
-const IMPACT_COUNT := 10                      # 光束命中迸裂并发池（脉冲激光每跳，用户反馈 2026-08-31）
+# r195-6（R198）扩容 10→20：需求槽 ≈ tick_rate × 目标数 × IMPACT_LIFE × 并行束数
+#（8 跳/s × 4 目标 × 0.16s × 主+3 副束 ≈ 20）——高射速×穿透下 10 槽欠配 ~2×（迸裂星闪
+# 轮转提前覆写，观感断续）。每槽仍预建 Node2D 组 3-4 sprite 静态池（_build_impacts），
+# 零运行期实例化；_impact_idx 轮转取槽口径不动。
+const IMPACT_COUNT := 20                      # 光束命中迸裂并发池（脉冲激光每跳，用户反馈 2026-08-31）
 const IMPACT_LIFE := 0.16                     # 迸裂星闪时长 s
 const IMPACT_SPARKS := 3                      # 每次迸裂迸溅火花数（束色圆珠）
 const DEVOUR_COUNT := 10                      # 烈焰吞噬内聚并发池（burn_dmg 乘区生效，2026-09-13）
@@ -97,10 +103,12 @@ func _ready() -> void:
 	EventBus.knockback_hit.connect(_on_knockback_hit)
 	EventBus.poison_cloud_cast.connect(_on_poison_cloud_cast)
 	EventBus.poison_cloud_tick.connect(_on_poison_cloud_tick)
+	EventBus.poison_cloud_end.connect(_on_poison_cloud_end)     # R199 H01：云结束即渐隐
 	EventBus.kill_blast.connect(_on_kill_blast)
 	EventBus.missile_blast.connect(_on_missile_blast)
 	EventBus.skill_cast.connect(_on_skill_cast)   # R19：角色技能施放金环
 	EventBus.elemental_dot_fired.connect(_on_dot_fired)
+	EventBus.burn_spread_ignited.connect(_on_burn_spread_ignited)   # R199 F17：燎原传火原点橙环
 	EventBus.reaction_triggered.connect(_on_reaction_triggered)
 	EventBus.shield_blocked.connect(_on_shield_blocked)
 	EventBus.bullet_nullified.connect(_on_bullet_nullified)
@@ -293,7 +301,8 @@ func _tick_sparks(p_raw_delta: float) -> void:
 
 # ── 碎裂冲击小环（RXN_FIR_ICE 结算瞬间；夜间R58 主环改冰蓝——用户反馈「冰冻的
 # 爆炸波纹改成蓝色，现在是黄橙色」：碎裂主体是冰，火源读感降为窄橙内环） ──
-const SHATTER_ICE_COL := Color(0.62, 0.85, 1.0)   # 冰蓝（与 ELE 冻结/跳字冰色同源）
+const SHATTER_ICE_COL := PopPalette.ELEMENT_COLORS[GameConst.Element.ICE]   # 冰蓝（色表单源——与 ELE 冻结/跳字冰色同源）
+
 func _build_rings() -> void:
 	for i in range(RING_COUNT):
 		var ring := Sprite2D.new()
@@ -306,10 +315,14 @@ func _build_rings() -> void:
 
 
 func _on_reaction_triggered(p_rxn: int, p_pos: Vector2, _p_target_uid: int) -> void:
-	# R22 反应专属特效补全（此前仅碎裂有橙环）：
-	# · 碎裂 FIR+ICE：橙色冲击环（既有）
+	# R22 反应专属特效补全（此前仅碎裂有橙环）→ R192 族化扩 20 臂（族级配色复用
+	# _spawn_reaction_ring；取色全部单源 PopPalette.ELEMENT_COLORS / RXN 表）：
+	# · 碎裂 FIR+ICE：冰蓝主环（既有池）+ 窄橙内环
 	# · 过载 FIR+LTG：紫橙双环冲击（火橙外环 + 雷紫内环）
 	# · 超导 ICE+LTG：冰紫雾环慢扩散（全抗削减的减益光环读感）
+	# · 蒸发/绽放/冻结/感电/燃烧/激化：双元素双色环 / 减益单色环
+	# · 扩散族×5：风淡青大环 + 被扩元素色内环（满槽转移读感）
+	# · 结晶族×6：岩金黄晶环 + 元素色内环（晶盾获得感读感）
 	match p_rxn:
 		GameConst.ReactionType.RXN_FIR_ICE:
 			var ring: Dictionary = _rings[_ring_idx % RING_COUNT]
@@ -319,13 +332,80 @@ func _on_reaction_triggered(p_rxn: int, p_pos: Vector2, _p_target_uid: int) -> v
 			sp.visible = true
 			ring["left"] = RING_LIFE
 			_layout_ring(ring, 0.0)
-			_spawn_reaction_ring(p_pos, Color(1.0, 0.55, 0.2, 1.0), 0.22, 1.3)   # 窄橙内环（火源提示）
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR], 0.22, 1.3)   # 窄橙内环（火源提示）
 		GameConst.ReactionType.RXN_FIR_LTG:
-			_spawn_reaction_ring(p_pos, Color(1.0, 0.55, 0.2, 1.0), 0.38, 2.6)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR], 0.38, 2.6)
 			_spawn_reaction_ring(p_pos, PopPalette.SHOCK, 0.3, 1.6)
 		GameConst.ReactionType.RXN_ICE_LTG:
-			_spawn_reaction_ring(p_pos, PopPalette.PLAYER.lerp(Color.WHITE, 0.4), 0.55, 3.0)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.ICE].lerp(Color.WHITE, 0.4), 0.55, 3.0)
 			_spawn_reaction_ring(p_pos, PopPalette.SHOCK, 0.45, 2.0)
+		GameConst.ReactionType.RXN_FIR_HYD:
+			# 蒸发：火橙外环 + 水蓝内环（汽化白雾读感）
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR], 0.38, 2.2)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.HYD].lerp(Color.WHITE, 0.3), 0.3, 1.4)
+		GameConst.ReactionType.RXN_HYD_DEN:
+			# 绽放：水蓝外环 + 草绿内环（种子萌发读感）
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.HYD], 0.42, 2.4)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.DEN], 0.34, 1.5)
+		GameConst.ReactionType.RXN_ICE_HYD:
+			# 冻结：冰蓝雾环慢扩散 + 水蓝内环（封冻读感）
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.ICE].lerp(Color.WHITE, 0.4), 0.5, 2.8)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.HYD], 0.32, 1.4)
+		GameConst.ReactionType.RXN_LTG_HYD:
+			# 感电：雷紫外环 + 水蓝内环（导电读感）
+			_spawn_reaction_ring(p_pos, PopPalette.SHOCK, 0.38, 2.4)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.HYD], 0.3, 1.4)
+		GameConst.ReactionType.RXN_FIR_DEN:
+			# 燃烧：火橙双环（炽燃读感）
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR], 0.4, 2.2)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR].lerp(Color.WHITE, 0.35), 0.28, 1.3)
+		GameConst.ReactionType.RXN_LTG_DEN:
+			# 激化：雷紫单环（减益光环读感）
+			_spawn_reaction_ring(p_pos, PopPalette.SHOCK, 0.45, 2.2)
+		GameConst.ReactionType.RXN_FIR_ANE, GameConst.ReactionType.RXN_ICE_ANE, \
+		GameConst.ReactionType.RXN_LTG_ANE, GameConst.ReactionType.RXN_HYD_ANE, \
+		GameConst.ReactionType.RXN_ANE_DEN:
+			# 扩散族×5：风淡青大环 + 被扩元素色内环
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.ANE].lerp(Color.WHITE, 0.4), 0.46, 2.8)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[_spread_carry_element(p_rxn)], 0.3, 1.5)
+		GameConst.ReactionType.RXN_FIR_GEO, GameConst.ReactionType.RXN_ICE_GEO, \
+		GameConst.ReactionType.RXN_LTG_GEO, GameConst.ReactionType.RXN_HYD_GEO, \
+		GameConst.ReactionType.RXN_DEN_GEO, GameConst.ReactionType.RXN_ANE_GEO:
+			# 结晶族×6：岩金黄晶环 + 元素色内环
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.GEO], 0.42, 2.2)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[_crystal_carry_element(p_rxn)].lerp(Color.WHITE, 0.3), 0.3, 1.3)
+
+
+func _spread_carry_element(p_rxn: int) -> int:
+	# 扩散族被扩元素读数（族配色展示用；配对真源=ElementalSystem.RXN_PAIRS 语义）
+	match p_rxn:
+		GameConst.ReactionType.RXN_FIR_ANE:
+			return GameConst.Element.FIR
+		GameConst.ReactionType.RXN_ICE_ANE:
+			return GameConst.Element.ICE
+		GameConst.ReactionType.RXN_LTG_ANE:
+			return GameConst.Element.LTG
+		GameConst.ReactionType.RXN_HYD_ANE:
+			return GameConst.Element.HYD
+		_:
+			return GameConst.Element.DEN            # RXN_ANE_DEN（草）
+
+
+func _crystal_carry_element(p_rxn: int) -> int:
+	# 结晶族配对元素读数（族配色展示用）
+	match p_rxn:
+		GameConst.ReactionType.RXN_FIR_GEO:
+			return GameConst.Element.FIR
+		GameConst.ReactionType.RXN_ICE_GEO:
+			return GameConst.Element.ICE
+		GameConst.ReactionType.RXN_LTG_GEO:
+			return GameConst.Element.LTG
+		GameConst.ReactionType.RXN_HYD_GEO:
+			return GameConst.Element.HYD
+		GameConst.ReactionType.RXN_DEN_GEO:
+			return GameConst.Element.DEN
+		_:
+			return GameConst.Element.ANE            # RXN_ANE_GEO（风+岩）
 
 
 func _spawn_reaction_ring(p_pos: Vector2, p_color: Color, p_life: float, p_scale: float) -> void:
@@ -733,12 +813,28 @@ func _on_poison_cloud_cast(p_pos: Vector2, p_radius: float) -> void:
 
 
 func _on_poison_cloud_tick(p_pos: Vector2, p_radius: float) -> void:
-	# 每跳刷新中心（跟随玩家）+ 归位时长
+	# R199 H01：每跳只刷新中心（跟随玩家）——left 改剩余时长语义（cast 置 6.0 后
+	# 自然衰减，与技能持续同起同灭），不再每跳重置 6.0（旧口径技能结束后特效仍
+	# 全亮滞留 4.0s + 渐隐 1.5s，视觉上「还在转的毒圈」其实已不掉血不减速）
 	_poison["active"] = true
 	_poison["center"] = p_pos
 	_poison["radius"] = p_radius
-	_poison["left"] = 6.0
 	queue_redraw()
+
+
+func _on_poison_cloud_end() -> void:
+	# R199 H01：云结束广播 → 剩余时长钳入渐隐窗（即刻入渐隐；未激活零操作——
+	# 换角/重开清口同通道，天然对冲 raw/game 双时钟漂移与提前清场的滞留）
+	if not bool(_poison["active"]):
+		return
+	_poison["left"] = minf(float(_poison["left"]), 1.5)
+	queue_redraw()
+
+
+func _on_burn_spread_ignited(p_pos: Vector2) -> void:
+	# R199 F17：燎原传火原点橙环（此前借道 reaction_triggered(RXN_FIR_ICE) 的碎裂环——
+	# 表现保留、通道矫正：真反应图鉴/成就计数不再被传火冒名；配色单源 ELEMENT_COLORS）
+	_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR], 0.3, 1.8)
 
 
 func _tick_poison(p_raw_delta: float) -> void:
@@ -852,7 +948,7 @@ func _on_kill_blast(p_pos: Vector2, p_radius: float, p_life := 0.5) -> void:
 	(slot["fire"] as Sprite2D).scale = Vector2.ONE * (r1 * 0.25 / 32.0)
 	(slot["ring"] as Sprite2D).scale = Vector2.ONE * 0.3
 	(slot["smoke"] as Sprite2D).scale = Vector2.ONE * (r1 * 0.5 / 32.0)
-	(slot["fire"] as Sprite2D).modulate = Color(1.0, 0.55, 0.18, 1.0)
+	(slot["fire"] as Sprite2D).modulate = PopPalette.ELEMENT_COLORS[GameConst.Element.FIR]
 	(slot["flash"] as Sprite2D).modulate = Color(1.0, 0.97, 0.88, 1.0)
 	(slot["smoke"] as Sprite2D).modulate = Color(0.45, 0.38, 0.34, 0.55)
 
@@ -1014,8 +1110,8 @@ class MissileBlastFx:
 
 	func _draw() -> void:
 		var k := clampf(_t / LIFE, 0.0, 1.0)
-		var fire := Color(1.0, 0.55, 0.18)
-		var ember := Color(0.95, 0.30, 0.15)
+		var fire := PopPalette.ELEMENT_COLORS[GameConst.Element.FIR]   # 火球主色（色表单源）
+		var ember := fire.darkened(0.45)                               # 余烬深红（派生渐变）
 		# ① 白核闪光（前 18% 寿命）
 		if k < 0.18:
 			var fk := k / 0.18

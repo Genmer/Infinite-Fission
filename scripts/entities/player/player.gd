@@ -56,6 +56,8 @@ var _summon_copies: Array[WeaponBase] = []    # R183 复制武器（tick 驱动 
 var _mirror_images: Array = []
 var _mirror_locked: bool = false              # MEC_MIRROR_LOCK 挂载态（挂卡后波首不重掷——确定性出口兜底）
 var invuln_left: float = 0.0                  # 受击无敌帧（contact_tick=0.6s 口径）
+var dr_left: float = 0.0                      # R192 结晶晶盾减伤剩余 s（crystal_shield_request 唯一消费；纯会话态零存档）
+var dr_value: float = 0.0                     # 当前减伤比例（0.15 = −15%；刷新不叠加，到期归零）
 var _revive_protect_left: float = 0.0         # 复活保护青弧剩余 s（E2 r2；只由 _try_revive 置位，respawn/restore 显式清零）
 var _revive_protect_max: float = 0.0          # 青弧总长（ratio 分母；演出态不入快照——continue 局由 restore 清零）
 var weapon_slots: Array[WeaponBase] = []      # ≤7（集成包 B.8 第二批收紧：pkg2 用例已迁移 WeaponBase 真件）
@@ -71,7 +73,11 @@ var hitbox_radius: float = 16.0               # 命中盒半径（敌弹距离�
 
 var _dead: bool = false
 var _drag_accum: Vector2 = Vector2.ZERO       # 相对拖动采样累计（E-15）
+var _active_drag_index: int = -1              # R194 首指锁定（-1=无锁）：首条 ScreenDrag 认领，
+                                              # 异 index 丢弃，released 清锁——修单指双计数/多指串扰
 var input_enabled: bool = true                 # 输入使能（暂停恢复 0.5s 防误触宽限期——GameLoop 驱动）
+var _prev_input_enabled: bool = true          # R194 input_enabled 镜像（上升沿清首指锁——
+                                              # 宽限期内按下的旧指针不延续锁权）
 # 格挡力场（MEC_SHIELD 玩家侧接线，A3 §4.4：每 interval_s 生成护盾格挡 1 次接触伤害，
 # 2 层 → 5.5s；shield_interval<=0 = 未持有。charge 就绪 → 力场环可见；格挡瞬间脉冲扩散）
 var shield_interval: float = 0.0
@@ -177,6 +183,7 @@ func _ready() -> void:
 	add_child(_shield_ring)
 	weapon_slots.resize(MAX_SLOTS)
 	EventBus.slot_unlocked.connect(_on_slot_unlocked_event)
+	EventBus.crystal_shield_request.connect(grant_crystal_shield)   # R192 结晶族反应（ElementalSystem 结晶臂唯一发点）
 	var bal := GameConfig.balance
 	if bal != null:
 		# 初始 HP 真源 = cfg player_base_hp（60；张力调校值已回注真源，消除双轨）
@@ -199,6 +206,11 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 		invuln_left -= p_game_delta
 		if invuln_left < 0.0:
 			invuln_left = 0.0
+	# R192 结晶晶盾：tick 衰减（到期归零——减伤闸以 dr_left>0 为判据，双字段同步收口）
+	if dr_left > 0.0:
+		dr_left = maxf(dr_left - p_game_delta, 0.0)
+		if dr_left <= 0.0:
+			dr_value = 0.0
 	# 角色技能节拍（冷却 + 增益型剩余）
 	if skill_cd_left > 0.0:
 		skill_cd_left = maxf(skill_cd_left - p_game_delta, 0.0)
@@ -223,6 +235,9 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 			_poison_cloud_tick_left += POISON_CLOUD_TICK
 			_poison_cloud_pulse()
 			EventBus.emit_poison_cloud_tick(global_position, POISON_CLOUD_RADIUS)   # R10 毒圈持续表现
+		if _poison_cloud_left <= 0.0:
+			EventBus.emit_poison_cloud_end()   # R199 H01：云结束即广播（fx 层立即入渐隐，
+			                                   # 根治「毒圈全亮滞留 4s 误导走位」）
 	# 僚机到期还原（诺亚：复制武器回收 + 护航舰离场）
 	if _summon_left > 0.0:
 		_summon_left = maxf(_summon_left - p_game_delta, 0.0)
@@ -233,6 +248,11 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 		shield_timer = maxf(shield_timer - p_game_delta, 0.0)
 		if shield_timer <= 0.0:
 			shield_ready = true
+	# R194 input_enabled 上升沿（宽限期结束）清首指锁：宽限期间认领锁的旧指针不延续
+	# 锁权，恢复采样后由当前按下的手指重新认领（采样→消费→钳制链路与宽限语义不动）
+	if input_enabled and not _prev_input_enabled:
+		_active_drag_index = -1
+	_prev_input_enabled = input_enabled
 	var total := p_move_delta
 	if total == Vector2.ZERO:
 		total = _drag_accum if input_enabled else Vector2.ZERO   # 宽限期吞掉自采样拖动（防误触）
@@ -260,15 +280,34 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 	for mirror in _mirror_images:
 		if mirror != null and is_instance_valid(mirror) and mirror.has_method(&"tick"):
 			mirror.call(&"tick", p_game_delta)
+	# R198（P2-escort）：护航舰同拍驱动——SummonDrone._process 自驱改吃副本 game_delta
+	#（引擎不再自驱；时间缩放/暂停冻结下僚机与主循环同步，不独走墙上时钟）
+	for drone in _summon_drones:
+		if drone != null and is_instance_valid(drone):
+			drone.tick(p_game_delta)
 	_tick_visual(p_game_delta, total)
 
 
 func _unhandled_input(p_event: InputEvent) -> void:
-	# 输入抽象：相对拖动采样（Q-3；E-15 单指针锁定由 GameLoop 输入层承担，本层累计拖动向量）
+	# 输入抽象：相对拖动采样（Q-3）；R194 单指针锁定由本层承担——首条 ScreenDrag 认领
+	# _active_drag_index，异 index（次指）丢弃；emulate_mouse_from_touch 下首指同时合成
+	# MouseMotion(device=-1)，与 ScreenDrag 双路重复累计（≈速度×2）→ 仿真路丢弃，桌面
+	# 真鼠标 device=0 基线不受影响。消费侧（tick 宽限吞拖 + 逐帧清零）语义不变
 	if p_event is InputEventScreenDrag:
-		_drag_accum += (p_event as InputEventScreenDrag).relative
+		var drag := p_event as InputEventScreenDrag
+		if _active_drag_index == -1:
+			_active_drag_index = drag.index          # 首指认领（无锁态先到先得）
+		elif drag.index != _active_drag_index:
+			return                                    # 次指拖动不累计（防多指速度叠乘）
+		_drag_accum += drag.relative
+	elif p_event is InputEventScreenTouch:
+		var st := p_event as InputEventScreenTouch
+		if not st.pressed and st.index == _active_drag_index:
+			_active_drag_index = -1                   # 首指抬起清锁（次指可在下条拖动认领——锁转移）
 	elif p_event is InputEventMouseMotion:
 		var mm := p_event as InputEventMouseMotion
+		if mm.device == InputEvent.DEVICE_ID_EMULATION:
+			return                                    # 触摸仿真鼠标路（已由 ScreenDrag 累计——防双计数）
 		if (mm.button_mask & MOUSE_BUTTON_LEFT) != 0:
 			_drag_accum += mm.relative
 
@@ -295,7 +334,9 @@ func _draw() -> void:
 
 
 func take_contact_damage(p_dmg: float) -> void:
-	# ★ 简化路径（Q-16）：无敌帧判定 → 格挡力场 → 直接扣 HP → player_hit 事件（不入 M-12）
+	# ★ 简化路径（Q-16）：无敌帧判定 → 格挡力场 → 结晶晶盾减伤闸 → 直接扣 HP →
+	# player_hit 事件（不入 M-12）。R192：减伤闸位于无敌帧/格挡闸后、HP 直减前——
+	# 结晶族反应唯一玩家侧消费漏斗（dr 刷新不叠加，纯会话态零存档）
 	if _dead or invuln_left > 0.0:
 		return
 	# 格挡力场优先（A3 §4.4 MEC_SHIELD：就绪的护盾吞掉这次接触伤害并进入再充能）
@@ -307,6 +348,8 @@ func take_contact_damage(p_dmg: float) -> void:
 		EventBus.emit_shield_blocked(global_position)
 		return
 	var dmg := maxf(p_dmg, 0.0)
+	if dr_left > 0.0:
+		dmg *= 1.0 - clampf(dr_value, 0.0, 0.8)   # 结晶晶盾：×(1−dr)（dr_value 0.15 → ×0.85）
 	hp -= dmg
 	invuln_left = GameConfig.balance.contact_tick if GameConfig.balance != null else 0.6
 	_flash_left = FLASH_TIME                     # 方向 C：受击变白弹回
@@ -557,6 +600,16 @@ func _skill_time_stop() -> void:
 	DebugStats.count(&"time_stop")
 
 
+func _inject_relic_pools(p_ctx: DamageContext, p_target: Node2D) -> void:
+	# R199 D07：角色技能结算通道（毒沼绽放/毒云）遗物命中乘区注入——照 WeaponBase.
+	# inject_relic_pools 先例（weapon_base.gd:466 → relic_handler.inject_hit_mult_pools）；
+	# 问询通道 = setup deps 的 relic_handler（game_loop.gd:1410 B.2 注入位）。鸭子问询
+	# 零新编译期类型边；deps 未含（测试裸 Player）→ 零操作。
+	var rh: Variant = _deps.get("relic_handler")
+	if rh != null and (rh as Object).has_method(&"inject_hit_mult_pools"):
+		(rh as Object).call(&"inject_hit_mult_pools", p_ctx, p_target)
+
+
 func _skill_poison_nova() -> void:
 	# 毒沼绽放（腐化者·莽·终极毒核）：全屏敌人结算 150% 主武器攻击（AOE_SECONDARY 通道）
 	var grid: Variant = _deps.get("enemy_grid")
@@ -575,10 +628,12 @@ func _skill_poison_nova() -> void:
 		ctx.target_uid = int(e.get("uid"))
 		ctx.frame_stamp = GameConfig.frame_stamp
 		ctx.base_atk = base
-		ctx.element = GameConst.Element.FIR
+		ctx.element = GameConst.Element.KIN       # R199 D14：毒系技能无元素通道（原 FIR 被火免疫
+		                                          # 敌 elem_immune=2 拦零——毒沼绽放对 E4/E8 恒 0 伤）
 		ctx.hit_flags |= GameConst.HIT_IS_AOE_SECONDARY
 		ctx.crit_chance = 0.0
 		ctx.pos = (e as Node2D).global_position
+		_inject_relic_pools(ctx, e)               # R199 D07：技能通道遗物乘区（管线⑤主通道直消费）
 		if pipeline != null and (pipeline as Object).has_method(&"resolve"):
 			pipeline.call(&"resolve", ctx)
 			settled += 1
@@ -623,8 +678,11 @@ func _reset_skill_temp_state() -> void:
 	# 回收——_summon_restore 内有 is_instance_valid 守卫）。
 	# ★R187 刻意不含镜面：_mirror_images 是永久会话态（验收 2 反向断言——本函数执行后
 	# _summon_copies 空而 _mirror_images 原样）；镜面回收只在 clear_mirrors（重开/换局）。
+	var cloud_was_active := _poison_cloud_left > 0.0
 	_poison_cloud_left = 0.0
 	_poison_cloud_tick_left = 0.0
+	if cloud_was_active:
+		EventBus.emit_poison_cloud_end()   # R199 H01：换角/重开清毒云同样收口（fx 层即入渐隐）
 	_summon_restore()
 
 
@@ -727,10 +785,12 @@ func _poison_cloud_pulse() -> void:
 		ctx.target_uid = int(e.get("uid"))
 		ctx.frame_stamp = GameConfig.frame_stamp
 		ctx.base_atk = base * POISON_CLOUD_ATK_PCT
-		ctx.element = GameConst.Element.FIR      # 毒伤元素口径沿 mank 毒沼绽放先例（FIR 通道）
+		ctx.element = GameConst.Element.KIN      # R199 D14：毒云无元素通道（沿 mank 同批矫正——
+		                                         # 原 FIR 口径被火免疫敌 elem_immune=2 拦零）
 		ctx.hit_flags |= GameConst.HIT_IS_AOE_SECONDARY
 		ctx.crit_chance = 0.0                    # 领域 DoT 不暴击（稳定期望口径）
 		ctx.pos = (e as Node2D).global_position
+		_inject_relic_pools(ctx, e)              # R199 D07：技能通道遗物乘区（管线⑤主通道直消费）
 		pipeline.call(&"resolve", ctx)
 	DebugStats.count(&"poison_cloud_pulse")
 
@@ -842,7 +902,9 @@ func make_mirror_image(p_source: WeaponBase, p_prism: WeaponBase) -> WeaponBase:
 	# 镜面标记（鸭子协议——镜面实体侧字段缺失时静默无操作）：
 	mirror.set("is_mirror_image", true)
 	mirror.set("mirror_source_id", p_source.data.id)
-	mirror.set("copy_tint", Color(0.82, 0.92, 1.0))   # 银白/冰青（禁金色调性——读感区分裁定）
+	mirror.set("copy_tint", true)   # 灰染 flag（R183 通道同 :822 p_copy 口径——此前写
+	                                # Color 被 LaserWeapon 类型化 bool 字段静默丢弃，
+	                                # 镜面 W4 束恒玩家蓝；冰青读感由化身层 MirrorImage.TINT 承担）
 	return mirror
 
 
@@ -970,16 +1032,43 @@ func gain_xp(p_amount: float) -> void:
 	xp += amount
 	EventBus.emit_xp_gained(amount)
 	var levels := 0
-	while xp >= xp_need:
-		xp -= xp_need
-		level += 1
-		xp_need = _xp_need_for(level)
+	# R189 巨批连升内联循环：曲线参数本地化（免 4.8 万次 _xp_need_for 调用/int→float
+	# 转换/maxi——爆发帧 51ms→~35ms 裕量）；公式与 _xp_need_for 逐位一致（同序浮点运算）
+	var curve_base := 14.0
+	var curve_power := 1.4
+	if not _xp_curve_cached and GameConfig.balance != null:
+		curve_base = float(GameConfig.balance.xp_curve.get("base", 14.0))
+		curve_power = float(GameConfig.balance.xp_curve.get("power", 1.4))
+		_xp_curve_base = curve_base
+		_xp_curve_power = curve_power
+		_xp_curve_cached = true
+	elif _xp_curve_cached:
+		curve_base = _xp_curve_base
+		curve_power = _xp_curve_power
+	var lv := float(level)
+	var need := xp_need
+	var xp_local := xp                                # R189：巨批循环全局部变量化
+	var level_local := level                          #（成员访问 ~0.15µs/次 × 3 × 4.8 万级）
+	while xp_local >= need:
+		xp_local -= need
+		level_local += 1
+		lv += 1.0
+		need = curve_base * pow(lv, curve_power)
 		levels += 1
-		EventBus.emit_level_up(level)
+	xp = xp_local
+	level = level_local
+	xp_need = need
 	if levels > 0:
 		hp = max_hp
 		level_burst_last = levels
 		level_burst_max = maxi(level_burst_max, levels)
+		if levels == 1:
+			EventBus.emit_level_up(level)            # 单级：逐级广播语义保持（E-16）
+		else:
+			# R189 连升合并广播：巨批逐级 emit 的每级信号税（4+ 订阅者 × 4.8 万级）
+			# 为爆发帧超预算主头——批级一次入账，GameLoop._on_level_up_batch 与
+			# 逐级仲裁（首级弹卡/排队帽 3/溢出批计数）逐位同口径
+			EventBus.emit_level_up_batch(levels)
 
 
 func set_difficulty(p_d: int) -> void:
@@ -1030,12 +1119,14 @@ func respawn() -> void:
 	slot_bonus = 0                              # R88 金卡解锁计数随局清零
 	invuln_left = RESPAWN_INVULN_S
 	clear_revive_protect()                       # E2 r2：青弧跨局清零（复活 3s 内重开/回菜单不得残留）
+	clear_crystal_shield()                       # R192：晶盾纯会话态随局清零（重开不残留减伤）
 	# 格挡力场复位（词条随武器重建重挂；interval 清零防上局残留——挂载时再置位）
 	shield_interval = 0.0
 	shield_timer = 0.0
 	shield_ready = false
 	_shield_pulse_left = 0.0
 	_drag_accum = Vector2.ZERO
+	_active_drag_index = -1                      # R194：首指锁随局清零（重开不残留上局锁权）
 	skill_cd_left = 0.0
 	skill_active_left = 0.0
 	rof_mult = 1.0
@@ -1080,6 +1171,7 @@ func _try_revive() -> bool:
 	invuln_left = REVIVE_INVULN_S
 	_revive_protect_left = REVIVE_INVULN_S       # 青弧倒数置位（唯一写点；哨兵 3s 技能无敌不触发——独立字段）
 	_revive_protect_max = REVIVE_INVULN_S
+	clear_crystal_shield()                       # R192：晶盾随生死态清零（复活不满血白嫖减伤残留）
 	queue_redraw()
 	_revive_clear_bullets()                      # 260px 内至多 24 颗敌弹清弹缓冲（_skill_stomp 同帽）
 	EventBus.emit_revive_burst(global_position, revives_left)   # charges_left = 扣减后余量
@@ -1117,6 +1209,19 @@ func clear_revive_protect() -> void:
 	queue_redraw()
 
 
+func grant_crystal_shield(p_dr: float, p_duration: float) -> void:
+	# R192 结晶族反应（GEO+X）：晶盾减伤刷新不叠加（重复触发重置时长与幅度——
+	# 纯会话态：不入 run_save 快照；dr 钳 [0, 0.8] 与削抗钳同界）
+	dr_value = clampf(p_dr, 0.0, 0.8)
+	dr_left = maxf(p_duration, 0.0)
+
+
+func clear_crystal_shield() -> void:
+	# 晶盾清零（复活/死亡/重开收口——减伤不得跨生死态残留）
+	dr_value = 0.0
+	dr_left = 0.0
+
+
 func _on_slot_unlocked_event(p_slot: int) -> void:
 	unlock_slot(p_slot)
 
@@ -1130,14 +1235,20 @@ func _clamp_to_playfield() -> void:
 	global_position.y = clampf(global_position.y, size.y * 0.6, size.y - hitbox_radius)
 
 
+var _xp_curve_base: float = 14.0              # R189：xp 曲线参数缓存（balance 静态——
+var _xp_curve_power: float = 1.4              # 巨批连升 4.8 万级 × 逐次 dict 读是爆发帧主头）
+var _xp_curve_cached: bool = false
+
+
 func _xp_need_for(p_level: int) -> float:
 	# 14 × lv^1.4（balance.xp_curve 真源；lv → lv+1 升级所需）
-	var base := 14.0
-	var power := 1.4
-	if GameConfig.balance != null:
-		base = float(GameConfig.balance.xp_curve.get("base", 14.0))
-		power = float(GameConfig.balance.xp_curve.get("power", 1.4))
-	return base * pow(float(maxi(p_level, 1)), power)
+	# R189：曲线参数首次求值时缓存（balance 表 Boot 期加载后不变，测试无运行期改表）
+	if not _xp_curve_cached:
+		_xp_curve_cached = true
+		if GameConfig.balance != null:
+			_xp_curve_base = float(GameConfig.balance.xp_curve.get("base", 14.0))
+			_xp_curve_power = float(GameConfig.balance.xp_curve.get("power", 1.4))
+	return _xp_curve_base * pow(float(maxi(p_level, 1)), _xp_curve_power)
 
 
 # ── 方向 C 表现层（贴纸机体：倾斜 / 双引擎喷焰 / hover 浮动 / 受击白闪弹回 / 无敌闪烁） ──
@@ -1230,11 +1341,16 @@ class SummonDrone:
 	# R93 真护航僚机（用户「所谓僚机就是临时环绕力场？」）：舰形贴图编队侧翼跟随
 	# + 主动开火（弹道池真弹，伤害 12% 主武器 ATK）——不再是环绕接触珠。
 	# 到期前 1.5s 闪烁预警，寿命尽自回收。
+	# R198（P2-escort）：引擎自驱 _process 改 Player.tick 同拍 tick(p_game_delta)
+	#（非虚方法名即退出引擎 _process 回调）——寿命/开火节拍/编队跟随全吃副本
+	# game_delta，顿帧/暂停冻结下与主循环同步；浮动相位自累加 _anim_t 脱离
+	# Time.get_ticks_msec() 墙上时钟。到期回收/预警闪烁语义逐值保持。
 	extends Node2D
 
 	var side := 1                                # 编队侧（1 右 / -1 左）
 	var _fire_left := 0.0
 	var _life_left := 10.0
+	var _anim_t := 0.0                           # R198：浮动相位（game_delta 自累加）
 	var _sprite: Sprite2D = null
 
 	func _ready() -> void:
@@ -1245,23 +1361,23 @@ class SummonDrone:
 		_sprite.scale = Vector2(0.4, 0.4)
 		add_child(_sprite)
 
-	func _process(p_delta: float) -> void:
+	func tick(p_game_delta: float) -> void:
 		var host := get_parent()
 		if host == null or not is_instance_valid(host):
 			return
-		_life_left -= p_delta
+		_life_left -= p_game_delta
 		if _life_left <= 0.0:
 			queue_free()
 			return
+		_anim_t += p_game_delta
 		# 编队位：侧翼 ±74px / 前突 44px + 微浮动——平滑跟随（非环绕）
-		var t_now := Time.get_ticks_msec() * 0.001
-		var target: Vector2 = Vector2(side * 74.0, -44.0 + sin(t_now * 2.2 + side) * 7.0)
-		position = position.lerp(target, minf(p_delta * 6.0, 1.0))
+		var target: Vector2 = Vector2(side * 74.0, -44.0 + sin(_anim_t * 2.2 + side) * 7.0)
+		position = position.lerp(target, minf(p_game_delta * 6.0, 1.0))
 		# 到期预警闪烁（末 1.5s）
 		if _life_left < 1.5:
 			_sprite.modulate.a = 0.4 + 0.6 * absf(sin(_life_left * 14.0))
 		# 开火：0.55s 一发，最近敌 ≤340px
-		_fire_left -= p_delta
+		_fire_left -= p_game_delta
 		if _fire_left > 0.0:
 			return
 		_fire_left = 0.55

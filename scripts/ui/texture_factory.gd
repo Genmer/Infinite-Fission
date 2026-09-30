@@ -1394,9 +1394,12 @@ static func weapon_icon(p_id: StringName) -> ImageTexture:
 
 static func skill_icon(p_id: StringName) -> ImageTexture:
 	# 角色技能图标（HUD 技能键 + 角色选人卡，2026-08-31 用户反馈「技能好歹画个对应的
-	# 图标」）：8 角色各一枚贴纸风程序化图形，64px 画布——剪影 + 主题色承载辨识度
+	# 图标」）：10 角色各一枚贴纸风程序化图形，64px 画布——剪影 + 主题色承载辨识度
 	#（哨兵=盾徽蓝 / 薇拉=爆发箭橙 / 磐=践踏波棕红 / 岚=瞬步残影青 / 零=时锶紫 /
-	# 莽=毒爆绿 / 薇拉博士=毒云绿蓝 / 诺亚=僚机环蓝）
+	# 莽=毒爆绿 / 薇拉博士=毒云绿蓝 / 诺亚=僚机环蓝 / 枢=自定义星金 / 伊可=双菱镜紫）
+	# R198（二aw-5）：fission/echo 专属两 case 补齐——此前两者落 `_:` 通用星；
+	# `_:` 默认分支保留（防未来新角色裸奔）。fission 无技能（no_skill 契约），其图标
+	# 仅消费于选人卡 skill_ico；echo 图标 HUD 技能键自动生效（同函数同缓存键）。
 	var key := "skill_icon_%s" % String(p_id)
 	return _cached(key, func() -> ImageTexture:
 		var blue := PopPalette.PLAYER
@@ -1489,6 +1492,32 @@ static func skill_icon(p_id: StringName) -> ImageTexture:
 					])), "fill": deep, "ow": 2.4},
 					{"sd": _circle_at(Vector2(0.0, 0.0), 2.4), "fill": white, "ow": 0.0},
 				]
+			"fission":                        # R198（二aw-5）初始武装自定义：中央星（PLAYER×GOLD 混色）+ 底部两条槽位短杠——「开局武器任选」读感
+				layers = [
+					{"sd": _box_at(Vector2(-13.0, 17.0), Vector2(5.0, 1.8), 0.9),
+						"fill": PopPalette.GOLD, "ow": 1.6},
+					{"sd": _box_at(Vector2(13.0, 17.0), Vector2(5.0, 1.8), 0.9),
+						"fill": PopPalette.GOLD, "ow": 1.6},
+					{"sd": _poly_sd(_star_pts(14.0, 6.2)),
+						"fill": PopPalette.PLAYER.lerp(PopPalette.GOLD, 0.5), "ow": 3.0},
+					{"sd": _circle_at(Vector2(-4.0, -4.0), 2.2), "fill": white, "ow": 0.0},
+				]
+			"echo":                           # R198（二aw-5）双生回响：镜像双菱镜 + 中央连线——「随机双武装」镜像读感（PLAYER×SHOCK 混色）
+				var echo_col := PopPalette.PLAYER.lerp(PopPalette.SHOCK, 0.5)
+				var echo_deep := echo_col.lerp(PopPalette.OUTLINE, 0.35)   # 镜像深色（像 vs 本体）
+				var gem_l := PackedVector2Array([
+					Vector2(-19.0, -13.0), Vector2(-8.0, 0.0), Vector2(-19.0, 13.0), Vector2(-30.0, 0.0),
+				])
+				var gem_r := PackedVector2Array([
+					Vector2(19.0, -13.0), Vector2(30.0, 0.0), Vector2(19.0, 13.0), Vector2(8.0, 0.0),
+				])
+				layers = [
+					{"sd": _box_at(Vector2.ZERO, Vector2(6.0, 1.6), 0.8),
+						"fill": echo_col, "ow": 0.0},
+					{"sd": _poly_sd(gem_l), "fill": echo_col, "ow": 3.0},
+					{"sd": _poly_sd(gem_r), "fill": echo_deep, "ow": 3.0},
+					{"sd": _circle_at(Vector2.ZERO, 2.4), "fill": white, "ow": 0.0},
+				]
 			_:
 				layers = [
 					{"sd": _poly_sd(_star_pts(16.0, 7.0)), "fill": blue, "ow": 3.0},
@@ -1512,6 +1541,67 @@ static func ui_glyph(p_kind: int) -> ImageTexture:
 			layers.append({"sd": _poly_sd(PackedVector2Array([
 				Vector2(-7.0, -13.0), Vector2(14.0, 0.0), Vector2(-7.0, 13.0),
 			])), "fill": PopPalette.OUTLINE, "ow": 0.0})
+		return _render(64, 64, _shade(layers)))
+
+
+static func ui_lock() -> ImageTexture:
+	# R196 UI 字形贴纸（apk_menu_no_icons 定案：emoji 字面量禁入 UI 字符串——Android
+	# 系统字体链缺 SMP emoji 字形只出字不出图）：挂锁 = 锁梁环段（下半被锁体覆写）+
+	# 锁体圆角方 + 锁孔（孔/柄 PANEL 白，体 OUTLINE 藏青）。64×64 惰性缓存
+	#（R188 红线：Boot 后一次性生成 + 静态缓存，运行期零重生成零分配）。
+	var key := "ui_lock"
+	return _cached(key, func() -> ImageTexture:
+		var layers: Array = [
+			{"sd": _ring_at_c(Vector2(0.0, -7.0), 6.4, 2.4), "fill": PopPalette.OUTLINE, "ow": 0.0},
+			{"sd": _box_at(Vector2(0.0, 5.0), Vector2(10.5, 8.0), 3.5),
+				"fill": PopPalette.OUTLINE, "ow": 0.0},
+			{"sd": _circle_at(Vector2(0.0, 3.5), 2.3), "fill": PopPalette.PANEL, "ow": 0.0},
+			{"sd": _box_at(Vector2(0.0, 8.5), Vector2(1.2, 3.2), 1.2),
+				"fill": PopPalette.PANEL, "ow": 0.0},
+		]
+		return _render(64, 64, _shade(layers)))
+
+
+static func ui_gem() -> ImageTexture:
+	# R196 UI 字形贴纸：裂变结晶 = 切面菱形（上部台面亮带 + 左上白高光）。大厅「养成」
+	# /角色「解锁」/养成「升级」按钮 icon（Button.icon 原生排版），替代结晶 emoji 字面量。
+	var key := "ui_gem"
+	return _cached(key, func() -> ImageTexture:
+		var gem := PackedVector2Array([
+			Vector2(-13.0, -4.0), Vector2(-7.0, -12.0), Vector2(7.0, -12.0),
+			Vector2(13.0, -4.0), Vector2(0.0, 14.0),
+		])
+		var table := PackedVector2Array([
+			Vector2(-13.0, -4.0), Vector2(-7.0, -12.0), Vector2(7.0, -12.0),
+			Vector2(13.0, -4.0),
+		])
+		var layers: Array = [
+			{"sd": _poly_sd(gem), "fill": PopPalette.XP, "ow": 3.5},
+			{"sd": _poly_sd(table), "fill": PopPalette.XP.lightened(0.28), "ow": 0.0},
+			{"sd": _circle_at(Vector2(-4.0, -7.0), 2.0), "fill": Color(1.0, 1.0, 1.0, 0.95),
+				"ow": 0.0},
+		]
+		return _render(64, 64, _shade(layers)))
+
+
+static func ui_trophy() -> ImageTexture:
+	# R196 UI 字形贴纸：奖杯 = 杯体五边 + 双耳环（画在杯体下层，内弧被覆写）+ 杯颈 +
+	# 深色底座。成就位/成就 toast 视觉锚，替代奖杯 emoji 字面量。
+	var key := "ui_trophy"
+	return _cached(key, func() -> ImageTexture:
+		var cup := PackedVector2Array([
+			Vector2(-10.0, -14.0), Vector2(10.0, -14.0), Vector2(8.0, 2.0),
+			Vector2(0.0, 7.0), Vector2(-8.0, 2.0),
+		])
+		var layers: Array = [
+			{"sd": _ring_at_c(Vector2(-13.0, -8.0), 4.2, 2.0), "fill": PopPalette.XP, "ow": 2.5},
+			{"sd": _ring_at_c(Vector2(13.0, -8.0), 4.2, 2.0), "fill": PopPalette.XP, "ow": 2.5},
+			{"sd": _poly_sd(cup), "fill": PopPalette.XP, "ow": 3.5},
+			{"sd": _box_at(Vector2(0.0, 11.0), Vector2(2.5, 3.5), 1.5),
+				"fill": PopPalette.XP, "ow": 2.5},
+			{"sd": _box_at(Vector2(0.0, 17.0), Vector2(8.0, 2.5), 2.0),
+				"fill": PopPalette.OUTLINE, "ow": 0.0},
+		]
 		return _render(64, 64, _shade(layers)))
 
 
@@ -1599,6 +1689,14 @@ static func _box_rot_at(p_center: Vector2, p_half: Vector2, p_rad: float, p_angl
 static func _ring_at(p_r: float, p_thickness: float) -> Callable:
 	return func(p_x: float, p_y: float) -> float:
 		return absf(sqrt(p_x * p_x + p_y * p_y) - p_r) - p_thickness
+
+
+static func _ring_at_c(p_center: Vector2, p_r: float, p_thickness: float) -> Callable:
+	# 圆环 SDF（圆心偏移版——ui_lock 锁梁 / ui_trophy 杯耳；原点版 _ring_at 既有调用不动）
+	return func(p_x: float, p_y: float) -> float:
+		var dx := p_x - p_center.x
+		var dy := p_y - p_center.y
+		return absf(sqrt(dx * dx + dy * dy) - p_r) - p_thickness
 
 
 static func _poly_sd(p_pts: PackedVector2Array) -> Callable:

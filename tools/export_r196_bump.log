@@ -1,0 +1,17 @@
+版本已迭代：versionCode=4 versionName=0.1.3
+导出第 1 次尝试：exit=0
+── 门禁 ──
+  PASS  清单竖屏 screenOrientation=1
+  PASS  清单 versionCode==文件名 vc
+  PASS  清单 versionName==文件名 v
+  PASS  badging 无 landscape
+  PASS  apksigner verify
+  PASS  体积 24~48MiB
+  PASS  abis==arm64-v8a
+  PASS  无 export_presets.cfg 泄露
+  PASS  assets/data/manifest.cfg 在包
+  PASS  assets/data/balance/global_constants.cfg 在包
+  PASS  五生成链 .gdc 在包（A8 子集）
+  PASS  .gdc 计数==repo 非测试 .gd 计数（A10 子集）
+汇总：12 项中 12 过；包=E:\Code\Agent\Infinite-Fission\android_export\out\InfiniteFission_v0.1.3_vc4.apk
+EXIT=0

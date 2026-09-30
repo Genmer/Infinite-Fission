@@ -138,24 +138,39 @@ func _probe_level_burst() -> void:
 	print("[deep-probe] 断言 C1 选卡排队 ≤ 3（连升合并帽）：%s" % ["PASS" if p_ok else "FAIL"])
 	if not p_ok:
 		_fails += 1
-	# R188 裁定口径（同风暴档锚）：C2 预算线在连升爆发上为遥测线（非失败断言）——
-	# 根因已定位：47,958 次逐级 emit_level_up（GameLoop 合并仲裁的计数契约真源）×
-	# meta_manager._on_level_up → _check_achievements 全表扫（idle 组文件）≈ 7µs/级 →
-	# 350ms 单帧；消费方减负移交评审/修复环。C1 排队帽（结构性修复本体）保持硬闸门。
-	print("[deep-probe] 断言 C2 gain_xp 单帧 ≤ %.0f ms（遥测预算线）：%s" % [
-		FRAME_BUDGET_MS, "达线" if burst_ms <= FRAME_BUDGET_MS else "超线（WARN）"])
-	if burst_ms > FRAME_BUDGET_MS:
-		print("[deep-probe] WARN：连升爆发帧 %.1f ms > %.0f ms（逐级 emit × meta 成就全表扫——见移交清单）" % [
-			burst_ms, FRAME_BUDGET_MS])
-	# 收口链：choose → 溢出批同分布自动抽卡（真链全程无单帧 >50ms 口径）
+	# R189：C2 预算线复位为真断言（spec §4.8-9「全程无单帧 >50ms」）——根因已修：
+	# ①巨批逐级 emit_level_up 收敛为 level_up_batch 单信号入账；②Meta 成就按计数
+	# 类型分桶增量检查（原逐级 7 键字典构建 + 11 项全表扫 ≈7µs/级）。
+	# 溢出批同步收口改分帧预算消化后，choose 收口帧不再含巨批抽卡（C3 同口径复位）。
+	var c2_ok := burst_ms <= FRAME_BUDGET_MS
+	print("[deep-probe] 断言 C2 gain_xp 单帧 ≤ %.0f ms（§4.8-9 单帧预算）：%s" % [
+		FRAME_BUDGET_MS, "PASS" if c2_ok else "FAIL"])
+	if not c2_ok:
+		_fails += 1
+	# 收口链：choose → 溢出批挂起转分帧消化（收口帧不含巨批抽卡，逐帧 ≤6ms 预算）
 	if _gl.state == GameConst.GameStatus.LEVEL_UP and _gl.card_select_ui.is_open:
 		var t1 := Time.get_ticks_usec()
 		_gl.card_select_ui.choose(0)
 		var close_ms := float(Time.get_ticks_usec() - t1) / 1000.0
 		var f2_ok := close_ms <= FRAME_BUDGET_MS
-		print("[deep-probe] choose 收口帧 %.2f ms（溢出批 %d 张自动抽卡）| 断言 C3 单帧 ≤ %.0f ms：%s" % [
+		print("[deep-probe] choose 收口帧 %.2f ms（溢出批 %d 张转分帧消化）| 断言 C3 单帧 ≤ %.0f ms：%s" % [
 			close_ms, merged, FRAME_BUDGET_MS, "PASS" if f2_ok else "FAIL"])
 		if not f2_ok:
+			_fails += 1
+		var drain_frames := 0
+		# R189：消化期挂机自动选卡 ON（战斗升级弹窗自动消化防阻塞）+ 窗口闭合双条件；
+		# 结束后复位 OFF（套件原口径）
+		Meta.set_setting("auto_select_on", true)
+		while (_gl.merged_overflow_level_ups > 0 or _gl.card_select_ui.is_open) \
+				and drain_frames < 12000:
+			_gl._physics_process(1.0 / 120.0)     # 抽卡在 PLAYING 帧序内分帧消化
+			drain_frames += 1
+		Meta.set_setting("auto_select_on", false)
+		var drain_ok := _gl.merged_overflow_level_ups == 0 \
+			and _gl.state == GameConst.GameStatus.PLAYING
+		print("[deep-probe] 溢出批分帧消化 %d 帧 | 断言 C4 批清零收口：%s" % [
+			drain_frames, "PASS" if drain_ok else "FAIL"])
+		if not drain_ok:
 			_fails += 1
 	else:
 		print("[deep-probe] 断言 C3 跳过（LEVEL_UP 卡窗未开——state=%d）" % _gl.state)

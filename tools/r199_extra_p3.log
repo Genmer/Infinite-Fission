@@ -1,0 +1,30 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · Boss P3 专项自测 ══════════
+── 三阶段 / 狂暴化 ──
+PASS | 前置：阶段 1
+PASS | 阶段机：HP ≤ 60% → 阶段 2
+PASS | 阶段 2：全抗 +0.2 一次
+PASS | 阶段机：HP ≤ 30% → 阶段 3
+PASS | B8：狂暴锁存（_enrage_done）
+PASS | B8：全抗不重复加（仍 0.2）
+PASS | B8：乘区就位（cd ×0.8 / 弹速 ×1.2）
+PASS | B8：狂暴前摇 ×0.85（0.4→0.34）
+PASS | B8：血量回升不撤销狂暴（一次性锁存）
+PASS | 切段：技能 cd 重置（≤ cd×0.5+容差）
+── B4 裂变召唤 ──
+PASS | B4：召唤节拍生成小怪（≥2 只）
+PASS | B4：召唤物面值折算（hp_ratio 0.3）
+PASS | B4：该 Boss 召唤物在场 ≤ cap（4，自然波次不误伤）
+── 真源配置 ──
+PASS | E17_frost_sovereign：三阶段 + enrage 在册
+PASS | E18_demon_lord：三阶段 + enrage 在册
+PASS | E19_grove_warden：三阶段 + enrage 在册
+PASS | E20_swamp_hydra：三阶段 + enrage 在册
+PASS | E6 教学级：保持两阶段（无 enrage）
+────────────────────────────────────────
+汇总：PASS 18 / FAIL 0（共 18 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

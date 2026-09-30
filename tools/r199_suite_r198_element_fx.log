@@ -1,0 +1,63 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R198 组1 元环表现验证 ══════════
+── ①b R192-low1 stat 统计段读表守卫 ──
+WARNING: [DamagePopup] reaction_stat_text 表缺键 RXN_ICE_LTG——返回空串（R192-low1）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | ①b 表缺键：reaction_stat_text 返回空串且告警闸记账（RXN_ICE_LTG）
+WARNING: [DamagePopup] reaction_stat_text 枚举错位 rxn=9999（无表键）——返回空串（R192-low1）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | ①b 枚举错位：reaction_stat_text 返回空串且告警闸记账（rxn=9999）
+PASS | ①b 合法无统计段（感电）：空串且零告警（禁误报——:220 注释口径）
+PASS | ①b 合法无统计段（扩散·火）：空串且零告警
+── ①a R192-low1 冻结臂缺键：告警一次 + 默认值回落 + 结算不崩 ──
+WARNING: [ElementalSystem] reaction_table RXN_ICE_HYD 缺键 "freeze_dur"（回落默认 1.2，结算不中断——R192-low1）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [ElementalSystem] reaction_table RXN_ICE_HYD 缺键 "chill_dur"（回落默认 2.5，结算不中断——R192-low1）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [ElementalSystem] reaction_table RXN_ICE_HYD 缺键 "vuln_mult"（回落默认 1.25，结算不中断——R192-low1）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [ElementalSystem] reaction_table RXN_ICE_HYD 缺键 "vuln_dur"（回落默认 3，结算不中断——R192-low1）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | ①a 缺键 rule 结算不崩：反应触发 +1 · 双槽清空 · cd 落闸
+PASS | ①a 默认值回落：冻结 1.2s / 寒滞 2.5s / 易伤 ×1.25 3s（默认硬默认不中断结算）
+PASS | ①a 告警路径触发：会话一次闸记满 4 门（freeze_dur/chill_dur/vuln_mult/vuln_dur）
+PASS | ①a 真表对照：零缺键告警 + 表值冻结 1.2s/寒滞 2.5s/易伤 ×1.25 3s
+── ② R192-low2 冻结臂 IMMUNE_CHILL 检位 ──
+PASS | ② IMMUNE_CHILL：冻结反应仍触发（计数 +1 · 双槽清空——消费契约不受免疫影响）
+PASS | ② IMMUNE_CHILL：freeze 不发生（无 IMMUNE_FREEZE 位仍不冻）且 chill==0/vuln 不变
+PASS | ② IMMUNE_FREEZE 半边不变：不定身（freeze==0）仍吃寒滞 2.5s/易伤 ×1.25 3s
+PASS | ② 非免疫目标逐值不变：冻结 1.2s / 寒滞 2.5s / 易伤 ×1.25 3s
+── ③ R192-low6 绽放 delay 双源同批（1.5→0.75，R198 契约变更） ──
+PASS | ③ 双源同值：运行时（.tres）== .gd 默认 == 0.75（validator 双源闸同批）
+PASS | ③ coef/radius 不随调参漂移：χ1.5 / r120 保持
+PASS | ③ 行为臂：bloom_active 挂账 · bloom_timer≈0.75（锁表值 delay==0.75）
+── ①c R192-low1 感电反应臂零误报 ──
+PASS | ①c 感电反应正常触发（+1 计数 · 双槽清空）
+PASS | ①c 感电臂零缺键告警（合法无键规则不入取键路径——会话闸全空）
+── ④⑤ R192-low7 卡名消歧 + R192-low9 四新卡箭头式 ──
+PASS | ④ R192-low7：ELE_SHOCK display_name==「雷引」（卡名让位反应名）
+PASS | ④ R192-low7：反应名「感电」单源不动（REACTION_NAMES + REACTION_LOOKS + 跳字名）
+PASS | ⑤ 水卡（既有口径基准）：火→蒸发 · 冰→冻结 · 雷→感电 · 草→绽放
+PASS | ⑤ 草卡：火→燃烧 · 雷→激化 · 水→绽放 · 风→扩散·草
+PASS | ⑤ 风卡：五配对箭头式全为「X→扩散·X」（反应名带·元素后缀）+ 岩→结晶·风
+PASS | ⑤ 风卡：无「遇…即」列表式残留（同构口径收口）
+PASS | ⑤ 岩卡：任意元素→结晶·X 箭头式（结晶族六名引 REACTION_NAMES 词）
+PASS | ⑤ 岩卡：无「遇…即」列表式残留
+PASS | ⑤ 卡族主题名风格：五元素卡各具主题名（潮湿/草种/风域/岩铠/雷引）
+── ⑥ R192-low10 popup 分桶映射（直击 0 / 反应 1 / 其余 2 / 文字 3 / 引爆 4） ──
+PASS | ⑥ _style_bucket 逐值映射 == 头注桶枚举（含 CHARGE_BURST→4，R187）
+── ⑦ R192-low3 燃烧带层数口径 ──
+PASS | ⑦ 跳字统计段：燃烧读表 burn_layers_max →「5层」（stat 型带层数非无数）
+PASS | ⑦ 图鉴 mult_fmt：「至多 N 层」口径（game_const.gd 文案真源未动）
+PASS | ⑦ 其余 stat 型：超导-30% / 激化+25% / 结晶-15% / 冻结1.2s（如实用词不漂移）
+── ⑧ r195-5 confetti 落雨世界域（960 宽画布域下 x∈[0,720]） ──
+PASS | ⑧ 爆发齐量：PIECE_COUNT 64 + RAIN_COUNT 26 = 90 枚
+PASS | ⑧ 全部 piece 初始 x∈[0,720]（世界 720 域——画布 960 宽不外溢）
+PASS | ⑧ 落雨带（尾部 26 枚）x∈[0,720] ⊆ 世界可见带 [-120,840]（3:4 画布全覆盖）
+── ⑨ r195-6 beam_impact 迸裂池扩容 10→20 ──
+PASS | ⑨ 池槽总数==20 且常量同步（IMPACT_COUNT 10→20）
+PASS | ⑨ 预建槽位：BeamImpact* 子节点恰 20（_ready 一次建齐）
+PASS | ⑨ 命中/tick 路径零 add_child：子节点数不变（静态池零运行期实例化）
+────────────────────────────────────────
+汇总：PASS 36 / FAIL 0（共 36 项）

@@ -1,0 +1,288 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R188 整案验收（market·buffs·idle·perf） ══════════
+PASS | Boot#1：完成且进入 MENU
+── §M R188-1 黑市供给（验收五断言 + 口径抽查） ──
+PASS | §M 前置：常规局开局
+PASS | §M 前置：null 目标候选全部叠满（枯竭复现，无溢出）
+PASS | §M 前置：补充空栈宿主武器
+PASS | ① 真终局（枯竭循环后）开店 buyable_count() >= 1
+PASS | ② 词条枯竭态货架有非 heal 词条行（口径对齐扩池生效）
+PASS | ② 展示=实挂：购买后词条 id 落在展示 target 的 trait_stack 上
+PASS | ② 购买扣金 + 购买即下架（_wares 行清空）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | ③ 前置：取得空栈 target 武器
+PASS | ③ 前置：target 武器直挂 12 条不同词条（TraitStack.MAX_TRAITS 满栈）
+PASS | ③ 前置：取得第 13 条未挂词条（全武器栈均无）
+PASS | ③ 满 12 词条武器为 target 的行：购买不扣金
+PASS | ③ 拒买且第 13 条词条未挂到任何武器（不静默换宿主）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | ④ 持 REL_BLACK_MARKET 出现金卡行
+PASS | ④ 金卡价 = .tres params.gold_card_price（260，数据驱动无硬编码）
+PASS | ④ 购买金卡 → unlocked_slots +1（SLOT_BONUS 提前解锁帽内下一槽）
+PASS | ④ 购买扣金 260 + 购买即下架
+PASS | ④ 满槽不上架（无金卡行）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | ⑤ 前置：补充可挂载空栈宿主
+PASS | ⑤ buyable_count()==0 触发终兜底常青货上架（FALLBACK_ATK 运行期构造）
+PASS | ⑤ 保底行可购（buyable_count() >= 1）
+PASS | ⑤ 购买保底行：FALLBACK_ATK 落展示 target 栈 + 金币 25→0
+PASS | ⑤ 清空 _wares 后 open 立即补保底常青行且可购
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 抽查：刷新价曲线不变 15×market_mult(wave,9)×1.5ⁿ（n=0,1,2 逐点相等）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 抽查：关店 _refresh_count 归零（重开回基准价 ==c0）
+PASS | 抽查：R37 玩家侧 5 池词条不出现在黑市货架（扫 3 行）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | Boot#2：完成且进入 MENU
+── §H R188-2 高位叠层回归（十组「正常」口径锁死） ──
+PASS | §H 前置：常规局开局
+PASS | ①a 1000 层逐层挂载全成功，layers/layer_values 同步 1000
+PASS | ①b 1000 层 aggregate_panel = 150.0（绝对误差 <1e-9，无隐藏饱和）
+PASS | ①c stacked_add_total 与面板同源 150.0
+PASS | ①d 第 1001 层增量恰 +0.15（逐层仍按层生效）
+PASS | ①e 100 层 aggregate_panel = 15.0（±1e-9）
+PASS | ②a 真卡 AFF_ATK_UP attach×10 → 恰 8 层（stack_max+超帽延伸 5），第 9 层拒绝
+PASS | ②b 运行期 stack_max=99 载体（FALLBACK 口径）attach×200 → 恰 104 层硬帽（stack_max+5）
+PASS | ③a F4 帽真源 add_atk = 2.0
+PASS | ③b 99×0.05=4.95 → F4 钳 2.0 + audit.clamped_add 记账（饱和可见非隐式）
+PASS | ③c FALLBACK dmg(40) == dmg(99) == 300（1+F4 帽 2.0）
+PASS | ③d 99 层审计可见（clamped_add）且 R_alarm 不误报
+PASS | ④a 诅咒 99 层线性全额 −9.9（不衰减/不钳——惩罚语义按层全额）
+PASS | ④b 诅咒 1000 层叠层面全额 −100（无 NaN）
+PASS | ④c 诅咒 99 层 → S 转负、终值钳 0（有限、无 NaN、无误告警）
+PASS | ⑤a 单区钳：contrib 5.0/cap_pool 2.0 → merged_M = 3.0
+PASS | ⑤b 乘区名额 top-8（20 区 → 8 入）+ cap_prod 钳 8.0 + 审计 compressed
+PASS | ⑤c add_crit 1000 层 → crit_rate 钳 cap_crit_rate=1.0
+PASS | ⑤d add_skillcdr 1000 层 → 技能急速钳 0.6
+PASS | ⑤e BALLISTIC add_rof 1000 层 → 节拍钳 1/30 s（cap_rof_per_weapon=30）
+PASS | ⑥a 激活拉满存款 0.6（20/s×0.01×3 网格化快照）
+PASS | ⑥b 满 60 击直减 0.6 → CD 119.4（snappedf 网格无浮点漂移）
+PASS | ⑥c 计费遥测 credits==60 / seconds==0.60
+PASS | ⑥d 存款枯竭第 61 击不直减（<1 击预算整击丢弃）
+PASS | ⑥e tick(1s) 回充 0.2（20 击/s 口径）
+PASS | ⑥f 继续回充钳存款帽 0.6
+PASS | ⑥g 同帧 120 击恰 +60 计费 / CD 119.4→118.8（回充-消耗循环无漂移）
+PASS | ⑥h 技能就绪不计费（存款留存）
+PASS | ⑥i 120k×(1/120s) tick soak：预算恰回帽 0.6、计费零增、无 NaN
+PASS | ⑦a 清空后 reaction_mult = 1.0
+PASS | ⑦b 同 uid 重注册覆盖（4.7，非连乘 8.46）
+PASS | ⑦c 1000 注册/注销循环 → 表空 + 聚合归 1.0（注销泄漏回归锁）
+PASS | ⑦d 注销口精确移除 + 幻影 uid 静默
+PASS | ⑦e 局清空回 1.0（start_run/continue_run 两口同源）
+PASS | ⑧a +15%×2 → 「+30%」（金色高亮），不再渲染「+0.3…」
+PASS | ⑧b +25×4 → 「+100」，不再渲染「1005」
+PASS | ⑧c +8%×3 → 「+24%」
+PASS | ⑧d +1×2 → 「+2」
+PASS | ⑧e 1 层描述逐字不变（不改写）
+PASS | ⑧f 负值（-10%）描述逐字不变（eff≤0 早退不改写）
+N= 100 | aggregate_panel  187.725 µs/次
+N=1000 | aggregate_panel 1804.038 µs/次
+PASS | ⑨a 成本随层数线性标度（1000 层/100 层比值 ∈[5,15]——O(总层数) 无超线性爆炸）
+PASS | ⑨b copy_full 混品级保真：源 37.5 → 克隆 37.5（±1e-9）且逐层条目 150 保真
+PASS | ⑩a layers 往返保真：存 3 = 落盘回读 3 = 恢复实挂 3，聚合 0.45→0.45
+PASS | ⑩b 恢复受 stack_max 钳：存 99 → 回读恰 8（注册表基件帽 3+超帽延伸 5 生效，不越帽）
+PASS | ⑩c-预 满层挂载质变 value_mult==1.6（0.15×3×1.6=0.72）
+PASS | ⑩c 恢复后满层质变再触发：3 层 + value_mult==1.6 + 聚合 0.72
+PASS | Boot#3：完成且进入 MENU
+── §P R188-4 性能纵深（门控/脏标记/LOD/建波钳制/连升合并/池扩容） ──
+PASS | §P 前置：常规局开局
+PASS | P1 池预热扩容：pool_prewarm.projectile = 820（≥820，800 弹锚容量前提）
+PASS | P1 软/硬限不动（1500/2000——仅预热容量一处变更）
+PASS | P2 EventBus.end_frame 门控：关闭 0.156µs vs 开启 666.055µs → 下降 100.0%（≥90%）
+PASS | P2 复位：dev_assertions 回默认 false
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | P3 同帧 10 次 enemy_killed → refresh_stats 恰 1 次（脏标记合并）
+PASS | P3 displayed_kills 口径逐位一致（+10）
+PASS | P3 观测口读数不触发二次 flush（已同帧消化）
+PASS | P4 前置：波 1 有活跃敌
+SCRIPT ERROR: Invalid call. Nonexistent function '_enemy_lod_full_rate' in base 'Node2D (GameLoop)'.
+          at: _perf_enemy_lod (res://tests/runner/r188_idle_cases.gd:1098)
+WARNING: [WaveDirector] 波 233 生成请求钳制 →200（溢出转 HP×221.98/攻×14.90）——后续钳制仅计数
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | P5 w233 start_wave 稳态单帧 1.715 ms（≤5.0，原 w293=221.7ms 已结构性消除）
+PASS | P5 生成请求恰 200（WAVE_COUNT_CLAMP 钳制生效）
+PASS | P5 pressure 乘区下发（221.98 ≥ 1.0——变强不变多）
+WARNING: [EnemySpawner] spawn_queue 达高水位 600：拒收后续投放请求（一次告警）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | P6 高水位 600 拒收：队列不越线（600）且 queue_rejected +1
+PASS | P6 DebugStats 计数同步（spawn_queue_rejected ≥1）
+[perf-probe] gain_xp(1e12) 帧耗 45.12 ms | 连升 47958 级 | 排队 3（帽 3）| 溢出批 47954
+PASS | P7 连升爆发帧 45.1 ms ≤ 50 ms（§4.8-9 单帧预算）
+PASS | P7 连升 47958 级 → 选卡排队 ≤3（PENDING_LEVEL_UP_CAP 合并帽）
+PASS | P7 溢出批不排队（merged_overflow >0，消除 4.8 万张选卡冻结）
+PASS | P7 真实弹窗批恰 1 窗（溢出批零弹窗——自动选卡计时器只消化真实批）
+PASS | P7 choose 收口帧 17.49 ms（≤50，真链首选不超预算）
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+[perf-probe] 溢出批分帧消化 1111 帧 / 全程 48237.94 ms（原末批同帧收口 72040 ms 已消除）
+PASS | P7 收口归零：回 PLAYING、pending/merged 清、无残留卡窗
+PASS | Boot#4：完成且进入 MENU
+── §I R188-3 挂机全链路（设置/开关/选卡/商店/结算/soak） ──
+── A 设置段（auto_select_on / auto_restart_mode 双接线） ──
+PASS | A 出厂默认：auto_select_on == false（旧档缺键回默认零迁移）
+PASS | A 出厂默认：auto_restart_mode == 0
+PASS | A 越界钳制：9 → 2（clampi(0,2) 照 fx_quality 行口径）
+PASS | A 越界钳制：-3 → 0
+PASS | A 合法值：1 → 1
+PASS | A 未知键忽略：读口 null（DataValidator 白名单口径）
+PASS | A 未知键忽略：未入 _settings
+PASS | A 磁盘回路：写即落盘（settings/values.auto_select_on==true）
+PASS | A 磁盘回路：_load() 回读 true
+PASS | A 快照还原：_settings 与进套件前一致
+── B AUTO 开关（几何落位 + 五态可见性 + 模态期可点） ──
+PASS | B 开关存在（hud._auto_btn 胶囊按钮）
+PASS | B 开关几何：落位 x∈[644,704]×y∈[126,190]（波次徽章右/Boss 相位点外唯一空闲带）
+PASS | B 开关几何：与暂停钮矩形不相交
+PASS | B 开关几何：与波次徽章矩形不相交
+PASS | B 悬停说明：AUTO 胶囊经 _add_hover 注册（三档 mode 语义）
+PASS | B 点击翻转：Meta 落值取反（读写单一真源，无缓存 bool）
+PASS | B 点击翻转：写即落盘
+PASS | B 二次点击：回原值（无缓存态）
+PASS | B 模态期可点机制：HUD process_mode=ALWAYS（tree.paused 冻结战斗仍可切）
+PASS | B 模态期可点机制：三模态 root 均 MOUSE_FILTER_IGNORE（选卡/商店/结算不拦截）
+PASS | B 可见性：MENU 隐藏
+PASS | B 可见性：PLAYING 显示
+PASS | B 可见性：LEVEL_UP 显示（自动开关恰在选卡期工作，不照抄暂停钮仅 PLAYING）
+PASS | B 清场：选卡回 PLAYING
+PASS | B 可见性：PAUSED 隐藏
+PASS | B 可见性：GAME_OVER 隐藏
+PASS | B 可见性：回 MENU 隐藏
+── C 选卡真链（0.5s 窗 + 描金 + 成对协议 + 诅咒硬不变量） ──
+PASS | C 前置：常规局开局
+PASS | C1 前置：升级弹卡（LEVEL_UP）
+PASS | C1 pkg4:296 口径：0.5s 展示窗内 LEVEL UP 文案不变
+PASS | C1 描金 = 策略首选（单卡槽位一致）
+PASS | C1 0.6s 内自动选完成
+PASS | C1 choice_made 恰一次（普通单张）
+PASS | C1 card_chosen 恰 +1（Meta 图鉴口径真链）
+PASS | C1 state 回 PLAYING
+PASS | C2 前置：双级连升首级弹卡 + 排队 1（投喂 2 次）
+PASS | C2 逐次消化：两次各选 1 次后回 PLAYING
+PASS | C2 card_chosen 恰 +2
+PASS | C3 前置：地狱成对货架 6 卡
+PASS | C3 成对策略槽位 ∈[4,9] 且同行双亮（描金 2 槽）
+PASS | C3 成对整行：choice_made 载荷 2 张
+PASS | C3 card_chosen 恰 +2（成对两卡各应用一次）
+PASS | C4 诅咒硬不变量：200 seed 扫描（含成对 6 卡）恒指向非诅咒卡/行
+PASS | C5 前置：OFF 弹卡
+PASS | C5 OFF 零干预：1s 后仍 LEVEL_UP 未选
+PASS | C5 清场：回 PLAYING
+── D 商店自动离店（三源汇总 + 零损失） ──
+PASS | D1 前置：黑市开店（LEVEL_UP）
+PASS | D1 0.8s 后自动离店
+PASS | D1 state 回 PLAYING
+PASS | D1 金币零变动（不代买不烧金）
+PASS | D2 前置：战前补给开店
+PASS | D2 战前补给自动离店
+PASS | D2 金币零变动
+PASS | D2 收口：回 PLAYING（D3 独立前置）
+PASS | D3 前置：遗物排程开店（三源同汇口）
+PASS | D3 遗物排程源自动离店
+PASS | D3 金币零变动
+── E 结算自动重开（mode0/1/2 + 每日回退） ──
+PASS | E1 前置：死亡进 GAME_OVER
+PASS | E1 mode0 负向：5s 仍 GAME_OVER 不重开
+PASS | E1 mode0 负向：无倒计时挂起
+PASS | E1 mode0 结算恰 +1（total_runs 无双记）
+PASS | E1 mode0 手动重开放行（既有契约）
+PASS | E2 mode1 倒计时挂起（GameLoop 每帧喂秒）
+PASS | E2 倒计时文案：卡面内 Label（N 秒后自动再来一局 · 点按取消）
+PASS | E2 前置：RestartButton 在
+PASS | E2 点按取消：立即回 PLAYING
+PASS | E2 点按取消：倒计时撤销 + 文案收起
+PASS | E2 点按取消：无二次重开（wave_started 不再派发）
+PASS | E2 mode1 结算恰 +1（无双记）
+PASS | E3 mode1 ~3s 自动重开（restart_run 真链）
+PASS | E3 mode1 结算恰 +1（无双记）
+PASS | E4 前置：非每日局
+PASS | E4 前置：通关收尾窗 → 通关屏（无尽出口可见）
+PASS | E4 mode2 ~3s 自动无尽（continue_endless 真链）
+PASS | E4 波次越过 final_wave（保构筑续打）
+PASS | E5 前置：每日局开局
+PASS | E5 每日局 mode2 回退：5s 仍 GAME_OVER
+PASS | E5 每日局手动重开放行
+PASS | E5 每日局 mode1 回退：5s 仍 GAME_OVER
+── F 全链 soak（全开 + mode2，3120 帧 ≥3000） ──
+PASS | F 前置：常规局开局
+PASS | F soak：LEVEL_UP 连续停留 ≤10s（1200 帧）
+PASS | F soak：GAME_OVER 连续停留 ≤10s（1200 帧）
+PASS | F soak：波次单调不减（重开瞬间豁免）
+[idle soak] 遥测：max_wave=2 自动选卡 2 次 max_lu=60帧 max_go=0帧 波次违例=0
+────────────────────────────────────────
+R188 用例分账：PASS 178 / FAIL 0（共 178 项）
+══════════════════════════════════════════════════
+验收汇总：178/178 通过
+WARNING: 1 RID of type "Canvas" was leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2483)
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 8 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

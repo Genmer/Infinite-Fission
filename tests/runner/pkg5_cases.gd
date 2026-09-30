@@ -59,6 +59,16 @@ func _ensure_autoloads() -> void:
 
 func _boot_game_loop() -> void:
 	# ★ main.tscn 实例化（入口场景组装验证：根节点即 GameLoop，Boot 全链在 _ready 完成）
+	# 套件隔离（pkg4「夜间R42」先例同款）：boot 前清继续档 + Meta 归零——player._ready
+	# 在 spawn 期直读 Meta.character_id/hp_bonus() 定 max_hp（player.gd:476），前置套件
+	# 经大厅选人（menu_screen.gd:1367 → set_character_id 即时落档 meta_manager.gd:335）
+	# 残留低血量角色（veles base 45）时，REL_HARVEST 回血触 max_hp 钳制
+	#（relic_handler.gd:320）→ 偶发空 detail FAIL（探针实证：veles 残留 → 恰 143/1）；
+	# 字面血量断言（REL_HARVEST 0.4% 口径）假定 sentinel 基线档案
+	RunSave.clear()
+	Meta.upgrades = {}
+	Meta.crystals = 0
+	Meta.character_id = &"sentinel"
 	var scene: PackedScene = load(MAIN_SCENE)
 	_gl = scene.instantiate() as GameLoop
 	_gl.name = "GameLoopUnderTest"
@@ -372,6 +382,37 @@ func _test_rxn_alarm_line() -> void:
 	_check("B.6：亚线反应原值通过（200）且审计无告警",
 		r_ok != null and is_equal_approx(r_ok.final_value, 200.0)
 		and r_ok.audit != null and not r_ok.audit.alarm)
+	# —— B.6 [R192 扩] 反应矩阵告警线（R192 §10：管线按「每笔结算 coefficient>50」判，
+	# 配对数结构性不进口径——reaction_table 全 coef 键逐条注入验证）——
+	var coef_keys: Array = []
+	for k in bal.reaction_table:
+		if (bal.reaction_table[k] as Dictionary).has("coef"):
+			coef_keys.append(String(k))
+	_check("B.6-R192：反应表含 coef 键条目 ≥4（现役 2 + 新增伤害反应——矩阵非空）",
+		coef_keys.size() >= 4, "coef_keys=%s" % str(coef_keys))
+	var mat_ok := true
+	var mat_detail := ""
+	pipe._rxn_alarm_emitted = false           # 复位广播闸（验证矩阵首条重新广播、此后保持）
+	var mat_alarm0: int = int(pipe._stats["rxn_alarms"])
+	for i in range(coef_keys.size()):
+		var ctx_m := _pipe_ctx(t, 20 + i)     # 独立 frame_stamp——绕开幂等缓存
+		var r_m: DamageResult = pipe.resolve_reaction(100.0, 60.0, ctx_m)
+		if r_m == null or not is_equal_approx(r_m.final_value, 5000.0) \
+				or r_m.audit == null or not r_m.audit.alarm:
+			mat_ok = false
+			mat_detail = "%s final=%s" % [coef_keys[i],
+				str(r_m.final_value if r_m != null else -1.0)]
+	_check("B.6-R192：全矩阵 coef 键逐条注入 χ=60 → 均钳至 S_snap×50（5000）+ alarm",
+		mat_ok, mat_detail)
+	_check("B.6-R192：矩阵超线计数逐笔累加（+%d）且广播闸一局一次（首条后保持）" % coef_keys.size(),
+		int(pipe._stats["rxn_alarms"]) == mat_alarm0 + coef_keys.size()
+		and bool(pipe._rxn_alarm_emitted))
+	# 最大合法构筑不误报：单源金 φ4.68 × 蒸发 1.5 = 7.02 ≤ 50 → 原值通过、审计干净
+	var ctx_mx := _pipe_ctx(t, 19)
+	var r_mx: DamageResult = pipe.resolve_reaction(100.0, 7.02, ctx_mx)
+	_check("B.6-R192：最大构筑 coef=7.02 不钳不告警（702 原值通过）",
+		r_mx != null and is_equal_approx(r_mx.final_value, 702.0)
+		and r_mx.audit != null and not r_mx.audit.alarm)
 	(_gl.pools[&"enemy"] as EnemyPool).release(t)
 
 
@@ -441,7 +482,9 @@ func _test_relic_handler() -> void:
 	_gl.player.hp = 50.0
 	EventBus.emit_enemy_killed(victim)            # spawner 同步归还（池内节点合法）
 	_check("REL_HARVEST：击杀 +0.4% max_hp（50→50.4）",
-		is_equal_approx(_gl.player.hp, 50.0 + _gl.player.max_hp * 0.004))
+		is_equal_approx(_gl.player.hp, 50.0 + _gl.player.max_hp * 0.004),
+		"hp=%s max_hp=%s（max_hp<50.24 即 boot 角色残留钳制——见 _boot_game_loop 隔离）"
+			% [str(_gl.player.hp), str(_gl.player.max_hp)])
 	# REL_OVERCLOCK：精英首杀 → 下一张卡稀有度保底紫+（每波一次）
 	_check("REL_OVERCLOCK：激活", h.activate(&"REL_OVERCLOCK"))
 	EventBus.emit_wave_started(3)
@@ -797,11 +840,22 @@ func _test_duck_tightening() -> void:
 func _test_ac_core_subset() -> void:
 	print("── AC 核心子集 ──")
 	# AC-01.1：竖屏逻辑分辨率 + 拉伸策略
-	_check("AC-01.1：720×1280 + canvas_items/keep（Q-1 裁定口径）",
+	# R195 契约更新：Q-1 原裁 canvas_items/keep 黑边 → R195 主案 keep→expand（超宽/超长
+	# 窗延伸画布）；运行期窗口高宽比>2.34 由 GameLoop 表现层钳制回落 KEEP 居中黑边
+	#（STRETCH_ASPECT_RATIO_MAX 代码常量，r195_adapt A7 验收）——断言值随契约同步为
+	# expand，非放宽（r195_adapt D1② 与 R195 契约表同口径；整体回退位=project.godot
+	# 单行改回 keep，届时本断言须随之回改）。
+	_check("AC-01.1：720×1280 + canvas_items/expand（R195 更新 Q-1 口径：keep→expand+超限钳制回落）",
 		ProjectSettings.get_setting("display/window/size/viewport_width") == 720
 		and ProjectSettings.get_setting("display/window/size/viewport_height") == 1280
 		and String(ProjectSettings.get_setting("display/window/stretch/mode")) == "canvas_items"
-		and String(ProjectSettings.get_setting("display/window/stretch/aspect")) == "keep")
+		and String(ProjectSettings.get_setting("display/window/stretch/aspect")) == "expand")
+	# R194：Android 竖屏唯一修口 = 项目设置（4.3 导出器清单 screenOrientation 只读
+	# display/window/handheld/orientation；1=PORTRAIT——export_presets 的
+	# screen/orientation 为 3.x 死键已删，导出门禁以重导出包 xmltree=1 为准）
+	_check("R194：window/handheld/orientation=1（竖屏，AC-01.1 同款 ProjectSettings 直读）",
+		int(ProjectSettings.get_setting("display/window/handheld/orientation")) == 1,
+		str(ProjectSettings.get_setting("display/window/handheld/orientation")))
 	# AC-14.4：池满降级（软闸 null + 计数）
 	var tiny := ProjectilePool.new()
 	tree.get_root().add_child(tiny)
@@ -1152,6 +1206,21 @@ func _test_aff_hp_up_wiring() -> void:
 	_gl.player.hp = _gl.player.max_hp
 	# R94 隔离宿主：新装一把干净手枪专测（前序用例可能已把槽 0 词条挂满 12 帽——
 	# attach 拒绝与 HP 池无关；增量口径同 R9b 但宿主零污染）
+	# R189 槽位保障：前序用例升级即选（_ensure_playing/_drive_safe → choose(0)）卡池
+	# 每局随机（start_run randomize），可能抽中 WEAPON 卡占用武器槽——已解锁槽存在
+	# 全满可能，add_weapon 返回 null 属测试装配失败而非产品缺陷。末位用例：先开放
+	# 难度帽内槽位；帽内仍全满则回收槽 1 多余武器腾位（不影响任何前序已完成的断言）。
+	_gl.player.unlock_slot(int(_gl.player.call(&"slot_cap_total")))
+	var host_full := true
+	for i in range(mini(_gl.player.unlocked_slots, _gl.player.weapon_slots.size())):
+		if _gl.player.weapon_slots[i] == null:
+			host_full = false
+			break
+	if host_full and _gl.player.weapon_slots.size() > 1:
+		var drop: WeaponBase = _gl.player.weapon_slots[1]
+		if drop != null and is_instance_valid(drop):
+			drop.queue_free()
+		_gl.player.weapon_slots[1] = null
 	var host_w: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W1_pistol"))
 	if host_w == null:
 		_check("AFF_HP_UP 接线：+2 层（基线 0）→ max_hp = 60+25×2 = 110 且 hp 等量回补",
