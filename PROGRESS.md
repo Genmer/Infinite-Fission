@@ -1,8 +1,25 @@
 # ⚡ INFINITE FISSION · 开发进度与交接文档（PROGRESS）
 
-> **本文档是跨工具/跨会话交接的唯一入口。新会话/新工具接手后：先读完本文 → 按 §5「下一步行动」顺序执行。**
-> 最后更新：2026-08-29 ｜ 更新人：主控 Agent（ZCode 会话：包 3 自测+修复、内容 .tres、duck 收紧、包 4、集成包两段接力，全部完成；当前在阶段 E 把关）
-> 远程仓库：`https://github.com/Genmer/Infinite-Fission.git`（main 分支）
+> **本文档是跨工具/跨会话交接的唯一入口。新会话/新工具接手后：先读 §0「当前状态（R199 收口）」→ 需要历史背景再回溯 §1 以下归档（§2/§4/§5 为 M1~M3 时代快照，勿当现役状态）。**
+> 最后更新：2026-10-01 ｜ 更新人：复审修复 Agent（R199 发布清扫轮·交付基线入库；此前最后更新 2026-08-29~08-30，M1~M3 交付与用户反馈轮记录作为归档保留在正文）
+> 远程仓库：`https://github.com/Genmer/Infinite-Fission.git`（**现役工作分支 `art/daylight-pop`——交付物在此分支，不在 main**，分支拓扑见 §0 警示）
+
+---
+
+## 0. 当前状态（R199 收口快照，2026-10-01）——新会话先读本节
+
+**交付基线已入库并推送（R199 复审修复轮落账）：**
+- 交付基线提交 = **71a7338**（R195~R199 全量工作：105 处修改 + 111 个新文件——G1~G8 修复、docs/design/R191~R199、tools/export_apk_versioned.py + export_artifact_gate.py + make_icon.py、assets 启动图标、auto_idle_strategy / safe_area_helper / playfield_outline 等产品码、R19x 验收套件、r196/r199 验证日志）；随后一笔 = 本交接修正。
+- 推送状态：origin/art/daylight-pop 与 HEAD 同步（判据 `git rev-list --count origin/art/daylight-pop..HEAD` = 0）。欠账补登：fdebd76（R188 基线固化）/ 15b6e6f（R188-perf）/ 10e3cec（R194-orient）三个本地提交自 2026-09-20（R94，6f453f0）后一直未推，随本轮一并推送。
+- 基线复跑证据（本轮先落日志再取退出码）：test_r199_g1 24/24、test_r199_g4 37/37、test_r199_g6 23/23，headless 退出码全 0。
+- **史实更正**：§2 旧快照「全部已推送（HEAD = ff9240d）」与 §5 第 9 条「commit+push 纪律全程遵守」**与事实不符**——实际 2026-09-20 后至本轮零提交，已交付的 v0.1.2~v0.1.5 四批 APK 均出自未提交工作树；**更早批次逐批快照不可从 git 复现（无 tag）**。当前树（export_presets.cfg：version/code=6 / version/name=0.1.5 口径，即 v0.1.5 交付批）已入库。后续每交付批必须 commit+push 并真验证推送（口径见 §10 与 docs/design/R199_RELEASE_SWEEP.md §四门槛第 6 条）。
+
+**分支拓扑警示（接手必读）：**
+- 现役开发线 = `art/daylight-pop`。`origin/main`（adc876d，2026-09-04「feat(combat): 重构全向立体出兵」）自 032f988（2026-08-31）与 art 线分叉，含一条**未合入 art 的异线提交**；art 线相对 origin/main 领先 124+ 提交。两侧合并或取舍属仓库级决策，本修复轮**未做**——找交付物请切 `art/daylight-pop`，勿按旧口径只看 main。
+- 本地 `main` 分支（d87259b）与 origin/main 亦不一致（ahead 1 / behind 28），同待处置。
+
+**R195~R199 轮次索引**（设计文档 docs/design/，验收套件 tests/runner/test_r19x_*.gd，验证日志 tools/r19x_*.log）：
+R195 屏幕适配（test_r195_adapt / laser_pierce / layout）｜ R196 成长修复（test_r196_growth / pistol_trait_probe）｜ R197 构建面板（test_r197_build_panel，QA 报告 docs/qa/2026-09-29）｜ R198 积压清扫（test_r198_element_fx / flow_weapon / hud_layout / menu_meta，收口报告 docs/qa/2026-09-30）｜ R199 发布清扫（test_r199_g1 / g4 / g6 + docs/design/R199_RELEASE_SWEEP.md 放行门槛）。
 
 ---
 
@@ -26,7 +43,7 @@
 | E 审查+测试（并行） | 独立代码审查 + 运行验证（两轮） | ✅ 完成（一轮：1C+3I 修复；二轮：可交付判定，720/720 终验 PASS） |
 | F 交付报告 | 汇总判定+关键决策清单 | ✅ 完成（判定 = 可交付；见 §5.8 与 §4 裁定记录） |
 
-**仓库当前可编译（0 解析错误），回归 720/720 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 117）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~5.8ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。全部已推送（HEAD = ff9240d）。**
+**仓库当前可编译（0 解析错误），回归 720/720 全 PASS（pkg0 129 + pkg1 108 + pkg2 140 + pkg3 128 + pkg4 98 + pkg5 117）。压力场景（500 弹+100 敌，headless 逻辑帧口径）P95≈5.5~5.8ms < 8.3ms；soak 180s 满载自动战斗 0 运行期实例化 / 0 池污染 / 无错误日志。全部已推送（HEAD = ff9240d）。〔历史快照注记 2026-10-01：本行所记为 M1~M3 阶段当时事实；此后推送纪律长期中断至 R199 修复轮补登，现役状态一律以 §0 为准。〕**
 
 **阶段 E 关键战果（审查/测试发现并修复）：**
 - 一轮审查 1C+3I：重开不清场（残留战场秒杀重生）→ `_clear_battlefield` 清场序 + respawn 1.5s 无敌；GameFeel 订阅晚于 Spawner 清 tags（Boss 击杀打击感永不触发）→ early_bind；Boss 波伴随怪流水锁死 wave_cleared → `_boss_ref` 存活闸；TH_CRIT_SHARD 全武器声明零实现 + 校验器空承诺 → 补 `trait_effect_crit_shard.gd` + check_references ② 落地
@@ -87,7 +104,7 @@
 6. ~~集成包~~ ✅（2026-08-29，两段接力：前任智能体完成 A/B/D 后跑 soak 超时被中断，续作智能体盘点补缺。main.tscn 全链可跑；扫尾 8 项全落；压力 P95=5.62ms<8.3ms + soak 180s 满载 0 实例化；pkg5 98/98。**续作额外修 3 bug**：game_feel_director.on_player_hit 双参信号签名、enemy._reset_state 归还置 dead=true（防二次死亡广播）、GameLoop spawner/wave_director 入树序（F-19 Boss 击杀解锁失效））
 7. ~~阶段 E~~ ✅ 两轮：一轮（reviewer 1C+3I ∥ tester 全量复现通过）→ coder 修复（1f7d3db/ff9240d，含双落血族 5 处 + 2 项追加裁定）→ 二轮（reviewer 判可交付 ∥ tester 720/720 终验 + 专项 24/24）
 8. ~~阶段 F~~ ✅ 交付判定：**可交付**。关键决策清单 = §4 全部裁定条目 + §2 阶段 E 战果 + §8.1 weapon_ref 增量契约；后续改进清单见 §11
-9. 每完成一个包：**git commit + push**（纪律！全程遵守，HEAD = ff9240d 已推）
+9. 每完成一个包：**git commit + push**（纪律声明；史实更正 2026-10-01：2026-09-20 后曾长期中断，至 R199 修复轮才补登欠账，见 §0——后续以 §10 的推送判据为准，勿只口头声明）
 
 ## 11. 后续改进清单（不阻塞交付，下轮迭代）
 
@@ -158,8 +175,9 @@
 - 不用外部插件；美术全用程序化占位（纯色/PrimitiveShape），正式美术后续迭代
 - 测试全绿才允许合入下一包；每包完成必须 git commit + push
 
-## 10. Git 约定
+## 10. Git 约定（2026-10-01 修订）
 
-- 远程：`origin = https://github.com/Genmer/Infinite-Fission.git`，主分支 `main`
-- `.gitignore`：`.godot/`、`.DS_Store`（Godot 导入缓存不入库）
-- 提交信息格式：`<包号>: <一句话>`（如 `pkg3: weapon/trait/elemental core + builtin traits`）
+- 远程：`origin = https://github.com/Genmer/Infinite-Fission.git`；**现役工作分支 `art/daylight-pop`（交付物所在）**；`main` 与之分叉且含一条异线提交（adc876d），处置属仓库级决策（见 §0 警示）
+- `.gitignore`：`.godot/`、`/android/`、`.DS_Store`、`*.tmp`、`screens/`（Godot 导入缓存与本地自检产物不入库）
+- 提交信息格式：现行 `<轮次>-<主题>: <一句话+要点>`（如 `R194-orient: …`、`R199-基线入库: …`；M 时代旧格式 `<包号>: <一句话>` 仅作存档）
+- **推送纪律（R199 补强）**：每完成一个包/轮次必须 `git push origin art/daylight-pop`，且以 `git rev-list --count origin/art/daylight-pop..HEAD` 返回 **0** 为「已推送」判据；交付基线入库前抽跑定向验收套件（先落日志再取退出码）

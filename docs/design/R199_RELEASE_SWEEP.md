@@ -290,4 +290,5 @@
   3. r188_idle 单跑功能断言绿（P4 死组清账后总账更新；P7 时敏超预算记录不拦截）；
   4. 全仓无新增 emoji 字面量、无 SpaceGrid/池化纪律违例；
   5. FEEDBACK_TRACKER.md 由收口组统一登记（修复组未触碰）。
+  6. **交付基线入库可复现（R199 复审修复轮补入，finding「交付基线未入库未推送」闭环）**：全部产品码/测试/设计文档已 commit 且推送现役工作分支——71a7338（R195~R199 全量落账：105 处修改+111 个新文件，提交前定向套件复跑 g1 24/24、g4 37/37、g6 23/23 headless 全绿）+ 交接修正一笔（PROGRESS.md §0 快照 + 本条），origin/art/daylight-pop 同步，判据 `git rev-list --count origin/art/daylight-pop..HEAD` = 0；**后续每交付批重复 commit+push 并同法验证**。注：origin/main 与 art 线分叉（含异线提交 adc876d）属仓库级决策，未在本轮处置，已在 PROGRESS.md §0 公示。
 - **不阻塞发布但须公示**：deferred 66 项（其中 P12/H05 待真机验收；C01/C02 建议进下批首批）。
