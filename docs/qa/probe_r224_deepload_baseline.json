@@ -1,0 +1,883 @@
+{
+	"S0": {
+		"gates": {
+
+		},
+		"killed_in_window": 2671,
+		"per_sec_tail": [
+			{
+				"bucket_enemy": 4,
+				"bucket_projectile": 2,
+				"bucket_xp": 13,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 60,
+				"popups": 79,
+				"projectiles": 417,
+				"runtime_inst": 0,
+				"settles": 2752,
+				"settles_deferred": 0,
+				"settles_dropped": 0,
+				"settles_flushed": 0,
+				"shards": 84,
+				"status_enemies": 0,
+				"submissions": 2752,
+				"tint_groups": 4,
+				"tinted_enemies": 16
+			},
+			{
+				"bucket_enemy": 4,
+				"bucket_projectile": 2,
+				"bucket_xp": 13,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 10,
+				"popups": 80,
+				"projectiles": 473,
+				"runtime_inst": 0,
+				"settles": 3701,
+				"settles_deferred": 0,
+				"settles_dropped": 0,
+				"settles_flushed": 0,
+				"shards": 30,
+				"status_enemies": 0,
+				"submissions": 3701,
+				"tint_groups": 4,
+				"tinted_enemies": 10
+			},
+			{
+				"bucket_enemy": 4,
+				"bucket_projectile": 2,
+				"bucket_xp": 13,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 0,
+				"popups": 80,
+				"projectiles": 440,
+				"runtime_inst": 0,
+				"settles": 3497,
+				"settles_deferred": 0,
+				"settles_dropped": 0,
+				"settles_flushed": 0,
+				"shards": 48,
+				"status_enemies": 0,
+				"submissions": 3497,
+				"tint_groups": 4,
+				"tinted_enemies": 12
+			},
+			{
+				"bucket_enemy": 4,
+				"bucket_projectile": 2,
+				"bucket_xp": 13,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 39,
+				"popups": 79,
+				"projectiles": 352,
+				"runtime_inst": 0,
+				"settles": 2765,
+				"settles_deferred": 0,
+				"settles_dropped": 0,
+				"settles_flushed": 0,
+				"shards": 44,
+				"status_enemies": 0,
+				"submissions": 2765,
+				"tint_groups": 4,
+				"tinted_enemies": 10
+			},
+			{
+				"bucket_enemy": 4,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 1,
+				"popups": 80,
+				"projectiles": 344,
+				"runtime_inst": 0,
+				"settles": 2811,
+				"settles_deferred": 0,
+				"settles_dropped": 0,
+				"settles_flushed": 0,
+				"shards": 42,
+				"status_enemies": 0,
+				"submissions": 2811,
+				"tint_groups": 4,
+				"tinted_enemies": 14
+			},
+			{
+				"bucket_enemy": 4,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 34,
+				"popups": 80,
+				"projectiles": 323,
+				"runtime_inst": 0,
+				"settles": 2885,
+				"settles_deferred": 0,
+				"settles_dropped": 0,
+				"settles_flushed": 0,
+				"shards": 40,
+				"status_enemies": 0,
+				"submissions": 2885,
+				"tint_groups": 4,
+				"tinted_enemies": 14
+			},
+			{
+				"bucket_enemy": 4,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 32,
+				"popups": 80,
+				"projectiles": 299,
+				"runtime_inst": 0,
+				"settles": 2777,
+				"settles_deferred": 0,
+				"settles_dropped": 0,
+				"settles_flushed": 0,
+				"shards": 35,
+				"status_enemies": 0,
+				"submissions": 2777,
+				"tint_groups": 4,
+				"tinted_enemies": 7
+			},
+			{
+				"bucket_enemy": 4,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 25,
+				"popups": 78,
+				"projectiles": 364,
+				"runtime_inst": 0,
+				"settles": 2572,
+				"settles_deferred": 0,
+				"settles_dropped": 0,
+				"settles_flushed": 0,
+				"shards": 47,
+				"status_enemies": 0,
+				"submissions": 2572,
+				"tint_groups": 4,
+				"tinted_enemies": 8
+			},
+			{
+				"bucket_enemy": 4,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 3,
+				"popups": 80,
+				"projectiles": 421,
+				"runtime_inst": 0,
+				"settles": 3231,
+				"settles_deferred": 0,
+				"settles_dropped": 0,
+				"settles_flushed": 0,
+				"shards": 57,
+				"status_enemies": 0,
+				"submissions": 3231,
+				"tint_groups": 4,
+				"tinted_enemies": 11
+			},
+			{
+				"bucket_enemy": 4,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 5,
+				"popups": 78,
+				"projectiles": 311,
+				"runtime_inst": 0,
+				"settles": 2112,
+				"settles_deferred": 0,
+				"settles_dropped": 0,
+				"settles_flushed": 0,
+				"shards": 18,
+				"status_enemies": 0,
+				"submissions": 2112,
+				"tint_groups": 4,
+				"tinted_enemies": 3
+			}
+		],
+		"segments": {
+			"card_drain": {
+				"mean_ms": 0.00154944444444438,
+				"p50_ms": 0.001,
+				"p95_ms": 0.002
+			},
+			"enemy": {
+				"mean_ms": 1.09860555555556,
+				"p50_ms": 0.889,
+				"p95_ms": 2.282
+			},
+			"feel": {
+				"mean_ms": 0.0585027777777779,
+				"p50_ms": 0.056,
+				"p95_ms": 0.088
+			},
+			"feel_shard": {
+				"mean_ms": 0.166585,
+				"p50_ms": 0.127,
+				"p95_ms": 0.429
+			},
+			"fx": {
+				"mean_ms": 0.073121666666666,
+				"p50_ms": 0.068,
+				"p95_ms": 0.096
+			},
+			"grid_projectile": {
+				"mean_ms": 16.8541305555555,
+				"p50_ms": 16.552,
+				"p95_ms": 26.771
+			},
+			"grid_rebuild": {
+				"mean_ms": 0.312936111111111,
+				"p50_ms": 0.3,
+				"p95_ms": 0.454
+			},
+			"other": {
+				"mean_ms": 1.53826722222222,
+				"p50_ms": 1.477,
+				"p95_ms": 2.36
+			},
+			"player": {
+				"mean_ms": 0.23353111111111,
+				"p50_ms": 0.036,
+				"p95_ms": 1.049
+			},
+			"player_mv": {
+				"mean_ms": 0.0059872222222223,
+				"p50_ms": 0.006,
+				"p95_ms": 0.008
+			},
+			"player_wp": {
+				"mean_ms": 0.215453888888887,
+				"p50_ms": 0.019,
+				"p95_ms": 1.03
+			},
+			"popup": {
+				"mean_ms": 1.47826777777778,
+				"p50_ms": 1.417,
+				"p95_ms": 2.302
+			},
+			"shard": {
+				"mean_ms": 0.137127222222222,
+				"p50_ms": 0.077,
+				"p95_ms": 0.458
+			},
+			"ui": {
+				"mean_ms": 2.40936611111111,
+				"p50_ms": 2.34,
+				"p95_ms": 3.338
+			},
+			"wave": {
+				"mean_ms": 0.0151850000000001,
+				"p50_ms": 0.012,
+				"p95_ms": 0.023
+			}
+		},
+		"totals": {
+			"p50_ms": 22.667,
+			"p95_ms": 33.539,
+			"p99_ms": 38.1
+		}
+	},
+	"S1": {
+		"gates": {
+
+		},
+		"killed_in_window": 2596,
+		"per_sec_tail": [
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 5,
+				"popups": 80,
+				"projectiles": 402,
+				"runtime_inst": 0,
+				"settles": 2969,
+				"settles_deferred": 6,
+				"settles_dropped": 0,
+				"settles_flushed": 6,
+				"shards": 26,
+				"status_enemies": 0,
+				"submissions": 2975,
+				"tint_groups": 3,
+				"tinted_enemies": 7
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 20,
+				"popups": 78,
+				"projectiles": 281,
+				"runtime_inst": 0,
+				"settles": 2593,
+				"settles_deferred": 144,
+				"settles_dropped": 6,
+				"settles_flushed": 138,
+				"shards": 27,
+				"status_enemies": 0,
+				"submissions": 2743,
+				"tint_groups": 3,
+				"tinted_enemies": 8
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 12,
+				"popups": 78,
+				"projectiles": 353,
+				"runtime_inst": 0,
+				"settles": 3014,
+				"settles_deferred": 26,
+				"settles_dropped": 0,
+				"settles_flushed": 26,
+				"shards": 46,
+				"status_enemies": 0,
+				"submissions": 3040,
+				"tint_groups": 4,
+				"tinted_enemies": 13
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 22,
+				"popups": 80,
+				"projectiles": 429,
+				"runtime_inst": 0,
+				"settles": 3514,
+				"settles_deferred": 63,
+				"settles_dropped": 1,
+				"settles_flushed": 62,
+				"shards": 70,
+				"status_enemies": 0,
+				"submissions": 3578,
+				"tint_groups": 4,
+				"tinted_enemies": 15
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 2,
+				"popups": 80,
+				"projectiles": 343,
+				"runtime_inst": 0,
+				"settles": 2883,
+				"settles_deferred": 13,
+				"settles_dropped": 0,
+				"settles_flushed": 13,
+				"shards": 119,
+				"status_enemies": 0,
+				"submissions": 2896,
+				"tint_groups": 4,
+				"tinted_enemies": 13
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 6,
+				"popups": 80,
+				"projectiles": 423,
+				"runtime_inst": 0,
+				"settles": 3195,
+				"settles_deferred": 15,
+				"settles_dropped": 0,
+				"settles_flushed": 15,
+				"shards": 50,
+				"status_enemies": 0,
+				"submissions": 3210,
+				"tint_groups": 4,
+				"tinted_enemies": 14
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 40,
+				"popups": 79,
+				"projectiles": 345,
+				"runtime_inst": 0,
+				"settles": 2876,
+				"settles_deferred": 51,
+				"settles_dropped": 0,
+				"settles_flushed": 51,
+				"shards": 47,
+				"status_enemies": 0,
+				"submissions": 2927,
+				"tint_groups": 4,
+				"tinted_enemies": 7
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 0,
+				"popups": 79,
+				"projectiles": 398,
+				"runtime_inst": 0,
+				"settles": 2169,
+				"settles_deferred": 0,
+				"settles_dropped": 0,
+				"settles_flushed": 0,
+				"shards": 30,
+				"status_enemies": 0,
+				"submissions": 2169,
+				"tint_groups": 4,
+				"tinted_enemies": 16
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 38,
+				"popups": 79,
+				"projectiles": 404,
+				"runtime_inst": 0,
+				"settles": 2679,
+				"settles_deferred": 23,
+				"settles_dropped": 4,
+				"settles_flushed": 19,
+				"shards": 47,
+				"status_enemies": 0,
+				"submissions": 2706,
+				"tint_groups": 4,
+				"tinted_enemies": 6
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 38,
+				"popups": 79,
+				"projectiles": 315,
+				"runtime_inst": 0,
+				"settles": 1838,
+				"settles_deferred": 10,
+				"settles_dropped": 0,
+				"settles_flushed": 10,
+				"shards": 53,
+				"status_enemies": 0,
+				"submissions": 1848,
+				"tint_groups": 4,
+				"tinted_enemies": 17
+			}
+		],
+		"segments": {
+			"card_drain": {
+				"mean_ms": 0.00157111111111104,
+				"p50_ms": 0.002,
+				"p95_ms": 0.002
+			},
+			"enemy": {
+				"mean_ms": 1.12158444444445,
+				"p50_ms": 0.925,
+				"p95_ms": 2.308
+			},
+			"feel": {
+				"mean_ms": 0.0589961111111115,
+				"p50_ms": 0.057,
+				"p95_ms": 0.088
+			},
+			"feel_shard": {
+				"mean_ms": 0.16536,
+				"p50_ms": 0.13,
+				"p95_ms": 0.457
+			},
+			"fx": {
+				"mean_ms": 0.0752299999999993,
+				"p50_ms": 0.07,
+				"p95_ms": 0.097
+			},
+			"grid_projectile": {
+				"mean_ms": 16.5139505555556,
+				"p50_ms": 16.049,
+				"p95_ms": 25.834
+			},
+			"grid_rebuild": {
+				"mean_ms": 0.312751666666667,
+				"p50_ms": 0.302,
+				"p95_ms": 0.438
+			},
+			"other": {
+				"mean_ms": 1.58822777777778,
+				"p50_ms": 1.528,
+				"p95_ms": 2.439
+			},
+			"player": {
+				"mean_ms": 0.228523333333333,
+				"p50_ms": 0.035,
+				"p95_ms": 1.006
+			},
+			"player_mv": {
+				"mean_ms": 0.00581277777777782,
+				"p50_ms": 0.005,
+				"p95_ms": 0.008
+			},
+			"player_wp": {
+				"mean_ms": 0.210619444444443,
+				"p50_ms": 0.018,
+				"p95_ms": 0.988
+			},
+			"popup": {
+				"mean_ms": 1.48418833333333,
+				"p50_ms": 1.448,
+				"p95_ms": 2.227
+			},
+			"shard": {
+				"mean_ms": 0.109512222222222,
+				"p50_ms": 0.08,
+				"p95_ms": 0.291
+			},
+			"ui": {
+				"mean_ms": 2.32585944444444,
+				"p50_ms": 2.29,
+				"p95_ms": 3.229
+			},
+			"wave": {
+				"mean_ms": 0.0455216666666669,
+				"p50_ms": 0.013,
+				"p95_ms": 0.02
+			}
+		},
+		"totals": {
+			"p50_ms": 22.136,
+			"p95_ms": 32.418,
+			"p99_ms": 37.622
+		}
+	},
+	"S2": {
+		"gates": {
+
+		},
+		"killed_in_window": 2304,
+		"per_sec_tail": [
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 0,
+				"popups": 78,
+				"projectiles": 375,
+				"runtime_inst": 0,
+				"settles": 2814,
+				"settles_deferred": 3033,
+				"settles_dropped": 571,
+				"settles_flushed": 2409,
+				"shards": 46,
+				"status_enemies": 0,
+				"submissions": 6418,
+				"tint_groups": 3,
+				"tinted_enemies": 2
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 61,
+				"popups": 80,
+				"projectiles": 324,
+				"runtime_inst": 0,
+				"settles": 2714,
+				"settles_deferred": 2282,
+				"settles_dropped": 305,
+				"settles_flushed": 2021,
+				"shards": 63,
+				"status_enemies": 0,
+				"submissions": 5301,
+				"tint_groups": 3,
+				"tinted_enemies": 10
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 0,
+				"popups": 79,
+				"projectiles": 417,
+				"runtime_inst": 0,
+				"settles": 2730,
+				"settles_deferred": 3367,
+				"settles_dropped": 874,
+				"settles_flushed": 2193,
+				"shards": 51,
+				"status_enemies": 0,
+				"submissions": 6971,
+				"tint_groups": 3,
+				"tinted_enemies": 5
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 38,
+				"popups": 78,
+				"projectiles": 412,
+				"runtime_inst": 0,
+				"settles": 2814,
+				"settles_deferred": 2896,
+				"settles_dropped": 462,
+				"settles_flushed": 2544,
+				"shards": 59,
+				"status_enemies": 0,
+				"submissions": 6172,
+				"tint_groups": 4,
+				"tinted_enemies": 10
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 0,
+				"popups": 78,
+				"projectiles": 321,
+				"runtime_inst": 0,
+				"settles": 2826,
+				"settles_deferred": 2891,
+				"settles_dropped": 312,
+				"settles_flushed": 2684,
+				"shards": 77,
+				"status_enemies": 0,
+				"submissions": 6029,
+				"tint_groups": 3,
+				"tinted_enemies": 7
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 0,
+				"popups": 79,
+				"projectiles": 346,
+				"runtime_inst": 0,
+				"settles": 2207,
+				"settles_deferred": 799,
+				"settles_dropped": 30,
+				"settles_flushed": 638,
+				"shards": 25,
+				"status_enemies": 0,
+				"submissions": 3036,
+				"tint_groups": 4,
+				"tinted_enemies": 5
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 79,
+				"popups": 79,
+				"projectiles": 315,
+				"runtime_inst": 0,
+				"settles": 2811,
+				"settles_deferred": 2545,
+				"settles_dropped": 316,
+				"settles_flushed": 2265,
+				"shards": 85,
+				"status_enemies": 0,
+				"submissions": 5672,
+				"tint_groups": 4,
+				"tinted_enemies": 8
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 21,
+				"popups": 78,
+				"projectiles": 328,
+				"runtime_inst": 0,
+				"settles": 2391,
+				"settles_deferred": 1742,
+				"settles_dropped": 327,
+				"settles_flushed": 1486,
+				"shards": 27,
+				"status_enemies": 0,
+				"submissions": 4460,
+				"tint_groups": 3,
+				"tinted_enemies": 3
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 7,
+				"popups": 79,
+				"projectiles": 259,
+				"runtime_inst": 0,
+				"settles": 2071,
+				"settles_deferred": 560,
+				"settles_dropped": 67,
+				"settles_flushed": 488,
+				"shards": 22,
+				"status_enemies": 0,
+				"submissions": 2698,
+				"tint_groups": 4,
+				"tinted_enemies": 8
+			},
+			{
+				"bucket_enemy": 5,
+				"bucket_projectile": 2,
+				"bucket_xp": 14,
+				"enemies": 120,
+				"homing_projectiles": 0,
+				"magnet_shards": 1,
+				"popups": 80,
+				"projectiles": 351,
+				"runtime_inst": 0,
+				"settles": 2367,
+				"settles_deferred": 771,
+				"settles_dropped": 54,
+				"settles_flushed": 722,
+				"shards": 51,
+				"status_enemies": 0,
+				"submissions": 3192,
+				"tint_groups": 4,
+				"tinted_enemies": 4
+			}
+		],
+		"segments": {
+			"card_drain": {
+				"mean_ms": 0.00158888888888882,
+				"p50_ms": 0.001,
+				"p95_ms": 0.002
+			},
+			"enemy": {
+				"mean_ms": 1.155705,
+				"p50_ms": 0.942,
+				"p95_ms": 2.384
+			},
+			"feel": {
+				"mean_ms": 0.059353888888889,
+				"p50_ms": 0.058,
+				"p95_ms": 0.086
+			},
+			"feel_shard": {
+				"mean_ms": 0.148300555555556,
+				"p50_ms": 0.112,
+				"p95_ms": 0.425
+			},
+			"fx": {
+				"mean_ms": 0.0738916666666662,
+				"p50_ms": 0.069,
+				"p95_ms": 0.097
+			},
+			"grid_projectile": {
+				"mean_ms": 14.4181366666667,
+				"p50_ms": 13.983,
+				"p95_ms": 22.572
+			},
+			"grid_rebuild": {
+				"mean_ms": 0.296252777777778,
+				"p50_ms": 0.287,
+				"p95_ms": 0.419
+			},
+			"other": {
+				"mean_ms": 3.01985166666667,
+				"p50_ms": 3.083,
+				"p95_ms": 5.38
+			},
+			"player": {
+				"mean_ms": 0.227982222222222,
+				"p50_ms": 0.039,
+				"p95_ms": 0.992
+			},
+			"player_mv": {
+				"mean_ms": 0.00705111111111109,
+				"p50_ms": 0.006,
+				"p95_ms": 0.01
+			},
+			"player_wp": {
+				"mean_ms": 0.207968888888887,
+				"p50_ms": 0.02,
+				"p95_ms": 0.971
+			},
+			"popup": {
+				"mean_ms": 1.36215833333333,
+				"p50_ms": 1.311,
+				"p95_ms": 2.175
+			},
+			"shard": {
+				"mean_ms": 0.113224444444444,
+				"p50_ms": 0.078,
+				"p95_ms": 0.373
+			},
+			"ui": {
+				"mean_ms": 1.77788333333334,
+				"p50_ms": 1.791,
+				"p95_ms": 2.529
+			},
+			"wave": {
+				"mean_ms": 0.0157966666666668,
+				"p50_ms": 0.013,
+				"p95_ms": 0.022
+			}
+		},
+		"totals": {
+			"p50_ms": 21.011,
+			"p95_ms": 30.651,
+			"p99_ms": 37.24
+		}
+	},
+	"meta": {
+		"build": "W2_gatling L5 + AFF_PIERCE×3/AFF_MULTI×2/MEC_BOUNCE×3/MEC_KILL_BLAST×2/MEC_FRACTAL×2（无棱镜/无自导——指纹定标，与真机构筑差异见用例体头注）",
+		"date": "2026-10-03",
+		"dt": 0.0166666666666667,
+		"governor": "frozen, mode=frame_priority, tier_override=2",
+		"hold": 120,
+		"map": "world_grove w16（敌血 ×0.3 定标复本）",
+		"measure_frames": 1800,
+		"note": "desktop headless；绝对 ms 桌面≈真机 ×0.5-2（R224 修正待 vc31 精定，勿引 R219 ×5-10）；渲染(dc/o) 不可复现；运行前旧档轮转 *_prev1/2/3.json",
+		"package": "desktop-headless-probe（校准对象=真机 vc30 v0.1.29）"
+	}
+}
