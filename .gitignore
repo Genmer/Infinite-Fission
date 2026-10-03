@@ -7,3 +7,5 @@
 screens/
 # R224 深载探针基线滚动档（每次运行轮转，仅正典 baseline.json 入库）
 docs/qa/probe_r224_deepload_baseline_prev*.json
+# R225 分离测量基线滚动档（仅正典 baseline.json 入库）
+docs/qa/probe_r225_separation_baseline_prev*.json
