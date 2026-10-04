@@ -25,7 +25,10 @@
 # · 桌面≠真机声明（R224 修正，待 vc31 精定）：GDScript 侧绝对 ms 桌面≈真机 ×0.5-2
 #   （R219 微基准 ×5-10 带对本复合负载不适用）；渲染面（dc/o）headless 不渲染**不可
 #   复现**；桌面 popup 首排版立即（defer_first_layout 桌面档）与真机 mobile 限批方向
-#   相反，popup 段判读注意。种子化=统计可复现（击杀/需求/饱和轴跨运行 ±2-10%，
+#   相反，popup 段判读注意。
+# · R231 刀B 扩展（只读——不改场景构建/RNG 消费序）：诊断快N 覆盖率读数行（pfast
+#   活弹 p50 / 弹 p50，源=diag_counts().pfast_live 每秒采样，game_loop 分区计数）。
+#   场景构建、种子、驱动序、结算口径与本节上述定案逐位不变。种子化=统计可复现（击杀/需求/饱和轴跨运行 ±2-10%，
 #   ~2% 级 RNG 分歧源存在——非严格确定性）。
 extends RefCounted
 
@@ -54,6 +57,8 @@ var _gate_results: Dictionary = {}     # 本情景门读数（入基线 JSON—�
 func run(p_tree: SceneTree) -> void:
 	tree = p_tree
 	seed(20261003)
+	_baseline_rotated = false           # 评审#1：每运行轮转闩复位（runs 语义=一次运行一轮转）
+	_baseline_writes = 0                # 评审#1：写情景计数复位（首写=轮转+空 root）
 	print("══ R224 深载复现基准：翡翠树海 w16 构成 × 敌120 驻场 × 深构筑近似 ══")
 	if not _boot():
 		_teardown()
@@ -335,6 +340,11 @@ func _report(p_label: String, p_totals: Array[float], p_stage: Dictionary,
 		% [subs_p50, subs_p50 * 60.0, subs_p95, settle_p50, defer_p50, drop_p50])
 	print("驻场：敌 p50=%.0f｜弹 p50=%.0f max=%.0f｜跳字 p50=%.0f｜击杀（测量窗）=%d"
 		% [enemy_p50, proj_p50, proj_max, popup_p50, _kill_count()])
+	# R231 刀B：快路径覆盖率读数（快N p50 / 弹 p50——diag_counts().pfast_live 每秒采样，
+	# 只读不改 RNG 消费序；用户构筑大量 MEC_BOUNCE/EF_SIZE 时快N→0=刀未激活判读键）
+	var pfast_p50 := _pct(_sec_series(p_per_sec, "pfast_live", false), 0.50)
+	print("快路径：快N p50=%.0f｜弹 p50=%.0f｜覆盖率≈%.0f%%"
+		% [pfast_p50, proj_p50, (pfast_p50 / maxf(proj_p50, 1.0)) * 100.0])
 	var proj_stage_mean := _mean(p_stage.get(&"grid_projectile", [] as Array[float]))
 	if settle_p50 > 0.0:
 		print("口径参考：弹段均值 %.2fms ÷ 结/步 %.1f ≈ %.0fµs/结算（弹段含弹tick——上界口径）"
@@ -390,16 +400,30 @@ func _sec_series(p_per_sec: Array[Dictionary], p_key: String, p_per_step: bool) 
 
 
 # ── 基线 JSON（后续性能轮对数迭代的对照档案）────────────────────────
+# 评审#1 修正（R231 修复轮）：轮转语义=「每次运行整体轮转一次」（runs 语义，非每情景
+# 轮转）——原实现 _store_baseline 每情景调用且每次先轮转 → 一次运行轮转 3 次，且每次
+# 合并解析写陈旧文件（QA 实锤：归档件与滚动基线逐位相同/归档件部分情景为旧代数据）。
+# 修正后：run() 首个情景写前整体轮转一次（旧运行整体移入 prev 链），且首个情景从空
+# root 起写（三情景逐键覆写完成=干净终态档案，不带上一运行的残留键）。
+
+var _baseline_rotated: bool = false           # 评审#1：本运行已轮转闩（run() 复位）
+var _baseline_writes: int = 0                 # 评审#1：本运行已写情景数（0=首写：轮转+空 root）
+
 
 func _store_baseline(p_label: String, p_totals: Array[float], p_stage: Dictionary,
 		p_per_sec: Array[Dictionary]) -> void:
-	_rotate_baseline()                     # 修轮 H2b：写前轮转（旧设计静默覆写，评审/QA 期实证覆写两次）
-	var existing_text := FileAccess.get_file_as_string(BASELINE_JSON)
+	# 评审#1 语义：首情景写=整体轮转一次 + 从空 root 起写（干净终态档案，不带上一运行
+	# 残留键）；后续情景写=解析既有文件逐键覆写（同运行三情景在档案内合流）。
 	var root: Dictionary = {}
-	if not existing_text.is_empty():
-		var parsed = JSON.parse_string(existing_text)
-		if parsed is Dictionary:
-			root = parsed
+	if _baseline_writes == 0:
+		_rotate_baseline()
+		_baseline_rotated = true
+	else:
+		var existing_text := FileAccess.get_file_as_string(BASELINE_JSON)
+		if not existing_text.is_empty():
+			var parsed = JSON.parse_string(existing_text)
+			if parsed is Dictionary:
+				root = parsed
 	var seg_stats: Dictionary = {}
 	for k in p_stage:
 		var arr: Array[float] = p_stage[k]
@@ -432,6 +456,7 @@ func _store_baseline(p_label: String, p_totals: Array[float], p_stage: Dictionar
 		return
 	f.store_string(JSON.stringify(root, "\t"))
 	f.close()
+	_baseline_writes += 1
 
 
 func _rotate_baseline() -> void:
