@@ -1,0 +1,293 @@
+{
+	"gates": {
+		"FG3[SA] 望远镜闭环 ≤±5": {
+			"detail": "closure=0",
+			"ok": true
+		},
+		"G-棱镜注入：镜面数=5（W5_prism L5+SPLIT×2→帽5）": {
+			"detail": "mirror_count=5 split=2/2（MIRROR_CAP=5，mirror_weapon.gd:26）",
+			"ok": true
+		},
+		"G-沙箱 user:// 重定向生效（含 .qa_sandbox_r230）": {
+			"detail": "user_dir=E:/Code/Agent/Infinite-Fission/.qa_sandbox_r230/Godot/app_userdata/Infinite Fission",
+			"ok": true
+		},
+		"K2c 否决臂辅证：F3 P2 单独可见 帽关(0) − 帽开(0) = +0": {
+			"detail": "辅证披露（无掩码耦合面；主证门以上行为准）",
+			"disclosed": true,
+			"ok": true
+		},
+		"K2c 否决臂：F1 边际 耦合面 差=+33（披露不判刀）": {
+			"detail": "帽关=223 帽开均值=190（F1 主效混淆面=射手注入，不入对标）",
+			"disclosed": true,
+			"ok": true
+		},
+		"K2c 否决臂：F3 边际 帽关(0) − 帽开均值(0,3跑) > 0（纯刀效主证）": {
+			"detail": "差=+0（DEATHPOP_FX_CAP=10，enemy.gd:386）",
+			"ok": false
+		},
+		"SA 敌弹注入生效：敌弹 p50>0（team=1，D4 洞补齐）": {
+			"detail": "敌弹=31 射手=16",
+			"ok": true
+		},
+		"SA 敌弹量级对拍：敌弹 p50∈[8,60]（真机 1:40 行 弹26 量级带）": {
+			"detail": "敌弹=31 射手=16（披露类：精调=post-merge 全量基线调参）",
+			"disclosed": true,
+			"ok": true
+		}
+	},
+	"meta": {
+		"arm": "k2c_veto（deathpop_cap_override=-2 帽关，余同权威臂 SA：哨兵 -3/全load=1/tier2/内容 v2）",
+		"content_version": 2,
+		"date": "2026-10-04",
+		"reference": "磁盘当前基线 qa_r230_dcscan_baseline.json 的 SA（权威末跑，帽开 -3）"
+	},
+	"reference_sa": {
+		"f1_marg_ref": 190,
+		"f3_marg_ref": 0,
+		"f3_p2_ref": 0,
+		"n_refs": 3
+	},
+	"veto_sa": {
+		"P1": [
+			{
+				"after_dc": 158,
+				"fam": 1,
+				"marginal_dc": 223
+			},
+			{
+				"after_dc": 162,
+				"fam": 2,
+				"marginal_dc": -4
+			},
+			{
+				"after_dc": 162,
+				"fam": 3,
+				"marginal_dc": 0
+			},
+			{
+				"after_dc": 159,
+				"fam": 4,
+				"marginal_dc": 3
+			},
+			{
+				"after_dc": 157,
+				"fam": 5,
+				"marginal_dc": 2
+			},
+			{
+				"after_dc": 146,
+				"fam": 6,
+				"marginal_dc": 11
+			},
+			{
+				"after_dc": 129,
+				"fam": 7,
+				"marginal_dc": 17
+			},
+			{
+				"after_dc": 109,
+				"fam": 8,
+				"marginal_dc": 20
+			},
+			{
+				"after_dc": 55,
+				"fam": 9,
+				"marginal_dc": 54
+			},
+			{
+				"after_dc": 52,
+				"fam": 10,
+				"marginal_dc": 3
+			},
+			{
+				"after_dc": 3,
+				"fam": 11,
+				"marginal_dc": 49
+			},
+			{
+				"after_dc": 0,
+				"fam": 12,
+				"marginal_dc": 3
+			},
+			{
+				"after_dc": 0,
+				"fam": 13,
+				"marginal_dc": 0
+			}
+		],
+		"P2": [
+			{
+				"fam": 1,
+				"indep_dc": 61,
+				"live": 485
+			},
+			{
+				"fam": 2,
+				"indep_dc": 0,
+				"live": 11
+			},
+			{
+				"fam": 3,
+				"indep_dc": 0,
+				"live": 8
+			},
+			{
+				"fam": 4,
+				"indep_dc": 1,
+				"live": 584
+			},
+			{
+				"fam": 5,
+				"indep_dc": 1,
+				"live": 14
+			},
+			{
+				"fam": 6,
+				"indep_dc": 7,
+				"live": 8
+			},
+			{
+				"fam": 7,
+				"indep_dc": 0,
+				"live": 28
+			},
+			{
+				"fam": 8,
+				"indep_dc": 23,
+				"live": 114
+			},
+			{
+				"fam": 9,
+				"indep_dc": 54,
+				"live": 0
+			},
+			{
+				"fam": 10,
+				"indep_dc": 0,
+				"live": 0
+			},
+			{
+				"fam": 11,
+				"indep_dc": 0,
+				"live": 0
+			},
+			{
+				"fam": 12,
+				"indep_dc": 3,
+				"live": 7
+			},
+			{
+				"fam": 13,
+				"indep_dc": 0,
+				"live": 94
+			}
+		],
+		"P3": [],
+		"anchor": false,
+		"baseline_dc": 381,
+		"baseline_dcs": [
+			275,
+			281,
+			292,
+			315,
+			316,
+			368,
+			354,
+			411,
+			389,
+			369,
+			407,
+			412,
+			398,
+			370,
+			388,
+			381,
+			395,
+			425,
+			450,
+			457,
+			443,
+			403,
+			416,
+			428,
+			420,
+			413,
+			381,
+			389,
+			390,
+			378,
+			399,
+			381,
+			422,
+			412,
+			439,
+			438,
+			381,
+			413,
+			390,
+			384,
+			391,
+			378,
+			273,
+			298,
+			289,
+			280,
+			287,
+			289,
+			307,
+			296,
+			295,
+			311,
+			271,
+			305,
+			299,
+			293,
+			272,
+			271,
+			279,
+			290
+		],
+		"counts": {
+			"1": 485,
+			"2": 10,
+			"3": 5,
+			"4": 700,
+			"5": 14,
+			"6": 10,
+			"7": 28,
+			"8": 109,
+			"9": 59,
+			"10": 14,
+			"11": 30,
+			"12": 8,
+			"13": 74
+		},
+		"hold": 120,
+		"live": {
+			"enemy_live": 120,
+			"eproj_live": 31,
+			"popup_live": 40,
+			"proj_live": 401,
+			"spitter_live": 16
+		},
+		"residual_dc": 0,
+		"stage_p50_ms": {
+			"card_drain": 0,
+			"enemy": 0.91,
+			"feel": 0.02,
+			"feel_shard": 0,
+			"fx": 0.08,
+			"grid_projectile": 16.62,
+			"grid_rebuild": 0.34,
+			"other": 0.27,
+			"player": 0.64,
+			"player_mv": 0.01,
+			"player_wp": 0.61,
+			"popup": 0.19,
+			"shard": 0.02,
+			"ui": 1.34,
+			"wave": 0.01
+		}
+	}
+}
