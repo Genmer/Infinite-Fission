@@ -1,0 +1,34 @@
+{
+	"disclosure": [
+		"合成 ctx 为代表负载（≤3 池条目）——与主探针 MICRO 臂同构；FULL-M 规模（5 池）未入本配对（主探针 JSON FULL-M 臂已并记）",
+		"单机单轮——绝对 µs 受机器热漂移影响，判定只对本档案内配对差；跨日复评须重跑本探针"
+	],
+	"falsify": {
+		"delta_pct": -2.18081354338115,
+		"delta_us": -0.96614583333334,
+		"dict_readings": [
+			46.3177083333333,
+			42.2864583333333
+		],
+		"dict_us_median": 44.3020833333333,
+		"falsified": false,
+		"order_log": [
+			"arm0=dict(46.3µs)",
+			"arm1=typed(43.4µs)",
+			"arm2=typed(43.3µs)",
+			"arm3=dict(42.3µs)"
+		],
+		"typed_readings": [
+			43.375,
+			43.296875
+		],
+		"typed_us_median": 43.3359375,
+		"verdict": "NOT_REPRODUCED"
+	},
+	"meta": {
+		"date": "2026-10-05",
+		"package": "desktop-headless-probe（R232 刀1e 证伪配对——评审#2 修轮①落档）",
+		"protocol": "AGG_TYPED false(字典)/true(typed) 双序平衡（dict→typed→typed→dict）各两读数取中位；批 48/96/192 合成结算（r225 MICRO 同值：base100+1add+2mult+1local+crit0.05）；窗外预构建零打点",
+		"verdict_rule": "typed_us_median ≥ dict_us_median → FALSIFIED（shipped=false 维持）；否则 NOT_REPRODUCED"
+	}
+}
