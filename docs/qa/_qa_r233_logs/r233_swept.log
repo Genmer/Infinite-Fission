@@ -1,0 +1,53 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R233 T5（swept 隧穿对策） 回归 ══════════
+── ① 垂直掠过隧穿（薄敌 12px × 979.2px/s × 步长 32.64px） ──
+  PASS | ①A 30Hz swept：垂直掠过薄敌命中（线段窄相修复实证）
+  PASS | ①A 掠过弹命中后仍存活（pierce 预算未耗尽）
+  PASS | ①B 30Hz 谓词关：点判定漏（30Hz 口径隧穿复现——swept 随谓词联动关）
+  PASS | ①B 步末点距出 reach（_in_reach 否决——漏检在窄相非粗判候选缺失）
+  PASS | ①C 60Hz 基线：同轨迹点判定命中（步长 16.32px < 36px 无隧穿）
+── ② 对头 chase（相对 1179.2px/s → 39.31px/步，越过 36px 下限） ──
+  PASS | ②A 30Hz swept：对头 chase 命中（步中敌位落弦内——越过 36px 下限档）
+  PASS | ②B 30Hz 谓词关：对头 chase 点判定漏（设计定案真实可漏档复现）
+  PASS | ②B 步末距 19.31 > reach 18（点窄相否决实证）
+  PASS | ②C 60Hz 基线：对头 chase 点判定命中（相对步长 19.65px）
+── ③ 静止敌步长边界 + swept 半径语义 ──
+  PASS | ③a 静止敌 32.64px 步长边界：步末落心命中（贴沿档不回退）
+  PASS | ③b 弦内掠过 L=17：swept 命中（reach=er+tr 语义下限）
+  PASS | ③b 同位点判定否决（点距 23.8 > reach 18——swept 增量判定分叉）
+  PASS | ③c 控制组 L=19：swept 零命中（判定半径=er+tr 不多不少）
+── ④ 超集对拍（随机弹幕 15 弹 × 8 薄敌 × 60 步，DT30 双臂） ──
+  PASS | ④ 点检测命中集非平凡（|P|≥2——双脚本直击保底）
+  PASS | ④ 超集：点检测命中集 ⊆ swept 命中集（15 弹×60 步对拍）
+  PASS | ④ 脚本掠过敌（index 0）∈ swept 集（结构性额外命中在位）
+  PASS | ④ 两臂同轨（swept 集 ≥ 点集）
+── ⑤ 跨帧重复命中=0 ──
+  PASS | ⑤a 多步接触带（连续 7 步可判）：恰 1 结算（无跨帧重复提交）
+  PASS | ⑤a 生命周期表已录 uid（R196 层在位）
+  PASS | ⑤a 接触带穿行后弹仍存活（pierce 预算未耗尽）
+  PASS | ⑤b 纵列敌1 恰一次
+  PASS | ⑤b 纵列敌2 恰一次（步4 弦距 17.9 再判步被去重）
+  PASS | ⑤b 纵列敌3 恰一次
+  PASS | ⑤b 结算总数=3（无重复提交）
+── ⑥ prev 步前暂存时序（运动执行前 stash=上步末位） ──
+  PASS | ⑥a spawn 后 _swept_prev=出生位（防池上家残位）
+  PASS | ⑥b pfast tick1：stash=步前位（非本步末位）
+  PASS | ⑥b pfast tick1：步长 32px 落位（运动真发生）
+  PASS | ⑥b pfast tick2：stash=上步末位 p1（≠本步末位）
+  PASS | ⑥e 归还清零 _swept_prev=ZERO（池复用防串弹）
+  PASS | ⑥c 慢路径 tick2：stash=tick1 末位（运动前 stash 贯穿 _move 覆写链）
+  PASS | ⑥d 前置：敌弹判 fast（最小参数域 spawn）
+  PASS | ⑥d 敌弹 _tick_fast：stash=步前位（字段单步语义全弹统一）
+── ⑦ 微观 AC-5(b)：同轨迹 60Hz 点集 == 30Hz+swept 集 ──
+  PASS | ⑦ 60Hz 点检测：三敌全中（每敌恰一次）
+  PASS | ⑦ 30Hz swept：三敌全中（每敌恰一次）
+  PASS | ⑦ 命中集逐位相等（同轨迹两态等价——AC-5(b) 小样，步内序不同集合同）
+  PASS | 套件总项数（EXPECTED=35——R231 假绿教训：总项数也要断言）
+────────────────────────────────────────
+汇总：PASS 36 / FAIL 0（共 36 项）
+验收汇总：36/36 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

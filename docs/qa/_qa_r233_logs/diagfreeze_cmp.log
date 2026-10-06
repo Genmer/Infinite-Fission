@@ -1,0 +1,21 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ QA 探针：诊断行冻结格式对拍（R229 裁N 追加） ══════════
+L1|[1:05 M] fpsF dc0 o0 | 玩0 移0 火0 碎0 网0 弹0 敌0 波0 磁0 感0 特0 跳0 UI0 开0 消0 他0 余Fms 敌0 弹0 态0 桶0+0+0 磁0 拾0 跳0 断0 组0 模0* st+0 p120 ri0  结0 自0 调2  顺0 冲0 弃0 帽0  位图1 翻0 补0 裁0 快0 结µs0 插µs0
+L2|[1:05 M] fpsF dc0 o0 | 玩0 移0 火0 碎0 网0 弹0 敌0 波0 磁0 感0 特0 跳0 UI0 开0 消0 他0 余Fms 敌0 弹0 态0 桶0+0+0 磁0 拾0 跳0 断0 组0 模0* st+0 p120 ri0  结0 自0 调2  顺0 冲0 弃0 帽0  位图1 翻0 补0 裁0 快0 结µs0 插µs0
+L3|[1:05 M] fpsF dc0 o0 | 玩0 移0 火0 碎0 网0 弹0 敌0 波0 磁0 感0 特0 跳0 UI0 开0 消0 他0 余Fms 敌0 弹0 态0 桶0+0+0 磁0 拾0 跳0 断0 组0 模0* st+0 p120 ri0  结0 自0 调2  顺0 冲0 弃0 帽0  位图1 翻0 补0 裁0 快0 结µs0 插µs0
+── 对拍（before=tests/qa_r228_diagfreeze_before.txt） ──
+  PASS | 采集档三行齐全（L1/L2/L3）
+  PASS | L1 行尾恰一个「 裁N」段
+  PASS | L1 既有子串逐位不变（去 裁N 后 == 改造前行）
+  PASS | L2 行尾恰一个「 裁N」段
+  PASS | L2 既有子串逐位不变（去 裁N 后 == 改造前行）
+  PASS | L3 行尾恰一个「 裁N」段
+  PASS | L3 既有子串逐位不变（去 裁N 后 == 改造前行）
+────────────────────────────────────────
+汇总：PASS 7 / FAIL 0（共 7 项）
+验收汇总：7/7 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

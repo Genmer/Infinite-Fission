@@ -1,0 +1,51 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R233 T6（渲染插值层） 回归 ══════════
+── ① 谓词关直返零写（关态基线——现状逐位） ──
+  PASS | A1 关态真实帧序恢复遍历不跑（显示位 sentinel 保持——恢复若跑会拍回 _ip_curr）
+  PASS | A2 关态 _process 零写（位保持 ∧ 插µs 分子零增——现状逐位）
+  PASS | A3 源级断言前置：game_loop.gd 可读
+  PASS | A4 恢复挂点同谓词恰一处 ∧ 快照保鲜无条件恰一处（R233 T7 切换态保鲜迁移——恢复/插值写仍谓词零执行，插值层不脱钩）
+  PASS | A5 _process 谓词直返+headless 直返+写入口（谓词×1/headless×1/调用×1/喂数×1）
+  PASS | A6 spawner 真路接线（ip_birth_snap 恰一处——敌出生位置位走 spawner 挂位后）
+── ② 谓词开四段时序（恢复→模拟→快照→插值逐段） ──
+  PASS | B1 步间插值 prev=curr 无跳变（_ip_render_write(0.5) 写位==A）
+  PASS | B2 恢复段：显示残留拍回真位（global==_ip_curr==A）
+  PASS | B3 快照段：prev=N-1 步末位 A ∧ curr=本步末位 B（次序固定）
+  PASS | B4 插值半步：写位==lerp(A,B,0.5)==(315,400)（∈[prev,curr] 包络）
+  PASS | B5 插值位不污染下一帧模拟（恢复后 global==真位 B）
+  PASS | B6 真实帧序接线（MENU 臂 _physics_process）：入口恢复拍回 B ∧ 帧末快照收敛 prev==curr==B
+── ③ spawn 置位无跳变（弹/敌/碎片） ──
+  PASS | C1 弹 spawn 置位：prev==curr==global==出生位（position 键落位后定型）
+  PASS | C2 弹插值无跳变：alpha 0.7 写位仍==出生位（prev=curr 钳平）
+  PASS | C3 敌 spawner 真路置位：enqueue→tick 出生敌 prev==curr==挂位出生位 ∧ 入表
+  PASS | C4 碎片 activate 置位：prev==curr==global（散射落点定型后——三值一致）
+  PASS | C5 碎片插值无跳变：alpha 0.3 写位仍==散射落点
+── ④ release/树外豁免 + 池化矩阵（复用重置） ──
+  PASS | D1 弹 release 豁免：出活跃表后回池位不被插值覆盖（写遍历只走 active）
+  PASS | D2 碎片 release 豁免：出 active_shards 后回池位不被插值覆盖
+  PASS | D3 弹池复用 reacquire 重置：同节点 prev=curr=新出生位（旧位 (200, 600) 不残留）
+  PASS | D4 碎片池复用 reacquire 重置：同节点 prev=curr=新散射落点（旧回池位不残留）
+  PASS | D5 树外豁免：摘树在册实体插值位零写（is_inside_tree 守卫——渲染层不追写孤儿）
+── ⑤ 深载态真实帧序 + headless _process 直返 ──
+  PASS | E1 深载态建立：敌102+弹520+追踪20+碎片159=801（≥700——设计 3.2 ~780 量级，池容量钳制）
+  PASS | E2 深载恢复遍历真实生效：801 实体显示位全体==_ip_curr（零残留零漏拍）
+  PASS | E3 快照收敛：MENU 无位移帧 prev==curr 全体（幂等快照）
+  PASS | E4 headless _process 直返：位保持 ∧ 插µs 分子零增（直驱口径模拟位=显示位）
+── ⑥ alpha 口径与钳制（设计 3.1 自算——步长 1/30） ──
+  PASS | F1 步进点归零：物理帧推进帧 alpha==0.0（本渲染帧为步进基准）
+  PASS | F2 渲染 delta 累计：1/120×3→alpha 0.25/0.50/0.75（步长 1/30 口径；浮点近似断言）
+  PASS | F3 累计达步长：4×1/120→alpha==1.0（恰一整步）
+  PASS | F4 大 delta 钳顶：alpha 恒 1.0（写位不越包络上沿）
+  PASS | F5 负 delta 钳底：alpha==0.0（写位不越包络下沿）
+  PASS | F6 写遍历包络两端：alpha 0→prev ∧ 1→curr（写位 ∈ [prev,curr]）
+── ⑦ 插µs 喂数 + 深载 ≤500µs 冒烟（AC-9） ──
+  PASS | G1 写遍历喂 ip_write_us_total（直调同口——累计器单调不减）
+  PASS | G2 diag ip_us_per 消费喂数（谓词开态喂入后 >0——关态恒 0 基线在 r233_sim30 D3 锁）
+  PASS | G3 重复拉取增量=0（结µs/帽N 同款闩语义）
+  （深载写遍历 783 实体 × 5×40 次：overall_avg=312µs min_batch=302µs=0.39µs/实体）
+  PASS | G4 深载写遍历回归护栏：min-batch ≤2.0µs/实体 ×783 实体（best=302µs；AC-9 绝对值 ≤500µs 归 vc38 真机裁定）
+  PASS | 套件总项数（EXPECTED=36——R231 假绿教训：总项数也要断言）
+────────────────────────────────────────
+汇总：PASS 37 / FAIL 0（共 37 项）
+验收汇总：37/37 通过

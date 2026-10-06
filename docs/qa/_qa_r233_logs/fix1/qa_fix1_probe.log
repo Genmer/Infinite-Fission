@@ -1,0 +1,26 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ QA 探针：R233 修复轮独立复核（HIGH-1 派发键 / MED-3 插模拟µs） ══════════
+── ① HIGH-1 派发两键行拼装（计数器注入 → 行读真值） ──
+  PASS | H1 首拉立基线（行尾 派deferred0 派drop0）
+  PASS | H2 行拼装真值（注入 37/5 → 行读 派deferred37 派drop5）
+  PASS | H3 重复拉取增量=0（零注入第二拉 → 派deferred0 派drop0——闩语义）
+  PASS | H4 两键独立基线（单键注入 11 → 派deferred11 派drop0，无交叉消费）
+  PASS | H5 与帽N 独立（帽3 与 派deferred7 同行各自真值——本类侧两差分口基线分立）
+── ② MED-3 关态（sim30_override=-2）插模拟µs 读数 ──
+  PASS | M1 夹具就绪（关态敌墙 48 在场）
+  PASS | M2 同窗自洽（键值 2163 == 原始累计差分 2163——120 驱动帧同步窗）
+  PASS | M3 关态读数量级合理（每帧 18.02µs ∈ (0, 2000)——快照遍历实际成本直读，恢复遍历谓词关不计）
+  PASS | M4 重复拉取增量=0（闩语义——零驱动第二拉）
+── ③ 真实 1Hz 采样器行（等墙钟窗读 _diag_lines 末行） ──
+  PASS | R1 真实采样行行尾六段次序（裁N 快N 结µsN 插µsN 插模拟µsN 派deferredN 派dropN）
+  PASS | R2 真实采样行含 派deferred0 派drop0（零注入窗——闩语义在真实通道同样成立）
+  PASS | R3 真实采样行 插模拟µs 关态读数非零（MENU 期 48 敌快照遍历 T7 无条件成本，读数=8656——量级记录供报告）
+  PASS | 套件总项数（EXPECTED=12——R231 假绿教训：总项数也要断言）
+────────────────────────────────────────
+汇总：PASS 13 / FAIL 0（共 13 项）
+验收汇总：13/13 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)
