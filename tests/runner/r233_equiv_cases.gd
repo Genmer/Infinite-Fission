@@ -348,7 +348,7 @@ func _test_a_double_run_bitwise() -> void:
 	#   实跑实证本环境带宽：计数 |Δ|≤3/值桶 ≤5/回收合计 ≤4）；整局 RNG 探针随事件计数
 	#   带漂移（popup 采样侧消费差分）降观察项 A11，掷骰硬等价由 A14 孪生面 + E1 idle
 	#   面承载。
-	GameLoop.SIM_30HZ_ENABLED = true          # 开关保持默认 true——唯一变量=override 哨兵
+	GameLoop.SIM_30HZ_ENABLED = true          # 开关显式注入 true（vc39 起默认已回退 false）——唯一变量=override 哨兵
 	var arm_a := await _run_equiv_arm(-2)     # 臂 A：-2 强制关（回退档）
 	var arm_b := await _run_equiv_arm(-1)     # 臂 B：-1 默认态（headless 真值门=关=现网基线执行口）
 	_check("A1 臂A（-2 强制关）谓词 false", arm_a["pred_off"], "")
@@ -505,9 +505,12 @@ func _test_b_off_zero_exec() -> void:
 		pb_src = fb.get_as_text().replace("\r\n", "\n")   # CRLF 归一（同上）
 		fb.close()
 	var swept_decl := pb_src.count("var swept := GameLoop.sim30_effective()")
-	var infl := pb_src.count("if swept:\n\t\tquery_r += (global_position - _swept_prev).length() * 0.5")
-	_check("B2 源级：swept 膨胀零执行口径（谓词单点声明 ×1 ∧ 膨胀行在 if swept: 门内 ×1——关态查询半径零膨胀）",
-		swept_decl == 1 and infl == 1, "decl=%d infl=%d" % [swept_decl, infl])
+	var infl_all := pb_src.count("query_r += (global_position - _swept_prev).length() * 0.5")
+	var infl_gated := pb_src.count("if swept:\n\t\t\tquery_r += (global_position - _swept_prev).length() * 0.5") \
+			+ pb_src.count("if GameLoop.sim30_effective():\n\t\t\tquery_r += (global_position - _swept_prev).length() * 0.5")
+	_check("B2 源级：swept 膨胀零执行口径（谓词单点声明 ×1 ∧ 膨胀行恰 2 且全部在谓词门内——本体 if swept: ∧ R235 4b 预检直呼同源谓词，关态查询半径零膨胀）",
+		swept_decl == 1 and infl_all == 2 and infl_gated == 2,
+		"decl=%d all=%d gated=%d" % [swept_decl, infl_all, infl_gated])
 	var narrow := pb_src.count("if swept:\n\t\t\tif _in_reach_swept(target, reach):")
 	var n_call := pb_src.count("_in_reach_swept(")
 	_check("B3 源级：线段窄相零分派口径（_in_reach_swept 定义+调用恰 2 处 ∧ 调用点唯一且在 if swept: 门内——关态零线段分派）",

@@ -173,8 +173,13 @@ func _diag_lines_part1() -> void:
 		dc0.has(&"pool_trimmed") and int(dc0.get(&"pool_trimmed", -1)) == 0,
 		"val=%s" % str(dc0.get(&"pool_trimmed", "?")))
 	_line_l1 = _norm_fps(DebugStats._diag_format_line(_gl, NOW_L1))
-	_check("L1 行尾段「 补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0」（追加位在位、触发前读 0——R231 快N/R232 T1b 结µs/R233 T1 插µs/R233 修轮 插模拟µs+派deferred/派drop 追加在裁N 后；预置格式化后同步零帧 → 插模拟µs0 确定值）",
-		_line_l1.ends_with("补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0"), "tail=%s" % _line_l1.right(48))
+	var rx_l1 := RegEx.new()
+	# R235 搭车③迁移：行尾再追加「物步µsN 派µsN 渲msN.N」三键（物理服务器步本体/
+	# ⑧前派发段/渲染轴秒窗读数）——物步µs/渲ms=秒窗时序读数不逐位断言（X 口径），
+	# 派µs=MENU 探针关=0 确定值（同 插模拟µs 迁移纪律）
+	rx_l1.compile("补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d$")
+	_check("L1 行尾段「 补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µsX 派µs0 渲msX.X」（追加位在位、触发前读 0——R231 快N/R232 T1b 结µs/R233 T1 插µs/R233 修轮 插模拟µs+派deferred/派drop/R235 搭车③ 物步µs+派µs+渲ms 追加在派drop 后；预置格式化后同步零帧 → 插模拟µs0/派µs0 确定值；物步µs/渲ms=秒窗均值时序读数不断言值）",
+		rx_l1.search(_line_l1) != null, "tail=%s" % _line_l1.right(64))
 
 
 var _line_l1: String = ""
@@ -195,12 +200,13 @@ func _norm_fps(p_line: String) -> String:
 
 
 func _strip_trim(p_line: String) -> String:
-	# 去「 裁N 快N 结µsN 插µsN 插模拟µsN 派deferredN 派dropN」尾段（既有子串（至 补%d）
-	# 提取——R231 快N/R232 T1b 结µs/R233 T1 插µs/R233 修轮 插模拟µs+派deferred/派drop
-	# 追加在裁N 后，同归「行尾新段」一并剥离：快N=当帧分区计数，L2/L3 并发弹读数与
-	# L1 不同属预期；插模拟µs=时序读数同剥离不断言值）
+	# 去「 裁N 快N 结µsN 插µsN 插模拟µsN 派deferredN 派dropN 物步µsN 派µsN 渲msN.N」尾段
+	#（既有子串（至 补%d）提取——R231 快N/R232 T1b 结µs/R233 T1 插µs/R233 修轮 插模拟µs+
+	# 派deferred/派drop/R235 搭车③ 物步µs+派µs+渲ms 追加在裁N 后，同归「行尾新段」一并
+	# 剥离：快N=当帧分区计数，L2/L3 并发弹读数与 L1 不同属预期；插模拟µs/物步µs/渲ms=
+	# 时序读数同剥离不断言值）
 	var rx := RegEx.new()
-	rx.compile(" 裁\\d+ 快\\d+( 结µs\\d+)?( 插µs\\d+)?( 插模拟µs\\d+)?( 派deferred\\d+)?( 派drop\\d+)?$")
+	rx.compile(" 裁\\d+ 快\\d+( 结µs\\d+)?( 插µs\\d+)?( 插模拟µs\\d+)?( 派deferred\\d+)?( 派drop\\d+)?( 物步µs\\d+)?( 派µs\\d+)?( 渲ms\\d+\\.\\d+)?$")
 	var m := rx.search(p_line)
 	return p_line.substr(0, m.get_start()) if m != null else ""
 
@@ -262,13 +268,17 @@ func _diag_lines_part2() -> void:
 	# R233 修轮：L2 插模拟µs=两采样间 6 次手动驱动帧的快照遍历（T7 无条件）秒差分
 	# ——时序读数随机器速度漂移，不逐位断言（行尾六段形态 + 确定子段断言）；
 	# 派deferred/派drop=MENU 无战斗派发 → 确定零。L3：L2→L3 同步零帧 → 插模拟µs0。
+	# R235 搭车③迁移：行尾再追加 物步µsN 派µsN 渲msN.N（三键恒在——秒窗均值时序读数
+	# 不逐位断言，X 口径；派µs MENU 探针关=0 确定值）。
 	var rx_tail := RegEx.new()
-	rx_tail.compile(" 裁\\d+ 快\\d+ 结µs\\d+ 插µs\\d+ 插模拟µs\\d+ 派deferred\\d+ 派drop\\d+$")
-	_check("L2 行尾六段在位「 裁372 快0 结µs0 插µs0 插模拟µsX 派deferred0 派drop0」（裁372 触发后下一采样行 >0；X=时序读数不断言值）",
+	rx_tail.compile(" 裁\\d+ 快\\d+ 结µs\\d+ 插µs\\d+ 插模拟µs\\d+ 派deferred\\d+ 派drop\\d+ 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d+$")
+	_check("L2 行尾六段在位「 裁372 快0 结µs0 插µs0 插模拟µsX 派deferred0 派drop0 物步µsX 派µs0 渲msX.X」（裁372 触发后下一采样行 >0；X=时序读数不断言值）",
 		rx_tail.search(_line_l2) != null and _line_l2.contains("裁372 快0 结µs0 插µs0")
-			and _line_l2.contains("派deferred0 派drop0"), "tail=%s" % _line_l2.right(56))
-	_check("L3 行尾「 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0」（之后归 0——一次性读数）",
-		_line_l3.ends_with("裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0"), "tail=%s" % _line_l3.right(44))
+			and _line_l2.contains("派deferred0 派drop0"), "tail=%s" % _line_l2.right(64))
+	var rx_l3 := RegEx.new()
+	rx_l3.compile("裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d$")
+	_check("L3 行尾「 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µsX 派µs0 渲msX.X」（之后归 0——一次性读数；物步µs/渲ms=秒窗均值时序读数不断言值）",
+		rx_l3.search(_line_l3) != null, "tail=%s" % _line_l3.right(56))
 	var s1 := _strip_trim(_line_l1)
 	var s2 := _strip_trim(_line_l2)
 	var s3 := _strip_trim(_line_l3)

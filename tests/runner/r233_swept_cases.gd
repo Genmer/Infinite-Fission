@@ -102,7 +102,7 @@ func _freeze_engine_callbacks(p_root: Node) -> void:
 
 func _cleanup() -> void:
 	GameLoop.sim30_override = -1              # 谓词注入口复位（headless 真值=关）
-	GameLoop.SIM_30HZ_ENABLED = true
+	GameLoop.SIM_30HZ_ENABLED = false         # 复位到 vc39 起的新默认（二ch 回退）
 	_release_field()
 	_check("套件总项数（EXPECTED=%d——R231 假绿教训：总项数也要断言）" % EXPECTED_TOTAL,
 		_pass + _fail == EXPECTED_TOTAL, "实=%d" % (_pass + _fail))
@@ -213,6 +213,7 @@ func _test_1_graze_tunnel() -> void:
 	#（点判定双端漏）而弦距 12≤18（swept 命中）——隧穿窗口 [7.6, 18] 内的定案点。
 	# A：30Hz 谓词开（-3）→ swept 线段窄相命中
 	GameLoop.sim30_override = -3
+	GameLoop.SIM_30HZ_ENABLED = true      # 二ch 默认回退 false 后须显式注入（-3 只跳 OS 门，开关真值仍须 true——interp/sim30 同款成对注入）
 	var e := _spawn_enemy(1.0e12, Vector2(360.0, 400.0))
 	_gl.enemy_grid.rebuild(_gl.spawner.active)
 	var spy: Array = []
@@ -263,6 +264,7 @@ func _test_2_headon_chase() -> void:
 	# 步末距 19.31 > 18（点判定漏）——分析 Q3「对头确定性漏」档的脚本化复现。
 	# A：30Hz 谓词开
 	GameLoop.sim30_override = -3
+	GameLoop.SIM_30HZ_ENABLED = true      # 二ch 默认回退 false 后须显式注入（-3 只跳 OS 门，开关真值仍须 true——interp/sim30 同款成对注入）
 	var e := _spawn_enemy(1.0e12, Vector2(120.0, 400.0))
 	e.global_position = Vector2(120.0 - 200.0 * DT30, 400.0)   # 敌速 200px/s 脚本化步进
 	_gl.enemy_grid.rebuild(_gl.spawner.active)
@@ -312,6 +314,7 @@ func _test_2_headon_chase() -> void:
 func _test_3_boundary_and_radius() -> void:
 	print("── ③ 静止敌步长边界 + swept 半径语义 ──")
 	GameLoop.sim30_override = -3
+	GameLoop.SIM_30HZ_ENABLED = true      # 二ch 默认回退 false 后须显式注入（-3 只跳 OS 门，开关真值仍须 true——interp/sim30 同款成对注入）
 	# a）步长边界：步前距恰一整步 → 步末正落敌心（设计「静止敌 32.64 已贴 36 上沿」锚点）
 	var ea := _spawn_enemy(1.0e12, Vector2(500.0, 400.0))
 	_gl.enemy_grid.rebuild(_gl.spawner.active)
@@ -396,6 +399,7 @@ func _test_4_barrage_superset() -> void:
 	_release_field()
 	# S 臂：谓词开 = 30Hz swept 命中集
 	GameLoop.sim30_override = -3
+	GameLoop.SIM_30HZ_ENABLED = true      # 二ch 默认回退 false 后须显式注入（-3 只跳 OS 门，开关真值仍须 true——interp/sim30 同款成对注入）
 	var arm_s: Dictionary = _run_barrage_arm()
 	_release_field()
 	var set_p: Dictionary = arm_p["hits"]
@@ -419,6 +423,7 @@ func _test_4_barrage_superset() -> void:
 func _test_5_no_repeat() -> void:
 	print("── ⑤ 跨帧重复命中=0 ──")
 	GameLoop.sim30_override = -3
+	GameLoop.SIM_30HZ_ENABLED = true      # 二ch 默认回退 false 后须显式注入（-3 只跳 OS 门，开关真值仍须 true——interp/sim30 同款成对注入）
 	# a）漂移接触带：弹自敌侧 10px 以 4px/步纵移——连续 7 步 swept 可判（6,2,2,6,10,14,18）
 	var e := _spawn_enemy(1.0e12, Vector2(400.0, 400.0))
 	_gl.enemy_grid.rebuild(_gl.spawner.active)
@@ -455,6 +460,7 @@ func _test_5_no_repeat() -> void:
 func _test_6_prev_stash() -> void:
 	print("── ⑥ prev 步前暂存时序（运动执行前 stash=上步末位） ──")
 	GameLoop.sim30_override = -3
+	GameLoop.SIM_30HZ_ENABLED = true      # 二ch 默认回退 false 后须显式注入（-3 只跳 OS 门，开关真值仍须 true——interp/sim30 同款成对注入）
 	_gl.enemy_grid.rebuild(_empty_items())
 	# a）spawn 置出生位
 	var proj := _spawn_bullet(Vector2(200.0, 800.0), Vector2(0.0, -960.0))
@@ -523,6 +529,7 @@ func _test_7_micro_equivalence() -> void:
 	_release_field()
 	# 30Hz swept 臂（谓词开 + DT30）
 	GameLoop.sim30_override = -3
+	GameLoop.SIM_30HZ_ENABLED = true      # 二ch 默认回退 false 后须显式注入（-3 只跳 OS 门，开关真值仍须 true——interp/sim30 同款成对注入）
 	var e30: Array = []
 	for pos in [Vector2(300.0, 400.0), Vector2(340.0, 400.0), Vector2(380.0, 400.0)]:
 		e30.append(_spawn_enemy(1.0e12, pos))

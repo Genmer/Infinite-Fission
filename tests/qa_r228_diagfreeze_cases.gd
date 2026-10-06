@@ -19,6 +19,11 @@
 #   「 裁\d+( 快\d+)?( 结µs\d+)?( 插µs\d+)?( 插模拟µs\d+)?( 派deferred\d+)?( 派drop\d+)?$」
 #   （同款迁移纪律；插模拟µs=时序读数不逐位断言，MENU 冻结同步窗=0 确定值；
 #   派deferred0 派drop0=MENU 无战斗派发确定值）。
+#   R235 搭车③披露：行尾再追加「物步µsN 派µsN 渲msN.N」段（物理服务器步本体/⑧前
+#   派发段/渲染轴秒窗键），剥离正则再放宽为
+#   「 …( 派deferred\d+)?( 派drop\d+)?( 物步µs\d+)?( 派µs\d+)?( 渲ms\d+\.\d+)?$」
+#   （同款迁移纪律；物步µs/渲ms=秒窗均值时序读数不逐位断言；派µs=探针关=0 确定值；
+#   行尾格式变更后 compare 模式须重采采集档——capture 模式重跑一次）。
 #   既证明「旧行全部既有子串（至 补%d）逐位不变」，又证明「仅行尾多 裁%d」。
 #   采集档为 Windows 控制台重定向产物（CRLF）——读档剥 \r（重定向痕迹非行内容）。
 extends RefCounted
@@ -133,7 +138,9 @@ func _compare_with_before(p_after: Array[String], p_before_path: String) -> void
 	# R233 修轮再迁移（HIGH-1/MED-3）：行尾再追加「插模拟µsN」「派deferredN 派dropN」
 	# 段——正则再放宽（头注披露同步；插模拟µs=时序读数，MENU 冻结同步窗=0；
 	# 派deferred0 派drop0=MENU 无战斗派发确定值）。
-	rx.compile(" 裁\\d+( 快\\d+)?( 结µs\\d+)?( 插µs\\d+)?( 插模拟µs\\d+)?( 派deferred\\d+)?( 派drop\\d+)?$")
+	# R235 搭车③再迁移：行尾再追加「物步µsN 派µsN 渲msN.N」段——正则再放宽（头注披露
+	# 同步；物步µs/渲ms=秒窗均值时序读数不逐位断言；派µs=MENU 探针关=0 确定值）。
+	rx.compile(" 裁\\d+( 快\\d+)?( 结µs\\d+)?( 插µs\\d+)?( 插模拟µs\\d+)?( 派deferred\\d+)?( 派drop\\d+)?( 物步µs\\d+)?( 派µs\\d+)?( 渲ms\\d+\\.\\d+)?$")
 	for i in 3:
 		var m := rx.search(p_after[i])
 		_check("L%d 行尾恰一个「 裁N」段" % [i + 1], m != null, "tail=%s" % p_after[i].right(32))

@@ -2,11 +2,12 @@
 # R231 刀B「玩家弹快路径」用例体（入口 test_r231_pfast.gd 运行时 load——cases 禁 test_
 # 前缀防电池 glob 误收）。覆盖设计 T8-T12 + 分析新增断言 + 追加快N 诊断键：
 # ① T8 资格矩阵：基线资格弹判 fast（_pfast==true、_fast_radius=派发后终值）；逐取消项
-#    单独构造判 slow——team1 / 直接 bounces 键 / MEC_BOUNCE 栈（派发期 +预算→派发后
-#    判慢，分析 AC-4 主洞反例）/ boomerang / lateral_offset（conv_gap）/ element=LTG /
+#    单独构造判 slow——team1 / boomerang / lateral_offset（conv_gap）/ element=LTG /
 #    accel 键 / 直挂数组 traits（一律慢路径）/ EF_SIZE 栈（AFF_AREA——半径快照陈旧洞）/
 #    ON_TICK 挂钩栈（armed 判慢）；MEC_FRACTAL 栈判 fast（inheritable 子代资格）；
 #    开关 false 不改 spawn 期判定（回退口在分区）。
+#    （R235 4a 政策迁移：「直接 bounces 键 / MEC_BOUNCE 栈」原判慢两项已翻转为判
+#    fast——跳弹弹入快路径，贴边带预检回落保语义；迁移断言见正文 4a 段。）
 # ② T8+ 分裂子代：资格父弹（MEC_FRACTAL 栈）request_split → 子代 _pfast==true。
 # ③ T10 接触回落恰调 _check_collision：重叠桩敌一 tick 即结算；生命周期去重（R196
 #    同 uid 二次接触零二结）；死亡短路（P1 击杀后 P2 同位零二结——回池不改位+快照
@@ -233,7 +234,6 @@ func _test_1_eligible_matrix() -> void:
 	# 逐取消项（每项独立新弹——池化弹 spawn 重判）
 	var cases := {
 		"team=1": {"team": 1},
-		"直接 bounces=2 键": {"bounces": 2},
 		"boomerang=true": {"boomerang": true},
 		"lateral_offset=5（conv_gap）": {"lateral_offset": 5.0},
 		"element=LTG": {"element": GameConst.Element.LTG},
@@ -241,15 +241,13 @@ func _test_1_eligible_matrix() -> void:
 		"直挂数组 traits（测试桩通道，无栈）": {"traits": [_gl.registry.get_trait(&"AFF_PIERCE")],
 			"trait_stack": null},
 		"trait_stack=null（无栈——僚机直发通道判慢）": {"trait_stack": null},
-		"MEC_BOUNCE 栈（派发期+预算→派发后判慢）": {"trait_stack": _mk_stack([&"MEC_BOUNCE"])},
 		"EF_SIZE 栈（AFF_AREA——半径快照陈旧洞）": {"trait_stack": _mk_stack([&"AFF_AREA"])},
 	}
+	# （R235 4a 政策迁移：「直接 bounces=2 键」「MEC_BOUNCE 栈」两项判慢断言移除——跳弹弹
+	# 入快路径（贴边带预检回落 _check_edge_bounce 保语义），迁移断言见本函数尾 4a 段。）
 	for case_name in cases:
 		var proj := _spawn_bullet(Vector2(360.0, 900.0), cases[case_name])
 		_check("判 slow：%s" % case_name, not proj._pfast, str(proj._pfast))
-		if case_name.begins_with("MEC_BOUNCE"):
-			_check("MEC_BOUNCE 派发期 bounces_left 已写（派发后判定取到终值）",
-				proj.bounces_left > 0, str(proj.bounces_left))
 		if case_name.begins_with("EF_SIZE"):
 			_check("EF_SIZE 派发期 size_mult 已写且 _fast_radius=终值",
 				proj.size_mult > 1.0
@@ -269,6 +267,17 @@ func _test_1_eligible_matrix() -> void:
 	# MEC_FRACTAL 栈（inheritable、非 EF_SIZE、无 ON_TICK）→ 保持资格
 	var fr := _spawn_bullet(Vector2(360.0, 900.0), {"trait_stack": _mk_stack([&"MEC_FRACTAL"])})
 	_check("MEC_FRACTAL 栈判 fast（子代资格载体）", fr._pfast, str(fr._pfast))
+	# R235 4a 政策迁移断言：跳弹弹判 fast（贴边带预检回落 _check_edge_bounce 保语义）
+	var bb := _spawn_bullet(Vector2(360.0, 900.0), {"bounces": 2})
+	_check("R235 4a：直接 bounces=2 键判 fast", bb._pfast, str(bb._pfast))
+	_check("R235 4a：bounces>0 弹 _vis_invariant 仍不立（反弹改视觉面）",
+		not bb._vis_invariant, str(bb._vis_invariant))
+	(bb.pool as ProjectilePool).release(bb)
+	var mb := _spawn_bullet(Vector2(360.0, 900.0), {"trait_stack": _mk_stack([&"MEC_BOUNCE"])})
+	_check("R235 4a：MEC_BOUNCE 栈判 fast（派发期 bounces_left 终值>0）",
+		mb._pfast and mb.bounces_left > 0,
+		"pfast=%s b=%d" % [str(mb._pfast), mb.bounces_left])
+	(mb.pool as ProjectilePool).release(mb)
 	# 开关 false：spawn 判定不依赖开关（分区口承担回退——_pfast 值不变）
 	GameLoop.PLAYER_BULLET_FAST_PATH = false
 	var sw := _spawn_bullet(Vector2(360.0, 900.0))
@@ -448,13 +457,13 @@ func _test_6_fastn_diag_key() -> void:
 	_gl._pfast_live = 0
 	for i in range(6):
 		_spawn_bullet(Vector2(200.0 + 40.0 * i, 900.0))
-	# 一个慢路径弹（bounces 直达键）混编验证分区
-	_spawn_bullet(Vector2(500.0, 900.0), {"bounces": 2})
+	# 一个慢路径弹（lateral_offset 收束通道——R235 4a 后 bounces 弹已入快路径）混编验证分区
+	_spawn_bullet(Vector2(500.0, 900.0), {"lateral_offset": 5.0})
 	var pool := _gl.pools[&"projectile"] as ProjectilePool
 	GameLoop.PLAYER_BULLET_FAST_PATH = true
 	_gl._tick_one_pool(pool, DT)
 	var counts: Dictionary = _gl.diag_counts()
-	_check("分区计数：快N=6（6 资格弹 + 1 跳弹慢路径）",
+	_check("分区计数：快N=6（6 资格弹 + 1 收束通道慢路径弹）",
 		int(counts[&"pfast_live"]) == 6, str(int(counts[&"pfast_live"])))
 	_check("弹仍被驱动（快弹前进了——分区非丢弃）",
 		(pool.active_projectiles()[0] as ProjectileBase).global_position.y < 900.0)
