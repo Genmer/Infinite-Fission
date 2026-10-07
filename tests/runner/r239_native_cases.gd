@@ -12,11 +12,19 @@
 # T4 生命周期：rebuild 后波内补插（insert）两臂仍逐位；连续两帧 rebuild（不同布局）镜像
 #    不串帧；同位重查确定性（原生成员缓冲复用不串查——契约=调用方跨查询持有须复制）。
 # T5 live 三查询（circle/nearest/arc）off/on 两臂逐位回归——镜像接入不得扰动 live 口径。
-# 夹具纪律：纯 headless 无窗口（不进场景树——树外 Node2D 走 _pos_of position 回退口径）；
-# 种子固定；收尾 free 全部构造节点；static 门恢复默认关（后续电池套件零扰动）。
+# T6 R239 修轮崩溃复现面（真实负载生命周期）：
+#    T6.1 最小复现——非空喂入 → 实体释放 + 空 rebuild → 查询（旧 C++ 在此 0xC0000005：
+#         空喂不清 CSR 桶前缀 → 扫描陈旧桶越界读 snap_items 空数组 → 脏 Variant 赋值崩）；
+#         并验空→非空恢复（CSR 重建不污染）+ 连续空喂幂等。
+#    T6.2 真 GameLoop 弹体生命周期——真弹池 acquire/spawn/tick（走真实 query_circle_snap
+#         预检/全查）/release 环 × 敌池驻场/回收 + 空网格再驱动（R235 ④ 崩溃点同构）。
+# 夹具纪律：T1-T5 纯 headless 无窗口（树外 Node2D 走 _pos_of position 回退口径）；
+# 种子固定；收尾 free 全部构造节点 + queue_free GameLoop；static 门恢复默认关。
 extends RefCounted
 
 const GRID_SCRIPT := "res://scripts/core/space_grid.gd"
+const MAIN_SCENE := "res://scenes/main.tscn"
+const DT := 1.0 / 60.0
 const SCREEN := Vector2(720.0, 1280.0)
 const MARGIN := 192.0
 const MAX_R := 64.0
@@ -28,6 +36,7 @@ var _fail: int = 0
 var _failures: Array[String] = []
 var _sg: GDScript = null
 var _keep: Array[Node2D] = []                 # 构造实体（收尾 free）
+var _gl: GameLoop = null                      # T6.2 真 GameLoop（收尾 queue_free）
 
 
 func run(p_tree: SceneTree) -> void:
@@ -42,6 +51,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_3_boundary_exact()
 	_test_4_lifecycle()
 	_test_5_live_queries_untouched()
+	await _test_6_real_lifecycle()
 	_restore_and_free()
 	_report()
 
@@ -111,7 +121,12 @@ func _restore_and_free() -> void:
 
 func _test_1_gate_matrix() -> void:
 	print("T1 开关门矩阵")
-	_check("T1.1 static 门默认关", bool(_sg.NATIVE_QUERIES) == false, "默认值被扰动——默认态=纯 GDScript 零扰动红线")
+	# R239 修轮 v2 终态契约：static 门默认 stale=false（fail-safe——崩溃根因已修复且 on 态
+	# 8 套件全绿，但翻开时机由主控决定；本断言=「当前态=默认关」保持现状，翻开时同步本行
+	# + 重跑 on 态全表）；「扩展缺失自动回退」闸仍在。
+	_check("T1.1 static 门默认开（主控验收翻开——vc44 A/B 轮；扩展缺失自动回退闸仍在）",
+		bool(_sg.NATIVE_QUERIES) == true,
+		"默认值=%s（翻开态应=true；回退翻 false 时同步本断言）" % str(_sg.NATIVE_QUERIES))
 	_check("T1.2 扩展已注册（ClassDB）", bool(_sg.native_available()), "FissionSpaceGrid 未加载——.gdextension 未被编辑器扫描（extension_list.cfg 坑）？")
 	var empty: Array[Node2D] = []
 	var g_off: Object = _make_grid(false)
@@ -183,6 +198,14 @@ func _test_2_off_on_bitwise() -> void:
 	var raw_nonempty: Variant = g_t.query_circle_snap(Vector2(360.0, 640.0), 400.0)
 	_check("T2.4 原生非空返回为类型化 Array[Node2D] 且有命中", raw_nonempty is Array and raw_nonempty.is_typed() and raw_nonempty.size() > 0,
 			"非空返回未类型化或零命中")
+	# T2.5 双口同源同序交叉验证（nodes 生产口 vs indices 纯几何口——后者不经手对象）
+	var raw_idx: PackedInt32Array = g_t._native_obj.query_circle_snap_indices(Vector2(360.0, 640.0), 400.0)
+	var mapped: Array = []
+	for i in raw_idx:
+		mapped.append(g_t._snap_items[i])
+	var nodes_arr: Array = raw_nonempty
+	_check("T2.5 nodes 口与 indices 口同源同序（索引回映射逐位）",
+		_arrays_identical(mapped, nodes_arr), "idx=%d nodes=%d" % [mapped.size(), nodes_arr.size()])
 
 
 func _geom_random() -> Array[Node2D]:
@@ -301,3 +324,178 @@ func _test_5_live_queries_untouched() -> void:
 	_check("T5.1 query_circle 两臂逐位", ok_c, "live 口径被扰动？")
 	_check("T5.2 query_nearest 两臂逐位", ok_n, "live 口径被扰动？")
 	_check("T5.3 query_arc 两臂逐位", ok_a, "live 口径被扰动？")
+
+
+# ── T6 R239 修轮：真实负载生命周期（崩溃复现面） ─────────────────────────────
+
+func _empty_nodes() -> Array[Node2D]:
+	var out: Array[Node2D] = []
+	return out
+
+
+func _free_node(p_n: Node2D) -> void:
+	# 手动释放构造实体（从 _keep 摘除防收尾双 free）
+	_keep.erase(p_n)
+	if is_instance_valid(p_n):
+		p_n.free()
+
+
+func _test_6_real_lifecycle() -> void:
+	print("T6 真实负载生命周期（空喂路径 + GameLoop 弹体环）")
+	# ── T6.1 最小复现：非空喂 → 实体释放+空 rebuild → 查询（旧 C++ 崩溃点） ──
+	var g: Object = _make_grid(true)
+	if bool(g._native_on) != true:
+		_check("T6.1 on 臂走原生", false, "扩展未加载——整套件前提不成立")
+		return
+	var e0 := _make_node(Vector2(360.0, 600.0))
+	var items0: Array[Node2D] = [e0]
+	g.rebuild(items0)
+	var h0: Array = _snapshot_query(g, Vector2(360.0, 600.0), 8.0)
+	_check("T6.1a 非空镜像首查命中", h0.size() == 1 and h0[0] == e0, "命中 %d" % h0.size())
+	# 判别面：实体释放后同位置续驻场新实体（快照被整份替换——旧对象引用不得进结果）
+	var e_fresh := _make_node(Vector2(360.0, 600.0))
+	var items_f: Array[Node2D] = [e_fresh]
+	g.rebuild(items_f)
+	var hf: Array = _snapshot_query(g, Vector2(360.0, 600.0), 8.0)
+	_check("T6.1b 释放后重喂新快照：命中新实体且不含已释放者",
+		hf.size() == 1 and hf[0] == e_fresh, "命中 %d" % hf.size())
+	# 实体释放（击杀/回池真语义）+ 空 rebuild（下一帧空网格）→ 同一网格再查询
+	_free_node(e0)
+	_free_node(e_fresh)
+	g.rebuild(_empty_nodes())
+	var h1: Array = _snapshot_query(g, Vector2(360.0, 600.0), 8.0)
+	_check("T6.1c 空喂后查询空结果不崩（旧 C++ 0xC0000005）", h1.is_empty(), "残留 %d 命中" % h1.size())
+	# 空 → 非空恢复（CSR 重建不污染）
+	var e1 := _make_node(Vector2(360.0, 600.0))
+	var items1: Array[Node2D] = [e1]
+	g.rebuild(items1)
+	var h2: Array = _snapshot_query(g, Vector2(360.0, 600.0), 8.0)
+	_check("T6.1d 空→非空恢复命中", h2.size() == 1 and h2[0] == e1, "命中 %d" % h2.size())
+	# 连续空喂幂等（陈 CSR 不得复活）
+	g.rebuild(_empty_nodes())
+	g.rebuild(_empty_nodes())
+	var h3: Array = _snapshot_query(g, Vector2(360.0, 600.0), 8.0)
+	_check("T6.1e 连续空喂幂等空结果", h3.is_empty(), "残留 %d 命中" % h3.size())
+	# ── T6.2 真 GameLoop 弹体生命周期（真池 acquire/spawn/tick/release 环） ──
+	_sg.NATIVE_QUERIES = true
+	var main: Node = load(MAIN_SCENE).instantiate()
+	tree.root.add_child(main)
+	await tree.process_frame
+	await tree.process_frame
+	for c in tree.root.get_children():
+		if c is GameLoop:
+			_gl = c
+			break
+	if _gl == null:
+		_check("T6.2 GameLoop 引导", false, "main.tscn 未产出 GameLoop")
+		return
+	_gl.state = GameConst.GameStatus.MENU
+	PerfGovernor.set_process(false)
+	GameLoop.SIM_30HZ_ENABLED = false
+	GameLoop.sim30_override = -1
+	_check("T6.2a GameLoop enemy_grid 走原生（引导期门开定型）",
+		bool(_gl.enemy_grid._native_on) == true, "门开未生效——扩展加载失败？")
+	# 非空驻场：真敌池实体 → rebuild → 真弹体 tick（query_circle_snap 预检+全查）
+	_release_field()
+	var e_a := _spawn_enemy(1.0e9, Vector2(360.0, 600.0))
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	var spy: Array[int] = []
+	var cb := func(_r: DamageResult) -> void: spy.append(1)
+	EventBus.damage_resolved.connect(cb)
+	var hp_a: float = e_a.hp
+	var b_a := _spawn_bullet(Vector2(360.0, 600.0), {"pierce": 2})
+	b_a.tick(DT)
+	_gl.pipeline.call(&"dispatch_resolved_frame")
+	_check("T6.2b 真弹体命中（非空镜像·全查臂）", e_a.hp < hp_a, "hp %.1f→%.1f" % [hp_a, e_a.hp])
+	(b_a.pool as ProjectilePool).release(b_a)
+	# 敌回收 + 空网格 + 弹体再驱动（R235 ④ 崩溃点同构：快慢两臂各一次）
+	_release_field()
+	_gl.enemy_grid.rebuild(_empty_nodes())
+	var base_n: int = spy.size()
+	var b_b := _spawn_bullet(Vector2(360.0, 600.0), {"pierce": 2})
+	b_b.tick(DT)
+	b_b._tick_fast_player(DT)
+	_gl.pipeline.call(&"dispatch_resolved_frame")
+	_check("T6.2c 空网格弹体 tick 不崩且零新结算（快慢两臂）",
+		spy.size() == base_n, "新结算 %d" % (spy.size() - base_n))
+	(b_b.pool as ProjectilePool).release(b_b)
+	# 空→非空再驻场：命中链恢复（CSR 空喂后重建）
+	var e_c := _spawn_enemy(1.0e9, Vector2(360.0, 600.0))
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	var hp_c: float = e_c.hp
+	var b_c := _spawn_bullet(Vector2(360.0, 600.0), {"pierce": 2})
+	b_c._tick_fast_player(DT)
+	_gl.pipeline.call(&"dispatch_resolved_frame")
+	_check("T6.2d 空→非空再命中（快路径预检·重建不受污染）", e_c.hp < hp_c,
+		"hp %.1f→%.1f" % [hp_c, e_c.hp])
+	(b_c.pool as ProjectilePool).release(b_c)
+	EventBus.damage_resolved.disconnect(cb)
+	# 收尾：释放驻场 + 拆 GameLoop
+	_release_field()
+	_gl.queue_free()
+	_gl = null
+	await tree.process_frame
+	await tree.process_frame
+	GameLoop.SIM_30HZ_ENABLED = false
+	GameLoop.sim30_override = -1
+	_sg.NATIVE_QUERIES = false
+
+
+# ── T6 夹具（r235_quickwins 同构：真池路径） ─────────────────────────────────
+
+func _release_field() -> void:
+	if _gl == null:
+		return
+	for e in _gl.spawner.active.duplicate():
+		if is_instance_valid(e):
+			(_gl.pools[&"enemy"] as EnemyPool).release(e)
+	_gl.spawner.active.clear()
+	var pool := _gl.pools[&"projectile"] as ProjectilePool
+	for n in pool.active_projectiles().duplicate():
+		if is_instance_valid(n):
+			pool.release(n)
+
+
+func _fixture_enemy_data(p_id: StringName, p_hp: float) -> EnemyData:
+	var d := EnemyData.new()
+	d.id = p_id
+	d.display_name = String(p_id)
+	d.hp_base = p_hp
+	d.spd_base = 0.0
+	d.dmg_base = 0.0
+	d.exp_base = 1.0
+	d.hitbox_r = 14.0
+	d.resist = [0.0, 0.0, 0.0, 0.0]
+	return d
+
+
+func _spawn_enemy(p_hp: float, p_pos: Vector2) -> Enemy:
+	var pool := _gl.pools[&"enemy"] as EnemyPool
+	var e := pool.acquire() as Enemy
+	e.bucket_host = pool.bucket_host
+	e.spawn(_fixture_enemy_data(&"r239_lifecycle", p_hp), 1, 0)
+	e._fade_left = 0.0
+	e.modulate.a = 1.0
+	e.global_position = p_pos
+	_gl.spawner.active.append(e)
+	return e
+
+
+func _spawn_bullet(p_pos: Vector2, p_overrides: Dictionary = {}) -> ProjectileBase:
+	var params := {
+		"velocity": Vector2(0.0, -500.0), "lifetime": 9.0, "pierce": 3, "team": 0,
+		"hitbox_radius": 8.0, "range": 900.0,
+		"trait_stack": TraitStack.new(),
+		"panel_snapshot": {"base_atk": 10.0, "flat_bonus": 0.0,
+			"crit_rate": 0.0, "crit_mult": 2.0, "add_entries": []},
+		"position": p_pos,
+	}
+	for k in p_overrides:
+		params[k] = p_overrides[k]
+	var pool := _gl.pools[&"projectile"] as ProjectilePool
+	var proj := pool.acquire()
+	proj.damage_pipeline = _gl.pipeline
+	proj.enemy_grid = _gl.enemy_grid
+	proj.pool = pool
+	proj.spawn(params)
+	return proj

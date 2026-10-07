@@ -2,44 +2,44 @@
 	"ab_clustered": {
 		"gate_desktop": ">=3.0x",
 		"gate_passed": true,
-		"off_k_queries_per_s": 248077.400148846,
-		"off_median_us": 16124,
+		"off_k_queries_per_s": 245022.970903522,
+		"off_median_us": 16325,
 		"off_rounds_raw_us": [
-			16440,
-			16124,
-			17539,
-			15573,
-			15710
+			16248,
+			16716,
+			15801,
+			16331,
+			16325
 		],
-		"off_us_per_query": 4.031,
-		"on_k_queries_per_s": 930232.558139535,
-		"on_median_us": 4300,
+		"off_us_per_query": 4.08125,
+		"on_k_queries_per_s": 913242.00913242,
+		"on_median_us": 4380,
 		"on_rounds_raw_us": [
-			4464,
-			4431,
-			4295,
-			4262,
-			4300
+			4803,
+			4380,
+			4277,
+			4426,
+			4314
 		],
-		"on_us_per_query": 1.075,
+		"on_us_per_query": 1.095,
 		"role": "主判定（生产查询分布）",
-		"speedup_x": 3.74976744186047
+		"speedup_x": 3.72716894977169
 	},
 	"ab_uniform": {
-		"off_median_us": 10551,
-		"off_us_per_query": 2.63775,
-		"on_median_us": 2975,
-		"on_us_per_query": 0.74375,
+		"off_median_us": 10964,
+		"off_us_per_query": 2.741,
+		"on_median_us": 3259,
+		"on_us_per_query": 0.81475,
 		"role": "披露（稀疏最坏情形——跨界开销占比放大的下界读数）",
-		"speedup_x": 3.54655462184874
+		"speedup_x": 3.36422215403498
 	},
 	"bridge": {
 		"note": "镜像随建=rebuild 期 packed append；feed=首查时整份 CSR 建桥（每 rebuild 一次）；off 臂先跑含冷启动噪声",
-		"on_first_query_with_feed_us": 67,
-		"rebuild_off_us": 449,
-		"rebuild_on_with_mirror_us": 491
+		"on_first_query_with_feed_us": 30,
+		"rebuild_off_us": 169,
+		"rebuild_on_with_mirror_us": 155
 	},
-	"date": "2026-10-07 15:34:15",
+	"date": "2026-10-07 18:38:34",
 	"equivalence_spot": {
 		"note": "抽查口径（聚簇臂）——全量逐位等价归 tests/runner/test_r239_native.gd",
 		"off_hits_total": 182550,
