@@ -10,7 +10,7 @@ extends RefCounted
 
 const MAIN_SCENE := "res://scenes/main.tscn"
 const DT := 1.0 / 60.0
-const EXPECTED_TOTAL := 17
+const EXPECTED_TOTAL := 18
 
 var tree: SceneTree
 var _pass: int = 0
@@ -119,6 +119,9 @@ func _test_1_h4_first_instant() -> void:
 		absf(p.hp - hp0) <= 0.01 and not p.shield_ready
 		and absf(p.shield_timer - 8.0) <= 0.01,
 		"hp %.0f→%.0f timer=%.3f" % [hp0, p.hp, p.shield_timer])
+	_check("①c 挡N 计数在位（R238 诊断键——shield_blocks≥1，1Hz 行效果可判读口）",
+		DebugStats.get_counter(&"shield_blocks") >= 1,
+		"n=%d" % DebugStats.get_counter(&"shield_blocks"))
 	_reset_fixture()
 
 

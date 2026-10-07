@@ -338,7 +338,7 @@ func _test_5_capped_delta_and_diagline() -> void:
 	# R235 搭车③迁移：行尾再追加「物步µsN 派µsN 渲msN.N」三键（物理服务器步本体/⑧前
 	# 派发段/渲染轴秒窗读数）——物步µs/渲ms=秒窗时序读数不逐位断言（X 口径）；DiagStub
 	# 空 stage_probe_us → 派µs0 确定值（r229 L1 迁移同款纪律）
-	rx_tail.compile("补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d$")
+	rx_tail.compile("补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d( 挡\\d+)?$")
 	_check("⑤行尾「补N 裁N 快N 结µsN 插µsN 插模拟µsN 派deferredN 派dropN 物步µsX 派µs0 渲msX.X」冻结断言不变位（r229_pool_valve 断言兼容——R231 快N/R232 T1b 结µs/R233 T1 插µs/R233 修轮 插模拟µs+派deferred/派drop/R235 搭车③ 物步µs+派µs+渲ms 追加在派drop 后；DiagStub 空 counts → 新键 0 确定值）",
 		rx_tail.search(line) != null, "tail=%s" % line.right(64))
 	var line2: String = DebugStats._diag_format_line(stub, 65001)

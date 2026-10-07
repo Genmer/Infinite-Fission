@@ -1,0 +1,80 @@
+{
+	"ab_clustered": {
+		"gate_desktop": ">=3.0x",
+		"gate_passed": true,
+		"off_k_queries_per_s": 248077.400148846,
+		"off_median_us": 16124,
+		"off_rounds_raw_us": [
+			16440,
+			16124,
+			17539,
+			15573,
+			15710
+		],
+		"off_us_per_query": 4.031,
+		"on_k_queries_per_s": 930232.558139535,
+		"on_median_us": 4300,
+		"on_rounds_raw_us": [
+			4464,
+			4431,
+			4295,
+			4262,
+			4300
+		],
+		"on_us_per_query": 1.075,
+		"role": "主判定（生产查询分布）",
+		"speedup_x": 3.74976744186047
+	},
+	"ab_uniform": {
+		"off_median_us": 10551,
+		"off_us_per_query": 2.63775,
+		"on_median_us": 2975,
+		"on_us_per_query": 0.74375,
+		"role": "披露（稀疏最坏情形——跨界开销占比放大的下界读数）",
+		"speedup_x": 3.54655462184874
+	},
+	"bridge": {
+		"note": "镜像随建=rebuild 期 packed append；feed=首查时整份 CSR 建桥（每 rebuild 一次）；off 臂先跑含冷启动噪声",
+		"on_first_query_with_feed_us": 67,
+		"rebuild_off_us": 449,
+		"rebuild_on_with_mirror_us": 491
+	},
+	"date": "2026-10-07 15:34:15",
+	"equivalence_spot": {
+		"note": "抽查口径（聚簇臂）——全量逐位等价归 tests/runner/test_r239_native.gd",
+		"off_hits_total": 182550,
+		"on_hits_total": 182550
+	},
+	"extension": {
+		"class": "FissionSpaceGrid",
+		"classdb_registered": true,
+		"lib": "res://native/bin/libfission_space_grid.windows.template_debug.x86_64.dll"
+	},
+	"godot": "4.3.0.stable",
+	"meta": {
+		"caliber": "桌面 headless 口径——真机系数另测（桌面判据 ≥3x 挂聚簇臂）",
+		"concurrent_load_note": "桌面单机读数，若主控并行跑套件可能抬高双臂噪声（中位口径缓解）",
+		"distributions": {
+			"clustered": "主判定=生产分布：70% 查询点聚簇心 ~180px 带（弹流汇聚敌簇）+30% 全场散",
+			"uniform": "披露=稀疏最坏情形：全场均匀点阵（大量空查询）"
+		},
+		"entities": 120,
+		"grid": {
+			"cell": 128,
+			"margin": 192,
+			"max_entity_radius": 64,
+			"screen": [
+				720,
+				1280
+			]
+		},
+		"queries_per_round": 4000,
+		"radii_formula": "6.0 + (i % 4) * 5.5  # 60Hz 点判定→30Hz swept 带",
+		"rng_consumed": false,
+		"rounds": 5,
+		"seed": 20261006,
+		"timing": "Time.get_ticks_usec() 包整轮循环；轮内臂序交替取中位",
+		"warmup": 400
+	},
+	"probe": "r239_native_first_cut_ab_bench"
+}
