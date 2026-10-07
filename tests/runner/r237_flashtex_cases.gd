@@ -39,6 +39,10 @@ var _gl: GameLoop = null
 func run(p_tree: SceneTree) -> void:
 	tree = p_tree
 	seed(20261007)
+	# R240 契约迁移：本套件测 FLASH_TEX 刀语义，基准态=BODY_MM=false（镜像敌轻载
+	# 闪白设计内改贴图路径常开——④/⑥e「轻载 shader 闪白」断言在镜像关态仍全真；
+	# 镜像互作由 r240_bodymm ④b 覆盖；正交刀各自基准态，R237 闪白迁移同款先例）。
+	Enemy.BODY_MM = false
 	_boot_game_loop()
 	await tree.process_frame
 	await tree.process_frame
@@ -416,6 +420,7 @@ func _case6_bake_and_adjacency_anchors() -> void:
 func _cleanup() -> void:
 	Enemy.fullload_override = -1
 	Enemy.FLASH_TEX = true                # 源默认 on 态复位（防跨套件泄漏）
+	Enemy.BODY_MM = true                  # R240 契约迁移复位（源默认 on）
 	Enemy._fullload_latched = false
 	tree.paused = false
 	RunSave.clear()

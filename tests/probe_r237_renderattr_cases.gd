@@ -117,6 +117,8 @@ var _comp: Array[Dictionary] = []           # 平铺构成池 {data: EnemyData, 
 var _cursor: int = 0
 var _smoke: bool = false                    # -- --smoke：管线烟测（不落 JSON）
 var _plateau: bool = false                  # -- --plateau：深老化档（run1 实证平台 ~25k 步）
+var _mm_off: bool = false                   # -- --mm_off：R240 敌本体镜像关臂（A/B 基线）
+var _out_json: String = ""                  # R240 A/B 臂专用落盘路径（空=OUT_JSON 原路径）
 var _phys_hz_project := 120                 # 工程默认物理频率（注入前快照——teardown 还原）
 var _phys_steps_project := 8                # 工程默认物理追赶帽（注入前快照——teardown 还原）
 var _vsync_prev: int = -1                   # vsync 原值（探针侧关 vsync——渲ms 读数前提，头注）
@@ -140,6 +142,12 @@ func run(p_tree: SceneTree) -> void:
 	tree = p_tree
 	_smoke = OS.get_cmdline_user_args().has("--smoke")
 	_plateau = OS.get_cmdline_user_args().has("--plateau")
+	# R240 刀效 A/B 臂（探针侧注入零产品码，teardown 还原）：--mm_off=敌本体 MultiMesh
+	# 镜像关（逐敌 Sprite 现状基线臂）；缺省=产品默认（BODY_MM=true 镜像臂）。
+	_mm_off = OS.get_cmdline_user_args().has("--mm_off")
+	Enemy.BODY_MM = not _mm_off
+	if OS.get_cmdline_user_args().has("--mm_off") or OS.get_cmdline_user_args().has("--mm_on"):
+		_out_json = "res://docs/qa/probe_r240_bodymm_%s.json" % ("off" if _mm_off else "on")
 	_phys_hz_project = Engine.physics_ticks_per_second
 	_phys_steps_project = Engine.max_physics_steps_per_frame
 	if _smoke:
@@ -1180,13 +1188,14 @@ func _store_json() -> void:
 		"derive": _results.get("derive", {}),
 		"gates": _gate_results.duplicate(true),
 	}
-	var f := FileAccess.open(OUT_JSON, FileAccess.WRITE)
+	var out_path := _out_json if _out_json != "" else OUT_JSON
+	var f := FileAccess.open(out_path, FileAccess.WRITE)
 	if f == null:
-		_gate("G-JSON 落盘", false, "打开失败：%s" % OUT_JSON)
+		_gate("G-JSON 落盘", false, "打开失败：%s" % out_path)
 		return
 	f.store_string(JSON.stringify(root, "\t"))
 	f.close()
-	_gate("G-JSON 落盘", true, OUT_JSON)
+	_gate("G-JSON 落盘", true, out_path)
 
 
 # ── 清场/收尾 ────────────────────────────────────────────────────────
@@ -1218,6 +1227,7 @@ func _teardown() -> void:
 	DamagePopup.bitmap_override = -1
 	PopupGlyphAtlas.runstart_bake_override = -1
 	Enemy.fullload_override = -1
+	Enemy.BODY_MM = true                  # R240 A/B 臂还原（源默认 on）
 	PerfGovernor.mode_override = -1
 	PerfGovernor.tier_override = -1
 	PerfGovernor.set_process(true)

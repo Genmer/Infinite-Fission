@@ -22,6 +22,8 @@
 #   域D 设置键（§6）：无新增运行时设置键（SETTINGS_DEFAULTS 键集逐位钉死）、aspect=expand
 #       为唯一项目设置改值（单行可回退）、钳制阈值 2.34 为代码常量、读口缺键回默认/
 #       未知键拒写（存档兼容）、既有键写口钳制机制不回归。
+#       R202（G4 独占编辑）：show_fps 帧率显示键入面（恰 11 键）+ FpsLabel/ShowFpsButton
+#       入 R1 界内法（自守卫——新 UI 元素不留 QA 空窗）。
 # 时序纪律：win.size 赋值后 await ≥2 帧再断言（同帧读旧值）；resize 后 _show_toast 重触发；
 # 弹窗卡 squash_pop 沉降 0.5s 再测；末尾 _gl.free() 防泄漏（r194 口径）。
 # 「显示不能乱」硬底线：任一尺寸任一律红即本套件 FAIL（宁可 aspect=keep 黑边回退）。
@@ -68,9 +70,18 @@ const SIZES: Array = [
 # R196 有意契约变更（原 9 键）：panel_pos 构筑面板位置三选入设置面
 # （meta_manager.gd SETTINGS_DEFAULTS + _normalized_setting 双注册；存档 values
 # 字典加键，旧档缺键回默认 0——R196_GROWTH_FIXES.md §1.1）
+# R202 有意契约变更（原 10 键，G4 本组独占编辑）：show_fps 帧率显示开关入设置面
+# （蛇形 bool 命名族同 shake_on/damage_numbers_on；双注册 + 旧档缺键回默认 false）
+# R211 有意契约变更（原 11 键）：diag_log 诊断日志采样开关入设置面（DebugStats
+# 1Hz 采样门，默认 true=现状不突变；双注册 + 旧档缺键回默认 true）
+# R212 有意契约变更（原 12 键）：diag_log_len 诊断日志环形容量档入设置面
+#（DebugStats._diag_capacity 动态读口 60/120/240/360 行，默认 240=只留最新 N 条；
+# 双注册 + 旧档缺键回默认 240——r212_diaglog2_cases.gd 键契约段专项）
 const EXPECTED_SETTING_KEYS: Array[String] = [
 	"auto_restart_mode", "auto_select_on", "bgm_volume", "damage_numbers_on",
-	"fps_cap", "fx_opacity", "fx_quality", "panel_pos", "shake_on", "sfx_volume",
+	"diag_log", "diag_log_len", "fps_cap", "fx_opacity", "fx_quality",
+	"master_mute", "panel_pos", "perf_mode", "shake_on", "show_fps",
+	"skill_auto_cast", "sfx_volume",
 ]
 
 var tree: SceneTree
@@ -438,6 +449,9 @@ func _visit_size(p_label: String, p_size: Vector2i, p_expect_vis: Vector2) -> vo
 	_enter_settings()
 	await _state_settle()
 	_law_r1(_gl.settings_panel._card, p_label, "SETTINGS/SettingsCard")
+	# R202（G4 独占编辑）：新设置行按钮入 R1 界内法（「显示帧率」开关行——卡内重排塞入
+	# 不扩卡高，按钮随卡居中锚恒界内；消除新行 QA 空窗）
+	_law_r1(_gl.settings_panel._show_fps_btn, p_label, "SETTINGS/ShowFpsButton")
 	_law_r2_settings(p_label)
 	_law_r6(_gl.settings_panel._root.find_child("SettingsDim", true, false), p_label, "SETTINGS")
 	_leave_settings()
@@ -495,6 +509,9 @@ func _law_r1_playing(p_label: String) -> void:
 	_law_r1(hud._boss_banner, p_label, "PLAYING/BossBanner")
 	_law_r1(hud._state_label, p_label, "PLAYING/StateLabel")
 	_law_r1(hud._revive_banner, p_label, "PLAYING/ReviveBanner")
+	# R202（G4 独占编辑）：FPS 读数小字入 R1 界内法（急切创建于 _build_ui、默认 visible=
+	# false——visible 不影响 get_global_rect，隐藏态断言仍有效；右缘锚任意尺寸贴沿界内）
+	_law_r1(hud._fps_label, p_label, "PLAYING/FpsLabel")
 	_law_r1(hud._hud_root.find_child("BuildPanel", true, false) as Control, p_label,
 		"PLAYING/BuildPanel")
 
@@ -529,16 +546,15 @@ func _law_r2_playing(p_label: String) -> void:
 	_pair_law(hud._pause_btn, hud._auto_btn, p_label, "PLAYING", false)
 	_pair_law(hud._wave_label.get_parent() as Control, hud._pause_btn, p_label, "PLAYING", false)
 	_pair_law(hud._wave_label.get_parent() as Control, hud._auto_btn, p_label, "PLAYING", false)
-	# 白名单钉死对（R198 契约变更：注释对齐 §3.3 登记全集 3 对——ReviveBadge∩HP 条
-	# 设计钉死 + R187Readout∩HP 条（超设计增量，R198 补登评审）+ Settings 设置卡沿徽标；
-	# 本函数钉前两对，第三对见 _law_r2_settings）——钉存在性防漂移
+	# 白名单钉死对（R200 契约变更：R187Readout∩HP 条出白单转正——读数盒右移 x368
+	# （右沿 592 空走廊、HP 右沿 364 留 4px 缝，D1 修复）后不相交，转无重叠硬法；全集 3→2 对——钉存在性防漂移）
 	_pair_law(hud._revive_badge, hp_panel, p_label, "PLAYING", true)
-	_pair_law(hud._r187_readout, hp_panel, p_label, "PLAYING", true)
+	_pair_law(hud._r187_readout, hp_panel, p_label, "PLAYING", false)
 
 
 func _law_r2_settings(p_label: String) -> void:
-	# 白名单钉死对（§3.3 第 3 对：设置卡沿徽标 settings_panel.gd:83 (268,−40) 压卡沿；
-	# R198 注释对齐——全集=ReviveBadge∩HP 条、R187Readout∩HP 条、本对）
+	# 白名单钉死对（§3.3 设置卡沿徽标 settings_panel.gd:83 (268,−40) 压卡沿；
+	# R200 后全集=ReviveBadge∩HP 条 + 本对（R187Readout 对已转无重叠硬法，见上））
 	_pair_law(_gl.settings_panel._card,
 		_gl.settings_panel._root.find_child("SettingsGlyph", true, false) as Control,
 		p_label, "SETTINGS", true)
@@ -811,8 +827,11 @@ func _test_safe_area_contract() -> void:
 func _test_settings_keys() -> void:
 	print("── 域D 设置键：无新增键 + 钳制常量 + 存档兼容 ──")
 	# D1 项目设置：唯一改值 aspect keep→expand（单行可回退），mode/viewport/override 原值
-	_check("D1①：display/window/stretch/mode==canvas_items（原值不动）",
-		String(ProjectSettings.get_setting("display/window/stretch/mode", "")) == "canvas_items",
+	# R203：mode canvas_items→viewport（真机渲染分辨率帽——1.5K-2K 屏 canvas_items 按原生
+	# 分辨率光栅化填充 4-6 倍放大，怪稍多 5-10 帧；viewport 内部按 720 档展开分辨率渲染
+	# 再 GPU 上采样。行为等价性=本套件七尺寸矩阵全绿即 expand 语义保持）
+	_check("D1①：display/window/stretch/mode==viewport（R203 渲染分辨率帽，原 canvas_items）",
+		String(ProjectSettings.get_setting("display/window/stretch/mode", "")) == "viewport",
 		str(ProjectSettings.get_setting("display/window/stretch/mode", "")))
 	_check("D1②：display/window/stretch/aspect==expand（R195 唯一项目设置改值）",
 		String(ProjectSettings.get_setting("display/window/stretch/aspect", "")) == "expand",
@@ -832,8 +851,22 @@ func _test_settings_keys() -> void:
 	expected_keys.sort()
 	# R196 有意契约变更（原「恰 9 键」）：panel_pos 构筑面板位置键入面（双注册齐，
 	# DataValidator 口径 + 存档兼容——settings 段 values 字典加键允许、结构禁改）
-	_check("D2①：SETTINGS_DEFAULTS 恰 10 键且键集与 R196 后逐位一致（panel_pos 为唯一新增键）",
-		actual_keys == expected_keys,
+	# R202 有意契约变更（原「恰 10 键」，G4 独占编辑）：show_fps 帧率显示键入面
+	#（双注册齐——r202_perf_cases.gd 键契约段专项；存档兼容同口径零迁移）
+	# R211 有意契约变更（原「恰 11 键」）：diag_log 诊断日志采样开关键入面
+	#（双注册齐——r211_diagtoggle_cases.gd 键契约段专项；存档兼容同口径零迁移）
+	# R212 有意契约变更（原「恰 12 键」）：diag_log_len 日志环形容量档键入面
+	#（双注册齐——r212_diaglog2_cases.gd 键契约段专项；存档兼容同口径零迁移）
+	# R220 有意契约变更（原「恰 13 键」）：perf_mode 优先模式键入面（0=帧率优先默认/
+	# 1=特效优先——PerfGovernor 调速器模式源；双注册齐——r220_governor_cases.gd ①段专项；
+	# 存档兼容同口径零迁移）
+	# R230 有意契约变更（原「恰 14 键」）：master_mute 总静音键入面（二cb 静音按钮——
+	# 双注册齐 r230_mute_cases.gd ①段专项；存档兼容同口径零迁移）
+	# R241 有意契约变更（原「恰 15 键」）：skill_auto_cast 技能自动施放键入面
+	#（二cm④ HUD 技能键下自动施放按钮——双注册齐 r241_boomfix_cases.gd ④段专项；
+	# 存档兼容同口径零迁移）
+	_check("D2①：SETTINGS_DEFAULTS 恰 16 键且键集与 R241 后逐位一致（skill_auto_cast 为唯一新增键）",
+		actual_keys == expected_keys and actual_keys.size() == 16,
 		"actual=%s" % str(actual_keys))
 	var no_new := true
 	for key in actual_keys:
