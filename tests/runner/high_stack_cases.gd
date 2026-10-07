@@ -243,31 +243,25 @@ func _test_thousand_layer_linear() -> void:
 	_check("①e 100 层 aggregate_panel = 15.0（±1e-9）", absf(agg100 - 15.0) < 1e-9, str(agg100))
 
 
-# ── ② attach 门 stack_max 封顶（R196 有意契约变更：ADD 池帽放宽至
-#    stack_max + OVERCAP_EXT_MAX(5)——超帽层 ×0.7 计贡献，非 ADD 池保持原帽） ──
+# ── ② attach 无限叠（R226 有意契约变更：用户拍板「肉鸽别搞上限」——原硬帽退役） ──
 func _test_attach_cap() -> void:
 	var real_td: TraitData = _gl.registry.get_trait(&"AFF_ATK_UP")
 	var s := TraitStack.new()
 	var got := _attach_n(s, real_td, 10)
 	var over := _attach_n(s, real_td, 1)
-	# R196 有意契约变更（原「attach×10 → 恰 3 层，满层再挂拒绝」）：ADD 池恰收
-	# stack_max+OVERCAP_EXT_MAX = 3+5 = 8 层，第 9 层拒绝
-	_check("②a 真卡 AFF_ATK_UP attach×10 → 恰 8 层（stack_max+超帽延伸 5），第 9 层拒绝",
-		got == 8 and over == 0 and int(s.traits[0].layers) == 8,
+	_check("②a 真卡 AFF_ATK_UP attach×10 → 恰 10 层（R226 无限叠），第 11 层也收",
+		got == 10 and over == 1 and int(s.traits[0].layers) == 11,
 		"got=%d over=%d" % [got, over])
 	var fb := _mk_add(&"add_atk", 0.05, 99, &"HSC_FALLBACK99")
 	var s99 := TraitStack.new()
 	var got99 := _attach_n(s99, fb, 200)
-	# R196 有意契约变更（原「恰 99 层硬帽」）：ADD 池硬帽平移至 99+OVERCAP_EXT_MAX = 104
-	_check("②b 运行期 stack_max=99 载体（FALLBACK 口径）attach×200 → 恰 104 层硬帽（stack_max+5）",
-		got99 == 104 and int(s99.traits[0].layers) == 104, str(got99))
+	_check("②b 运行期 stack_max=99 载体（FALLBACK 口径）attach×200 → 恰 200 层全收（R226 无帽）",
+		got99 == 200 and int(s99.traits[0].layers) == 200, str(got99))
 
 
-# ── ③ F4 池钳 2.0 + 记账 + FALLBACK dmg(40)==dmg(99) ─────────────
+# ── ③ F4 池钳退役（R226）：全额入账 + 伤害随层数增长 ─────────────
 func _test_f4_pool_clamp() -> void:
 	var caps: Dictionary = _cfg().balance.add_pool_caps
-	_check("③a F4 帽真源 add_atk = 2.0", absf(float(caps.get("add_atk", 0.0)) - 2.0) < 1e-12,
-		str(caps.get("add_atk")))
 	var ms := ModifierStack.new()
 	ms.audit = DamageAudit.new()
 	var entries: Array[Dictionary] = []
@@ -275,22 +269,22 @@ func _test_f4_pool_clamp() -> void:
 		entries.append({"trait_id": &"HSC_FALLBACK99", "pool_id": &"add_atk", "layer": 1,
 			"contrib": 0.05, "decay_delta": 0.85, "is_curse": false})
 	ms.aggregate_add(entries, caps)
-	_check("③b 99×0.05=4.95 → F4 钳 2.0 + audit.clamped_add 记账（饱和可见非隐式）",
-		absf(float(ms.add_pool_sum.get(&"add_atk", 0.0)) - 2.0) < 1e-12
-		and (ms.audit as DamageAudit).clamped_add.has(&"add_atk"),
+	_check("③b 99×0.05=4.95 全额入账（R226 F4 钳退役——原钳 2.0+审计拆除）",
+		absf(float(ms.add_pool_sum.get(&"add_atk", 0.0)) - 4.95) < 1e-12
+		and (ms.audit as DamageAudit).clamped_add.is_empty(),
 		str(ms.add_pool_sum.get(&"add_atk")))
-	# 管线端到端：40 层（恰触帽）与 99 层终值相等 = 饱和点设计内（>40 层边际 0，不失控）
+	# 管线端到端：R226 起无饱和点——dmg(99) = 100×(1+4.95)=595 > dmg(40)=300
 	var dummy := _make_dummy(Vector2(300.0, 500.0))
 	var r40 := _resolve_with_n_adds(dummy, 40, 0.05, false)
 	var r99 := _resolve_with_n_adds(dummy, 99, 0.05, false)
-	_check("③c FALLBACK dmg(40) == dmg(99) == 300（1+F4 帽 2.0）",
+	_check("③c FALLBACK dmg(99) = 100×(1+4.95)=595 全额（R226 无钳），且 > dmg(40)=300",
 		r40 != null and r99 != null
-		and absf(float(r40.final_value) - 300.0) < 0.01
-		and absf(float(r99.final_value) - 300.0) < 0.01,
+		and absf(float(r99.final_value) - 595.0) < 0.01
+		and absf(float(r40.final_value) - 300.0) < 0.01,
 		"40=%s 99=%s" % [str(r40.final_value if r40 != null else -1.0),
 			str(r99.final_value if r99 != null else -1.0)])
-	_check("③d 99 层审计可见（clamped_add）且 R_alarm 不误报",
-		r99 != null and (r99.audit as DamageAudit).clamped_add.has(&"add_atk")
+	_check("③d 无钳制审计（clamped_add 恒空）且 R_alarm 不误报",
+		r99 != null and (r99.audit as DamageAudit).clamped_add.is_empty()
 		and not bool((r99.audit as DamageAudit).alarm))
 	dummy.queue_free()
 
@@ -356,8 +350,10 @@ func _test_mult_guards() -> void:
 		absf(float(snap.get("crit_rate", 0.0)) - 1.0) < 1e-12, str(snap.get("crit_rate")))
 	_attach_n(_w1.trait_stack, _mk_add(&"add_skillcdr", 0.12, 4000), 1000)
 	_gl.player.call("refresh_skill_cd")
-	_check("⑤d add_skillcdr 1000 层 → 技能急速钳 0.6",
-		absf(float(_gl.player.call("skill_haste_pct")) - 0.6) < 1e-12,
+	# R226 有意契约变更：急速无帽——1000 层×0.12=120 全额（原 0.6 钳拆；
+	# 消费端 refresh_skill_cd 保 0.1 地板=CD 恒正，rof/crit 钳为射速/暴击数学阀保留）
+	_check("⑤d add_skillcdr 1000 层 → 急速无帽全额 ≥100（R226）",
+		float(_gl.player.call("skill_haste_pct")) > 100.0,
 		str(_gl.player.call("skill_haste_pct")))
 	_attach_n(_w1.trait_stack, _mk_add(&"add_rof", 0.12, 4000), 1000)
 	# W1 首发为 BALLISTIC 形态：节拍走 rof×(1+Σadd_rof)，最终钳 cap_rof 30/s
@@ -491,9 +487,26 @@ func _test_display_rendering() -> void:
 	var desc5 := "攻击 +15%"
 	var out5 := ov._trait_desc_bbcode(_mk_desc_tb(desc5, 0.15, 1))
 	_check("⑧e 1 层描述逐字不变（不改写）", out5 == desc5, str(out5))
-	var desc6 := "攻击 +10%"
-	var out6 := ov._trait_desc_bbcode(_mk_desc_tb(desc6, -0.10, 2))
-	_check("⑧f 负值（-10%）描述逐字不变（eff≤0 早退不改写）", out6 == desc6, str(out6))
+	# R242 有意契约变更（原⑧f「负值逐字不变」）：用户 2026-10-07「赌徒诅咒每次叠加扣的
+	# 攻击力也需要在构筑详情显示」——负值词条改写为累计负值+红高亮（ff5d5d，金色=增益
+	# 语义钉不动）。真实诅咒形态（描述「-10%」负号）+通用负号正则双门槛（原 eff≤0 早退
+	# 与「+N」正则均把负值整族排除）。
+	var curse_out := ov._trait_desc_bbcode(_mk_desc_tb("攻击力 -10%（赌徒硬币代价）", -0.1, 2))
+	_check("⑧f 负值×2 → 「-20%」红高亮（R242 诅咒累计改写；原早退语义终结）",
+		curse_out.contains("-20%") and curse_out.contains("ff5d5d")
+			and curse_out.contains("（赌徒硬币代价）"),
+		str(curse_out))
+	var curse_1 := ov._trait_desc_bbcode(_mk_desc_tb("攻击力 -10%（赌徒硬币代价）", -0.1, 1))
+	_check("⑧f2 负值 1 层描述逐字不变（同正值 ⑧e 口径）",
+		curse_1 == "攻击力 -10%（赌徒硬币代价）", str(curse_1))
+	# QA-R242-P01 混号词条（描述「-N%」+ value 正存=增益，如 AFF_CDR 出招间隔/AFF_
+	# SKILL_HASTE 技能急速）：显示符号跟随描述原文（「-20%」=间隔再减），高亮色按
+	# 收益方向（eff 正=金）——首版按 eff 符号会翻成金色「+20%」读作负收益
+	var mixed_out := ov._trait_desc_bbcode(_mk_desc_tb("武器出招间隔 -10%（cd 型武器）", 0.1, 2))
+	_check("⑧f3 混号×2 → 「-20%」**金色**（符号跟描述、色跟收益；P01 回归门）",
+		mixed_out.contains("-20%") and mixed_out.contains("ffd54a")
+			and not mixed_out.contains("+20%"),
+		str(mixed_out))
 
 
 # ── ⑨ 成本线性标度 + copy_full 混品级保真 ────────────────────────
@@ -559,8 +572,8 @@ func _test_save_green_path() -> void:
 		and absf(agg_before - 0.45) < 1e-9 and absf(agg_after - 0.45) < 1e-9,
 		"saved=%d disk=%d live=%d agg=%s" % [saved_layers, disk_layers, live_layers,
 			str(agg_after)])
-	# b. 恢复受注册表 stack_max 钳：快照 99 层 → 读档按基件帽重挂封顶
-	#    R196 有意契约变更（原「回读恰 3」）：ADD 池帽 = stack_max+OVERCAP_EXT_MAX = 3+5 = 8
+	# b. R226 恢复无钳（原「恢复受注册表 stack_max 钳：快照 99 层 → 读档按基件帽重挂
+	#    封顶 8」——叠层帽拆除后逐层重放 attach 全额回放）
 	_reset_stack()
 	var dup: TraitData = (_gl.registry.get_trait(&"AFF_ATK_UP") as Resource).duplicate()
 	dup.stack_max = 99
@@ -571,8 +584,8 @@ func _test_save_green_path() -> void:
 	_gl._restore_run_state(saved2)
 	_reacquire_weapon()
 	var live2 := _live_layers_of(&"AFF_ATK_UP")
-	_check("⑩b 恢复受 stack_max 钳：存 99 → 回读恰 8（注册表基件帽 3+超帽延伸 5 生效，不越帽）",
-		snap_layers == 99 and live2 == 8, "snap=%d live=%d" % [snap_layers, live2])
+	_check("⑩b 恢复无钳：存 99 → 回读恰 99（R226 无限叠）",
+		snap_layers == 99 and live2 == 99, "snap=%d live=%d" % [snap_layers, live2])
 	# c. 满层质变 ×1.6：第 4 关门开（MechanicGate idx≥3）→ 挂满 value_mult=1.6；
 	#    恢复路径按 game_loop.gd:1422「满层质变在末次挂载自然触发」复现 ×1.6
 	_reset_stack()

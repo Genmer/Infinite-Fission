@@ -624,6 +624,50 @@ func _test_build_details_panel() -> void:
 		if "◆金" in txt and "3/3 层" in txt:
 			found_badge = true
 	_check("品级徽记：金品词条名字行带「◆金」+「3/3 层」（R31）", found_badge, str(badge_texts))
+	# R242 金名终修（用户四轮反馈「非质变 buff 金名」——本轮终结「抽到过金品级恒金名」
+	# 通道）：名字金=质变语义专属（差一层满预告/已质变达成）；品质由 ◆徽记自解释。
+	# a) 源级防回退：pause_overlay 名字色判定必须是 ms_gold（质变门）而非 max_rarity 染色
+	var po_src := _read_source("res://scripts/ui/pause_overlay.gd")
+	_check("R242a 源级：名字色=质变门（ms_gold 判 GOLD/INK，max_rarity 染色退役）",
+		po_src.contains("ms_gold") and po_src.contains("PopPalette.GOLD if ms_gold else PopPalette.INK")
+			and not po_src.contains("rarity_col: Color = [PopPalette.INK"),
+		"")
+	# b) 运行态：3/3 满层（质变达成态）金品词条 → 名字金。QA-R242-P02：质变门=地图
+	# 第四关起（mechanic_gate.gd:71-74）——段首 set_run_map 第四图（high_stack ⑩c
+	# 口径）开金分支，段尾复位（map_prev 锚防跨段污染）
+	var map_prev: StringName = Meta.run_map_id()
+	Meta.set_run_map(&"world_grove")
+	_gl.pause_overlay.toggle_details()          # 门态变更后重建详情树（名字色在树建
+	_gl.pause_overlay.toggle_details()          # 期染色——不重建则残留门关时的墨色）
+	var gold_name_lbl: Label = _find_label_by_text(_gl.pause_overlay._details_list, "◆金")
+	_check("R242b 满层质变达成态（3/3，门开）→ 名字金（质变语义保留）",
+		gold_name_lbl != null
+			and gold_name_lbl.get_theme_color("font_color") == PopPalette.GOLD,
+		(gold_name_lbl.text if gold_name_lbl != null else "label 未找到"))
+	# c) 运行态：远质变（1 层，差两层）金品词条 → 名字墨色（金名不再随品质亮）。
+	# QA-R242-P04：夹具须**武器侧**词（玩家侧池渲染为 RichTextLabel 单行合并——
+	# pause_overlay:388-398 无名字 Label 可断言）；AFF_ATK_UP 攻击强化 stack_max=3
+	# 挂 1 层=真远质变（1 < 3-1），且 add_atk 非经济词零掉账污染
+	var far_t: TraitData = _gl.registry.get_trait(&"AFF_ATK_UP")
+	_check("前置：AFF_ATK_UP 入注册表", far_t != null, "")
+	if far_t != null:
+		var far_gold: TraitData = far_t.duplicate()
+		far_gold.rarity = 3
+		_check("前置：远质变金品层挂入", crit_w.attach_trait(far_gold), "")
+		_gl.pause_overlay.toggle_details()
+		_gl.pause_overlay.toggle_details()
+		var far_lbl: Label = _find_label_by_text(_gl.pause_overlay._details_list, "攻击强化")
+		_check("R242c 远质变金品词条（1 层 < 3-1，门开）→ 名字墨色非金（品质归 ◆徽记）",
+			far_lbl != null and far_lbl.get_theme_color("font_color") == PopPalette.INK,
+			(far_lbl.text if far_lbl != null else "label 未找到"))
+	Meta.set_run_map(map_prev)
+	# d) 诅咒卡面显性化（card_select_ui 三重标记）：描述尾行明示代价（compose 单源；
+	# ※ 记号=评审 MED-2 弃 ⚠〔Android 彩 emoji 化风险〕）
+	var curse_txt := CardSelectUI.compose_desc_text("测试词条", 1.0, false, true)
+	_check("R242d 诅咒卡描述尾行「※ 代价：攻击力 -10%」（compose p_cursed 单源）",
+		curse_txt.contains("※ 代价：攻击力 -10%")
+			and not CardSelectUI.compose_desc_text("测试词条", 1.0, false).contains("代价"),
+		curse_txt)
 	# 面板测试收尾（R31 修复：本块原缩进错位于递归函数 _collect_rtl 体内——每次递归
 	# 返回都重放 toggle/emit（历史 54 条非法迁移警告之源）；新增第二个 _collect_rtl
 	# 调用后按节点数平方引爆死循环。挪回本测试尾部，语义 = 面板互斥/恢复/退出验收）
@@ -638,8 +682,32 @@ func _test_build_details_panel() -> void:
 	_gl.call(&"quit_to_menu")
 
 
-func _collect_rtl(p_node: Node, p_out: Array[String]) -> void:
-	# 递归收集子树全部 RichTextLabel/Label 文本（详情卡层级：list→section→row→col→label）
+# ── R242 助手：源读口 + 名字 Label 递归查找 ──────────────────────
+func _read_source(p_path: String) -> String:
+	var f := FileAccess.open(p_path, FileAccess.READ)
+	if f == null:
+		return ""
+	var txt := f.get_as_text()
+	f.close()
+	return txt
+
+
+func _find_label_by_text(p_node: Node, p_needle: String) -> Label:
+	# 深度优先找首个 text 含 p_needle 的 Label（R242 名字色断言用）。
+	# 跳过 is_queued_for_deletion 节点：_rebuild_details 是 queue_free 式重建（帧尾
+	# 才真释放）——重建瞬间新旧两组行并存，不滤旧会先命中门关时染的旧墨色行
+	for c in p_node.get_children():
+		if c.is_queued_for_deletion():
+			continue
+		if c is Label and String((c as Label).text).contains(p_needle):
+			return c
+		var hit: Label = _find_label_by_text(c, p_needle)
+		if hit != null:
+			return hit
+	return null
+
+
+func _collect_rtl(p_node: Node, p_out: Array[String]) -> void:	# 递归收集子树全部 RichTextLabel/Label 文本（详情卡层级：list→section→row→col→label）
 	for c in p_node.get_children():
 		if c is RichTextLabel:
 			p_out.append((c as RichTextLabel).text)

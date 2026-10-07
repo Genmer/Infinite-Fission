@@ -263,6 +263,7 @@ func _test_b_toggle() -> void:
 	_check("B 可见性：PLAYING 显示",
 		_gl.start_run() and _gl.state == GameConst.GameStatus.PLAYING and btn.visible)
 	_gl._on_level_up(2)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("B 可见性：LEVEL_UP 显示",
 		_gl.state == GameConst.GameStatus.LEVEL_UP and btn.visible)
 	_gl.card_select_ui.choose(0)
@@ -289,6 +290,7 @@ func _test_c_auto_pick() -> void:
 	_choice_sizes.clear()
 	var cc0 := _card_chosen_count
 	_gl.player.gain_xp(_gl.player.xp_need)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("C1 前置：升级弹卡（LEVEL_UP）",
 		_gl.state == GameConst.GameStatus.LEVEL_UP and _gl.card_select_ui.is_open)
 	_check("C1 pkg4:296 口径：0.5s 展示窗内 LEVEL UP 文案不变",
@@ -313,6 +315,7 @@ func _test_c_auto_pick() -> void:
 	while int(_gl.player.get("level")) < lv0 + 2 and feeds < 40:
 		_gl.player.gain_xp(_gl.player.xp_need * 1.2)
 		feeds += 1
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("C2 前置：双级连升首级弹卡 + 排队 1（投喂 %d 次）" % feeds,
 		_gl.state == GameConst.GameStatus.LEVEL_UP and _gl.pending_level_ups == 1,
 		"pending=%d lv=%d" % [_gl.pending_level_ups, int(_gl.player.get("level"))])
@@ -332,6 +335,7 @@ func _test_c_auto_pick() -> void:
 	_gl._difficulty = 2                           # 地狱 → GameConst.difficulty_dual_pick 恒真
 	var cc2 := _card_chosen_count
 	_gl.player.gain_xp(_gl.player.xp_need)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("C3 前置：地狱成对货架 6 卡",
 		_gl.state == GameConst.GameStatus.LEVEL_UP and _gl.current_candidates.size() == 6,
 		"n=%d" % _gl.current_candidates.size())
@@ -381,10 +385,40 @@ func _test_c_auto_pick() -> void:
 			break
 	_check("C4 诅咒硬不变量：%d seed 扫描（含成对 6 卡）恒指向非诅咒卡/行"
 		% CURSE_SCAN_SEEDS, ok_curse and scenarios == CURSE_SCAN_SEEDS, detail)
+	# C4b 软排除不变量（用户裁定 2026-10-07「排除加大吸取范围 buff」——AFF_PICKUP 磁力吸附）：
+	# 纯函数直测（极端构造证明罚分压制力）；语义=「有别的安全卡绝不选它」非硬禁（全同卡
+	# 货架兜底可选，防 -1 重试死循环）——只影响 AUTO 自动选，手动选卡不受限。
+	var pickup_max := {"id": &"AFF_PICKUP", "rarity": 3, "value_scale": 9.0,
+		"milestone": true, "cursed": false}           # 3×9+2=29 分（远超真实上限的压制力证）
+	var plain_min := {"id": &"AFF_HP_UP", "rarity": 0, "value_scale": 0.1,
+		"milestone": false, "cursed": false}          # 0.01 分
+	var pair_a: Array[Dictionary] = [pickup_max, plain_min]
+	_check("C4b① 磁吸金卡+质变 29 分 vs 白卡 0.01 分 → 仍选白卡（罚分 100 绝对压制）",
+		AutoIdleStrategy.pick(pair_a, false) == 1,
+		"i=%d" % AutoIdleStrategy.pick(pair_a, false))
+	var dual_pair: Array[Dictionary] = [
+		{"id": &"AFF_PICKUP", "rarity": 3, "value_scale": 1.0, "milestone": false, "cursed": false},
+		{"id": &"AFF_XP_GAIN", "rarity": 0, "value_scale": 1.0, "milestone": false, "cursed": false},
+		{"id": &"AFF_HP_UP", "rarity": 0, "value_scale": 1.0, "milestone": false, "cursed": false},
+		{"id": &"AFF_SKILL_HASTE", "rarity": 0, "value_scale": 1.0, "milestone": false, "cursed": false},
+	]
+	# 行0=[磁吸3分−100, 经验0] 合计 −97 vs 行1=[生存0, 急速0] 合计 0 → 整行避开
+	_check("C4b② 成对模式含磁吸行整行避开（选行1=槽6）",
+		AutoIdleStrategy.pick(dual_pair, true) == 6,
+		"slot=%d" % AutoIdleStrategy.pick(dual_pair, true))
+	var all_pickup: Array[Dictionary] = [
+		{"id": &"AFF_PICKUP", "rarity": 3, "value_scale": 1.0, "milestone": false, "cursed": false},
+		{"id": &"AFF_PICKUP", "rarity": 2, "value_scale": 1.0, "milestone": false, "cursed": false},
+		{"id": &"AFF_PICKUP", "rarity": 1, "value_scale": 1.0, "milestone": false, "cursed": false},
+	]
+	var i_all := AutoIdleStrategy.pick(all_pickup, false)
+	_check("C4b③ 全货架磁吸兜底仍可选（非硬禁——最高分槽位）",
+		i_all == 0, "i=%d" % i_all)                  # 3−100 > 2−100 > 1−100 → 槽0
 	# C5 OFF 零干预
 	Meta.set_setting("auto_select_on", false)
 	_choice_sizes.clear()
 	_gl.player.gain_xp(_gl.player.xp_need)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("C5 前置：OFF 弹卡",
 		_gl.state == GameConst.GameStatus.LEVEL_UP and _gl.card_select_ui.is_open)
 	_drive_frames(120)                            # 1s > 0.6s 窗

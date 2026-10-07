@@ -666,30 +666,26 @@ func _hsc_linear() -> void:
 
 
 func _hsc_attach_cap() -> void:
-	# ② attach 门 stack_max 封顶（硬帽真实——非「软帽告警」）
-	# R196 有意契约变更：ADD 池帽放宽至 stack_max + OVERCAP_EXT_MAX(5)——超帽层
-	# ×0.7 计贡献（trait_stack.gd），非 ADD 池保持原帽；断言随帽平移
+	# ② R226 有意契约变更（用户拍板「肉鸽别搞上限」）：attach 叠层帽全池拆除——
+	# 原硬帽（stack_max / stack_max+5 / 99+5）退役，attach 恒收（非 ADD 取优语义不变）
 	var real_td: TraitData = _gl.registry.get_trait(&"AFF_ATK_UP")
 	var s := TraitStack.new()
 	var got := _attach_n(s, real_td, 10)
 	var over := _attach_n(s, real_td, 1)
-	# R196 有意契约变更（原「attach×10 → 恰 3 层，满层再挂拒绝」）：ADD 池恰收 3+5=8 层，第 9 层拒绝
-	_check("②a 真卡 AFF_ATK_UP attach×10 → 恰 8 层（stack_max+超帽延伸 5），第 9 层拒绝",
-		got == 8 and over == 0 and int(s.traits[0].layers) == 8,
+	_check("②a 真卡 AFF_ATK_UP attach×10 → 恰 10 层（R226 无限叠），第 11 层也收",
+		got == 10 and over == 1 and int(s.traits[0].layers) == 11,
 		"got=%d over=%d" % [got, over])
 	var fb := _mk_add(&"add_atk", 0.05, 99, &"R188_FALLBACK99")
 	var s99 := TraitStack.new()
 	var got99 := _attach_n(s99, fb, 200)
-	# R196 有意契约变更（原「恰 99 层硬帽」）：ADD 池硬帽平移至 99+OVERCAP_EXT_MAX = 104
-	_check("②b 运行期 stack_max=99 载体（FALLBACK 口径）attach×200 → 恰 104 层硬帽（stack_max+5）",
-		got99 == 104 and int(s99.traits[0].layers) == 104, str(got99))
+	_check("②b 运行期 stack_max=99 载体（FALLBACK 口径）attach×200 → 恰 200 层全收（R226 无帽）",
+		got99 == 200 and int(s99.traits[0].layers) == 200, str(got99))
 
 
 func _hsc_f4_pool_clamp() -> void:
-	# ③ F4 池钳（设计内显式钳制 + 审计可见，非隐式饱和）
+	# ③ R226 有意契约变更（用户拍板「肉鸽别搞上限」）：F4 池钳退役——加算池总额
+	# 全额入伤害式（原 add_atk 钳 2.0 + clamped_add 审计拆除；caps 数据遗留不消费）
 	var caps: Dictionary = _cfg().balance.add_pool_caps
-	_check("③a F4 帽真源 add_atk = 2.0", absf(float(caps.get("add_atk", 0.0)) - 2.0) < 1e-12,
-		str(caps.get("add_atk")))
 	var ms := ModifierStack.new()
 	ms.audit = DamageAudit.new()
 	var entries: Array[Dictionary] = []
@@ -697,21 +693,21 @@ func _hsc_f4_pool_clamp() -> void:
 		entries.append({"trait_id": &"R188_FALLBACK99", "pool_id": &"add_atk", "layer": 1,
 			"contrib": 0.05, "decay_delta": 0.85, "is_curse": false})
 	ms.aggregate_add(entries, caps)
-	_check("③b 99×0.05=4.95 → F4 钳 2.0 + audit.clamped_add 记账（饱和可见非隐式）",
-		absf(float(ms.add_pool_sum.get(&"add_atk", 0.0)) - 2.0) < 1e-12
-		and (ms.audit as DamageAudit).clamped_add.has(&"add_atk"),
+	_check("③b 99×0.05=4.95 全额入账（R226 F4 钳退役——原钳 2.0+审计拆除）",
+		absf(float(ms.add_pool_sum.get(&"add_atk", 0.0)) - 4.95) < 1e-12
+		and (ms.audit as DamageAudit).clamped_add.is_empty(),
 		str(ms.add_pool_sum.get(&"add_atk")))
 	var dummy := _make_dummy(Vector2(300.0, 500.0))
 	var r40 := _resolve_with_n_adds(dummy, 40, 0.05, false)
 	var r99 := _resolve_with_n_adds(dummy, 99, 0.05, false)
-	_check("③c FALLBACK dmg(40) == dmg(99) == 300（1+F4 帽 2.0）",
+	_check("③c FALLBACK 伤害随层数全额增长：dmg(99) = 100×(1+4.95)=595（R226 无钳）",
 		r40 != null and r99 != null
-		and absf(float(r40.final_value) - 300.0) < 0.01
-		and absf(float(r99.final_value) - 300.0) < 0.01,
+		and absf(float(r99.final_value) - 595.0) < 0.01
+		and float(r99.final_value) > float(r40.final_value),
 		"40=%s 99=%s" % [str(r40.final_value if r40 != null else -1.0),
 			str(r99.final_value if r99 != null else -1.0)])
-	_check("③d 99 层审计可见（clamped_add）且 R_alarm 不误报",
-		r99 != null and (r99.audit as DamageAudit).clamped_add.has(&"add_atk")
+	_check("③d 无钳制审计（clamped_add 恒空）且 R_alarm 不误报",
+		r99 != null and (r99.audit as DamageAudit).clamped_add.is_empty()
 		and not bool((r99.audit as DamageAudit).alarm))
 	dummy.queue_free()
 
@@ -774,8 +770,10 @@ func _hsc_mult_guards() -> void:
 		absf(float(snap.get("crit_rate", 0.0)) - 1.0) < 1e-12, str(snap.get("crit_rate")))
 	_attach_n(_w1.trait_stack, _mk_add(&"add_skillcdr", 0.12, 4000), 1000)
 	_gl.player.call("refresh_skill_cd")
-	_check("⑤d add_skillcdr 1000 层 → 技能急速钳 0.6",
-		absf(float(_gl.player.call("skill_haste_pct")) - 0.6) < 1e-12,
+	# R226 有意契约变更：急速无帽——1000 层×0.12=120 全额（原 0.6 钳拆；
+	# 消费端 refresh_skill_cd 保 0.1 地板=CD 恒正，rof/crit 钳为射速/暴击数学阀保留）
+	_check("⑤d add_skillcdr 1000 层 → 急速无帽全额 ≥100（R226）",
+		float(_gl.player.call("skill_haste_pct")) > 100.0,
 		str(_gl.player.call("skill_haste_pct")))
 	_attach_n(_w1.trait_stack, _mk_add(&"add_rof", 0.12, 4000), 1000)
 	var interval := float(_w1.call("_fire_interval"))
@@ -903,9 +901,13 @@ func _hsc_display_rendering() -> void:
 	var desc5 := "攻击 +15%"
 	var out5 := ov._trait_desc_bbcode(_mk_desc_tb(desc5, 0.15, 1))
 	_check("⑧e 1 层描述逐字不变（不改写）", out5 == desc5, str(out5))
-	var desc6 := "攻击 +10%"
-	var out6 := ov._trait_desc_bbcode(_mk_desc_tb(desc6, -0.10, 2))
-	_check("⑧f 负值（-10%）描述逐字不变（eff≤0 早退不改写）", out6 == desc6, str(out6))
+	# R242 有意契约迁移（原⑧f「负值逐字不变」语义终结——赌徒诅咒累计显示，与
+	# high_stack_cases ⑧f 同款双门槛修：eff==0 早退+[-+] 正则+红高亮）。夹具改真
+	# 诅咒形态（描述「-10%」负号——原「+10%」+负 value 是镜像混号抽象形态，真卡
+	# 不存在；符号跟描述原文=文案语义不变）
+	var out6 := ov._trait_desc_bbcode(_mk_desc_tb("攻击力 -10%（赌徒硬币代价）", -0.10, 2))
+	_check("⑧f 负值×2 → 「-20%」红高亮（R242 契约迁移）",
+		out6.contains("-20%") and out6.contains("ff5d5d"), str(out6))
 
 
 func _hsc_cost_scaling_and_copy_full() -> void:
@@ -981,9 +983,10 @@ func _hsc_save_green_path() -> void:
 	_gl._restore_run_state(saved2)
 	_reacquire_weapon()
 	var live2 := _live_layers_of(&"AFF_ATK_UP")
-	# R196 有意契约变更（原「回读恰 3」）：ADD 池帽 = stack_max+OVERCAP_EXT_MAX = 3+5 = 8
-	_check("⑩b 恢复受 stack_max 钳：存 99 → 回读恰 8（注册表基件帽 3+超帽延伸 5 生效，不越帽）",
-		snap_layers == 99 and live2 == 8, "snap=%d live=%d" % [snap_layers, live2])
+	# R226 有意契约变更（原「回读恰 8」）：叠层帽拆除——存 99 层原样恢复 99（恢复路径
+	# 逐层重放 attach，无帽即全额回放）
+	_check("⑩b 恢复无钳：存 99 → 回读恰 99（R226 无限叠，不越帽概念退役）",
+		snap_layers == 99 and live2 == 99, "snap=%d live=%d" % [snap_layers, live2])
 	_reset_stack()
 	Meta.set_run_map(&"world_grove")             # 第 4 关门开（MechanicGate idx≥3）质变口径
 	for i in range(3):
@@ -1144,6 +1147,7 @@ func _perf_level_burst() -> void:
 	_gl.merged_overflow_level_ups = 0
 	var t0 := Time.get_ticks_usec()
 	_gl.player.gain_xp(1e12)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	var burst_ms := float(Time.get_ticks_usec() - t0) / 1000.0
 	var burst: int = _gl.player.level_burst_last
 	var pending: int = _gl.pending_level_ups
@@ -1302,6 +1306,7 @@ func _idle_toggle() -> void:
 	_check("B 可见性：PLAYING 显示",
 		_gl.start_run() and _gl.state == GameConst.GameStatus.PLAYING and btn.visible)
 	_gl._on_level_up(2)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("B 可见性：LEVEL_UP 显示（自动开关恰在选卡期工作，不照抄暂停钮仅 PLAYING）",
 		_gl.state == GameConst.GameStatus.LEVEL_UP and btn.visible)
 	_gl.card_select_ui.choose(0)
@@ -1334,6 +1339,7 @@ func _idle_auto_pick() -> void:
 	_choice_sizes.clear()
 	var cc0 := _card_chosen_count
 	_gl.player.gain_xp(_gl.player.xp_need)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("C1 前置：升级弹卡（LEVEL_UP）",
 		_gl.state == GameConst.GameStatus.LEVEL_UP and _gl.card_select_ui.is_open)
 	_check("C1 pkg4:296 口径：0.5s 展示窗内 LEVEL UP 文案不变",
@@ -1361,6 +1367,7 @@ func _idle_auto_pick() -> void:
 	var feeds := 0
 	while int(_gl.player.get("level")) < lv0 + 2 and feeds < 40:
 		_gl.player.gain_xp(_gl.player.xp_need * 1.2)
+		_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 		feeds += 1
 	_check("C2 前置：双级连升首级弹卡 + 排队 1（投喂 %d 次）" % feeds,
 		_gl.state == GameConst.GameStatus.LEVEL_UP and _gl.pending_level_ups == 1,
@@ -1381,6 +1388,7 @@ func _idle_auto_pick() -> void:
 	_gl._difficulty = 2                          # 地狱 → GameConst.difficulty_dual_pick 恒真
 	var cc2 := _card_chosen_count
 	_gl.player.gain_xp(_gl.player.xp_need)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("C3 前置：地狱成对货架 6 卡",
 		_gl.state == GameConst.GameStatus.LEVEL_UP and _gl.current_candidates.size() == 6,
 		"n=%d" % _gl.current_candidates.size())
@@ -1438,6 +1446,7 @@ func _idle_auto_pick() -> void:
 	Meta.set_setting("auto_select_on", false)
 	_choice_sizes.clear()
 	_gl.player.gain_xp(_gl.player.xp_need)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("C5 前置：OFF 弹卡",
 		_gl.state == GameConst.GameStatus.LEVEL_UP and _gl.card_select_ui.is_open)
 	_drive_frames(120)                           # 1s > 0.6s 窗
