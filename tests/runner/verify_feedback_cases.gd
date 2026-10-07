@@ -540,10 +540,18 @@ func _test_e7_ranged_fire() -> void:
 	var free1: int = int(_gl.pools[&"projectile"].stats()["free"])
 	_check("射程内驻停开火（敌弹入池 free -1）", free1 == free0 - 1)
 	var bullet: Node = null
-	for n in _gl.pools[&"projectile"].get_children():
-		if n is Node2D and (n as Node2D).visible:
-			bullet = n
-			break
+	# R214 分桶：活弹 reparent 进 池根→TexBuckets→TexBucketN（孙/曾孙代）——递归扫，
+	# ProjectileBase 类型判据（桶容器/host 非 Node2D 或非弹体，不会误配）
+	var scan: Array[Node] = [_gl.pools[&"projectile"]]
+	while scan.size() > 0 and bullet == null:
+		var cur: Node = scan.pop_back()
+		for c in cur.get_children():
+			if c is ProjectileBase:
+				if (c as Node2D).visible:
+					bullet = c
+					break
+				continue
+			scan.push_back(c)
 	_check("敌弹实体可见（team=1 敌方弹）", bullet != null)
 	_gl.pools[&"enemy"].release(enemy)
 
@@ -660,6 +668,11 @@ func _test_particle_reap() -> void:
 # ── ⑪ 元素状态表现件挂载 ─────────────────────────────────────────
 func _test_status_fx_nodes() -> void:
 	print("── 状态表现件 ──")
+	# R202 收口：本段四断言（双电弧/落雷/火苗×4/冰晶放大）断的是高档预算（enemy.gd
+	# FLAME/SHARK/SHARD_BUDGET 表尾档），而 user://meta_save_test.cfg 档位跨套件残留
+	# （probe_r202_popup.gd 环境还原 / render_load_probe C 段会留 0），低档下挂件不建
+	# → 误伤。开段先钉高档（=出厂档，离开亦不污染），断言语义不变。
+	Meta.set_setting("fx_quality", 2)
 	var enemy := (_gl.pools[&"enemy"] as EnemyPool).acquire()
 	enemy.spawn(_fixture_enemy(&"E_FX", 100.0), 1, 0)
 	_gl.elemental.register_host(enemy)
@@ -1271,10 +1284,11 @@ func _test_p0_fixes() -> void:
 	var shield_data: TraitData = _gl.registry.get_trait(&"MEC_SHIELD")
 	var ok1: bool = main_w.attach_trait(shield_data)
 	_check("护盾链：attach_trait 成功（无崩溃）", ok1)
-	_check("护盾链：interval=8.0 首充 8s 未就绪",
+	# R238 H4 契约迁移：首挂即就绪（原「首充 8s 空窗」被用户真机两报证伪——选卡窗
+	# 关闭即被围殴掉血=「没生效」体感主因；现首次即给一枚可用护盾，此后每 interval 充能）
+	_check("护盾链：interval=8.0 首挂即就绪（R238 H4 契约）",
 		absf(float(p.get("shield_interval")) - 8.0) <= 0.01
-		and absf(float(p.get("shield_timer")) - 8.0) <= 0.01
-		and not bool(p.get("shield_ready")))
+		and bool(p.get("shield_ready")))
 	main_w.attach_trait(shield_data)             # 2 层
 	_check("护盾链：2 层 → interval=5.5", absf(float(p.get("shield_interval")) - 5.5) <= 0.01)
 	p.set("shield_timer", 0.01)
@@ -1287,7 +1301,12 @@ func _test_p0_fixes() -> void:
 	_check("护盾链：格挡 → HP 不掉 + 进入再充能",
 		absf(float(p.get("hp")) - hp0) <= 0.01 and not bool(p.get("shield_ready"))
 		and absf(float(p.get("shield_timer")) - 5.5) <= 0.01)
-	# ⑤ 前置还原：清除护盾状态（防本批次后续 roll 断言被充能干扰——语义无后续依赖）
+	# ⑤ 前置还原：清除护盾状态（防本批次后续 roll 断言被充能干扰——语义无后续依赖）。
+	# R238 H4 契约后必须显式清（原实现首挂未就绪=自然不挡；现首挂即就绪，ready 残留
+	# 会把后续 R72 引爆等接触伤用例挡掉——实证 hp 60→60）。
+	p.set("shield_ready", false)
+	p.set("shield_timer", 0.0)
+	p.set("shield_interval", 0.0)                # :114 口径：<=0=未持有
 	# ② W4 主束：真池真网格（GameLoop 既有依赖）。R187 翻转重写（原「0.5s 脉冲收束」——
 	#    pulse_duration 已随主束常驻化定案从 .tres 真删，同文件 R91 段/数据契约段同口径）：
 	#    spawn lifetime 缺省 0 = 常驻聚焦锚，0.5s 后仍存活不收束
@@ -2470,12 +2489,13 @@ func _test_r194_fx_opacity() -> void:
 			emitter_ok += 1
 	_check("R194 fx：粒子池发射器 modulate.a≈0.3（%d/%d）" % [emitter_ok, emitters.size()],
 		emitters.size() > 0 and emitter_ok == emitters.size())
-	# ⑥ 跳字折乘：show_popup → tick → modulate.a ≈ 0.3×(1−t²)（t=0.2 → 0.288）
+	# ⑥ 跳字折乘：show_popup → tick → modulate.a = _qa(0.3×(1−t²))（t=0.2 → 0.288→0.25；
+	#    R230 K1 根 alpha 四分档量化——折乘后整体量化，R194 乘区契约本身不变）
 	var popup: Node2D = (_gl.pools[&"popup"] as PopupPool).acquire()
 	popup.call(&"show_popup", Vector2(100.0, 100.0), 10.0, GameConst.PopupStyle.NORMAL)
 	popup.call(&"tick", 0.12)                     # t = 0.12/0.6 = 0.2
-	_check("R194 fx：跳字 tick 后 modulate.a≈0.3×(1−t²)=0.288",
-		absf(popup.modulate.a - 0.288) <= 0.01, str(popup.modulate.a))
+	_check("R194 fx：跳字 tick 后 modulate.a==_qa(0.3×(1−t²))==0.25",
+		absf(popup.modulate.a - 0.25) <= 0.01, str(popup.modulate.a))
 	(_gl.pools[&"popup"] as PopupPool).release(popup)
 	# ⑦ 枪口 TINT 不变：fx_opacity=0.3 开火 → 镜面火花 modulate==MirrorImage.TINT（精确锁，
 	#    枪口星闪/镜面火花排除于乘区——mirror_muzzle 套件 32 断言原样，此处锁跨系统互不染）
@@ -2583,6 +2603,7 @@ func _test_r2_reroll() -> void:
 	_check("刷新：开局次数 = 2（基础）", p.reroll_charges == 2)
 	_gl.start_run()
 	_gl._on_level_up(2)                      # PLAYING → LEVEL_UP 弹卡
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("刷新：选卡界面打开（LEVEL_UP）", _gl.card_select_ui.is_open)
 	var before: Array[Dictionary] = _gl.current_candidates.duplicate()
 	var first_id := String(before[0].get("id", "")) if not before.is_empty() else ""
@@ -2682,6 +2703,9 @@ func _test_r2_burn_floor_and_spread() -> void:
 	var cb := func(r: DamageResult) -> void: captured["v"] = r.final_value
 	EventBus.damage_resolved.connect(cb)
 	_gl.elemental._dot_tick(e, st)
+	# R220 刀11：damage_resolved 批化（结算只入队，⑧段前 dispatch_resolved_frame 统一
+	# 派发）——直驱路径补一次帧派发后再断言广播到达（帧内语义不变）
+	_gl.pipeline.call(&"dispatch_resolved_frame")
 	EventBus.damage_resolved.disconnect(cb)
 	_check("烧伤：低快照保底 ≥1（0.6 → 1）", float(captured["v"]) >= 1.0)
 	# 点燃蔓延（层 2 质变）：燃烧者死亡 → 邻敌满槽点燃
@@ -2902,9 +2926,12 @@ func _test_round7_audit() -> void:
 	var bounce_proj: ProjectileBase = (_gl.pools[&"projectile"] as ProjectilePool).acquire()
 	if bounce_proj != null:
 		_bounce_probe(bounce_proj, bounce_t, bproj_params)
-	_check("反弹动作：带预算子弹【射程无限】（寿命抬到 20s 上限，打空必达边界）",
-		bounce_proj == null or float(bounce_proj.lifetime_left) >= 20.0,
-		"life=%s" % str(bounce_proj.lifetime_left) if bounce_proj != null else "no-proj")
+	# R220 刀13②：跳弹流 dwell 上限按模式分支（帧率优先 10.0 / 特效优先 20.0）——
+	# 断言口径随 frame_priority 动态（headless 缺省帧率优先 → 10）
+	var life_expect := 10.0 if PerfGovernor.frame_priority() else 20.0
+	_check("反弹动作：带预算子弹【射程无限】（寿命抬到模式上限，打空必达边界）",
+		bounce_proj == null or float(bounce_proj.lifetime_left) >= life_expect,
+		"life=%s expect=%s" % [str(bounce_proj.lifetime_left), str(life_expect)] if bounce_proj != null else "no-proj")
 	if bounce_proj != null:
 		(bounce_proj as ProjectileBase).nullify()
 	# ⑩ 元素弹色串扰回归（R12：用户实测「霰弹枪点火，手枪弹丸变红」）
@@ -3042,6 +3069,11 @@ func _test_r69_rarity_ladder() -> void:
 		absf(_gl.player.shield_interval - 8.0 / 2.6) <= 0.01,
 		"i=%.2f" % _gl.player.shield_interval)
 	_gl.player.apply_shield_trait(1, {"interval_s": 8.0, "interval_lv2": 5.5}, 1.0)
+	# R238 H4 契约后补清理：上面两次直接调用在首挂即就绪下置 ready=true——残留会把
+	# 后续 R72 法术圈引爆等接触伤用例挡掉（实证 hp 60→60）。清三件套（:114 口径）。
+	_gl.player.set("shield_ready", false)
+	_gl.player.set("shield_timer", 0.0)
+	_gl.player.set("shield_interval", 0.0)
 	# ④ 死亡新星：金卡 value 0.78 + 卡面 78%/层2 117%
 	var blast_gold := _gold_card(gen, &"MEC_KILL_BLAST")
 	var bd := String(blast_gold.get("description"))
@@ -3503,8 +3535,11 @@ func _test_r72_new_enemies() -> void:
 		"n=%d elite=%s" % [hell_new, str(hell_elite_new)])
 	wd.difficulty = GameConst.Difficulty.NORMAL
 	# ⑧ 图鉴：攻击方式行 + 图标映射
+	# R202 收口：攻击方式句已迁 GameConst.enemy_attack_note 静态单源（menu_screen.gd:782
+	# 图鉴行同款消费），MenuScreen 旧名 _enemy_attack_note 不复存在——旧调用每跑必报
+	# SCRIPT ERROR 并使本函数后续 check（含下一行图标映射）静默跳过。改按新契约直调。
 	_check("R72：图鉴攻击方式行（壁垒枪兵 = 绕后提示）",
-		_gl.menu_screen._enemy_attack_note("E26_shield_lancer").contains("绕"))
+		GameConst.enemy_attack_note("E26_shield_lancer").contains("绕"))
 	_check("R72：图鉴图标映射（E27 → warden 贴图）",
 		_gl.menu_screen._enemy_icon_tex("E27_warden_orb") == TextureFactory.enemy_tex(&"warden"))
 
@@ -3906,19 +3941,23 @@ func _test_ev9_combo() -> void:
 	print("── E9 连杀 combo 跳字（1.2s 窗口 + 档位色阶） ──")
 	_gl.state = GameConst.GameStatus.MENU
 	_gl.call(&"start_run")
-	var stub := _make_killed_enemy_stub(false)
+	# R202 收口：击杀回收契约 = enemy_killed 首次派发即池归还（enemy_spawner.gd:180-186，
+	# _prepare_for_pool 清 data）。原夹具同一 stub 连发 25 次：第 2 发起 data 已 null →
+	# _on_enemy_killed_drop_xp 读 gold_drop 报 SCRIPT ERROR + 池双重归还拒绝（×34/局）。
+	# 改每杀新 stub（发完即被 spawner 回收，无需手动 release）——连杀计数按信号次数
+	# 计，与 stub 身份无关，断言不变。
 	for i in range(4):
-		EventBus.emit_enemy_killed(stub)         # 4 连杀：未到显示阈值
+		EventBus.emit_enemy_killed(_make_killed_enemy_stub(false))   # 4 连杀：未到显示阈值
 	_check("E9 前置：4 连杀无跳字", _gl._combo_count == 4
 		and (_gl._combo_label == null or not is_instance_valid(_gl._combo_label)))
-	EventBus.emit_enemy_killed(stub)             # 第 5 杀：跳字出现
+	EventBus.emit_enemy_killed(_make_killed_enemy_stub(false))       # 第 5 杀：跳字出现
 	_check("E9：5 连杀 → ×5 跳字显示（白色档）",
 		_gl._combo_label != null and is_instance_valid(_gl._combo_label)
 			and String(_gl._combo_label.text) == "×5 连杀！")
 	_gl._combo_left = 0.0
 	_gl._combo_count = 0
 	for i in range(20):
-		EventBus.emit_enemy_killed(stub)         # 20+：金色档
+		EventBus.emit_enemy_killed(_make_killed_enemy_stub(false))   # 20+：金色档
 	_check("E9：20 连杀 → 金色档位色（G9 起尾缀奖励行）",
 		String(_gl._combo_label.text).begins_with("×20 连杀！")
 			and _gl._combo_label.get_theme_color("font_color") == PopPalette.GOLD)
@@ -3926,7 +3965,6 @@ func _test_ev9_combo() -> void:
 	_gl._combo_left = 0.01
 	_gl._tick_combo_for_test()
 	_check("E9：窗口过期连击清零", _gl._combo_count == 0)
-	(_gl.pools[&"enemy"] as EnemyPool).release(stub)
 	_gl.call(&"quit_to_menu")
 
 
@@ -4173,24 +4211,25 @@ func _test_g9_combo_reward() -> void:
 	print("── G9 连杀奖励 ──")
 	_gl.state = GameConst.GameStatus.MENU
 	_gl.call(&"start_run")
-	var stub := _make_killed_enemy_stub(false)
+	# R202 收口：同 E9——每杀新 stub（击杀回收契约下同一 stub 二次派发 = data 已 null →
+	# SCRIPT ERROR + 双重归还拒绝），发完由 spawner 自动回收，无手动 release。
 	_gl._combo_count = 9                        # 下一杀 = ×10 档
 	_gl._combo_tier_paid = 0
 	var gold0: int = _gl.player.gold
-	EventBus.emit_enemy_killed(stub)
+	EventBus.emit_enemy_killed(_make_killed_enemy_stub(false))
 	_check("G9：×10 档发奖（入账 + 跳字含奖励行）",
 		_gl._combo_tier_paid == 1 and _gl.player.gold >= gold0
 			and String(_gl._combo_label.text).contains("奖励+"),
 		"paid=%d gold %d→%d label=%s" % [_gl._combo_tier_paid, gold0,
 			_gl.player.gold, str(_gl._combo_label.text)])
 	var gold1: int = _gl.player.gold
-	EventBus.emit_enemy_killed(stub)            # ×11：档内不重发
-	EventBus.emit_enemy_killed(stub)            # ×12
+	EventBus.emit_enemy_killed(_make_killed_enemy_stub(false))   # ×11：档内不重发
+	EventBus.emit_enemy_killed(_make_killed_enemy_stub(false))   # ×12
 	_check("G9：档内击杀不重发（tier_paid 不变）", _gl._combo_tier_paid == 1,
 		"paid=%d" % _gl._combo_tier_paid)
 	while _gl._combo_count < 19:
-		EventBus.emit_enemy_killed(stub)
-	EventBus.emit_enemy_killed(stub)            # ×20 档
+		EventBus.emit_enemy_killed(_make_killed_enemy_stub(false))
+	EventBus.emit_enemy_killed(_make_killed_enemy_stub(false))   # ×20 档
 	_check("G9：×20 档二段发奖", _gl._combo_tier_paid == 2
 			and _gl.player.gold >= gold1 + 14,
 		"paid=%d gold %d→%d" % [_gl._combo_tier_paid, gold1, _gl.player.gold])
@@ -4206,7 +4245,6 @@ func _test_g9_combo_reward() -> void:
 	_gl.game_over_screen.show_summary()
 	_check("G10：结算行含最高连杀", _gl.game_over_screen.summary_text().contains("最高连杀"),
 		_gl.game_over_screen.summary_text())
-	(_gl.pools[&"enemy"] as EnemyPool).release(stub)
 	_gl.call(&"quit_to_menu")
 
 
@@ -4740,10 +4778,14 @@ func _test_r199_g7() -> void:
 	ui.open(short_cards, false)
 	var b0: Button = ui._buttons[0]
 	var d0: Label = b0.get_node_or_null("CardDesc") as Label
-	_check("R199-G7 P05：短卡几何逐位恒等（卡 180/描述 58/栈顶 264）",
+	# R200：描述梯顶 18→20——短卡 1 行 @20 ≈ 60px > 58 基准 → 描述 58→60、
+	# 圆点让位 dots_y 150→152、卡体 180→182（扩高仍 ≤ 250 帽、栈顶 264 恒等）。
+	# R203：stretch canvas_items→viewport（渲染分辨率帽）下同一行高的字体度量结算
+	# -2px——描述 60→58、卡体 182→180（恒等语义不变：短卡仍钉在最小值，栈顶 264 恒等）
+	_check("R199-G7 P05：短卡几何逐位恒等（卡 180/描述 58/栈顶 264——R203 viewport 度量）",
 		b0.size.y == 180.0 and d0 != null and d0.size.y == 58.0 and b0.position.y == 264.0,
 		"h=%.1f d=%.1f y=%.1f" % [b0.size.y, d0.size.y if d0 != null else -1.0,
-		b0.position.y])
+			b0.position.y])
 	ui.close()
 	# ② 受控 3 行卡（80 字描述 + 品质注记）：整卡可见 + 卡体扩高≤帽 + 栈无重叠
 	var deco_cards: Array[Dictionary] = []
@@ -4916,18 +4958,20 @@ func _test_r199_g7() -> void:
 		var ware_ms := shop._make_trait_ware(pierce_t, tw2, 0, 0)
 		var msd := String((ware_ms.get("data") as TraitData).description)
 		f14_ms_ok = bool(ware_ms.get("milestone")) and msd.contains("满层质变")
-		if tw2.attach_trait(pierce_t):        # 2 层 = stack_max → 超帽层（ADD 池放行）
+		if tw2.attach_trait(pierce_t):        # 2 层 = stack_max（R226 起可继续叠）
 			var ware_oc := shop._make_trait_ware(pierce_t, tw2, 0, 0)
 			var oc_d: TraitData = ware_oc.get("data")
-			f14_oc_ok = bool(ware_oc.get("overcap")) \
-				and String(oc_d.description).contains(GameConst.OVERCAP_NOTE)
+			# R226 有意契约变更：超帽注记（OVERCAP_NOTE）退役——满层后货架无注记、
+			# overcap 恒假、描述干净（原「收益降低 30%」承诺随 ×0.7 一并拆除）
+			f14_oc_ok = not bool(ware_oc.get("overcap")) \
+				and not String(oc_d.description).contains("超出质变等级")
 			var row2: Control = shop._make_ware_row(0, ware_ms)
 			for ch2: Variant in row2.get_children():
 				if ch2 is Label and String((ch2 as Label).text).begins_with("◆质变◆"):
 					f14_prefix_ok = true
 			row2.free()
 	_check("R199-G7 F14：满层前沿质变 ◆ 预告（判据 cur+1≥stack_max 对齐卡架）", f14_ms_ok)
-	_check("R199-G7 F14：超帽层 OVERCAP_NOTE（GameConst 真源）+ 双写进 data 副本",
+	_check("R199-G7 F14：超帽注记退役（overcap 恒假+描述无注记——R226 契约）",
 		f14_oc_ok)
 	_check("R199-G7 F14：黑市行名 ◆质变◆ 前缀（对齐卡架 :673-674）", f14_prefix_ok)
 	Meta.set_run_map(map_save)
