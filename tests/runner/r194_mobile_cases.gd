@@ -7,6 +7,7 @@
 #     物理 120Hz 护栏（红线2：project.godot 全局物理时钟不破）
 #   · R194 设置键契约 headless 探针（fx_opacity + fps_cap 双注册/写口钳制/持久化/旧档回退/
 #     mobile 门 false 时 Engine.max_fps 零改动；测试档隔离 user://meta_save_test.cfg）
+#     + R202（G4）show_fps bool 键同段补强（缺键回默认/双注册/写口归一）
 #   · fx_opacity 乘区传递（fx §5.2 三单点抽全）：elemental_fx 层根 / 粒子池发射器 /
 #     DamagePopup static 折乘（tick 淡出 × f + _reset_state 带 f）+ player 本体不接入 +
 #     settings_changed 订阅即时重应用 + 快照还原乘区复位
@@ -134,6 +135,16 @@ func _test_settings_key_contract() -> void:
 		str(Meta.settings("fx_opacity")))
 	_check("R194 键契约：旧档缺键读口回退 fps_cap=60",
 		int(Meta.settings("fps_cap")) == 60, str(Meta.settings("fps_cap")))
+	# R202（G4 帧率显示，可选补强段）：show_fps bool 键同段契约——旧档缺键回默认 false +
+	# 双注册读侧 has() + 写口 bool 归一生效（不加本段不红；加则锁「缺一半静默失效」回归）
+	_check("R194 键契约：旧档缺键读口回退 show_fps=false（R202 零迁移）",
+		not bool(Meta.settings("show_fps")), str(Meta.settings("show_fps")))
+	_check("R194 键契约：双注册读侧（SETTINGS_DEFAULTS 含 show_fps，R202）",
+		Meta.SETTINGS_DEFAULTS.has("show_fps"))
+	Meta.set_setting("show_fps", true)
+	_check("R194 键契约：双注册写侧（show_fps true 写入生效，bool 归一非静默丢弃）",
+		bool(Meta.settings("show_fps")))
+	Meta.set_setting("show_fps", false)             # 本段不留痕（HUD 侧 visible 即时复位）
 	# ② 双注册缺一不可：SETTINGS_DEFAULTS 加行（读口侧）+ set_setting 写入生效（写口侧——
 	#    _normalized_setting 缺分支则静默丢弃、读回默认值）
 	_check("R194 键契约：双注册读侧（SETTINGS_DEFAULTS 含 fx_opacity/fps_cap）",
@@ -191,15 +202,17 @@ func _test_fx_opacity_apply() -> void:
 	_check("R194 fx④：player.modulate.a==1.0（玩家本体不接入，排除清单口径）",
 		is_equal_approx(_gl.player.modulate.a, 1.0), str(_gl.player.modulate.a))
 	# 消费点C：跳字折乘（真件直驱——tick 淡出曲线 × f + 复位带 f，R194 alpha 写点①②）
+	# R230 K1：折乘后过 _qa() 四分档量化——0.3×0.9375=0.28125→0.25 / 复位 _qa(0.3)=0.25
+	#（复位值恒等首拍值，「防池复用闪帧」契约在量化口径下原样成立）
 	var pop := DamagePopup.new()
 	tree.get_root().add_child(pop)
 	pop.show_popup(Vector2(100.0, 100.0), 10.0, GameConst.PopupStyle.NORMAL)
 	pop.tick(DamagePopup.LIFE_TIME * 0.25)        # t=0.25 → 淡出因子 1−t²=0.9375
-	_check("R194 fx⑤：跳字 tick 后 modulate.a==0.3×(1−t²)（消费点C 折乘）",
-		is_equal_approx(pop.modulate.a, 0.3 * (1.0 - 0.25 * 0.25)), str(pop.modulate.a))
+	_check("R194 fx⑤：跳字 tick 后 modulate.a==_qa(0.3×(1−t²))==0.25（消费点C 折乘×量化）",
+		is_equal_approx(pop.modulate.a, 0.25), str(pop.modulate.a))
 	pop._reset_state()
-	_check("R194 fx⑥：跳字 _reset_state 后 modulate.a==0.3（复位带乘区，防池复用闪帧）",
-		is_equal_approx(pop.modulate.a, 0.3), str(pop.modulate.a))
+	_check("R194 fx⑥：跳字 _reset_state 后 modulate.a==_qa(0.3)==0.25（复位带乘区，防池复用闪帧）",
+		is_equal_approx(pop.modulate.a, 0.25), str(pop.modulate.a))
 	pop.free()
 	# 第二跳：改值即时重应用（设置页拖动实时减淡口径，仅 fx_opacity 键短路）
 	Meta.set_setting("fx_opacity", 0.5)

@@ -1,0 +1,61 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R198 HUD 布局清账自测 ══════════
+── T 四处临时 toast 活宽拉伸锚（r195-3） ──
+PASS | T① 前置：镜面 toast 实挂（引用差集）
+PASS | T② 镜面 锚：anchor_left==0 ∧ anchor_right==1
+PASS | T② 镜面 offset：左右归 0 ∧ y 设计位 300..330 保持
+PASS | T② 镜面 居中：文本水平居中对齐 ∧ rect 中心==可视域中心（720 域 x 覆盖与旧死坐标等价）
+PASS | T② 镜面 活宽：满父域宽拉伸（size.x == 父域宽，旧 420/540 固定值已删）
+PASS | T② 镜面 设计位：global y 顶沿==300（720 域 y 逐位不变）
+PASS | T③ 前置：质变 toast 实挂
+PASS | T④ 质变 锚：anchor_left==0 ∧ anchor_right==1
+PASS | T④ 质变 offset：左右归 0 ∧ y 设计位 360..394 保持
+PASS | T④ 质变 居中：文本水平居中对齐 ∧ rect 中心==可视域中心（720 域 x 覆盖与旧死坐标等价）
+PASS | T④ 质变 活宽：满父域宽拉伸（size.x == 父域宽，旧 420/540 固定值已删）
+PASS | T④ 质变 设计位：global y 顶沿==360（720 域 y 逐位不变）
+PASS | T⑤ 前置：刷新次数 toast 实挂
+PASS | T⑥ 刷新次数 锚：anchor_left==0 ∧ anchor_right==1
+PASS | T⑥ 刷新次数 offset：左右归 0 ∧ y 设计位 300..330 保持
+PASS | T⑥ 刷新次数 居中：文本水平居中对齐 ∧ rect 中心==可视域中心（720 域 x 覆盖与旧死坐标等价）
+PASS | T⑥ 刷新次数 活宽：满父域宽拉伸（size.x == 父域宽，旧 420/540 固定值已删）
+PASS | T⑥ 刷新次数 设计位：global y 顶沿==300（720 域 y 逐位不变）
+PASS | T⑦ 前置：成就合批 toast（AchToast）实挂
+PASS | T⑧ 成就合批 锚：anchor_left==0 ∧ anchor_right==1
+PASS | T⑧ 成就合批 offset：左右归 0 ∧ y 设计位 300..330 保持
+PASS | T⑧ 成就合批 居中：文本水平居中对齐 ∧ rect 中心==可视域中心（720 域 x 覆盖与旧死坐标等价）
+PASS | T⑧ 成就合批 活宽：满父域宽拉伸（size.x == 父域宽，旧 420/540 固定值已删）
+PASS | T⑧ 成就合批 设计位：global y 顶沿==300（720 域 y 逐位不变）
+── P 暂停钮上移 6px 脱金币 pill（r194-2） ──
+PASS | P① 前置：_pause_btn/GoldPill 句柄在位
+PASS | P② y 带：offset_top==20 ∧ offset_bottom==92（26..98 → 20..92 上移 6px）
+PASS | P③ 零重叠：暂停钮底缘 ≤ 金币 pill 顶缘（92 ≤ 92 恰接不越）
+PASS | P④ 触控目标律：尺寸仍 72×72（R195 R7 ≥66 口径不回退）
+PASS | P⑤ 无辜带：AUTO 胶囊（y126..190）顶沿 ≥ 暂停钮底缘（不在影响域）
+── G 宝石超 7 枚补 +N 提示（r197-1） ──
+PASS | G① 夹具：单武器成功挂 8 个不同词条
+PASS | G② 前置：BuildContent 在位
+PASS | G③ 截断不回退：恰 Gem0..Gem6 恰 7 枚（溢出提示不占 Gem* 名额）
+PASS | G④ 无 Gem7：第 8 枚不建 Gem* 节点
+PASS | G⑤ +N 提示：OverflowGem.text=="+1"（8-7=1）
+PASS | G⑥ 溢出位：position==(74,210)（Gem 列起点、末行下方；R203 16pt 上移 2px）
+PASS | G⑦ 设计槽：position.y==210 ∧ 名义高 18 → 底沿 228 ≤ content 高 228（R203）
+PASS | G⑧ 非 Gem* 前缀：节点名不以 Gem 开头（r197 B③/r196 ③ 前缀消费方零污染）
+── G 后·F 宝石层数/Lv 字号 14/14（R200 真机可读） ──
+PASS | F① 夹具：AFF_ATK_UP 连挂 2 层
+PASS | F② 前置：BuildContent 在位
+PASS | F③ 前置：×2 贴纸与 Lv 标签都在位
+PASS | F④ 字号 override：×N 层数贴纸 font_size==16（R203 14→16 真机二次反馈）
+PASS | F⑤ 字号 override：武器 Lv 标签 font_size==16（R203 14→16 真机二次反馈）
+── R ×N 贴纸右沿 ≤ content 宽（R200：14pt/24 宽/右对齐） ──
+PASS | R① 前置：BuildContent 在位
+PASS | R② ×2 右沿：position.x==92（R203 16pt 重定位）∧ 右沿 92+28=120 ≤ content 宽
+PASS | R③ ×2 右对齐：horizontal_alignment==RIGHT（右沿收敛机制）
+PASS | R④ ×2 不溢节点：min-size 未顶开（可达域文本 < 28px 承载，size.x==28）
+PASS | R⑤ ×9 度量：@16pt 字符串宽 23 ≤ cnt 承载 28（R203 可达域判据）
+PASS | R⑥ 夹具：可达帽 ×9（1 位最大位数）贴纸在位
+PASS | R⑦ ×9 右沿：position.x==92（R203 同位）∧ 右沿 ≤ content 右沿（92+28=120 ≤ 120 恰等）
+PASS | R⑧ ×9 恰等承载：min-size 未顶开节点宽（size.x==28，可达域内右沿恒 ≤ content）
+────────────────────────────────────────
+汇总：PASS 50 / FAIL 0（共 50 项）
+验收汇总：50/50 通过

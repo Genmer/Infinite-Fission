@@ -146,6 +146,7 @@ func _test_reroll_flow() -> void:
 	print("── 换一批 ──")
 	_gl.player.set("reroll_charges", 2)
 	_gl._on_level_up(2)                           # 升级 → 弹卡（LEVEL_UP）
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("前置：卡牌流打开", _gl.state == GameConst.GameStatus.LEVEL_UP
 		and _gl.card_select_ui.is_open)
 	var first_candidates: Array = _gl.current_candidates.duplicate()

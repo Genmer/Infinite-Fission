@@ -150,11 +150,11 @@ func _test_modifier_stack() -> void:
 	stack5.aggregate_add([{"trait_id": &"CURSE", "pool_id": &"add_atk", "layer": 3, "contrib": -0.1, "decay_delta": 0.9, "is_curse": true}], {})
 	_check("诅咒负贡献全额：−0.1×3 = −0.3", is_equal_approx(float(stack5.add_pool_sum[&"add_atk"]), -0.3))
 
-	# F4 池钳（保险丝）
+	# R226 有意契约变更：F4 池钳退役——Σ 全额入账、审计恒空（caps 数据遗留不消费）
 	var stack4 := ModifierStack.new()
 	stack4.audit = DamageAudit.new()
 	stack4.aggregate_add([{"trait_id": &"X", "pool_id": &"add_atk", "layer": 1, "contrib": 3.0, "decay_delta": 0.85, "is_curse": false}], {"add_atk": 2.0})
-	_check("F4 池钳：Σ ≤ cap_add_atk=2.0 + 审计", is_equal_approx(float(stack4.add_pool_sum[&"add_atk"]), 2.0) and stack4.audit.clamped_add.has(&"add_atk"))
+	_check("F4 池钳退役：Σ=3.0 全额 + 审计空（R226 无钳）", is_equal_approx(float(stack4.add_pool_sum[&"add_atk"]), 3.0) and stack4.audit.clamped_add.is_empty())
 
 	# Flat 比例钳制（L3）
 	var stack6 := ModifierStack.new()
@@ -667,7 +667,9 @@ func _test_data_registry() -> void:
 	_check("get_weapon 未命中返回 null（fail-fast）", reg.get_weapon(&"W_MISSING") == null)
 	# R196 有意契约变更（原 16 条）：AFF_RANGE 广域印刻（add_range 池）上架，
 	# ADD 池内容词条 16 → 17（data_validator.gd:19 add_range 第 16 员追加）
-	_check("trait_ids_by_pool（ADD）= 17 条内容词条（原 16 条 + R196 AFF_RANGE 广域印刻）", reg.trait_ids_by_pool(GameConst.PoolClass.ADD).size() == 17)
+	# R243 有意契约变更：新增词条卡 MEC_THROW_RANGE（回旋刀范围变长，w2-boom）+
+	# MEC_BULLET_PARRY（挡弹构筑，w3-block）入册 → ADD 池内容词条 17 → 19
+	_check("trait_ids_by_pool（ADD）= 19 条内容词条（R243 迁移：17 + MEC_THROW_RANGE + MEC_BULLET_PARRY）", reg.trait_ids_by_pool(GameConst.PoolClass.ADD).size() == 19)
 	var wave_tbl := reg.get_wave_table()
 	_check("波表加载：30 波 entries（pkg3 内容落地）", wave_tbl != null and wave_tbl.entries.size() == 30)
 	# 注入坏词条 → validate_all 剔除 + 错误清单含文件名/字段名

@@ -1,0 +1,107 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · W1 并行弹幕/跳弹增值自测 ══════════
+── ① 面板锚点（70/80/121/143/198）──
+PASS | ① 前置：W1_pistol 入注册表
+PASS | ① upgrade_table 恰 5 项
+PASS | ① L1 面板 DPS 70.0（±0.5）
+PASS | ① L1 pierce==1
+PASS | ① L2 面板 DPS 80.0（±0.5）
+PASS | ① L2 pierce==1
+PASS | ① L3 面板 DPS 121.0（±0.5）
+PASS | ① L3 pierce==2
+PASS | ① L4 面板 DPS 143.0（±0.5）
+PASS | ① L4 pierce==2
+PASS | ① L5 面板 DPS 198.0（±0.5）
+PASS | ① L5 pierce==2
+PASS | ① p1_polish 锚：L1 base_atk==14 / L2==16
+PASS | ① L1/L2 note 过期文案修正（按新表写 70/80）
+PASS | ① lateral_gap_levels=[0,0,12,12,12]
+PASS | ① converge_pct_levels L5==0.55
+PASS | ① bounce_levels=[0,0,1,1,2]
+PASS | ① bounce_amp=0.12 / cap=1.0
+PASS | ① 阈值在册：TH_VOLLEY_STATE(pellets≥6) + TH_BANK_SHOT(bounce≥12)
+── ② 并排几何/收束 ──
+PASS | ② L3 offset 十次一致（round 2）
+PASS | ② L3 offset 十次一致（round 3）
+PASS | ② L3 offset 十次一致（round 4）
+PASS | ② L3 offset 十次一致（round 5）
+PASS | ② L3 offset 十次一致（round 6）
+PASS | ② L3 offset 十次一致（round 7）
+PASS | ② L3 offset 十次一致（round 8）
+PASS | ② L3 offset 十次一致（round 9）
+PASS | ② L3 offset 十次一致（round 10）
+PASS | ② L3 出 2 弹 offset={-6,+6}
+PASS | ② L5 offset 十次一致（round 2）
+PASS | ② L5 offset 十次一致（round 3）
+PASS | ② L5 offset 十次一致（round 4）
+PASS | ② L5 offset 十次一致（round 5）
+PASS | ② L5 offset 十次一致（round 6）
+PASS | ② L5 offset 十次一致（round 7）
+PASS | ② L5 offset 十次一致（round 8）
+PASS | ② L5 offset 十次一致（round 9）
+PASS | ② L5 offset 十次一致（round 10）
+PASS | ② L5 出 3 弹 offset={-12,0,+12}
+PASS | ② L5 收束 <10px @55% 射程
+PASS | ② L3 对照恒 12px 间距
+PASS | ② 前置：MEC_PARALLEL_CAL 上架
+PASS | ② PARALLEL_CAL×3 阵宽 ±24px
+PASS | ② PARALLEL_CAL×3 收束点 0.70
+PASS | ② PARALLEL_CAL×3 出膛 offset={-24,0,+24}
+PASS | ② PARALLEL_CAL×3 收束 <10px @70% 射程
+── ③ 跳弹预算/永存/黄金弹 ──
+PASS | ③ L1 出弹 bounces_left==0
+PASS | ③ L2 出弹 bounces_left==0
+PASS | ③ L3 出弹 bounces_left==1
+PASS | ③ L5 出弹 bounces_left==2
+PASS | ③ 金 MEC_BOUNCE×1 → L5 预算==7
+PASS | ③ 5 次 ON_BOUNCE 触发永存（≥999）/ 4 次不触发
+PASS | ③ 配额满 → TH_BOUNCE_ETERNAL 断供
+PASS | ③ 配额释放 → TH_BOUNCE_ETERNAL 恢复
+PASS | ③ 黄金弹 bounce≥12 必暴（crit_chance==1 → is_crit）
+PASS | ③ 黄金弹落点弹片（计数 +1 且邻敌掉血）
+PASS | ③ bounce<12 不触发黄金弹
+PASS | ③ 跳弹增值 +0.72 入乘区（bounce_count 6 × 0.12）
+PASS | ③ 增值链经 cap_prod 8.0 截断（mult_product==8.0）
+── ④ 弹幕态（pellets≥6 触发）──
+PASS | ④ 前置：AFF_MULTI 上架
+PASS | ④ 对照：pellets==4（<6 不触发）
+PASS | ④ 对照：弹幕态未激活
+PASS | ④ 触发门：pellets==6
+PASS | ④ pellets=6 触发弹幕态（_volley_left>0）
+PASS | ④ 首发激活：trait_milestone 恰 1 次 + volley_state_active 计数 +1
+PASS | ④ 弹幕态出 8 弹（+2 并排）
+PASS | ④ 弹幕态开火间隔 ×0.8
+PASS | ④ 弹幕态阵形 offset 8 丸 ±42px
+PASS | ④ 激活 4.0s 后进入散热（cd≈3.0）
+PASS | ④ 散热期 interval 恢复 ×1.0
+PASS | ④ 散热 3.0s 后就绪（可再触发）
+PASS | ④ 散热后再次触发（首发播报不重复）
+── ⑤ 上限阀压测（满配 30s）──
+WARNING: [EventBus] 事件风暴：bullet_bounced 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | ⑤ 永存弹峰值 ≤240
+PASS | ⑤ 稳态活弹 <600
+PASS | ⑤ 池拒收率 <1%（无 w1_spawn_dropped）
+── ⑥ REL_ECHO 绕门负例/副本独立 ──
+PASS | ⑥ 前置：MEC_PARALLEL_CAL 上架
+PASS | ⑥ REL_ECHO 负例：W2 挂 PARALLEL_CAL 阵宽/收束/回廊全不生效
+PASS | ⑥ 负例：W2 出弹零横向偏移（编队几何不越界）
+PASS | ⑥ 对照：W1 挂 PARALLEL_CAL 生效（gap 12+4=16）
+PASS | ⑥ 前置：副本弹幕态激活
+PASS | ⑥ 副本独立：本体 interval 不受副本弹幕态影响（计时互不串扰）
+── ⑦ validator 负例 ──
+PASS | ⑦ 前置：W1 数据在册
+PASS | ⑦ lateral_gap_levels 长度≠5 报 error
+PASS | ⑦ converge_pct_levels 长度≠5 报 error
+PASS | ⑦ bounce_levels 长度≠5 报 error
+PASS | ⑦ bounce_levels 值域 [0,5] 越界报 error
+PASS | ⑦ 现网 W1 数据零 error
+PASS | ⑦ EF_VOLLEY/EF_BANK 入 TECH_EFFECT_IDS 白名单
+PASS | ⑦ 反证：EF_NOPE 阈值被剔除（宿主保留）+ 告警
+────────────────────────────────────────
+汇总：PASS 89 / FAIL 0（共 89 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

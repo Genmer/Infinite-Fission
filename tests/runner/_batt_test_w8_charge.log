@@ -1,0 +1,74 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · W8 蓄能引爆自测 ══════════
+── R186 拆除负向锁死 ──
+PASS | 前置：W8 装配
+PASS | 前置：力场创建
+PASS | 拆除：attach_gate 属性不存在
+PASS | 拆除：attach_mult 属性不存在
+PASS | 拆除：_attach_cd 属性不存在
+PASS | 拆除：_orb_element 方法不存在
+PASS | 拆除：_enchant_elements 方法不存在
+PASS | 前置：ELE_IGNITE 挂载
+PASS | 前置：敌已挂 ElementalState
+PASS | 负向：240 帧接触目标 elemental 恒空（不复潮）
+PASS | 负向：apply_attach 经 W8 零调用
+PASS | 伤害底：接触伤害照常落血（拆附着不拆输出）
+── 蓄能确定性 ──
+PASS | 前置：力场创建
+PASS | 蓄能：首接触 tick 恰 +1
+PASS | 蓄能：gain_cd 内冷却（+0）
+PASS | 蓄能：同帧双球仅 +1
+PASS | 蓄能：逐档爬升（爆前可见峰值 4——第 5 档同 tick 引爆）
+PASS | 引爆：满 5 恰 1 次引爆（清零回落）
+PASS | 引爆：w8_detonations 逐一吻合（+1）
+PASS | 引爆：AoE=5×atk（60px 内副目标恰 50）
+PASS | 引爆：90px 外零波及
+PASS | 引爆：满档周期 = 3×接触(10) + 引爆 50 = 80（基线取在双球探测后蓄能 2 档）
+── 引爆三道闸 ──
+PASS | 前置：力场创建
+PASS | 闸①：两目标同帧满档 → 两次引爆先后发生（非同帧）
+PASS | 闸①：第二次引爆延后 ≥0.5s（全局 ICD）且 <1.5s（非失速）
+PASS | 闸②：单目标 ICD 内引爆被拒
+PASS | 闸②：ICD 到期后引爆放行（0.25s 闸）
+PASS | 闸③：刀数帽参数在力场（缺省 8）
+── 刀数帽与复制单例 ──
+PASS | 前置：力场创建
+PASS | 刀数帽：16 刀单目标命中事件 ≤ 帽等价位（≤4）
+PASS | 刀数帽：登记 distinct 刀数 ≤ 帽（2）
+PASS | 复制：副本力场创建（独立实体）
+PASS | 复制：恰 1 次引爆/周期（≥3 周期且间隔 ≥0.5s，uid 单例）
+── 塑场击退 ──
+PASS | 前置：力场创建
+PASS | 塑场：命中产生击退冲量
+PASS | 塑场：切向分量 = 击退×60%（沿公转扫带）
+PASS | 塑场：环上径向分量 ≈ 0（≤8px/击）
+PASS | 塑场：环内目标归环向外推（>0）
+PASS | 塑场：归环径向 ≤ 8px/击
+PASS | 塑场：切向分量保持 60%
+PASS | 塑场：MEC_KNOCK 平加进力场击退（40+60）
+PASS | 塑场：自爆引导被接触击退打断（契约保留）
+── 阈值改版 ──
+PASS | 阈值：三条投射物死声明已删（SIZE_NOVA/FRACTAL_ECHO/BOUNCE_ETERNAL）
+PASS | 阈值：TH_CRIT_SHARD 保留且 0.6→0.35
+PASS | 阈值：TH_DETONATION_ECHO / TH_RING_PRESSURE 在册
+PASS | 前置：力场创建
+PASS | 阈值：ECHO 生效（引爆 50→75）
+PASS | 阈值：ECHO 消费后计数重计
+PASS | 阈值：RING 生效（110px 处吃满引爆 50——基础半径 104 外）
+PASS | 阈值：环压半径外（150px）零波及
+── 数值探针 ──
+PASS | 前置：力场创建
+WARNING: [EventBus] 事件风暴：damage_resolved 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 数值：L1 裸装 DPS 33.3±10%（接触 16.7+引爆 16.7）
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 数值：L5 裸装 DPS 113.3±10%（×3.4）
+PASS | 节奏：AFF_CDR 经 cd×(1−ΣCDR) 通道生效（3.0→2.7）
+────────────────────────────────────────
+汇总：PASS 54 / FAIL 0（共 54 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

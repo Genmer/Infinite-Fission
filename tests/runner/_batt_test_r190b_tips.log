@@ -1,0 +1,10 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R190b tips（tooltip 全局样式 + 详情卡机制句）自测 ══════════
+── StickerTheme 全局 tooltip 条目 ──
+── 详情卡机制句（weapon_note 真源） ──
+── 详情卡无武器空态 ──
+────────────────────────────────────────
+汇总：PASS 27 / FAIL 0（共 27 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

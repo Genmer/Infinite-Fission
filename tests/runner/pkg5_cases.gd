@@ -139,7 +139,8 @@ func _test_full_chain_smoke() -> void:
 		_gl.active_shards.size() == shards_before + 1
 		and is_equal_approx(_gl.active_shards[_gl.active_shards.size() - 1].value,
 			exp_value * _gl.relic_handler.xp_mult() * _gl._early_xp_mult()))
-	# 磁吸拾取 → 经验入账（AC-16.1 磁吸段；520px/s 飞行 60px ≈ 12 帧）
+	# 磁吸拾取 → 经验入账（AC-16.1 磁吸段；R214 单驱动 1040px/s 飞行 60px ≈ 6 帧，
+	# _drive(20) 上界内到达——到达型断言不锁速度）
 	var shard: XpShard = _gl.active_shards[_gl.active_shards.size() - 1]
 	var xp0: float = _gl.player.xp
 	shard.global_position = _gl.player.global_position + Vector2(60.0, 0.0)
@@ -149,6 +150,7 @@ func _test_full_chain_smoke() -> void:
 	# 升级 → 三选一（LEVEL_UP 冻结，AC-16.2）
 	var lv0: int = _gl.player.level
 	_gl.player.gain_xp(_gl.player.xp_need)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("升级：gain_xp → LEVEL_UP 选卡流打开", _gl.player.level == lv0 + 1
 		and _gl.state == GameConst.GameStatus.LEVEL_UP and _gl.card_select_ui.is_open
 		and _gl.current_candidates.size() >= 3)
@@ -510,6 +512,7 @@ func _test_relic_handler() -> void:
 	_check("REL_GAMBLER：发牌数 4", h.deal_count() == 4 and h.curse_requested())
 	_gl.player.invuln_left = 0.0
 	EventBus.emit_level_up(2)                     # PLAYING → LEVEL_UP（发牌走遗物参数）
+	_gl.call(&"_consume_deferred_level_open")     # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("REL_GAMBLER：货架 4 张 + 末位诅咒标记",
 		_gl.state == GameConst.GameStatus.LEVEL_UP
 		and _gl.current_candidates.size() == 4
@@ -842,13 +845,14 @@ func _test_ac_core_subset() -> void:
 	# AC-01.1：竖屏逻辑分辨率 + 拉伸策略
 	# R195 契约更新：Q-1 原裁 canvas_items/keep 黑边 → R195 主案 keep→expand（超宽/超长
 	# 窗延伸画布）；运行期窗口高宽比>2.34 由 GameLoop 表现层钳制回落 KEEP 居中黑边
-	#（STRETCH_ASPECT_RATIO_MAX 代码常量，r195_adapt A7 验收）——断言值随契约同步为
-	# expand，非放宽（r195_adapt D1② 与 R195 契约表同口径；整体回退位=project.godot
-	# 单行改回 keep，届时本断言须随之回改）。
-	_check("AC-01.1：720×1280 + canvas_items/expand（R195 更新 Q-1 口径：keep→expand+超限钳制回落）",
+	#（STRETCH_ASPECT_RATIO_MAX 代码常量，r195_adapt A7 验收）。
+	# R203 真机渲染分辨率帽：mode canvas_items→viewport（1.5K-2K 屏原生光栅化填充
+	# 4-6 倍放大是怪海 5-10 帧主因；viewport 内部按 720 档展开分辨率渲染再 GPU 上采样，
+	# expand 语义由 r195_adapt 七尺寸矩阵全绿证实）——断言值随契约同步，非放宽。
+	_check("AC-01.1：720×1280 + viewport/expand（R203 渲染分辨率帽；R195 曾 keep→expand）",
 		ProjectSettings.get_setting("display/window/size/viewport_width") == 720
 		and ProjectSettings.get_setting("display/window/size/viewport_height") == 1280
-		and String(ProjectSettings.get_setting("display/window/stretch/mode")) == "canvas_items"
+		and String(ProjectSettings.get_setting("display/window/stretch/mode")) == "viewport"
 		and String(ProjectSettings.get_setting("display/window/stretch/aspect")) == "expand")
 	# R194：Android 竖屏唯一修口 = 项目设置（4.3 导出器清单 screenOrientation 只读
 	# display/window/handheld/orientation；1=PORTRAIT——export_presets 的

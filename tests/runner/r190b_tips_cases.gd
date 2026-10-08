@@ -144,8 +144,8 @@ func _test_details_weapon_note() -> void:
 				"%s/%s" % [str(note_label.position), str(note_label.size)])
 			_check("机制句行自动换行 WORD_SMART",
 				note_label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART)
-			_check("机制句行 12pt INK_SOFT + mouse IGNORE",
-				int(note_label.get_theme_font_size("font_size")) == 12
+			_check("机制句行 13pt INK_SOFT + mouse IGNORE（R203 真机二次反馈 12→13）",
+				int(note_label.get_theme_font_size("font_size")) == 13
 				and note_label.get_theme_color("font_color") == PopPalette.INK_SOFT
 				and note_label.mouse_filter == Control.MOUSE_FILTER_IGNORE,
 				"%d/%s" % [int(note_label.get_theme_font_size("font_size")),

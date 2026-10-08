@@ -1,0 +1,85 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 元素通道自测 ══════════
+── registry 数据断言 ──
+PASS | registry：ELE_IGNITE 在册且 params.required_forms == [0, 1, 2]（近战死卡下架）
+PASS | registry：ELE_SHOCK 在册且 params.required_forms == [0, 1, 2]（近战死卡下架）
+PASS | registry：ELE_FREEZE 在册且 params.required_forms == [0, 1, 2]（近战死卡下架）
+PASS | registry：ELE_REACTION_VOID 无 required_forms 键（全形态保留，不设门）
+PASS | registry：ELE_ARC_SURGE 无 required_forms 键（全形态保留，不设门）
+PASS | registry：ELE_ARC_SURGE 描述含「（不附着雷元素）」（防误当电元素卡）
+PASS | registry：元素键位锚（IGNITE=FIR / FREEZE=ICE / SHOCK=LTG）
+── 挂载形态门四向（required_forms = [0, 1, 2]） ──
+PASS | 形态门：ELE_IGNITE 投射物三形态（弹道/激光/自导）全放行
+PASS | 形态门：ELE_IGNITE 近战（W8 有意拆除 ELE 通道）拒绝上架
+PASS | 形态门：ELE_SHOCK 投射物三形态（弹道/激光/自导）全放行
+PASS | 形态门：ELE_SHOCK 近战（W8 有意拆除 ELE 通道）拒绝上架
+PASS | 形态门：ELE_FREEZE 投射物三形态（弹道/激光/自导）全放行
+PASS | 形态门：ELE_FREEZE 近战（W8 有意拆除 ELE 通道）拒绝上架
+── 解锁节奏（火冰第 2 关 / 感电第 3 关；无难度门） ──
+PASS | 无难度门：无局口径全开（map_index = -1，结算核零难度分支）
+PASS | 第 2 关：火/冰开放；感电未解锁（雷第 3 关起）
+PASS | 第 3 关：感电开放（过载/超导随之可发生）
+── 通道单元：ON_HIT 按当发宿主元素放行 ──
+PASS | 通道：FIR 宿主 → attach_request.element == FIR（修复前被末位覆写为 LTG）
+PASS | 通道：FIR 宿主请求 {element, value:22, overrides:{}} 完整
+PASS | 通道：LTG 宿主 → attach_request.element == LTG（交替发各附当发元素）
+PASS | E-03 帧闸：同帧同栈二次派发零输出（attach_request 保持空）
+PASS | 单元素回归：FIR 宿主 attach_request 逐字节 == {FIR, 22.0, {}}
+PASS | KIN 宿主放行：无附魔弹（直挂/兼容通道）attach_request 照旧输出
+── ON_SPAWN 守卫：FIR 进 FIR 出 ──
+PASS | ON_SPAWN：spawn 参数 FIR 保持 FIR（修复后整写覆写为末位 LTG）
+PASS | ON_SPAWN：spawn 参数 LTG 保持 LTG
+PASS | ON_SPAWN：KIN 中性弹保留附魔染色（放行分支→首挂词条元素）
+── 武器级实弹：双元素交替 ──
+PASS | 双元素实弹：FIR/LTG 均出现（每发随机取一，不再恒为挂载序末位）
+PASS | 双元素实弹：无 KIN / 无杂色（16 发全部 ∈ 附魔集合）
+── 端到端：双槽成对 → 过载触发（E-03 + CD 2s） ──
+PASS | 端到端：第 1 发 ON_SPAWN 后 element == FIR
+PASS | 端到端：第 1 发命中 → FIR 槽 +22（当发元素附着）
+PASS | 端到端：LTG 槽未被错元素串写（恒 0）
+PASS | 端到端：第 2 发命中 → 双槽成对（FIR=22 且 LTG=22）
+PASS | 过载触发：reaction_triggered 计数 +1
+PASS | 过载消耗：双槽清空
+PASS | 过载 CD：reaction_cd[RXN_FIR_LTG] = 2s
+PASS | 过载结算：120%ATK 落血（1000 − 100×2 弹体 − 120 = 680）
+PASS | 反应 CD：2s 内重附双槽不触发
+PASS | 反应 CD：cd_rxn=2s 过期后可再次触发（+1）
+── R192 反应矩阵：M0 超导账本 + 7 类新反应 + CD erase/多槽/幂等 ──
+── M0 超导账本：重触只刷新 · 到期净恢复 0 ──
+PASS | M0 首触：全抗 −0.3（0.3→0.0 / 0.1→−0.2 / 0→−0.3）
+PASS | M0 持续期重触 ×2：削抗不重扣（仍 0.0/−0.2/−0.3——账本不对称修复）
+PASS | M0 到期净恢复 0：回到 0.3/0.1/0.0
+── 蒸发（火+水）：χ1.5 快照结算 ──
+PASS | 蒸发：落血 == S_snap×1.5×φ（1000−150=850）
+PASS | 蒸发：双槽清空
+── 冻结（冰+水）：硬控 1.2s + 免疫定身豁免 ──
+PASS | 冻结：freeze_timer==1.2 · chill_timer==2.5 · vuln_timer==3.0
+PASS | 冻结：双槽清空
+PASS | 冻结：IMMUNE_FREEZE 不定身（freeze_timer==0）且双槽清空
+── 感电（雷+水）：连锁跳伤 + 护栏 ──
+PASS | 感电：连锁跳伤 >0（80/120px 邻居落血——35%×快照首跳）
+PASS | 感电：shock_chain_cd >0（护栏落闸）
+── 燃烧（火+草）：立即满层点燃 ──
+PASS | 燃烧：burn_layers==5 · burn_timer==3.0（立即满层）
+PASS | 燃烧：双槽清空 + 无 χ 不落血（hp 仍 1000）
+── 激化（雷+草）：易伤减益 ──
+PASS | 激化：vuln_timer==3.0 · vuln_mult≈1.25 · 双槽清空
+── 绽放（水+草）：0.75s 延迟 AoE（R198 契约变更 1.5→0.75） ──
+PASS | 绽放：主目标双槽已清 + bloom 挂账（bloom_timer≈0.75，R198 契约变更）
+PASS | 绽放：0.75s 到期爆发 → r120 副目标落血（1000−150=850）
+── 扩散（风+水）：直伤 + 满槽转移 ──
+PASS | 扩散：主目标直伤 χ0.8×S_snap（1000−80=920）+ 双槽清空
+PASS | 扩散：至多 3 敌满槽转移 HYD（gauges==GAUGE_MAX 钳制不清零）
+── 结晶（岩+火）：玩家晶盾 ×0.85 ──
+PASS | 结晶：双槽清空 + 玩家晶盾到账（dr_value≈0.15 / dr_left≈6.0）
+PASS | 结晶：接触伤害 ×0.85 折减（1000000−85）
+── CD erase + 多槽共存 + 幂等吸收 ──
+PASS | CD 写入：reaction_cd[RXN_FIR_HYD] = 2.0
+PASS | CD 到期 erase：键被删（字典 size 回落 1→0）
+PASS | 多槽共存：FIR+ICE+HYD 按序仅碎裂结算（计数 +1 · FIR/ICE 清 · HYD 存续）
+PASS | 多槽共存：单槽残余（HYD）不成对 → 不再触发
+PASS | 幂等吸收：同帧二次结算恰落一次（−150 而非 −300）
+────────────────────────────────────────
+汇总：PASS 61 / FAIL 0（共 61 项）
+════════════════════════════════════════

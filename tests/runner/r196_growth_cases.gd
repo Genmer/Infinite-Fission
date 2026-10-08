@@ -3,27 +3,30 @@
 # headless 自动化套件·用例体（由 test_r196_growth.gd 入口在 autoload 就绪后运行时加载编译）。
 # 覆盖（对照 docs/design/R196_GROWTH_FIXES.md + 三份缺陷定案）：
 #   ① AFF_RANGE 广域印刻（add_range 池）：登记/进池/环绕轨道半径与挥砍范围消费端
-#   ② 超质变叠层：超帽可叠（ADD 池帽 stack_max+OVERCAP_EXT_MAX）、收益 ×0.7/层、
-#     卡面 OVERCAP_NOTE 注记（文案真源 GameConst）、卡池上架帽放宽
+#   ② 无限叠层（R226 有意契约变更：R196 超帽帽+×0.7 衰减退役——超帽全额可叠、无注记、
+#     里程碑质变保留、上架无帽；stack_max 收窄为质变里程碑触发点）
 #   ③ 构筑面板位置三选（右上默认，不与暂停钮/金币 pill/AUTO 重叠）+ 面板区 ScreenDrag 不断链
 #   ④ 经验四色档位：xp_tier_of 阈值→档位映射（含七彩档）+ 档色单源 PopPalette
+#     （R202 扩：真实击杀链回归——分档基线锚=注册表最低 exp_base，普通/中价/精英/Boss
+#      四色分化；修复前 ratio=exp_base/自身基线 自相消 → 普通+Boss 恒白、精英恒金断环）
 #   ⑤ 图鉴反应锁：未触发锁定 / mark_reaction_seen 解锁（幂等）/ 存档兼容（旧档缺键不炸）
 #   ⑥ 武器准入门（wunlock 定案）：矩阵/逐关上架集/UI 三态读取/echo 双武装同门/首发守卫
 #   ⑦ 手枪词条家族（pistol_trait_family 修复后契约）：多重装填实发 N 发可辨 +
 #     穿透弹头逐目标贯穿（R196 FIX-2 有意契约变更——原 pkg2「同敌多跳耗尽」语义退役）
 #   ⑧ 图标（apk_menu_no_icons 定案）：ui_lock/ui_gem/ui_trophy 贴纸在位 +
-#     10 武器图标两两互异 + 源码零 >0xFFFF 码点（emoji 字面量禁入闸门）
+#     13 武器图标两两互异 + 源码零 >0xFFFF 码点（emoji 字面量禁入闸门；R243 迁移 10→13）
 # 纪律：headless 测试档自动隔离（meta_save_test.cfg）；用例收尾还原 Meta 状态防跨套件污染。
 extends RefCounted
 
 const DT := 1.0 / 120.0
 const MAIN_SCENE := "res://scenes/main.tscn"
 const DESIGN_DOMAIN := Rect2(0.0, 0.0, 720.0, 1280.0)
-const PANEL_SIZE := Vector2(140.0, 258.0)
+# R208 面板收窄 140→118（真机反馈右侧空白；右沿口径保持）
+const PANEL_SIZE := Vector2(118.0, 258.0)
 # R197 竖排两列改版：252×132 横排 → 140×258 窄高；三档绝对落位（canvas 域 720×1280）
-const PANEL_RECT_POS0 := Rect2(556.0, 196.0, 140.0, 258.0)    # 右上（默认）
-const PANEL_RECT_POS1 := Rect2(444.0, 998.0, 140.0, 258.0)    # 右下
-const PANEL_RECT_POS2 := Rect2(24.0, 998.0, 140.0, 258.0)     # 左下（贴底/左沿保持 R195 口径）
+const PANEL_RECT_POS0 := Rect2(578.0, 196.0, 118.0, 258.0)    # 右上（默认；R208 右沿 696 恒）
+const PANEL_RECT_POS1 := Rect2(466.0, 998.0, 118.0, 258.0)    # 右下（R208 右沿 584 恒）
+const PANEL_RECT_POS2 := Rect2(24.0, 998.0, 118.0, 258.0)     # 左下（贴底/左沿保持 R195 口径）
 
 var tree: SceneTree
 var _pass: int = 0
@@ -223,14 +226,9 @@ func _test_1_range_trait() -> void:
 	Meta.set_run_map(&"")
 
 
-# ══ ② 超质变叠层（R196 有意契约变更——原「至 stack_max 拒绝」） ════
+# ══ ② 无限叠层（R226 有意契约变更——R196 超帽帽+×0.7 衰减退役，用户拍板「肉鸽别搞上限」） ════
 func _test_2_overcap() -> void:
-	print("── ② 超质变叠层（超帽可叠 / ×0.7 加算 / 卡面注记） ──")
-	_check("②常量：OVERCAP_VALUE_MULT=0.7 / OVERCAP_EXT_MAX=5（单源 trait_stack）",
-		absf(TraitStack.OVERCAP_VALUE_MULT - 0.7) < 0.0001 and TraitStack.OVERCAP_EXT_MAX == 5)
-	_check("②文案：GameConst.OVERCAP_NOTE 在（真源逐字）",
-		GameConst.OVERCAP_NOTE == "超出质变等级的层数收益降低 30%",
-		GameConst.OVERCAP_NOTE)
+	print("── ② 无限叠层（超帽全额可叠 / 无注记 / 里程碑质变保留） ──")
 	var t: TraitData = _gl.registry.get_trait(&"AFF_ATK_UP")   # ADD 池 stack_max=3 value=0.15
 	var w := BallisticWeapon.new()
 	tree.root.add_child(w)
@@ -238,30 +236,29 @@ func _test_2_overcap() -> void:
 	_check("②夹具：W1 + AFF_ATK_UP 在册", t != null and w.trait_stack != null)
 	if t == null:
 		return
-	# 第 1 关注入：质变门未开（milestone_unlocked 假）→ value_mult 恒 1.0，×0.7 口径单独可辨
-	#（无局态 milestone_unlocked()==true——挂满层即 ×1.6，会与超帽乘子混淆）
+	# 第 1 关注入：质变门未开（milestone_unlocked 假）→ value_mult 恒 1.0，全额口径单独可辨
 	_set_map_idx(0)
 	var full_ok := true
-	for i in range(3 + TraitStack.OVERCAP_EXT_MAX):           # 8 层全收（3 满额 + 5 超帽）
+	for i in range(12):                                        # 12 层全收（原帽 stack_max+5=8 已拆）
 		full_ok = full_ok and w.attach_trait(t)
-	_check("②超帽可叠：ADD 池 stack_max+5 层连挂全成功（原第 4 层即拒——R196 契约变更）",
-		full_ok and w.trait_stack.traits[0].layers == 8,
+	_check("②无限叠：ADD 池 12 层连挂全成功（原第 9 层拒——R226 契约变更）",
+		full_ok and w.trait_stack.traits[0].layers == 12,
 		"layers=%d" % int(w.trait_stack.traits[0].layers))
-	_check("②帽外拒绝：第 9 层（>stack_max+OVERCAP_EXT_MAX）拒绝",
-		not w.attach_trait(t) and w.trait_stack.traits[0].layers == 8)
-	# 聚合收益：前 stack_max 层全额 + 超帽层 ×0.7 → 3×0.15 + 5×0.105 = 0.975
+	_check("②真无限：第 13 层仍成功（无任何帽）",
+		w.attach_trait(t) and w.trait_stack.traits[0].layers == 13)
+	# 聚合收益：R226 全额——13×0.15 = 1.95（原「前 3 全额+超帽 ×0.7」折算退役）
 	var agg: float = float(w.trait_stack.aggregate_panel().get("add_atk", 0.0))
-	_check("②收益：逐层路 3×0.15 + 5×(0.15×0.7) = 0.975", absf(agg - 0.975) < 0.001,
+	_check("②收益：逐层路 13×0.15 = 1.95 全额", absf(agg - 1.95) < 0.001,
 		"agg=%.4f" % agg)
 	var entries := w.trait_stack.aggregate_add_entries()
 	var oc_contrib := 0.0
 	if entries.size() > 3:
 		oc_contrib = float(entries[3].get("contrib", 0.0))
-	_check("②收益：add_entries 第 4 层（首个超帽层）contrib=0.105", absf(oc_contrib - 0.105) < 0.001,
+	_check("②收益：add_entries 第 4 层（原首个超帽层）contrib=0.15 全额",
+		absf(oc_contrib - 0.15) < 0.001,
 		"contrib=%.4f entries=%d" % [oc_contrib, entries.size()])
-	# R196 评审修复锁定：add_hp 直挂消费端（weapon_base 挂载口 → apply_max_hp_up）
-	# 超帽层同步 ×OVERCAP_VALUE_MULT——卡面 OVERCAP_NOTE「收益降低 30%」对实际血条
-	# 成立（原实现在直挂口全额回加，与面板聚合 ×0.7 失诺）
+	# R226 契约锁定：add_hp 直挂消费端全额回血（原超帽层 ×0.7 折算退役——
+	# 血条/面板/卡面三口径自然一致）
 	var hp0: float = float(_gl.player.get("max_hp"))
 	var hpv0: float = float(_gl.player.get("hp"))
 	var hp_t: TraitData = _gl.registry.get_trait(&"AFF_HP_UP")   # ADD 池 stack_max=4 value=25
@@ -269,16 +266,16 @@ func _test_2_overcap() -> void:
 	tree.root.add_child(whp)
 	whp.setup(_gl.registry.get_weapon(&"W1_pistol"), _gl.player, {})
 	var hp_ok := true
-	for i in range(4 + TraitStack.OVERCAP_EXT_MAX):          # 9 层全收（4 满额 + 5 超帽）
+	for i in range(9):                                       # 9 层全收（原 4+5 帽已拆）
 		hp_ok = hp_ok and whp.attach_trait(hp_t)
 	var hp_gain: float = float(_gl.player.get("max_hp")) - hp0
-	_check("②直挂消费端：AFF_HP_UP 9 层 → 血条恰 +4×25 + 5×(25×0.7)=187.5（×0.7 落血条）",
-		hp_ok and absf(hp_gain - 187.5) < 0.0001, "gain=%.2f" % hp_gain)
+	_check("②直挂消费端：AFF_HP_UP 9 层 → 血条恰 +9×25=225 全额",
+		hp_ok and absf(hp_gain - 225.0) < 0.0001, "gain=%.2f" % hp_gain)
 	_gl.player.set("max_hp", hp0)                  # 夹具还原（后续用例血量锚不串扰）
 	_gl.player.set("hp", hpv0)
 	whp.queue_free()
 	Meta.set_run_map(&"")
-	# 质变乘区兼容：满层质变 ×1.6 仍乘每层终值（超帽层 = value×0.7×1.6）
+	# 质变乘区兼容：满层质变 ×1.6 仍乘每层终值（R226 起全层全额 ×1.6——原超帽层折算退役）
 	_set_map_idx(3)                                # 第 4 关满层质变解锁
 	var w2 := BallisticWeapon.new()
 	tree.root.add_child(w2)
@@ -290,23 +287,23 @@ func _test_2_overcap() -> void:
 		if tb.data.id == &"AFF_ATK_UP":
 			mult = float(tb.value_mult)
 	var agg2: float = float(w2.trait_stack.aggregate_panel().get("add_atk", 0.0))
-	_check("②质变兼容：满层质变 ×1.6 触发，4 层聚合 = 3×0.24 + 1×0.168 = 0.888",
-		absf(mult - 1.6) < 0.001 and absf(agg2 - 0.888) < 0.001,
+	_check("②质变兼容：满层质变 ×1.6 触发，4 层聚合 = 4×0.24 = 0.96 全额",
+		absf(mult - 1.6) < 0.001 and absf(agg2 - 0.96) < 0.001,
 		"mult=%.2f agg=%.4f" % [mult, agg2])
 	w2.queue_free()
 	Meta.set_run_map(&"")
-	# 非 ADD 池保持原帽（MULT 取优/ELEM 语义不变）
+	# 非 ADD 池同享无限叠（MULT/ELE 取优语义不变——层计数照加、定义取优）
 	var elem: TraitData = _gl.registry.get_trait(&"ELE_IGNITE")   # ELEM 池 stack_max=2
 	var w3 := BallisticWeapon.new()
 	tree.root.add_child(w3)
 	w3.setup(_gl.registry.get_weapon(&"W1_pistol"), null, {})
 	var elem_ok := true
-	for i in range(2):
+	for i in range(4):
 		elem_ok = elem_ok and w3.attach_trait(elem)
-	_check("②非 ADD 帽：ELEM 池 2 层挂满成功、第 3 层拒绝（原帽语义不变）",
-		elem_ok and not w3.attach_trait(elem) and w3.trait_stack.traits[0].layers == 2)
+	_check("②非 ADD 无限叠：ELEM 池 4 层连挂全成功（原第 3 层拒——R226 契约变更；取优语义不变）",
+		elem_ok and w3.trait_stack.traits[0].layers == 4)
 	w3.queue_free()
-	# 卡面注记：超帽态描述尾追 GameConst.OVERCAP_NOTE（双写 card + data 副本）
+	# 卡面注记退役：超帽态不再有 OVERCAP_NOTE（overcap 字段恒 false）
 	var gen := CardGenerator.new()
 	gen.setup(_gl.registry)
 	var w_full := BallisticWeapon.new()
@@ -315,27 +312,25 @@ func _test_2_overcap() -> void:
 	for i in range(3):
 		w_full.attach_trait(t)
 	var card_oc := gen._make_trait_card(&"AFF_ATK_UP", 1, w_full)
-	_check("②卡面：满层目标 → card.overcap 真 + 描述含 OVERCAP_NOTE（card+data 双写）",
-		bool(card_oc.get("overcap", false))
-		and String(card_oc.get("description", "")).contains(GameConst.OVERCAP_NOTE)
-		and card_oc.get("data") != null
-		and String((card_oc.get("data") as TraitData).description).contains(GameConst.OVERCAP_NOTE))
+	_check("②卡面：满层目标 → overcap 恒假 + 描述不含超帽注记（R226 注记退役）",
+		not bool(card_oc.get("overcap", false))
+		and String(card_oc.get("description", "")).contains("超出质变等级") == false)
 	var w_zero := BallisticWeapon.new()
 	tree.root.add_child(w_zero)
 	w_zero.setup(_gl.registry.get_weapon(&"W1_pistol"), null, {})
 	var card_zero := gen._make_trait_card(&"AFF_ATK_UP", 1, w_zero)
 	_check("②卡面：零层目标 → overcap 假 + 描述不含注记（基描述干净）",
 		not bool(card_zero.get("overcap", false))
-		and not String(card_zero.get("description", "")).contains(GameConst.OVERCAP_NOTE))
-	# 卡池上架帽：满 3 层仍上架（原「至 stack_max 移出池」——R196 契约变更），满 8 层才移出
+		and String(card_zero.get("description", "")).contains("超出质变等级") == false)
+	# 卡池上架：R226 起无上架帽——满 3 层/满 13 层都持续上架（爽叠供给不断）
 	var pool_at_full := gen._trait_candidates("ADD", _gl.player, [], w_full)
-	_check("②上架帽：目标满 3 层时 AFF_ATK_UP 仍上架（帽放宽至 stack_max+5）",
+	_check("②上架：目标满 3 层时 AFF_ATK_UP 仍上架",
 		pool_at_full.has(&"AFF_ATK_UP"))
-	for i in range(5):
+	for i in range(10):
 		w_full.attach_trait(t)
 	var pool_at_ext := gen._trait_candidates("ADD", _gl.player, [], w_full)
-	_check("②上架帽：目标满 8 层（stack_max+5）时移出候选池",
-		not pool_at_ext.has(&"AFF_ATK_UP"))
+	_check("②上架：目标满 13 层时仍上架（原 stack_max+5 移出池——R226 拆除）",
+		pool_at_ext.has(&"AFF_ATK_UP"))
 	w.queue_free()
 	w_full.queue_free()
 	w_zero.queue_free()
@@ -355,13 +350,13 @@ func _test_3_panel_pos_and_drag() -> void:
 	Meta.set_setting("panel_pos", 0)
 	await tree.process_frame
 	var rect0: Rect2 = panel.get_global_rect()
-	_check("③默认右上：落位 x556-696×y196-454（锚/offset 逐位，R197 竖两列）",
+	_check("③默认右上：落位 x578-696×y196-454（锚/offset 逐位，R197 竖两列；R208 118 收窄）",
 		rect0.position == PANEL_RECT_POS0.position and rect0.size == PANEL_SIZE,
 		"rect=%s" % str(rect0))
-	_check("③右上锚：l/r=1 t/b=0，offset(-164,196,-24,454)",
+	_check("③右上锚：l/r=1 t/b=0，offset(-142,196,-24,454)",
 		panel.anchor_left == 1.0 and panel.anchor_right == 1.0
 		and panel.anchor_top == 0.0 and panel.anchor_bottom == 0.0
-		and panel.offset_left == -164.0 and panel.offset_top == 196.0
+		and panel.offset_left == -142.0 and panel.offset_top == 196.0
 		and panel.offset_right == -24.0 and panel.offset_bottom == 454.0)
 	# 持久元素零冲突：暂停钮 / 金币 pill / AUTO（均在右上带 y<196）
 	var pause_r: Rect2 = hud._pause_btn.get_global_rect()
@@ -396,7 +391,7 @@ func _test_3_panel_pos_and_drag() -> void:
 	Meta.set_setting("panel_pos", 2)
 	await tree.process_frame
 	var rect2: Rect2 = panel.get_global_rect()
-	_check("③左下档：落位 x24-164×y998-1256（R197 竖两列；贴底 24/左沿 24 保持）",
+	_check("③左下档：落位 x24-142×y998-1256（R197 竖两列；R208 118 收窄；贴底 24/左沿 24 保持）",
 		rect2.position == PANEL_RECT_POS2.position and rect2.size == PANEL_SIZE,
 		"rect=%s" % str(rect2))
 	# 设置页循环行：(cur+1)%3 一整圈（写即存 + HUD 随 settings_changed 即时重挂）；
@@ -470,44 +465,128 @@ func _test_3_panel_pos_and_drag() -> void:
 		accum == Vector2(17.0, 5.0), "accum=%s" % str(accum))
 
 
-# ══ ④ 经验四色档位（白/绿/金/七彩） ═══════════════════════════════
+# ══ ④ 经验五色档位（白/蓝/紫/金/彩——R208 五色递进） ═══════════════
 func _test_4_xp_tiers() -> void:
-	print("── ④ 经验面值四色档位（阈值→档位→颜色） ──")
-	var thresholds_ok := XpShard.XP_TIER_THRESHOLDS.size() == 3 \
-		and is_equal_approx(XpShard.XP_TIER_THRESHOLDS[0], 3.0) \
-		and is_equal_approx(XpShard.XP_TIER_THRESHOLDS[1], 8.0) \
-		and is_equal_approx(XpShard.XP_TIER_THRESHOLDS[2], 20.0)
-	_check("④阈值表：XP_TIER_THRESHOLDS == [3.0, 8.0, 20.0]（单源 pickup）", thresholds_ok)
-	_check("④映射：比 2.9→白 / 3.0→绿 / 7.9→绿 / 8.0→金 / 19.9→金 / 20.0→七彩",
-		XpShard.xp_tier_of(2.9, 1.0) == 0 and XpShard.xp_tier_of(3.0, 1.0) == 1
-		and XpShard.xp_tier_of(7.9, 1.0) == 1 and XpShard.xp_tier_of(8.0, 1.0) == 2
-		and XpShard.xp_tier_of(19.9, 1.0) == 2 and XpShard.xp_tier_of(20.0, 1.0) == 3)
+	print("── ④ 经验面值五色档位（阈值→档位→颜色；R208 五档化） ──")
+	var thresholds_ok := XpShard.XP_TIER_THRESHOLDS.size() == 4 \
+		and is_equal_approx(XpShard.XP_TIER_THRESHOLDS[0], 2.5) \
+		and is_equal_approx(XpShard.XP_TIER_THRESHOLDS[1], 5.0) \
+		and is_equal_approx(XpShard.XP_TIER_THRESHOLDS[2], 12.0) \
+		and is_equal_approx(XpShard.XP_TIER_THRESHOLDS[3], 40.0)
+	_check("④阈值表：XP_TIER_THRESHOLDS == [2.5, 5.0, 12.0, 40.0]（单源 pickup；R208 五档）", thresholds_ok)
+	_check("④映射：比 2.4→白 / 2.5→蓝 / 4.9→蓝 / 5.0→紫 / 11.9→紫 / 12.0→金 / 39.9→金 / 40.0→七彩",
+		XpShard.xp_tier_of(2.4, 1.0) == 0 and XpShard.xp_tier_of(2.5, 1.0) == 1
+		and XpShard.xp_tier_of(4.9, 1.0) == 1 and XpShard.xp_tier_of(5.0, 1.0) == 2
+		and XpShard.xp_tier_of(11.9, 1.0) == 2 and XpShard.xp_tier_of(12.0, 1.0) == 3
+		and XpShard.xp_tier_of(39.9, 1.0) == 3 and XpShard.xp_tier_of(40.0, 1.0) == 4)
 	_check("④降级：基线≤0 恒白档（旧调用/无通胀路径不崩）",
 		XpShard.xp_tier_of(5.0, 0.0) == 0 and XpShard.xp_tier_of(5.0, -1.0) == 0)
-	_check("④色源：白 fff1b8 / 绿 2ed573(SUCCESS) / 金 ffc93c(XP) 单源 PopPalette",
+	_check("④色源：白 fff1b8 / 蓝 3da9fc / 紫 b06ef7 / 金 ffc93c 单源 PopPalette（R208 五色）",
 		PopPalette.xp_tier_color(0) == Color("fff1b8")
-		and PopPalette.xp_tier_color(1) == Color("2ed573")
-		and PopPalette.xp_tier_color(2) == Color("ffc93c"))
+			and PopPalette.xp_tier_color(1) == Color("3da9fc")
+			and PopPalette.xp_tier_color(2) == Color("b06ef7")
+			and PopPalette.xp_tier_color(3) == Color("ffc93c"))
 	_check("④色源：越界钳制（-1→白档色 / 9→占位色不崩）",
 		PopPalette.xp_tier_color(-1) == Color("fff1b8")
-		and PopPalette.xp_tier_color(9) == PopPalette.XP_TIER_COLORS[3])
+			and PopPalette.xp_tier_color(9) == PopPalette.XP_TIER_COLORS[4])
 	# 实件：掉落分档 + 满池合并重分档（基线取 max）
-	_gl._spawn_xp_shard(Vector2(360.0, 300.0), 30.0, 1.0)
+	_gl._spawn_xp_shard(Vector2(360.0, 300.0), 45.0, 1.0)
 	var shard: XpShard = _gl.active_shards.back()
-	_check("④实件：wave1 基线 1.0 投 30 面值 → 七彩档（≥20）",
-		shard != null and shard.value == 30.0 and int(shard.get("_tier")) == 3)
+	_check("④实件：wave1 基线 1.0 投 45 面值 → 七彩档（≥40）",
+		shard != null and shard.value == 45.0 and int(shard.get("_tier")) == 4)
 	shard.merge_value(10.0, 0.0)
-	_check("④实件：merge_value 面值 40、基线取 max 保持 1.0 → 仍七彩",
-		shard.value == 40.0 and int(shard.get("_tier")) == 3)
+	_check("④实件：merge_value 面值 55、基线取 max 保持 1.0 → 仍七彩",
+		shard.value == 55.0 and int(shard.get("_tier")) == 4)
 	_gl._spawn_xp_shard(Vector2(500.0, 300.0), 5.0, 1.0)
 	var shard2: XpShard = _gl.active_shards.back()
-	_check("④实件：5/1.0 → 绿档（<8）", shard2 != null and int(shard2.get("_tier")) == 1)
+	_check("④实件：5/1.0 → 紫档（≥5 <12）",
+		shard2 != null and int(shard2.get("_tier")) == 2)
 	shard2.merge_value(50.0, 1.0)
 	_check("④实件：合并爬档 55/1.0 → 重分档七彩（满池合并珠随面值爬档）",
-		shard2.value == 55.0 and int(shard2.get("_tier")) == 3)
+		shard2.value == 55.0 and int(shard2.get("_tier")) == 4)
 	_check("④通胀锚：exp_inflation_per_wave=1.085（balance_tables 真源连通）",
 		GameConfig.balance != null
 		and absf(float(GameConfig.balance.exp_inflation_per_wave) - 1.085) < 0.0001)
+	# ── R202 真实击杀链回归（断环修复：分档基线锚=注册表最低 exp_base，非死者自身） ──
+	# 修复前 baseline=死者 exp_base×通胀^(w-1) 与 value=exp_value×点金×early 同乘通胀
+	# → 比值恒=e_exp×点金×early 自相消 → 普通/Boss 恒白档、精英恒金档（probe_r202_xpcolor
+	# 实证 E6_boss ratio=1.250 白档）；修复后锚式基线 → 普通/中价/精英/Boss 四色分化。
+	# 锚从同源（registry.enemies 最低 exp_base）动态扫，不硬编码 3.0——未来新增更低
+	# exp_base 怪移锚后本段仍锁「锚式基线」语义本身
+	var anchor := -1.0
+	var anchor_data: EnemyData = null
+	for eid in _gl.registry.enemies:
+		var ed: EnemyData = _gl.registry.enemies[eid]
+		if ed == null or ed.exp_base <= 0.0:
+			continue
+		if anchor < 0.0 or ed.exp_base < anchor:
+			anchor = ed.exp_base
+			anchor_data = ed
+	_check("④R202锚：注册表最低 exp_base=%.1f == boot 扫描缓存 _xp_tier_anchor_base" % anchor,
+		anchor > 0.0 and absf(_gl._xp_tier_anchor_base - anchor) < 0.0001,
+		"anchor=%.2f cached=%.2f" % [anchor, _gl._xp_tier_anchor_base])
+	var infl := 1.085
+	if GameConfig.balance != null:
+		infl = float(GameConfig.balance.exp_inflation_per_wave)
+	var midas := _gl.relic_handler.xp_mult()
+	var wave_late := 8                                   # early_xp_boost 过期波段（×1.0）
+	# a 锚敌（最低 exp_base）普通击杀 w8：基线逐位==锚×通胀^7（公式本体）+ 比值恰 1.0 → 白档
+	if anchor_data != null:
+		var e_exp_a := 1.0                            # 敌侧 e_exp 镜像（enemy.gd spawn 同式）
+		if (int(anchor_data.tags) & GameConst.TAG_ELITE) != 0 and not anchor_data.elite_mult.is_empty():
+			e_exp_a = float(anchor_data.elite_mult.get("exp", 1.0))
+		var shard_a := _kill_for_xp(anchor_data, wave_late, 0)
+		_check("④R202击杀链·普通：碎片 _baseline==锚%.1f×通胀^7×0.982^7=%.3f（锚式基线公式；R208 波衰减）" % [
+			anchor, anchor * pow(infl, 7.0) * pow(0.982, 7.0)],
+			shard_a != null and absf(shard_a._baseline - anchor * pow(infl, 7.0) * pow(0.982, 7.0)) < 0.001,
+			"b=%.3f" % float(shard_a._baseline if shard_a != null else -1.0))
+		_check("④R202击杀链·普通：锚敌比值≈1.14 → 白档（杂兵 1×白设计锚；面值守恒 value==exp_value×点金%.2f）" % midas,
+			shard_a != null and shard_a._tier == 0
+			and absf(shard_a.value - anchor * pow(infl, 7.0) * e_exp_a * midas) < 0.001,
+			"tier=%s value=%.3f" % [str(shard_a._tier if shard_a != null else -1),
+				float(shard_a.value if shard_a != null else -1.0)])
+	# b 中价敌 E7_spitter（exp_base=10）普通 w8 → 10/3≈3.33 绿档（修复前恒白）
+	# c 精英 E2_runner+TAG_ELITE（elite_mult.exp×8）w8 → 7×8/3≈18.7 金档
+	# d Boss E6_boss1+TAG_BOSS w5 → 600×1.25/3≈250 七彩（修复前 ratio=1.250 白档——断环实证位）
+	var spitter := _gl.registry.get_enemy(&"E7_spitter")
+	var runner := _gl.registry.get_enemy(&"E2_runner")
+	var boss1 := _gl.registry.get_enemy(&"E6_boss1")
+	_check("④R202夹具：E7_spitter/E2_runner/E6_boss1 在注册表",
+		spitter != null and runner != null and boss1 != null)
+	if spitter != null and runner != null and boss1 != null:
+		var shard_b := _kill_for_xp(spitter, wave_late, 0)
+		_check("④R202击杀链·中价：E7(10)/锚(3)/0.982^7≈3.79 → 蓝档（R208 五色第 2 档）",
+			shard_b != null and shard_b._tier == 1,
+			"tier=%s b=%.3f v=%.3f" % [str(shard_b._tier if shard_b != null else -1),
+				float(shard_b._baseline if shard_b != null else -1.0),
+				float(shard_b.value if shard_b != null else -1.0)])
+		var shard_c := _kill_for_xp(runner, wave_late, GameConst.TAG_ELITE)
+		_check("④R202击杀链·精英：E2×8(56)/锚(3)/0.982^7≈21.2 → 金档（<40 恰金）",
+			shard_c != null and shard_c._tier == 3,
+			"tier=%s b=%.3f v=%.3f" % [str(shard_c._tier if shard_c != null else -1),
+				float(shard_c._baseline if shard_c != null else -1.0),
+				float(shard_c.value if shard_c != null else -1.0)])
+		var shard_d := _kill_for_xp(boss1, 5, GameConst.TAG_BOSS)
+		_check("④R202击杀链·Boss：_baseline==锚×通胀^4×0.982^4=%.3f（w5 锚式基线；R208 波衰减）" % [anchor * pow(infl, 4.0) * pow(0.982, 4.0)],
+			shard_d != null and absf(shard_d._baseline - anchor * pow(infl, 4.0) * pow(0.982, 4.0)) < 0.001,
+			"b=%.3f" % float(shard_d._baseline if shard_d != null else -1.0))
+		_check("④R202击杀链·Boss：600×early1.25/锚/0.982^4≈268 → 七彩（实测；修复前 1.250 恒白）",
+			shard_d != null and shard_d._tier == 4,
+			"tier=%s ratio=%.1f" % [str(shard_d._tier if shard_d != null else -1),
+				float(shard_d.value / shard_d._baseline if shard_d != null and shard_d._baseline > 0.0 else -1.0)])
+	_gl.wave_director.current_wave = 1                   # 波次还原（防串扰后续用例）
+
+
+func _kill_for_xp(p_data: EnemyData, p_wave: int, p_tags: int) -> XpShard:
+	# R202 真实击杀链夹具：池件敌 → spawn（敌侧通胀缩放 exp_value）→ _on_died →
+	# EventBus.enemy_killed → GameLoop._on_enemy_killed_drop_xp → 尾件碎片
+	#（probe_r202_xpcolor 同链路；掉落订阅先于池归还——data 读取时序安全）
+	var enemy := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	enemy.spawn(p_data, p_wave, p_tags)
+	enemy.global_position = Vector2(420.0, 500.0)   # 远离玩家 (360,900)：磁吸不触发
+	_gl.wave_director.current_wave = p_wave         # 波次同步（掉落侧基线/early 读此源）
+	enemy._on_died()
+	return _gl.active_shards.back()
 
 
 # ══ ⑤ 图鉴反应锁（未触发锁定 / 标记解锁 / 存档兼容） ══════════════
@@ -833,17 +912,21 @@ func _test_6_weapon_gate() -> void:
 			locked_q_rows.append(r)
 		if (r.find_child("WeaponLockBadge", true, false) as TextureRect) == null:
 			badge_ok = false
-	_check("⑥图鉴三态：第1关行集合 10 行（行数口径不变）", rows.size() == 10,
-		"rows=%d" % rows.size())
-	_check("⑥图鉴三态：未获得且门外 6 行「未解锁」态（？？？+锁徽+压暗）",
-		locked_q_rows.size() == 6 and badge_ok,
+	# R243 有意契约变更：法器/近战 5 新武器入册（W11 灵剑 / W12 裂地斧 / W13 阔剑，
+	# W8/W9 改名）——图鉴行集合 10 → 13（=registry 武器数），未锁行 4 不变
+	#（第 1 关门内 W1/W2/W3 + 已获得 W1 口径）→ 未解锁行 6 → 9
+	_check("⑥图鉴三态：第1关行集合 13 行（R243 迁移：10→13，=registry 武器数）",
+		rows.size() == 13, "rows=%d" % rows.size())
+	_check("⑥图鉴三态：未获得且门外 9 行「未解锁」态（？？？+锁徽+压暗；R243 迁移：6→9）",
+		locked_q_rows.size() == 9 and badge_ok,
 		"locked=%d ？？？=%d badge_ok=%s" % [locked_rows.size(), locked_q_rows.size(), str(badge_ok)])
-	# W8 已获得 → 门外仍按「已获得」态展示（wunlock P6：获得优先于门，老档 10/10 无损）
+	# W8 已获得 → 门外仍按「已获得」态展示（wunlock P6：获得优先于门，老档无损）
+	# R243 有意契约变更：W8 display_name 改名「环绕力场」→「近战·天狼刀」（§1.3）
 	var w8_got_ok := false
 	for r: Panel in rows:
 		if absf(r.modulate.a - 1.0) < 0.01 and r.find_child("WeaponLockBadge", true, false) == null:
 			for sub in r.get_children():
-				if sub is Label and (sub as Label).text == "环绕力场":
+				if sub is Label and (sub as Label).text == "近战·天狼刀":
 					w8_got_ok = true
 	_check("⑥[定案 P6] 获得优先于门：门外已获得 W8 行应为已获得态（显示名+无锁徽+不压暗）",
 		w8_got_ok)
@@ -933,7 +1016,8 @@ func _test_8_icon_audit() -> void:
 		_tex_has_alpha_pixel(TextureFactory.ui_lock())
 		and _tex_has_alpha_pixel(TextureFactory.ui_gem())
 		and _tex_has_alpha_pixel(TextureFactory.ui_trophy()))
-	# 10 武器图标非空 + 两两互异（r187_rework_cases 先例口径）
+	# R243 有意契约变更：武器 10 → 13（W11/W12/W13 入册）——枚举真源 = registry
+	#（图标非空 + 两两互异口径不变；三新武器占位骨架已互异，w2 交付后经委托臂接管）
 	var icon_hashes: Array = []
 	var icons_ok := true
 	for wid_v: Variant in _gl.registry.weapons.keys():
@@ -948,8 +1032,9 @@ func _test_8_icon_audit() -> void:
 		for b in range(a + 1, icon_hashes.size()):
 			if icon_hashes[a] == icon_hashes[b]:
 				dup = true
-	_check("⑧武器图标：全 10 枚非空且含可见像素", icons_ok and icon_hashes.size() == 10,
-		"count=%d" % icon_hashes.size())
+	_check("⑧武器图标：全 13 枚非空且含可见像素（R243 迁移：10→13）",
+		icons_ok and icon_hashes.size() == 13 and icon_hashes.size() == _gl.registry.weapons.size(),
+		"count=%d registry=%d" % [icon_hashes.size(), _gl.registry.weapons.size()])
 	_check("⑧武器图标：像素两两互异（无重图）", not dup)
 	# 消费接线：menu_screen/hud 源级引用新贴纸（emoji 位已换贴纸；地图/提示行按定案
 	# 「删符号不动词」——🏆/🔒 前缀移除不补贴纸为可选支，ui_trophy 无强制消费点）

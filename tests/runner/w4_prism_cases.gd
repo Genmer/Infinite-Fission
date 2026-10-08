@@ -376,13 +376,17 @@ func _test_prism_stack_hardcap() -> void:
 	_check("叠束：挂 3 张 MEC_SPLIT_PRISM 全成功（stack_max=3）",
 		_attach(w, prism) and _attach(w, prism) and _attach(w, prism)
 			and w._sub_beam_count() == 3)
-	var rej0: int = DebugStats.get_counter(&"trait_attach_rejected_stack")
-	var ok4: bool = _attach(w, prism)
-	_check("叠束：第 4 张被拒且 DebugStack 计数 +1",
-		(not ok4) and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej0 + 1)
 	_drive(w, 3)
 	_check("叠束：段数==4（主束 1 + 副束 3）",
 		w.active_beams.size() == 4 and int(_laser_pool.stats()["live"]) == 4)
+	# R226 有意契约变更（用户拍板「肉鸽别搞上限」）：第 4 张 MEC_SPLIT_PRISM 挂载成功
+	#（原 stack_max=3 拒绝拆除）——栈层副束计数 3→4 无帽；本段不再 drive（活束保持 4，
+	# 4 副束目标耗尽的重叠回退 ×0.5 路径 = laser_weapon.gd:18 既有语义，此处不覆盖）
+	var rej0: int = DebugStats.get_counter(&"trait_attach_rejected_stack")
+	var ok4: bool = _attach(w, prism)
+	_check("叠束：第 4 张成功且栈层计数==4（R226 无限叠）、活束仍 4",
+		ok4 and w._sub_beam_count() == 4 and w.active_beams.size() == 4
+			and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej0)
 	var subs := _alive_subs(w)
 	_check("叠束：副束 dmg_mult == 主×0.6 ±1e-6（L1 sub_ratio）",
 		subs.size() == 3

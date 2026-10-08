@@ -297,9 +297,11 @@ func _test_element_matrix() -> void:
 				and int(t.pool) == GameConst.PoolClass.ELEM \
 				and String(t.effect_id) == &"EF_ELEMENTAL" \
 				and _approx(float(t.value), 22.0, 0.0001) \
-				and (t.params.get("required_forms", []) as Array) == [0, 1, 2] \
-				and int(t.stack_max) == 2 and int(t.rarity) == 1
-		_check("② 新卡 %s：在册 + element=%s + ELEM 池/EF_ELEMENTAL/value=22/三形态/2 层/稀有度 1"
+			and (t.params.get("required_forms", []) as Array) == [0, 1, 2, 3] \
+			and int(t.stack_max) == 2 and int(t.rarity) == 1
+		# R243 有意契约变更（原「三形态 [0,1,2]」）：词条共用适配给 ELE 卡加第 4 形态
+		# （近战）+ excluded_weapons 排除面（W8 天狼刀不适用）——value/池/层数/稀有度不动
+		_check("② 新卡 %s：在册 + element=%s + ELEM 池/EF_ELEMENTAL/value=22/四形态/2 层/稀有度 1"
 			% [cid, str(card[1])], ok,
 			str(t.params if t != null else "<缺卡>"))
 	var alias_ok := true

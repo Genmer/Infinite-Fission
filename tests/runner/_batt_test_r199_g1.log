@@ -1,0 +1,47 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R199-G1 局内循环组自测 ══════════
+── R199-C10 boot 空表闸 weapons 同判 ──
+PASS | R199-C10 前置：共享 GL 满注册表正常入 MENU（boot_fatal 空）
+ERROR: [GameLoop] 空注册表，拒绝进入 MENU：["DataRegistry 空注册表：enemies=1 / weapons=0 / report.total=1 / rejected=0——数据文件缺失（导出 include_filter 或 remap 扫描）"]
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | R199-C10① weapons 空 + enemies 满 + total>0 → boot_fatal 置位（拒绝入局）
+PASS | R199-C10①b 闸诊断文本含 weapons=0 计数（导出漏类目可定位）
+PASS | R199-C10② weapons 回填后放行（boot_fatal 保持空）
+── R199-P01 restart_run 难度附赠复活 ──
+PASS | R199-P01① 困难开局 revives = 养成 0 + 附赠 1
+PASS | R199-P01② 暂停重开后困难附赠复活保留（不回落养成值）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | R199-P01③ 地狱开局 revives = 养成 0 + 附赠 3
+PASS | R199-P01④ 结算重开后地狱附赠复活保留
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | R199-P01⑤ 普通局重开 revives = 养成值（附赠 0 口径不变）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R199-P18 选卡收口输入宽限 ──
+PASS | R199-P18 前置：升级弹卡（LEVEL_UP）
+PASS | R199-P18① 选卡收口回 PLAYING + 宽限置位（grace>0 且 input_enabled=false）
+PASS | R199-P18② 收口后 5 帧位移 ≈0（300px 级拖动残留被宽限吞掉，不瞬移）
+PASS | R199-P18③ 宽限期内输入保持禁用
+PASS | R199-P18④ 宽限到期输入放行（与暂停恢复同款 0.5s）
+── R199-P18 无尽继续输入宽限 ──
+PASS | R199-P18 前置：胜利结算进 GAME_OVER
+PASS | R199-P18⑤ continue_endless 成功 + 宽限置位
+PASS | R199-P18⑥ 无尽续打后 5 帧位移 ≈0（残留不落位）
+── R199-N13 换一批保底留存 ──
+PASS | R199-N13① 首 roll 保底落首卡（rarity≥2）+ 值留存本类 + 源头消费即焚
+PASS | R199-N13② 换一批后首卡仍 ≥2（保底不洗掉——R199 核心回归断言）
+PASS | R199-N13③ 首次换一批免费（次数不扣）
+PASS | R199-N13④ 多批换一批持续 ≥2 + 次数按次扣（5→3）
+PASS | R199-N13⑤ WORDS_TIDE 自动重随：首卡 ≥2（保底折入首 roll 序列且被保序保留）
+PASS | R199-N13⑥ WORDS_TIDE 流内手动换一批仍 ≥2
+PASS | R199-N13⑦ 下一流无保底（floor=-1，不跨流泄漏）
+────────────────────────────────────────
+汇总：PASS 24 / FAIL 0（共 24 项）
+验收汇总：24/24 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

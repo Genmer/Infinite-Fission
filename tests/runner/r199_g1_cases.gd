@@ -153,6 +153,7 @@ func _test_p18_card_choice_grace() -> void:
 	# 干扰「残留拖动不落位」断言（置 640 会被钳到 768 = 假阳性瞬移）
 	_gl.player.global_position = Vector2(360.0, 1000.0)
 	_gl.player.gain_xp(_gl.player.xp_need)     # → LEVEL_UP 弹卡
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("R199-P18 前置：升级弹卡（LEVEL_UP）",
 		_gl.state == GameConst.GameStatus.LEVEL_UP and _gl.card_select_ui.is_open)
 	_gl.player._drag_accum = Vector2(300.0, -600.0)   # 选卡模态期拖动残留（probe v3 D 路同口径）
@@ -238,6 +239,7 @@ func _test_n13_reroll_keeps_rarity_floor() -> void:
 	# 白盒注入保底（REL_OVERCLOCK 精英首杀真链 pkg5:488-494 已覆盖，此处直设等效值 2=紫）
 	_gl.relic_handler.rarity_floor_next = 2
 	_gl.player.gain_xp(_gl.player.xp_need)     # → _open_card_flow 消费保底开流
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("R199-N13① 首 roll 保底落首卡（rarity≥2）+ 值留存本类 + 源头消费即焚",
 		_gl.state == GameConst.GameStatus.LEVEL_UP
 		and int(_gl.current_candidates[0].get("rarity", 0)) >= 2
@@ -265,6 +267,7 @@ func _test_n13_reroll_keeps_rarity_floor() -> void:
 	_gl.relic_handler.reroll_pending = true    # 波开始重随申请（白盒等效 pkg5:500-503）
 	_gl.relic_handler.rarity_floor_next = 2
 	_gl.player.gain_xp(10)                     # → 新流：首 roll 保底 + WORDS_TIDE 自动重随
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("R199-N13⑤ WORDS_TIDE 自动重随：首卡 ≥2（保底折入首 roll 序列且被保序保留）",
 		_gl.state == GameConst.GameStatus.LEVEL_UP
 		and int(_gl.current_candidates[0].get("rarity", 0)) >= 2,
@@ -277,6 +280,7 @@ func _test_n13_reroll_keeps_rarity_floor() -> void:
 	_gl._on_card_choice([_gl.current_candidates[0]])
 	_gl.player.set("xp_need", 10)
 	_gl.player.gain_xp(10)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("R199-N13⑦ 下一流无保底（floor=-1，不跨流泄漏）",
 		int(_gl.get("_card_rarity_floor")) == -1,
 		"floor=%d" % int(_gl.get("_card_rarity_floor")))

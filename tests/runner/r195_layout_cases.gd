@@ -197,8 +197,15 @@ func _leave_settings() -> void:
 func _enter_level_up() -> void:
 	_gl.call(&"request_resume")                   # PAUSED→PLAYING
 	_gl.change_state(GameConst.GameStatus.LEVEL_UP)
-	var empty: Array[Dictionary] = []
-	_gl.card_select_ui.open(empty)                # 货架直驱（标题/dim/容器几何）
+	# R202（换一批按钮遮挡修复）：真货架 + update_reroll 免费态文本下测 LEVEL_UP 几何
+	# ——_law_r2_level_up 新增 reroll×首个可见卡配对律的测量前提（空货架无可见卡，
+	# 配对律退化为句柄空 FAIL）；免费态「换一批（本局首次免费）」=最长文案（按钮
+	# 最坏内容态，内容溢出/回涨路径最先暴露）。rng 由 run() 期 seed(42) 锚定；
+	# generate_candidates 产出与生产同构（game_loop.gd 升级弹窗同源）
+	var cands: Array[Dictionary] = _gl.card_generator.generate_candidates(
+		{"player": _gl.player, "wave": 1})
+	_gl.card_select_ui.open(cands)                # 货架直驱（标题/dim/容器几何）
+	_gl.card_select_ui.update_reroll(1, true)      # 免费态文本（R202 测量前提）
 
 
 func _leave_level_up() -> void:
@@ -338,12 +345,11 @@ func _law_r1_pair(p_ctrl: Control, p_label: String, p_tag: String) -> void:
 
 
 # ── R2 无重叠（簇配对；白名单钉死，数量+条目写死增量须评审） ────────
-## 白名单（R198 契约变更：头注重写为实盘 3 对——grep 本套件 p_whitelisted=true 配对
-## 全集，与 R195_SCREEN_ADAPT.md §3.3 登记集合一致；原头注所列「卡沿徽标同族 3 对」
-## 系幽灵对——全套件并无该配对断言，表述已删）。
+## 白名单（R200 契约变更：R187Readout∩HP 条出白单转正——读数盒右移 x368（右沿 592
+## 空走廊，D1 叠血条修复）后实测不相交，转无重叠硬法锁回归；全集 3→2 对，与
+## R195_SCREEN_ADAPT.md §3.3 登记集合的差异=R200 增量）。
 ## 全部贴纸叠贴语言非缺陷：
 ## · ReviveBadge∩HP 条（设计钉死，hud R186 徽标贴血条右上）
-## · R187Readout∩HP 条（超设计增量：R187 引入 R187Readout 后实际需要，R198 补登评审）
 ## · SettingsCard∩SettingsGlyph（设计钉死，settings_panel 徽标压卡沿 (268,−40)）
 func _law_r2_playing(p_label: String) -> void:
 	var hud: HUD = _gl.hud
@@ -360,7 +366,9 @@ func _law_r2_playing(p_label: String) -> void:
 	_pair_law(hud._wave_label, hud._auto_btn, p_label, "PLAYING", false)
 	# 白名单钉死对（不参与红/绿——存在性钉进断言，防白名单静默漂移）
 	_pair_law(hud._revive_badge, hp_panel, p_label, "PLAYING", true)
-	_pair_law(hud._r187_readout, hp_panel, p_label, "PLAYING", true)
+	# R200（D1 修复转正）：读数盒 x368（右沿 592 空走廊、与 HP 胶囊右沿 364 留 4px
+	# 缝）实测不相交——出白名单转无重叠硬法，锁「读数不画在血条上」回归
+	_pair_law(hud._r187_readout, hp_panel, p_label, "PLAYING", false)
 
 
 func _law_r2_settings(p_label: String) -> void:
@@ -372,6 +380,19 @@ func _law_r2_settings(p_label: String) -> void:
 func _law_r2_level_up(p_label: String) -> void:
 	_pair_law(_gl.card_select_ui._title, _gl.card_select_ui._reroll_btn,
 		p_label, "LEVEL_UP", false)
+	# R202（换一批按钮遮挡修复）新增配对律：reroll × 首个可见卡不重叠——真货架 +
+	# update_reroll 免费态文本下测量（_enter_level_up 装配，断言于 _state_settle 出场
+	# 过冲衰减后）。归一化测试档（按钮 min 高 = 设计 56 档）静息恒绿：设计位绝对
+	# y196..252（R202① y 锚对齐视觉组——title/卡栈均绝对 y 语义）对卡顶 264 恒
+	# 12px 缝、x 同 0.5 居中锚随视口缩放相对位恒等——锁未来任何重排/reset_size 路径
+	# 使按钮实际高回涨（极端字体档 min 高 79）或卡栈上沿越位时的回归（届时本律先红，
+	# 重叠兜底 = z 序按钮盖卡，card_select_ui _build_ui 树序）
+	var first_card: Control = null
+	for b in _gl.card_select_ui._buttons:
+		if b.visible:
+			first_card = b
+			break
+	_pair_law(_gl.card_select_ui._reroll_btn, first_card, p_label, "LEVEL_UP", false)
 
 
 func _law_r2_shop(p_label: String) -> void:

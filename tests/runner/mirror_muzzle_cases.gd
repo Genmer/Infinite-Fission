@@ -40,6 +40,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_anchor_on_avatar()         # A. 锚点组（剖面窗逐发硬界 + 全程扫掠分布）
 	_test_mirror_spark()             # B. 火花组（冰晶/自熄/本体零回归/低档门）
 	_test_r183_copy_unchanged()      # 负例：R183 副本行为前后不变
+	_test_laser_muzzle_alignment()   # C/D/E. R201 激光族（W4 主/副束、W5 锚束、镜内壳）
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -511,4 +512,118 @@ func _test_r183_copy_unchanged() -> void:
 	_check("负例：副本 weapon_muzzle_global 首查命中 + 出生点锚定自身化身（零变化）",
 		all_anchored, detail)
 	_release_fixtures(fixtures)
+	_wipe_weapons()
+
+
+# ── R201 激光族发射口对齐（用户「棱镜的激光不是从棱镜发出」） ──────────
+func _test_laser_muzzle_alignment() -> void:
+	print("── C/D/E. R201 激光族发射口对齐（W4 主/副束、W5 锚束、镜面内壳激光） ──")
+	_wipe_weapons()
+	_gl.player.global_position = PLAYER_HOME
+	_gl.player.unlocked_slots = 6
+	_layer_process(120)                      # 化身层惰性创建 + 环形编队就位
+	var enemies := _spawn_fixtures([Vector2(360.0, 500.0), Vector2(230.0, 640.0),
+		Vector2(490.0, 660.0)] as Array[Vector2])
+	# ── C. W4 主束 ──
+	var w4 := _add(&"W4_pulse_beam")
+	if w4 == null:
+		_check("C 前置：W4 在场", false)
+		_release_fixtures(enemies)
+		return
+	_drive_player(2)
+	var layer := _layer()
+	var av: Variant = layer.call("avatar_global", w4)
+	var main: LaserBeam = w4.get("_main_beam")
+	_check("C① W4 主束在位（夹具敌可索敌）",
+		main != null and is_instance_valid(main) and main.is_live(), str(main))
+	_check("C② W4 主束起点 == 棱镜化身枪口（≤2px）",
+		main != null and av != null
+		and main.global_position.distance_to(av as Vector2) <= ANCHOR_EPS,
+		"origin=%s avatar=%s" % [str(main.global_position if main != null else Vector2.INF),
+			str(av)])
+	# 激光化身口径：环半径+MUZZLE_REACH 随朝向角投影 49~60px（弹道组 FALLBACK_MIN=52
+	# 按加特林角位标定——此处取 ≥30：修复前从身体出束 d≈0~5，负例区分度充足）
+	_check("C③ 主束起点远离玩家中心（≥30px——修复前从玩家身体出束 d≈0 必红）",
+		main != null and main.global_position.distance_to(_gl.player.global_position) >= 30.0,
+		"d=%s" % str(main.global_position.distance_to(_gl.player.global_position)
+			if main != null else -1.0))
+	_gl.player.global_position = Vector2(300.0, 940.0)
+	_layer_process(2)
+	_drive_player(1)                         # 逐拍 set_origin 跟踪化身
+	av = layer.call("avatar_global", w4)
+	_check("C④ 玩家移动后主束原点仍 == 化身枪口（逐拍同步不脱钩）",
+		main != null and main.is_live() and av != null
+		and main.global_position.distance_to(av as Vector2) <= ANCHOR_EPS,
+		"origin=%s avatar=%s" % [str(main.global_position if main != null else Vector2.INF),
+			str(av)])
+	# ── D. W4 副束（裂片棱镜） ──
+	var ok_trait := w4.attach_trait(_gl.registry.get_trait(&"MEC_SPLIT_PRISM"))
+	_drive_player(3)
+	var subs: Array[LaserBeam] = []
+	for b_v in (w4.get("active_beams") as Array):
+		var b := b_v as LaserBeam
+		if b != null and is_instance_valid(b) and b.is_live() and b.sub_beam:
+			subs.append(b)
+	_check("D① 前置：裂片棱镜挂上 ∧ 副束在位", ok_trait and not subs.is_empty(),
+		"trait=%s subs=%d" % [str(ok_trait), subs.size()])
+	av = layer.call("avatar_global", w4)
+	var sub_anchor_ok := av != null and not subs.is_empty()
+	var sub_origins: Array = []
+	for s in subs:
+		if s.global_position.distance_to(av as Vector2) > ANCHOR_EPS:
+			sub_anchor_ok = false
+		sub_origins.append(s.global_position)
+	_check("D② 副束起点 == 化身枪口（分光自棱镜出）", sub_anchor_ok,
+		"avatar=%s origins=%s" % [str(av), str(sub_origins)])
+	_gl.player.global_position = Vector2(430.0, 900.0)
+	_layer_process(2)
+	_drive_player(2)                         # 含 _on_tick_post 原点同步拍
+	av = layer.call("avatar_global", w4)
+	var sub_sync_ok := av != null
+	var sync_origins: Array = []
+	for s in subs:
+		if not (s.is_live() and s.global_position.distance_to(av as Vector2) <= ANCHOR_EPS):
+			sub_sync_ok = false
+		if is_instance_valid(s):
+			sync_origins.append(s.global_position)
+	_check("D③ 玩家移动后副束原点逐拍同步化身枪口（不再生成时定格）", sub_sync_ok,
+		"avatar=%s origins=%s" % [str(av), str(sync_origins)])
+	# ── E. W5 锚束 + 镜面内壳激光 ──
+	_wipe_weapons()
+	_gl.player.global_position = PLAYER_HOME
+	var prism := _make_prism(3)              # L3 = 2 面（唯一源 W4 → 两镜皆激光，帽 2 恰等）
+	var w4b := _add(&"W4_pulse_beam")
+	_layer_process(3)                        # 先驱化身层：清场重装后 avatars 重建/扩位，
+	_drive_player(3)                         # 后驱玩家拍——束出束/逐拍同步时化身在位（生产帧序同构）
+	_layer_process(1)
+	_drive_player(1)                         # 再一拍：最新化身位 → 束原点重同步采样
+	var anchor: LaserBeam = prism.get("_main_beam")
+	var avp: Variant = layer.call("avatar_global", prism)
+	_check("E① W5 锚束起点 == 棱镜化身枪口",
+		anchor != null and anchor.is_live() and avp != null
+		and anchor.global_position.distance_to(avp as Vector2) <= ANCHOR_EPS,
+		"origin=%s avatar=%s" % [str(anchor.global_position if anchor != null else Vector2.INF),
+			str(avp)])
+	var laser_mirror: MirrorImage = null
+	for m_v in (_gl.player.get("_mirror_images") as Array):
+		var m := m_v as MirrorImage
+		if m != null and is_instance_valid(m) and m.inner is LaserWeapon:
+			laser_mirror = m
+			break
+	_check("E② 前置：存在激光源镜面（指向 W4——确定性指向）", laser_mirror != null,
+		"mirrors=%d" % (_gl.player.get("_mirror_images") as Array).size())
+	if laser_mirror != null:
+		var inner_main: LaserBeam = (laser_mirror.inner as LaserWeapon).get("_main_beam")
+		var avm: Variant = layer.call("avatar_global", laser_mirror)
+		_check("E③ 镜面内壳激光起点 == 镜面化身枪口（R191#2 别名链激光形态同享）",
+			inner_main != null and inner_main.is_live() and avm != null
+			and inner_main.global_position.distance_to(avm as Vector2) <= ANCHOR_EPS,
+			"origin=%s avatar=%s" % [str(inner_main.global_position
+				if inner_main != null else Vector2.INF), str(avm)])
+		_check("E④ 镜面激光起点远离玩家中心（≥52px）",
+			inner_main != null
+			and inner_main.global_position.distance_to(_gl.player.global_position) >= FALLBACK_MIN,
+			"d=%s" % str(inner_main.global_position.distance_to(_gl.player.global_position)
+				if inner_main != null else -1.0))
+	_release_fixtures(enemies)
 	_wipe_weapons()

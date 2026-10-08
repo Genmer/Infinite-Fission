@@ -165,6 +165,9 @@ func _test_formula_anchor() -> void:
 	]
 	ctx.crit_chance = 0.0
 	var r: DamageResult = pipe.resolve(ctx)
+	# R220 刀11：damage_resolved 批化（结算只入队，dispatch_resolved_frame 统一派发）
+	# ——直调用例在断言广播前补一次帧派发（帧内时序口径不变）
+	pipe.dispatch_resolved_frame()
 	_check("AC-12.1：(100×(1+0.2+0.3)+10)×1.5×1.4 = 336（非暴击）",
 		r != null and is_equal_approx(r.final_value, 336.0), "got %s" % str(r.final_value if r != null else null))
 	_check("面板段 S = 160（panel_snapshot）", r != null and is_equal_approx(r.panel_snapshot, 160.0))
@@ -274,14 +277,15 @@ func _test_add_flat_guards() -> void:
 	print("── F4/Flat 池钳 ──")
 	var pipe := DamagePipeline.new()
 	var target := _make_target()
-	# F4：Σ_add ≤ cap_add_atk = 2.0（BalanceTables 保险丝）
+	# R226 有意契约变更（用户拍板「肉鸽别搞上限」）：F4 池钳退役——Σ_add 全额入伤害式，
+	# clamped_add 恒空（原 cap_add_atk=2.0 保险丝拆除；BalanceTables 数据遗留不消费）
 	pipe.begin_frame(1)
 	var ctx := _make_ctx(target, 1)
 	ctx.add_entries = [{"trait_id": &"X", "pool_id": &"add_atk", "layer": 1, "contrib": 3.0, "decay_delta": 0.85, "is_curse": false}]
 	var r: DamageResult = pipe.resolve(ctx)
-	_check("F4 池钳：Σ=3.0 → cap 2.0 → S = 300",
-		r != null and is_equal_approx(r.final_value, 300.0), "got %s" % str(r.final_value if r != null else null))
-	_check("F4 触发记审计 clamped_add", r != null and r.audit != null and r.audit.clamped_add.has(&"add_atk"))
+	_check("F4 池钳退役：Σ=3.0 全额 → S = 400（R226 无钳）",
+		r != null and is_equal_approx(r.final_value, 400.0), "got %s" % str(r.final_value if r != null else null))
+	_check("F4 审计恒空（clamped_add 不再记）", r != null and r.audit != null and r.audit.clamped_add.is_empty())
 	# Flat 比例钳：Σ_flat ≤ 50% × base
 	pipe.begin_frame(2)
 	var ctxf := _make_ctx(target, 2)
@@ -679,6 +683,7 @@ func _test_reaction() -> void:
 		{"pool_id": &"bounce_dmg", "source_uid": 2, "contrib": 0.4, "cap_pool": 2.0},
 	]
 	var main: DamageResult = pipe.resolve(ctx)
+	pipe.dispatch_resolved_frame()   # R220 刀11：主结算广播先行派净（防反应段计数混入）
 	_check("主结算 panel_snapshot = 160（反应快照源）",
 		main != null and is_equal_approx(main.panel_snapshot, 160.0))
 	# 反应独立结算：D = χ × S_snap = 2.0 × 160 = 320（F-34 碎裂系数）
@@ -690,6 +695,7 @@ func _test_reaction() -> void:
 	rctx.mult_pools = [{"pool_id": &"frost_dmg", "source_uid": 1, "contrib": 0.5, "cap_pool": 2.0}]  # 应被忽略
 	var resolved_before: int = _probe_get("resolved_hits")
 	var rr: DamageResult = pipe.resolve_reaction(main.panel_snapshot, 2.0, rctx)
+	pipe.dispatch_resolved_frame()   # R220 刀11：批化派发口（同上）
 	_check("反应快照口径：D = 2.0 × 160 = 320",
 		rr != null and is_equal_approx(rr.final_value, 320.0), "got %s" % str(rr.final_value if rr != null else null))
 	_check("反应不掷暴击（crit_chance=1 仍非暴击）", rr != null and not rr.is_crit)

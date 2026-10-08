@@ -7,10 +7,10 @@
 #   P 暂停钮让位（r194-2）：底缘 y=92 ≤ 金币 pill 顶缘 y=92 零重叠 ∧ 尺寸仍 72×72
 #     （R195 R7 触控目标律）∧ AUTO 胶囊 y126..190 不在影响域
 #   G 宝石溢出（r197-1）：8 词条 → OverflowGem.text=="+1" ∧ 无 Gem7 节点 ∧ Gem0..Gem6
-#     恰 7 枚不回退 ∧ 溢出提示不出 content（214+12=226 ≤ 228）
-#   F 字号（r197-2）：×N 贴纸 font_size override==10 ∧ 武器 Lv 标签==11
-#   R 右沿收敛（r197-3，方案一 cnt 20 宽右对齐）：×N 右沿 ≤ content 宽（120）∧
-#     右对齐 ∧ 「×10」@10pt=20px 恰等承载（min-size 不顶开节点宽）
+#     恰 7 枚不回退 ∧ 溢出提示不出 content（R203：210+18=228 ≤ 228）
+#   F 字号（R203 真机二次反馈）：×N 贴纸 font_size override==16 ∧ 武器 Lv 标签==16
+#   R 右沿收敛（R203：16pt cnt 28 宽；R208 面板 118 收窄 x=88）：×N 右沿 ≤ content 宽（116）∧
+#     右对齐 ∧ 「×9」@16pt ≤28px 承载（min-size 不顶开节点宽）
 # 纪律：headless 测试档自动隔离（meta_save_test.cfg）；收尾还原 Meta 状态防跨套件污染；
 #   toast 几何同步读（拉伸锚挂树同帧生效——R198 探针实证），不 await 避开 tween 干扰。
 extends RefCounted
@@ -301,17 +301,17 @@ func _test_g_gem_overflow() -> void:
 		and overflow.text == "+1",
 		"text=%s" % (overflow.text if overflow != null else "null"))
 	if overflow != null:
-		_check("G⑥ 溢出位：position==(74,214)（Gem 列起点、末行下方）",
-			overflow.position.distance_to(Vector2(74.0, 214.0)) < 0.01,
+		_check("G⑥ 溢出位：position==(74,210)（Gem 列起点、末行下方；R203 16pt 上移 2px）",
+			overflow.position.distance_to(Vector2(74.0, 210.0)) < 0.01,
 			str(overflow.position))
 		# R198 实测注：Label 实际行高按字体度量结算（headless @10pt ≈23px，全站 Label
-		# 同律——旧 cnt 贴纸 (24,12) 同样实结 >12），「不出 content」契约落在规划名义
-		# 设计槽（214+12=226 ≤ 228）+ 面板出界由 r197 E② 全量守卫（本批复跑绿）
-		_check("G⑦ 设计槽：position.y==214 ∧ 名义高 12 → 底沿 226 ≤ content 高 228",
-			absf(overflow.position.y - 214.0) < 0.01
-			and overflow.position.y + 12.0 <= content.size.y + 0.01,
+		# 同律——名义盒高 ≠ 实结行高），「不出 content」契约落在规划名义设计槽
+		# （R203：210+18=228 == content 高恰等）+ 面板出界由 r197 E② 全量守卫
+		_check("G⑦ 设计槽：position.y==210 ∧ 名义高 18 → 底沿 228 ≤ content 高 228（R203）",
+			absf(overflow.position.y - 210.0) < 0.01
+			and overflow.position.y + 18.0 <= content.size.y + 0.01,
 			"y=%s nominal_bottom=%s content_h=%s actual_h=%s" % [
-				str(overflow.position.y), str(overflow.position.y + 12.0),
+				str(overflow.position.y), str(overflow.position.y + 16.0),
 				str(content.size.y), str(overflow.size.y)])
 		_check("G⑧ 非 Gem* 前缀：节点名不以 Gem 开头（r197 B③/r196 ③ 前缀消费方零污染）",
 			not String(overflow.name).begins_with("Gem"), String(overflow.name))
@@ -319,7 +319,7 @@ func _test_g_gem_overflow() -> void:
 
 # ══ F 字号（r197-2） ═════════════════════════════════════════════
 func _test_f_font_sizes() -> void:
-	print("── G 后·F 宝石层数/Lv 字号 10/11（r197-2） ──")
+	print("── G 后·F 宝石层数/Lv 字号 14/14（R200 真机可读） ──")
 	_clear_weapon_traits()
 	var w0: WeaponBase = _gl.player.weapon_slots[0]
 	var t: TraitData = _gl.registry.get_trait(&"AFF_ATK_UP")
@@ -344,17 +344,17 @@ func _test_f_font_sizes() -> void:
 		"cnt=%s lv=%s" % [str(cnt != null), str(lv != null)])
 	if cnt == null or lv == null:
 		return
-	_check("F④ 字号 override：×N 层数贴纸 font_size==10（9→10）",
-		cnt.get_theme_font_size("font_size") == 10,
+	_check("F④ 字号 override：×N 层数贴纸 font_size==16（R203 14→16 真机二次反馈）",
+		cnt.get_theme_font_size("font_size") == 16,
 		str(cnt.get_theme_font_size("font_size")))
-	_check("F⑤ 字号 override：武器 Lv 标签 font_size==11（10→11）",
-		lv.get_theme_font_size("font_size") == 11,
+	_check("F⑤ 字号 override：武器 Lv 标签 font_size==16（R203 14→16 真机二次反馈）",
+		lv.get_theme_font_size("font_size") == 16,
 		str(lv.get_theme_font_size("font_size")))
 
 
 # ══ R ×N 右沿收敛（r197-3 方案一） ═══════════════════════════════
 func _test_r_cnt_right_edge() -> void:
-	print("── R ×N 贴纸右沿 ≤ content 宽（r197-3 方案一：20 宽右对齐） ──")
+	print("── R ×N 贴纸右沿 ≤ content 宽（R200：14pt/24 宽/右对齐） ──")
 	var content := await _refresh_and_get_content()
 	_check("R① 前置：BuildContent 在位", content != null)
 	if content == null:
@@ -364,47 +364,46 @@ func _test_r_cnt_right_edge() -> void:
 	for kid in content.get_children():
 		if kid is Label and (kid as Label).text == "×2":
 			cnt2 = kid
-	_check("R② ×2 右沿：position.x==100（A⑤ 原样）∧ 右沿 100+20=120 ≤ content 宽",
-		cnt2 != null and absf(cnt2.position.x - 100.0) < 0.01
+	_check("R② ×2 右沿：position.x==80（R226 36 宽重定位）∧ 右沿 80+36=116 ≤ content 宽",
+		cnt2 != null and absf(cnt2.position.x - 80.0) < 0.01
 		and cnt2.position.x + cnt2.size.x <= content.size.x + 0.01,
 		"right=%s content_w=%s" % [str(cnt2.position.x + cnt2.size.x if cnt2 != null else -1.0),
 			str(content.size.x)])
 	_check("R③ ×2 右对齐：horizontal_alignment==RIGHT（右沿收敛机制）",
 		cnt2 != null and cnt2.horizontal_alignment == HORIZONTAL_ALIGNMENT_RIGHT)
-	_check("R④ ×2 不溢节点：min-size 未顶开（14px 文本 < 20px 承载，size.x==20）",
-		cnt2 != null and absf(cnt2.size.x - 20.0) < 0.01, str(cnt2.size.x if cnt2 != null else Vector2.INF))
-	# ×10 两位数边界：度量契约按规划 r197-3 判据实测（「×10」@10pt 字符串宽 ≤ 承载 20）。
-	# 实码双实测（R198）：①字符串度量 20px == 承载（按规划判据「未超」→ 方案一成立）；
-	# ②引擎 Label min-width 结算 28px > 20（TextServer 整形与 Label 最小宽口径差）——但
-	# ×10 局内不可达：R196 帽 = stack_max+OVERCAP_EXT_MAX，全池最高 AFF_CDR 4+5=9（×9），
-	# 故可达边界取 ×9 白盒夹具（直置 mounted.layers=9；BuildPanel 只读 layers/pool，
-	# layer_values/layer_rarities 同步补位保聚合消费端形状）。未来若抬帽出两位数 ×N，
-	# 需回退方案二并按 min-width 28 重定 content 宽（hud.gd :866 区段注已留痕）
+	_check("R④ ×2 不溢节点：min-size 未顶开（可达域文本 < 36px 承载，size.x==36）",
+		cnt2 != null and absf(cnt2.size.x - 36.0) < 0.01, str(cnt2.size.x if cnt2 != null else Vector2.INF))
+	# R226 有意契约变更：叠层帽拆除后两位数 ×N 局内可达（原 R196 帽全池最高 ×9）
+	# ——承载宽 28→36、x 88→80（右沿 80+36=116 ≤ 118 收敛保持）。
+	# 度量契约按 R203 判据实测：「×9」「×12」@16pt 字符串宽 ≤ 承载 36
 	var f2: Font = cnt2.get_theme_font("font") if cnt2 != null else null
-	var w10 := -1.0
+	var w9 := -1.0
+	var w12 := -1.0
 	if f2 != null:
-		w10 = f2.get_string_size("×10", HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
-	_check("R⑤ ×10 度量：@10pt 字符串宽 %s ≤ cnt 承载 20（规划判据实测，恰等不超→方案一）" % str(w10),
-		w10 >= 0.0 and w10 <= 20.0 + 0.01, "w10=%s" % str(w10))
+		w9 = f2.get_string_size("×9", HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+		w12 = f2.get_string_size("×12", HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+	_check("R⑤ 度量：@16pt「×9」=%s、「×12」=%s ≤ cnt 承载 36（R203 可达域判据+两位数新增）" % [str(w9), str(w12)],
+		w9 >= 0.0 and w9 <= 36.0 + 0.01 and w12 >= 0.0 and w12 <= 36.0 + 0.01,
+		"w9=%s w12=%s" % [str(w9), str(w12)])
 	var w0: WeaponBase = _gl.player.weapon_slots[0]
 	var mounted: Variant = w0.trait_stack.traits[0]   # AFF_ATK_UP（F 夹具残留 2 层）
-	mounted.layers = 9                                 # 全池可达最高层（AFF_CDR 4+5 同级）
-	for i in range(7):
+	mounted.layers = 12                                # R226 两位数可达（原全池最高 ×9）
+	for i in range(10):
 		mounted.layer_values.append(0.0)
 		mounted.layer_rarities.append(0)
-	_gl.hud._build_sig = ""                            # 签名失效（强制重建渲染 ×9）
+	_gl.hud._build_sig = ""                            # 签名失效（强制重建渲染 ×12）
 	content = await _refresh_and_get_content()
 	var cnt9: Label = null
 	for kid in content.get_children():
-		if kid is Label and (kid as Label).text == "×9":
+		if kid is Label and (kid as Label).text == "×12":
 			cnt9 = kid
-	_check("R⑥ 夹具：可达帽 ×9（1 位最大位数）贴纸在位", cnt9 != null,
+	_check("R⑥ 夹具：两位数 ×12（R226 可达域）贴纸在位", cnt9 != null,
 		"found=%s" % str(cnt9 != null))
 	if cnt9 == null:
 		return
-	_check("R⑦ ×9 右沿：position.x==100（A⑤ 同位）∧ 右沿 ≤ content 右沿（100+20=120 ≤ 120 恰等）",
-		absf(cnt9.position.x - 100.0) < 0.01
+	_check("R⑦ ×12 右沿：position.x==80（R226 同位）∧ 右沿 ≤ content 右沿（80+36=116 ≤ 116 恰等）",
+		absf(cnt9.position.x - 80.0) < 0.01
 		and cnt9.position.x + cnt9.size.x <= content.size.x + 0.01,
 		"right=%s content_w=%s" % [str(cnt9.position.x + cnt9.size.x), str(content.size.x)])
-	_check("R⑧ ×9 恰等承载：min-size 未顶开节点宽（size.x==20，可达域内右沿恒 ≤ content）",
-		absf(cnt9.size.x - 20.0) < 0.01, str(cnt9.size))
+	_check("R⑧ ×12 恰等承载：min-size 未顶开节点宽（size.x==36，可达域内右沿恒 ≤ content）",
+		absf(cnt9.size.x - 36.0) < 0.01, str(cnt9.size))

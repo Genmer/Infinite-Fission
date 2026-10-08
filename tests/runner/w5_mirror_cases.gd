@@ -344,9 +344,11 @@ func _test_mirror_capacity_cap() -> void:
 	_check("数量帽：MEC_MIRROR_SPLIT×2 → _mirror_images.size() == 5（3+2）",
 		_gl.player.mirror_count() == 5 and prism.mirrors.size() == 5,
 		str(_gl.player.mirror_count()))
-	_check("数量帽：第 3 张 MEC_MIRROR_SPLIT 被 stack_max=2 拒绝",
-		not prism.attach_trait(split))
-	_check("数量帽：再挂钳制在 5（绝对帽）", _gl.player.mirror_count() == 5)
+	# R226 有意契约变更：第 3 张 SPLIT 挂载成功（叠层帽拆），镜面绝对帽 5 不变
+	#（register_mirror 侧结构帽与词条叠层帽独立——后者退役不影响前者）
+	_check("数量帽：第 3 张 MEC_MIRROR_SPLIT 挂载成功（R226 无限叠）",
+		prism.attach_trait(split))
+	_check("数量帽：再挂钳制在 5（绝对帽，register_mirror 侧保留）", _gl.player.mirror_count() == 5)
 	var spare := BallisticWeapon.new()
 	spare.setup(_gl.registry.get_weapon(&"W1_pistol"), _gl.player, _gl.player.get("_deps"))
 	_check("数量帽：register_mirror 超帽拒绝 + mirror_rejected 计数（第 6 面不入册）",

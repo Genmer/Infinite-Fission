@@ -1,0 +1,168 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 包 2 实体基座自测 ══════════
+── DamagePipelineStub ──
+PASS | 桩公式：S×M×L×C×V = 380.25
+PASS | 桩暴击：crit_chance=1 → is_crit
+PASS | 桩 killed 投影：hp 500 > 380.25 → false
+PASS | 桩字段回填：panel/mult/local/factor
+PASS | 桩反应通道：不掷暴击 → 100
+PASS | 桩反应 feel_level = CATALYST
+PASS | 桩 stats：settles ≥ 2
+PASS | 工厂 get_pipeline()：真件未合入回退桩（接口齐备）
+── 接触伤害（Area2D） ──
+PASS | 接触伤害：玩家 HP 扣减（无敌帧首击生效）
+PASS | 接触伤害：无敌帧内不再扣血
+PASS | 接触伤害：无敌帧过后再次扣血（contact_tick 0.6s）
+── 六大事件派发顺序 ──
+PASS | 六大事件派发顺序 = 挂载序（全序列一致）
+PASS | 三条词条各自命中全部事件（9 项/条）
+PASS | 三条词条事件序列一致（A=B=C）
+PASS | 穿透序：首敌恰 1 击（R196 FIX-2 同敌生命周期不重击）
+PASS | 穿透序：第 2 跳承接于第 2 敌（预算花在换目标）
+── 回收五路径 ──
+PASS | EXPIRED：OnExpire 已派发
+PASS | EXPIRED：派发期状态未清（velocity 非零）
+PASS | EXPIRED：派发期未清零（is_clean=false）
+PASS | EXPIRED：派发期未归还（visible=true）
+PASS | EXPIRED：清零后 velocity=ZERO
+PASS | EXPIRED：清零后 is_clean=true
+PASS | EXPIRED：池归还 visible=false
+PASS | EXPIRED：池 free 计数 +1
+PASS | EXPIRED 原因计数 +1
+PASS | PIERCE_DEPLETED：OnExpire 已派发
+PASS | PIERCE_DEPLETED：派发期状态未清（velocity 非零）
+PASS | PIERCE_DEPLETED：派发期未清零（is_clean=false）
+PASS | PIERCE_DEPLETED：派发期未归还（visible=true）
+PASS | PIERCE_DEPLETED：清零后 velocity=ZERO
+PASS | PIERCE_DEPLETED：清零后 is_clean=true
+PASS | PIERCE_DEPLETED：池归还 visible=false
+PASS | PIERCE_DEPLETED：池 free 计数 +1
+PASS | PIERCE_DEPLETED 原因计数 +1
+PASS | BOUNCE 路径：首次反弹 bounces_left 1→0
+PASS | BOUNCE_DEPLETED：OnExpire 已派发
+PASS | BOUNCE_DEPLETED：派发期状态未清（velocity 非零）
+PASS | BOUNCE_DEPLETED：派发期未清零（is_clean=false）
+PASS | BOUNCE_DEPLETED：派发期未归还（visible=true）
+PASS | BOUNCE_DEPLETED：清零后 velocity=ZERO
+PASS | BOUNCE_DEPLETED：清零后 is_clean=true
+PASS | BOUNCE_DEPLETED：池归还 visible=false
+PASS | BOUNCE_DEPLETED：池 free 计数 +1
+PASS | BOUNCE_DEPLETED 原因计数 +1
+PASS | NULLIFIED：OnExpire 已派发
+PASS | NULLIFIED：派发期状态未清（velocity 非零）
+PASS | NULLIFIED：派发期未清零（is_clean=false）
+PASS | NULLIFIED：派发期未归还（visible=true）
+PASS | NULLIFIED：清零后 velocity=ZERO
+PASS | NULLIFIED：清零后 is_clean=true
+PASS | NULLIFIED：池归还 visible=false
+PASS | NULLIFIED：池 free 计数 +1
+PASS | NULLIFIED 原因计数 +1
+PASS | FORCED：OnExpire 已派发
+PASS | FORCED：派发期状态未清（velocity 非零）
+PASS | FORCED：派发期未清零（is_clean=false）
+PASS | FORCED：派发期未归还（visible=true）
+PASS | FORCED：清零后 velocity=ZERO
+PASS | FORCED：清零后 is_clean=true
+PASS | FORCED：池归还 visible=false
+PASS | FORCED：池 free 计数 +1
+PASS | FORCED 原因计数 +1
+PASS | FORCED 池计数 +1
+── 穿透/反弹 ──
+PASS | 穿透计数递减：pierce 3→2
+PASS | 穿透后弹体存活（继续飞行）
+PASS | 穿透耗尽：pierce=3 三名不同敌命中后回收（R196 FIX-2）
+PASS | 穿透序：首敌整弹生命周期恰 1 击（同敌不重击）
+PASS | 穿透序：第 2/3 敌各恰 1 击
+PASS | 反弹反射角镜像 < 2°（左缘）
+PASS | 反弹后 bounces_left 2→1
+PASS | 反弹反射角镜像 < 2°（上缘）
+── 帧聚合去重（E-03） ──
+PASS | 同帧同目标去重：血量只扣一次
+PASS | 同帧同目标去重：结算只发生一次
+PASS | 同敌跨帧不重击（R196 FIX-2 生命周期去重优先）
+PASS | 帧聚合跨帧清零：下一帧可命中新目标
+── Homing ──
+PASS | 二段延时：arm 期内直飞（方向保持 UP）
+PASS | 角速度 clamp：单帧转向 ≤ turn_rate×dt（4°）
+PASS | 追踪收敛：朝向目标方向（误差 < 2°）
+PASS | 目标丢失：0.2s 内不重锁（保留原 uid）
+PASS | 目标丢失重索敌：0.2s 后锁定新目标
+PASS | AOE 委托：主目标全额伤害
+PASS | AOE 委托：次级目标线性衰减伤害
+PASS | AOE 后导弹回收（命中即亡）
+── Enemy ──
+PASS | 成长 w1：hp=72
+PASS | 成长 w3：hp=72×1.12²=90.32
+PASS | 成长 w3：spd=75×(1+0.008×2)=76.2
+PASS | 成长 w3：dmg=8×1.06²=8.98
+PASS | 成长 w3：exp=3×1.085²=3.53
+PASS | 抗性快照读取：KIN=0.3
+PASS | 抗性快照读取：FIR=0
+PASS | take_result 扣血：72−30=42
+PASS | take_result 非致死不广播
+PASS | 死亡广播 enemy_killed
+PASS | 死亡短路标志 dead
+PASS | 死亡只执行一次（E-06 短路）
+PASS | 击退：滑行位移 ≈ 135px（非即时闪退）
+PASS | 击退：Boss 免疫（质量分级）
+PASS | 精英模板：hp ×4.2 = 302.4
+PASS | 精英判定 is_elite
+PASS | Boss 阶段：HP<50% → phase=2
+PASS | Boss 阶段2 全抗 +0.2
+── Player ──
+PASS | 相对拖动：位移 = 拖动向量（1:1）
+PASS | 零拖动向量为静止
+PASS | 边界钳制：x ≥ hitbox_r
+PASS | 边界钳制：y ≥ 1280×0.6 = 768
+PASS | 边界钳制：y ≤ 1280−r
+PASS | 受击扣血：hp −10
+PASS | player_hit 事件派发
+PASS | 无敌帧内不受击（0.6s）
+PASS | 无敌帧过期后可再受击
+PASS | 升级：14 经验 → LV2 + level_up 事件
+PASS | 升级曲线：xp_need = 14×2^1.4 ≈ 36.94
+PASS | 多级连升：xp 100 → LV3（余量不足 LV4）
+PASS | 死亡事件 player_died 派发
+PASS | 死亡后不再受击/重复广播
+PASS | get_hp_pct：死亡 → 0
+PASS | 武器槽：槽 1 可装备
+PASS | 武器槽：槽 2 未解锁拒绝
+PASS | 武器槽：解锁至 3 后可装 2 把
+PASS | 自动开火调度：武器 tick 被调用（WeaponBase 真件直调）
+PASS | slot_unlocked 事件驱动解锁至 5
+PASS | 解锁 5 后装满 5 槽
+PASS | 5 槽全满拒绝第 6 把
+── WaveDirector/Spawner ──
+PASS | TP 公式（无表）：w1 = 17.2
+PASS | 波窗口公式：w1 = 18.4s
+PASS | wave_started 事件：w1
+PASS | 公式构成：w1 → 17 只杂兵入队
+PASS | TP 公式（无表）：精英波 w8 = 39.6×1.25 = 49.5
+PASS | 无尽段 TP：w35 = 110×1.03^5 ≈ 127.53
+PASS | 表驱动：tp_override≤0 → 公式 TP = 30
+PASS | 表驱动：窗口取表值 20s
+PASS | 表驱动：构成 = 20+8 = 28 条入队
+PASS | 生成节流：单帧 ≤ 8
+PASS | 同屏上限：active = 120（余 80 排队）
+PASS | 加速波：5 敌全部入场
+PASS | 击杀后活跃清零（池归还路径）
+PASS | wave_cleared 事件（窗口过 + 清场）
+PASS | 波间缓冲后自动开下一波（wave_started(2)）
+PASS | Boss 波：boss_spawned 事件派发
+PASS | Boss 波伴随怪流水：场上 > boss+1
+PASS | Boss 波伴随怪上限 ≤ 12
+── 池零实例化 ──
+PASS | 预热：free=4 / capacity=4
+PASS | 10 轮 acquire/release 复用：hits=10 / live=0 / free=4
+PASS | 池零实例化运行（runtime_instantiate = 0）
+PASS | 池零污染（pollution = 0）
+────────────────────────────────────────
+汇总：PASS 145 / FAIL 0（共 145 项）
+════════════════════════════════════════
+WARNING: 1 RID of type "CanvasItem" was leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2483)
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

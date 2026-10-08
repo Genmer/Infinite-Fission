@@ -1,0 +1,70 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R195 激光穿透探针 ══════════
+── S1 基线（pierce=1）──
+PASS | 探针前置：try_fire 维持主束
+PASS | S1 前置：beam.pierce==1（预算缺省=旧口径）
+PASS | S1①：仅 E1 结算——hp 978.4（2 跳×10×1.08 灼焦 1 层，pkg3 已知数同源）
+PASS | S1②：E2/E3/E4 满血（单目标口径零贯穿）
+PASS | S1③：束端==E1（首/最近目标）
+PASS | S1④：结算节拍 settle==2 / 跳字 ≤15Hz→1
+── S2 预算口径 hit=N ──
+PASS | 探针前置：try_fire 维持主束
+PASS | S2①：N=2 → E1/E2 各 978.4（恰 2 目标×2 跳）
+PASS | S2②：N=2 → E3/E4 满血（预算截断 + 超程对照 t=600>560）
+PASS | S2③：N=2 settle==4（2 目标×2 跳）
+PASS | 探针前置：try_fire 维持主束
+PASS | S2④：N=3 → E1-E3 全部结算（<1000）
+PASS | S2⑤：N=3 → E4 恒满血（超程对照零位移）
+── S3 无逐目标衰减 ──
+PASS | 探针前置：try_fire 维持主束
+PASS | S3①：N=2 同拍 E1/E2 伤害相等（无 ×0.6^(n-1) 逐目标衰减；各 21.6）
+── S4 SYN 激活值 ──
+PASS | 探针前置：真卡挂载（res://resources/traits/SYN_PIERCE_EVO.tres）
+PASS | 探针前置：try_fire 维持主束
+PASS | S4①：E1 ×1.2（index=2：0.2×(2−1)）×灼焦1.08 → 2 跳 25.92
+PASS | S4②：E2 ×1.4（index=3：0.2×(3−1)）×灼焦1.08 → 2 跳 30.24
+PASS | S4③：逐目标伤害比 == 1.4/1.2（区内累进同弹体式）
+PASS | 探针前置：真卡挂载（res://resources/traits/SYN_PIERCE_EVO.tres）
+PASS | 探针前置：try_fire 维持主束
+PASS | S4④：N=1 首目标即 ×1.2 → 2 跳 25.92（SYN 激光 0→生效，R195 有意变更）
+── S5 灼焦归属 ──
+PASS | 探针前置：try_fire 维持主束
+PASS | S5①：E1 scorch_layers_of==1（1 层/0.25s，tick 0.26 恰 1 层）
+PASS | S5②：E2（贯穿目标）灼焦同叠 ==1（B 案全量同叠）
+PASS | S5③：轴外 E3 ==0（未命中不叠焦）
+── S6 束端点归属 ──
+PASS | 探针前置：try_fire 维持主束
+PASS | S6①：N=2 束端==末贯穿目标 E2（t 最大者）
+PASS | 探针前置：try_fire 维持主束
+PASS | S6②：N=3 束端==E3
+PASS | S6 前置：try_fire（无目标维持 UP 指向）
+PASS | S6③：无敌束长==beam_length（560，画满不超程）
+PASS | S6④：束端恒 ≤beam_length<1280 逻辑像素（不穿屏）
+── S7 副束门 ──
+PASS | S7 前置：真卡挂载（res://resources/traits/AFF_PIERCE.tres）
+PASS | S7 前置：真卡挂载（res://resources/traits/MEC_SPLIT_PRISM.tres）
+PASS | S7 前置：_pierce_count()==2（L1+AFF_PIERCE 1.45→round 1）
+PASS | S7 前置：try_fire 出主束+副束（棱镜 1 副）
+PASS | S7①：副束 pierce==1（主束 _pierce_count()==2 不传导——_hit_budget 副束恒 1）
+PASS | S7②：主束 N=2 结算 E1+E2（均 <1000）
+PASS | S7③：副束只结算锁定 1 目标——同轴 E3 金丝雀恒满血（副束不吃穿透）
+── S8 折射分叉门 ──
+PASS | S8 前置：try_fire 出主束
+PASS | S8①：基线 N=1 → 恰 1 条分叉（active_beams==2）
+PASS | S8 前置：主束 N==2
+PASS | S8②：N=2 分叉数与 N=1 基线相同（恰 1 条——贯穿目标不触发新分叉）
+PASS | S8③：贯穿目标 E1/E2 ∈ hit_exclusions()（防子束回烧）
+PASS | S8④：分叉锁轴外折射目标 E3（250px 内最近未命中）
+PASS | S8⑤：主束 N=2 照常贯穿结算 E2（<1000）
+── S9 契约 ──
+PASS | 探针前置：try_fire 维持主束
+PASS | S9①：last_hit_uid==E1（首/最近目标——R91 主束锁定契约，多目标不漂移）
+PASS | S9②：_pierce_count()==maxi(L表+round(add_pierce),0)（L表=2 空栈 → 2）
+PASS | S9②b：L表 pierce=1 空栈 → _pierce_count()==1（基线零位移）
+PASS | S9 前置：AFF_PIERCE 直载非空
+PASS | S9③：挂 AFF_PIERCE → _pierce_count()==2（1+round(1.45)=1；面板 add_pierce）
+PASS | S9④：面板穿透行输出真值非 0（「穿透 2 名」——R195 面板恒 0→真值有意变更）
+────────────────────────────────────────
+汇总：PASS 55 / FAIL 0（共 55 项）
+════════════════════════════════════════

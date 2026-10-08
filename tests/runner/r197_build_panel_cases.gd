@@ -14,7 +14,7 @@
 extends RefCounted
 
 const MAIN_SCENE := "res://scenes/main.tscn"
-const PANEL_RECT_POS0 := Rect2(556.0, 196.0, 140.0, 258.0)
+const PANEL_RECT_POS0 := Rect2(578.0, 196.0, 118.0, 258.0)    # R208 面板收窄（右沿 696 恒）
 
 var tree: SceneTree
 var _pass: int = 0
@@ -192,16 +192,17 @@ func _test_a_gem_column() -> void:
 		wpns.size() > 0 and absf(wpns[0].position.x) < 0.01
 		and gems[0].position.x > wpns[0].position.x,
 		"w=%s g=%s" % [str(wpns[0].position.x), str(gems[0].position.x)])
-	# ×N 计数贴纸：layers=2 → 「×2」Label 在宝石右侧 x=100
+	# ×N 计数贴纸：layers=2 → 「×2」Label 在宝石右侧 x=92（R203：14→16pt、24→28 宽、96→92）
 	var cnt: Label = null
 	for kid in content.get_children():
 		if kid is Label and (kid as Label).text == "×2":
 			cnt = kid
-	_check("A⑤ ×N 计数贴纸：×2 在位且 x=100（宝石右侧）",
-		cnt != null and absf(cnt.position.x - 100.0) < 0.01,
+	# R226 有意契约变更：徽标承载 28→36、x 88→80（两位数 ×N 可达，右沿 80+36=116 保持）
+	_check("A⑤ ×N 计数贴纸：×2 在位且 x=80（宝石右侧；R226 36 宽重定位）",
+		cnt != null and absf(cnt.position.x - 80.0) < 0.01,
 		"cnt=%s" % str(cnt.position if cnt != null else Vector2.INF))
-	# R198（r197-3）契约变更新增：×N 贴纸右沿 ≤ content 宽（hud.gd cnt 24→20 宽 + 右对齐，
-	# 右沿 100+20=120 == content 宽 :866——旧 24 宽右沿 124>120 的 4px 出界收敛）
+	# R198（r197-3）契约 + R200 重定：×N 贴纸右沿 ≤ content 宽（14pt 24 宽右对齐，
+	# 右沿 96+24=120 == content 宽 :866 口径不变）
 	var a8_right := cnt.position.x + cnt.size.x if cnt != null else -1.0
 	_check("A⑧ [R198 契约变更] ×N 右沿收敛：cnt 右沿 ≤ content 宽", cnt != null
 		and a8_right <= content.size.x + 0.01,
@@ -298,14 +299,23 @@ func _test_c_weapon_column() -> void:
 	_check("C⑤ 锁槽计数：恰 Lock3/Lock4（unlocked=3、空且未解锁槽 3/4）", lock_names_ok,
 		"locks=%d" % locks.size())
 	var lock_center_ok := locks.size() == 2
+	# R208（用户「锁的图标太小」）：锁徽 14 固定 → maxf(icon_size*0.7, 14)
+	# （cap5 行 icon32 → 锁 22.4；居中语义不变）
+	var lock_sz := maxf(icon_size * 0.7, 14.0)
 	for lock in locks:
 		var idx := int(String(lock.name).trim_prefix("Lock"))
-		var expect := Vector2((icon_size - 14.0) * 0.5,
-			float(idx) * row_h + (row_h - 14.0) * 0.5)
+		var expect := Vector2((icon_size - lock_sz) * 0.5,
+			float(idx) * row_h + (row_h - lock_sz) * 0.5)
 		if lock.position.distance_to(expect) > 0.01:
 			lock_center_ok = false
-	_check("C⑥ 锁贴纸居中：Lock_i 位于暗环中心 ((32-14)/2, row_y+(45.6-14)/2)", lock_center_ok,
+	_check("C⑥ 锁贴纸居中：Lock_i 位于暗环中心（R208 放大锁 22.4，中心口径不变）", lock_center_ok,
 		"pos0=%s" % str(locks[0].position if locks.size() > 0 else Vector2.INF))
+	var lock_size_ok := locks.size() == 2
+	for lock in locks:
+		if absf(lock.size.x - lock_sz) > 0.01 or absf(lock.size.y - lock_sz) > 0.01:
+			lock_size_ok = false
+	_check("C⑥b 锁贴纸尺寸：R208 放大 14→maxf(0.7×icon,14)（真机反馈太小）", lock_size_ok,
+		"size0=%s expect=%s" % [str(locks[0].size if locks.size() > 0 else Vector2.INF), str(lock_sz)])
 	# tooltip：持有武器行含 Lv 与机制注记；锁槽行（Wpn3/Wpn4）含解锁途径说明
 	var tip_w: String = wpns[0].tooltip_text if wpns.size() > 0 else ""
 	var tip_lock_hits := 0

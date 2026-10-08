@@ -1,0 +1,36 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 精英词缀专项自测 ══════════
+── 投放门 ──
+PASS | wave7 精英无词缀
+PASS | wave8+ 精英获得词缀
+PASS | R202：24 次抽样词缀全在五词缀池（越池即红）
+PASS | wave15+ 出现双词缀（24 次抽样 ≥1）
+PASS | Boss 恒无词缀
+── 环爆体 affix_ring ──
+PASS | 前置：词缀在列
+PASS | 环爆：8 发环形弹
+PASS | 环爆：cd 重置为表值 7s
+── 狙击手 affix_sniper ──
+PASS | 狙击：3 发
+PASS | 狙击：±12° 等角扇（arc 24°）
+── 布雷者 affix_trapper ──
+PASS | 布雷：新增 2 颗雷（blast 80）
+── 冻结打断（cd 退 50%） ──
+PASS | 前摇已开启
+PASS | 冻结打断：前摇取消
+PASS | 冻结打断：cd 退 50%（3.5s）
+── 冲锋者 affix_charger ──
+PASS | 冲锋：前摇毕进入冲刺位移
+PASS | 冲锋：冲刺期接触伤 ×1.25
+PASS | 冲锋：段毕伤害复位
+── 唤潮者 affix_caller ──
+PASS | 唤潮：广播 1 次（E1_grunt / hp_ratio 0.5）
+── 互斥对（charger×trapper） ──
+PASS | 互斥对：60 次双词缀抽样无 charger×trapper 同叠
+────────────────────────────────────────
+汇总：PASS 19 / FAIL 0（共 19 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

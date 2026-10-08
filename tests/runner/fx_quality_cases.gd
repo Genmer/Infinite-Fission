@@ -62,6 +62,11 @@ func _check(p_name: String, p_cond: bool, p_detail: String = "") -> void:
 
 func _test_setting_roundtrip() -> void:
 	print("── 设置读写 ──")
+	# R202 收口：「出厂默认」断言原样读 Meta.settings()——读的是 user://meta_save_test.cfg
+	# 残留值（headless 测试档跨套件/探针共享，probe_r202_popup.gd:49 环境还原 /
+	# render_load_probe C 段会把 0 落盘）。先抹内存键模拟「旧档缺键」（meta_manager.gd
+	# 读口契约：缺键 = 默认表回退），断言才真正钉住 SETTINGS_DEFAULTS 出厂值。
+	Meta._settings.erase("fx_quality")
 	_check("出厂默认：fx_quality = 2（高）", int(Meta.settings("fx_quality")) == 2)
 	Meta.set_setting("fx_quality", 0)
 	_check("写口：低档落盘读回", int(Meta.settings("fx_quality")) == 0)

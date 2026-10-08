@@ -1,0 +1,31 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · Boss 主题攻击自测 ══════════
+── 四 Boss 主题配置 ──
+PASS | E17_frost_sovereign：barrage 新真源（存量双轨清零）
+PASS | E17_frost_sovereign：主题技能在册（["mine"]）
+PASS | E18_demon_lord：barrage 新真源（存量双轨清零）
+PASS | E18_demon_lord：主题技能在册（["flame_wave"]）
+PASS | E19_grove_warden：barrage 新真源（存量双轨清零）
+PASS | E19_grove_warden：主题技能在册（["laser_sweep", "mine"]）
+PASS | E20_swamp_hydra：barrage 新真源（存量双轨清零）
+PASS | E20_swamp_hydra：主题技能在册（["mine", "laser_sweep", "poison_pool"]）
+PASS | 校验器：E19 存量折算告警清零（双轨清零）
+── 雷区 / 冰锁圈 ──
+PASS | B6：雷区落地 4 颗（挂世界层）
+PASS | B6：地雷位置 ≠ Boss 本体子节点（世界层锚定）
+PASS | B6：踩雷爆炸结算 21（35% 档）
+PASS | B6/frost：爆炸落冰锁圈（HazardPool）
+PASS | B6/frost：冰锁圈减速玩家（拖动映射 ×0.6）
+── 湮灭扫线 ──
+PASS | B7：前摇期直线警示带可见
+PASS | B7：扫线束落场（世界层锚定 Boss 位置）
+PASS | B7：起角 = 前摇锁定方向（不追踪）
+PASS | B7：束内结算 30（50% 处决档）
+── 玩家减速通道 ──
+PASS | apply_hazard_slow：系数与持续时间写入
+PASS | 减速到期自动还原 1.0
+────────────────────────────────────────
+汇总：PASS 20 / FAIL 0（共 20 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

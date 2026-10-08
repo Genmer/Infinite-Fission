@@ -117,8 +117,12 @@ func _test_registry_data() -> void:
 	for id: StringName in [&"ELE_IGNITE", &"ELE_SHOCK", &"ELE_FREEZE"]:
 		var t := registry.get_trait(id)
 		var forms: Variant = t.params.get("required_forms", null) if t != null else null
-		_check("registry：%s 在册且 params.required_forms == [0, 1, 2]（近战死卡下架）" % id,
-			t != null and forms is Array and (forms as Array) == [0, 1, 2], str(forms))
+		# R243 §6.2 迁移：ELE 七卡 required_forms 扩 [0,1,2,3]；W8 附着通道（R186 拆除
+		# 维持）改由 excluded_weapons 按武器 id 精确下架——required_forms 不再承担 W8 锁
+		var excluded: Variant = t.params.get("excluded_weapons", null) if t != null else null
+		_check("registry：%s 在册且 params.required_forms == [0, 1, 2, 3] + excluded_weapons [W8]（R243 迁移）" % id,
+			t != null and forms is Array and (forms as Array) == [0, 1, 2, 3]
+				and excluded is Array and (excluded as Array) == [&"W8_orbit_field"], str(forms))
 	for id: StringName in [&"ELE_REACTION_VOID", &"ELE_ARC_SURGE"]:
 		var t2 := registry.get_trait(id)
 		_check("registry：%s 无 required_forms 键（全形态保留，不设门）" % id,
@@ -139,9 +143,10 @@ func _test_registry_data() -> void:
 # ── 2. 挂载形态门四向（mount_gate_allows 静态直调） ───────────────
 # p_target 形参锁定 WeaponBase——夹具用真件武器（pkg3 _make_weapon 同构映射），
 # 仅 setup 不开火（四形态 setup 均只做 super + 字段复位，无池依赖）。
-func _form_weapon(p_form: int) -> WeaponBase:
+func _form_weapon(p_form: int, p_id: StringName = &"") -> WeaponBase:
+	# R243 迁移：可选 p_id（excluded_weapons 门负向用例需按武器 id 构造 W8 桩）
 	var d := WeaponData.new()
-	d.id = StringName("W_RXN_FORM_%d" % p_form)
+	d.id = p_id if String(p_id) != "" else StringName("W_RXN_FORM_%d" % p_form)
 	d.form = p_form
 	var w: WeaponBase
 	match p_form:
@@ -159,7 +164,7 @@ func _form_weapon(p_form: int) -> WeaponBase:
 
 
 func _test_mount_gate_forms() -> void:
-	print("── 挂载形态门四向（required_forms = [0, 1, 2]） ──")
+	print("── 挂载形态门四向（R243 迁移：[0,1,2,3] + excluded_weapons [W8]） ──")
 	for id: StringName in [&"ELE_IGNITE", &"ELE_SHOCK", &"ELE_FREEZE"]:
 		var t := _ele(id)
 		var gate_ok := true
@@ -169,10 +174,15 @@ func _test_mount_gate_forms() -> void:
 			gate_ok = gate_ok and CardGenerator.mount_gate_allows(t, w)
 			w.free()
 		_check("形态门：%s 投射物三形态（弹道/激光/自导）全放行" % id, gate_ok)
+		# R243 §6.2 迁移：form 3 入 required_forms → 一般近战放行；W8 附着 R186 拆除维持
+		# ——改由 excluded_weapons 按武器 id 精确拒之（先例 = MEC_KNOCK 排 W9）
 		var melee := _form_weapon(GameConst.WeaponForm.MELEE)
-		_check("形态门：%s 近战（W8 有意拆除 ELE 通道）拒绝上架" % id,
-			not CardGenerator.mount_gate_allows(t, melee))
+		var w8 := _form_weapon(GameConst.WeaponForm.MELEE, &"W8_orbit_field")
+		_check("形态门：%s 近战放行 + W8 拒绝上架（R243 迁移——excluded_weapons 精确下架）" % id,
+			CardGenerator.mount_gate_allows(t, melee)
+				and not CardGenerator.mount_gate_allows(t, w8))
 		melee.free()
+		w8.free()
 
 
 # ── 3. 解锁节奏口径（G1 图鉴反应页条件/解锁句真源；无难度门） ─────
@@ -324,12 +334,16 @@ func _test_channel_unit() -> void:
 	ctx_fir.event = GameConst.TraitEvent.ON_HIT
 	ctx_fir.projectile = p_fir
 	stack.dispatch(GameConst.TraitEvent.ON_HIT, ctx_fir)
-	_check("通道：FIR 宿主 → attach_request.element == FIR（修复前被末位覆写为 LTG）",
-		int(ctx_fir.attach_request.get("element", -1)) == GameConst.Element.FIR,
+	# R243 §6.3 迁移：attach_request 单槽机制升级为 attach_requests 数组全元素并发；
+	# 本夹具 ctx 未投递 host_elements（空池 = 无限制）→ 双卡按挂载序并发输出
+	_check("通道：双卡并发 → attach_requests 按挂载序 [{FIR},{LTG}]（R243 迁移——全元素并发）",
+		ctx_fir.attach_requests.size() == 2
+			and int(ctx_fir.attach_requests[0].get("element", -1)) == GameConst.Element.FIR
+			and int(ctx_fir.attach_requests[1].get("element", -1)) == GameConst.Element.LTG,
+		str(ctx_fir.attach_requests))
+	_check("通道：单槽 attach_request == 末位条目（R243 迁移——后位覆写兼容不变）",
+		ctx_fir.attach_request == ctx_fir.attach_requests[-1],
 		str(ctx_fir.attach_request))
-	_check("通道：FIR 宿主请求 {element, value:22, overrides:{}} 完整",
-		ctx_fir.attach_request == {"element": GameConst.Element.FIR,
-			"value": 22.0, "overrides": {}}, str(ctx_fir.attach_request))
 	# LTG 宿主：LTG 词条放行
 	var p_ltg := _spawn_proj({"position": Vector2(150, 150), "velocity": Vector2.ZERO,
 		"lifetime": 10.0, "pierce": 1, "hitbox_radius": 6.0,
@@ -442,8 +456,10 @@ func _test_reaction_end_to_end() -> void:
 	_check("端到端：第 1 发命中 → FIR 槽 +22（当发元素附着）",
 		st != null and _approx(st.gauges[GameConst.Element.FIR], 22.0),
 		"fir=%s" % str(st.gauges[GameConst.Element.FIR] if st != null else -1.0))
-	_check("端到端：LTG 槽未被错元素串写（恒 0）",
-		st == null or _approx(st.gauges[GameConst.Element.LTG], 0.0))
+	# R243 §6.3 迁移：一击全池并发——第 1 发即双槽附着（不再等当发随机交替）
+	_check("端到端：第 1 发双槽并发——LTG 槽同步 +22（R243 迁移）",
+		st != null and _approx(st.gauges[GameConst.Element.LTG], 22.0),
+		"ltg=%s" % str(st.gauges[GameConst.Element.LTG] if st != null else -1.0))
 	# 第 2 发：当发随机元素 = LTG（交替）
 	var p2 := _spawn_proj({"position": Vector2(360, 640), "velocity": Vector2(100, 0),
 		"lifetime": 10.0, "pierce": 1, "hitbox_radius": 6.0,
@@ -451,9 +467,10 @@ func _test_reaction_end_to_end() -> void:
 		"panel_snapshot": {"base_atk": 100.0}, "trait_stack": stack.copy_runtime()})
 	_bump_frame()
 	p2.tick(DT)
-	_check("端到端：第 2 发命中 → 双槽成对（FIR=22 且 LTG=22）",
-		st != null and _approx(st.gauges[GameConst.Element.FIR], 22.0)
-			and _approx(st.gauges[GameConst.Element.LTG], 22.0),
+	# R243 §6.3 迁移：第 2 发再各 +22（每击全池并发；has_both 于第 1 发已达成）
+	_check("端到端：第 2 发命中 → 双槽累加（FIR=44 且 LTG=44——R243 迁移）",
+		st != null and _approx(st.gauges[GameConst.Element.FIR], 44.0)
+			and _approx(st.gauges[GameConst.Element.LTG], 44.0),
 		"fir=%s ltg=%s" % [str(st.gauges[GameConst.Element.FIR]),
 			str(st.gauges[GameConst.Element.LTG])])
 	# 帧末统一检测（E-07）：过载 RXN_FIR_LTG = 120%ATK × 快照 100

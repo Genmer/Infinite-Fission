@@ -62,10 +62,14 @@ func _run() -> void:
 
 	# ── 结算捕获助手（同步块 connect→call→disconnect，零跨帧噪声） ──
 	var capture_settle := func(p_call: Callable) -> Array:
+		# R220 刀11：damage_resolved 批化（结算只入队，⑧段前 dispatch_resolved_frame
+		# 统一派发）——直驱捕获块内补一次帧派发再断开（帧内时序口径不变）
 		var rows: Array = []
 		var cb := func(r: Variant) -> void: rows.append(r)
 		eb.damage_resolved.connect(cb)
 		p_call.call()
+		if gl.pipeline != null and gl.pipeline.has_method(&"dispatch_resolved_frame"):
+			gl.pipeline.call(&"dispatch_resolved_frame")
 		eb.damage_resolved.disconnect(cb)
 		return rows
 

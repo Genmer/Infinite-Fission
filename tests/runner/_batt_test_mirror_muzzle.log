@@ -1,0 +1,60 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R191#2 镜面枪口锚点自测 ══════════
+── 负例. 无化身回退（层未驱动 → 镜面弹出生点 == 菱形标记位） ──
+PASS | 前置：inner 为镜面行为壳（is_mirror_image）
+PASS | 前置：化身未建（_avatars 空——层从未驱动）
+PASS | 负例：镜面弹已出膛（归因键 weapon_uid==inner.uid）
+PASS | 负例：无化身时出生点 == inner.global_position（菱形回退语义保留）
+── A. 锚点组（镜面弹出生点 = 外层 MirrorImage 化身枪口） ──
+PASS | 前置：1 镜在场
+PASS | 前置：包装体入册（entries.find(outer) 首查命中）
+PASS | 前置：包装体化身已建且可见
+PASS | A1：采样量 ≥ 60 发（30/s 钳 × 3s 窗）
+PASS | A1：MENU 冻结前提（同态双采零漂移 <0.01px）
+PASS | A1：逐发 |spawn−avatar_global(outer)| ≤ 2.0px（同帧采样）
+PASS | A1：逐发 |spawn−inner.global_position| ≥ 52px（非菱形回退位）
+PASS | A1：逐发 |spawn−玩家中心| ≥ 52px（非玩家中心回退）
+PASS | A2：累计采样 ≥240 帧驱动且 ≥120 发（≥240 帧采 mirror 弹口径）
+PASS | A2：扫掠期逐发 |spawn−avatar_global(outer)| ≤ 2.0px
+PASS | A2：扫掠期 |spawn−菱形| 中位距离 ≥52px
+PASS | A2：扫掠期 |spawn−玩家中心| 中位距离 ≥52px
+PASS | A2：扫掠期出生点非菱形重合占比 ≥ 0.9（修复前 == 0——出生点恒为菱形）
+  标定：化身枪口 ↔ 菱形回退位 距离带 3.0~119.0 px（修复前出生点即菱形——错位即此带；修复后出生点贴合化身 ≤0.0000px）
+── B. 火花组（ice_shard/TINT/0.09s · 自熄 · star 零回归 · 低档门） ──
+PASS | B①：镜面开火建 MuzzleFlash（常驻件非空）
+PASS | B①：开火帧 visible == true
+PASS | B①：texture == TextureFactory.ice_shard()
+PASS | B①：modulate == MirrorImage.TINT（银白/冰青单源）
+PASS | B①：_muzzle_timer > 0（0.09s 口径）
+PASS | B②：驱动 ≥0.2s 后自熄（visible == false）
+PASS | B③：本体开火建 MuzzleFlash
+PASS | B③：本体 texture 仍 == TextureFactory.star(40, PopPalette.XP)
+PASS | B③：本体 flash visible 且 _muzzle_timer > 0（0.05s 口径）
+PASS | B④：低档门开火路径到达（镜面弹已出膛，live 245→244）
+PASS | B④：fx_quality=0 开火后 visible == false（门不放宽）
+PASS | B⑤：连发后 MuzzleFlash 子节点恒 1（零逐发实例化）
+── 负例. R183 副本（_summon_copies 在册件首次 find 即命中） ──
+PASS | 负例前置：诺亚技能施放（_summon_copies 通道）
+PASS | 负例前置：帧内副本在册（≥1）
+PASS | 负例：副本 weapon_muzzle_global 首查命中 + 出生点锚定自身化身（零变化）
+── C/D/E. R201 激光族发射口对齐（W4 主/副束、W5 锚束、镜面内壳激光） ──
+PASS | C① W4 主束在位（夹具敌可索敌）
+PASS | C② W4 主束起点 == 棱镜化身枪口（≤2px）
+PASS | C③ 主束起点远离玩家中心（≥30px——修复前从玩家身体出束 d≈0 必红）
+PASS | C④ 玩家移动后主束原点仍 == 化身枪口（逐拍同步不脱钩）
+PASS | D① 前置：裂片棱镜挂上 ∧ 副束在位
+PASS | D② 副束起点 == 化身枪口（分光自棱镜出）
+PASS | D③ 玩家移动后副束原点逐拍同步化身枪口（不再生成时定格）
+PASS | E① W5 锚束起点 == 棱镜化身枪口
+PASS | E② 前置：存在激光源镜面（指向 W4——确定性指向）
+PASS | E③ 镜面内壳激光起点 == 镜面化身枪口（R191#2 别名链激光形态同享）
+PASS | E④ 镜面激光起点远离玩家中心（≥52px）
+────────────────────────────────────────
+汇总：PASS 43 / FAIL 0（共 43 项）
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 2 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 31 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

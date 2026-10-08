@@ -128,6 +128,7 @@ func _test_state_machine() -> void:
 		and _gl.player.level == 1 and _gl.player.weapon_slots[0] != null)
 	# 升级仲裁：PLAYING → LEVEL_UP（选卡流打开）——详细流程在卡牌用例
 	EventBus.emit_level_up(2)
+	_gl.call(&"_consume_deferred_level_open")     # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("升级仲裁：PLAYING→LEVEL_UP", _gl.state == GameConst.GameStatus.LEVEL_UP and tree.paused)
 	# LEVEL_UP 中再收升级 → 排队
 	EventBus.emit_level_up(3)
@@ -294,6 +295,7 @@ func _test_hud_binding() -> void:
 	_check("HUD 等级绑定（升级后）", hud.displayed_level_text() == "Lv %d" % player.level
 		and player.level == lv0 + 1,
 		"text=%s lv=%d lv0=%d xp=%f need=%f" % [hud.displayed_level_text(), player.level, lv0, player.xp, player.xp_need])
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("升级仲裁联动：gain_xp → LEVEL_UP 选卡流打开", _gl.state == GameConst.GameStatus.LEVEL_UP
 		and _gl.card_select_ui.is_open)
 	_check("HUD 状态提示（LEVEL_UP 覆盖显示）", _gl.hud._state_label.visible
@@ -343,6 +345,106 @@ func _test_popup_pool() -> void:
 		and pm.dropped_count() > 0)
 	pm.tick(10.0)
 	_check("上限流量全量归还", pm.active_popups == 0)
+	# ── R202 伤害数字节流回归（断言面新增 R202：层1 存活并入 + CRIT 升格 + element
+	# 刷新 + 层2 满池全局 1/8 采样——消费端两态口径，详见 popup_manager.gd 头注） ──
+	var q_prev: int = int(Meta.settings("fx_quality"))
+	var provider_prev: Callable = pm.baseline_provider
+	Meta.set_setting("fx_quality", 2)              # 高档钉死（cap 80 / 窗 0.12s——计数断言确定性）
+	pm.baseline_provider = Callable()              # 量级档关闭（本段只锁样式/合并语义）
+	# 层1：窗过期后同目标存活即并入——0.2s > 0.12s 高档窗（旧口径此处强制新起第 2 张）
+	var rl := DamageResult.new()
+	rl.final_value = 6.0
+	rl.target_uid = 2101
+	rl.pos = Vector2(100, 200)
+	rl.popup_style = GameConst.PopupStyle.NORMAL
+	pm.on_damage_resolved(rl)
+	pm.tick(0.2)                                   # 窗过期（0.2>0.12）、popup 仍活（<0.6s）
+	var rl2 := DamageResult.new()
+	rl2.final_value = 4.0
+	rl2.target_uid = 2101
+	rl2.pos = Vector2(100, 200)
+	rl2.popup_style = GameConst.PopupStyle.NORMAL
+	pm.on_damage_resolved(rl2)
+	_check("R202 层1：窗过期同目标存活即并入（active 仍 1 / 值累计 6+4）",
+		pm.active_popups == 1
+			and absf((pm._active_list[0] as DamagePopup).merged_value - 10.0) <= 0.001)
+	# 层1 CRIT 升格：NORMAL 宿主吃 CRIT 并入 → 原地升样式不新起（防暴击可见性回归）
+	var rl3 := DamageResult.new()
+	rl3.final_value = 5.0
+	rl3.target_uid = 2101
+	rl3.pos = Vector2(100, 200)
+	rl3.popup_style = GameConst.PopupStyle.CRIT
+	pm.on_damage_resolved(rl3)
+	var crit_host: DamagePopup = pm._active_list[0]
+	pm.tick(DT)                                    # 合并置脏 → tick 一次刷新文案/样式（R189）
+	_check("R202 层1 CRIT 升格：宿主原地升 CRIT（active 不涨 / 值累计 15 / 40px 字号）",
+		pm.active_popups == 1 and crit_host.style == GameConst.PopupStyle.CRIT
+			and absf(crit_host.merged_value - 15.0) <= 0.001
+			and crit_host._label.get_theme_font_size("font_size") == DamagePopup.FONT_SIZE_CRIT)
+	pm.tick(10.0)
+	# 层1 element 刷新：异元素并入 → 颜色随最新命中元素（不停在第跳）
+	var re := DamageResult.new()
+	re.final_value = 3.0
+	re.target_uid = 2102
+	re.pos = Vector2(100, 200)
+	re.popup_style = GameConst.PopupStyle.NORMAL
+	re.element = GameConst.Element.FIR
+	pm.on_damage_resolved(re)
+	var re2 := DamageResult.new()
+	re2.final_value = 3.0
+	re2.target_uid = 2102
+	re2.pos = Vector2(100, 200)
+	re2.popup_style = GameConst.PopupStyle.NORMAL
+	re2.element = GameConst.Element.HYD
+	pm.on_damage_resolved(re2)
+	var elem_host: DamagePopup = pm._active_list[-1]
+	pm.tick(DT)
+	_check("R202 层1 element 刷新：异元素并入颜色随新元素（FIR→HYD）",
+		elem_host.element == GameConst.Element.HYD
+			and elem_host._label.self_modulate == PopPalette.ELEMENT_COLORS[GameConst.Element.HYD])
+	pm.tick(10.0)
+	# 层2：满池全局单例 1/8 采样（仅 bucket0 直击 NORMAL 新起）——先填满 80（未满池
+	# 全显 N=1 零行为变化），再 16 发白字新起尝试：确定性 mod 恰 2 发放行（任意起点
+	# 连续 16 计数恰含 2 个 8 的倍数）、14 发采样丢弃计入 dropped；放行挤最老非反应
+	# 槽腾位（active 恒 == cap 80）
+	var uid_base := 3000
+	for i in range(80):
+		var rf2 := DamageResult.new()
+		rf2.final_value = 1.0
+		rf2.target_uid = uid_base + i
+		rf2.pos = Vector2(10 + i, 10)
+		rf2.popup_style = GameConst.PopupStyle.NORMAL
+		pm.on_damage_resolved(rf2)
+	_check("R202 层2 前置：未满池全显（80 目标 80 条）", pm.active_popups == 80)
+	var dropped_s0: int = pm.dropped_count()
+	for i in range(16):
+		var rs2 := DamageResult.new()
+		rs2.final_value = 1.0
+		rs2.target_uid = uid_base + 100 + i
+		rs2.pos = Vector2(10, 10)
+		rs2.popup_style = GameConst.PopupStyle.NORMAL
+		pm.on_damage_resolved(rs2)
+	_check("R202 层2：满池 NORMAL 1/8 采样（16 发 2 显 / 采样丢弃 +14 / active 恒==cap）",
+		pm.active_popups == 80 and pm.dropped_count() == dropped_s0 + 14)
+	# CRIT 必显通道：满池下 CRIT 新起绕过采样（不丢弃、挤最老非反应槽）
+	var dropped_s1: int = pm.dropped_count()
+	var rc2 := DamageResult.new()
+	rc2.final_value = 1.0
+	rc2.target_uid = uid_base + 200
+	rc2.pos = Vector2(10, 10)
+	rc2.popup_style = GameConst.PopupStyle.CRIT
+	pm.on_damage_resolved(rc2)
+	var crit_seen := false
+	for p: DamagePopup in pm._active_list:
+		if p.style == GameConst.PopupStyle.CRIT:
+			crit_seen = true
+	_check("R202 层2 CRIT 必显：满池绕过采样（active 恒 80 / 不丢 / 在册）",
+		pm.active_popups == 80 and pm.dropped_count() == dropped_s1 and crit_seen)
+	pm.tick(10.0)
+	_check("R202 层2 流量归还（清场）", pm.active_popups == 0)
+	# 复位（防污染后续用例）
+	Meta.set_setting("fx_quality", q_prev)
+	pm.baseline_provider = provider_prev
 
 
 # ── 要点 8：三选一卡牌流 ─────────────────────────────────────────
@@ -366,22 +468,20 @@ func _test_card_flow() -> void:
 		if gen._roll_rarity(5) == 3:
 			gold += 1
 	_check("稀有度权重分布合理（金卡 500 抽 ≤55，w<10 基础权重 6%）", gold <= 55, "gold=%d" % gold)
-	# 池过滤：叠层上限（R196 有意契约变更——原「满 stack_max=3 移出池」：ADD 池上架帽
-	# 放宽至 stack_max + TraitStack.OVERCAP_EXT_MAX = 3+5 = 8，与 attach 拒绝线同口径
-	# card_generator.gd:472-475；非 ADD 池保持原帽）
+	# 池过滤：R226 有意契约变更（用户拍板「肉鸽别搞上限」）——上架叠层帽全池拆除
+	#（原 §6.4「满 stack_max 移出池」→ R196 放宽 ADD 池 stack_max+5 → 本轮无限）
 	var atk := _gl.registry.get_trait(&"AFF_ATK_UP")
 	_check("夹具：AFF_ATK_UP 存在（stack_max=3）", atk != null and atk.stack_max == 3)
 	var weapon: WeaponBase = player.weapon_slots[0]
 	for i in range(atk.stack_max):
 		weapon.attach_trait(atk)
 	var add_pool := gen._trait_candidates("ADD", player, [])
-	# R196 有意契约变更（原「满层 ID 移出候选池」）：满 3 层（质变层）仍上架，帽放宽至 stack_max+5
-	_check("叠层上限过滤：满 stack_max 层 ID 仍上架（ADD 池帽放宽至 stack_max+5）",
-		add_pool.has(&"AFF_ATK_UP"))
-	for i in range(TraitStack.OVERCAP_EXT_MAX):
-		weapon.attach_trait(atk)                    # 续挂至 3+5=8 满帽
+	_check("叠层过滤拆除：满 stack_max 层 ID 仍上架", add_pool.has(&"AFF_ATK_UP"))
+	for i in range(5):
+		weapon.attach_trait(atk)                    # 续挂至 8 层（原满帽点）
 	var add_pool_full := gen._trait_candidates("ADD", player, [])
-	_check("叠层上限过滤：满 stack_max+5 层 ID 移出候选池", not add_pool_full.has(&"AFF_ATK_UP"))
+	_check("叠层过滤拆除：满 8 层（原 stack_max+5 帽点）仍上架（R226 无限供给）",
+		add_pool_full.has(&"AFF_ATK_UP"))
 	# 同批去重
 	var dup := gen._trait_candidates("ADD", player, [&"AFF_HP_UP"] as Array[StringName])
 	_check("同批货架去重（picked 过滤）", not dup.has(&"AFF_HP_UP"))

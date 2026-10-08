@@ -22,6 +22,9 @@ var _mirror_banner: String = ""                # mirror_formed 横幅记录
 func run(p_tree: SceneTree) -> void:
 	tree = p_tree
 	seed(42)
+	# R220 刀14 同步：本套件镜面预算断言按 .tres 原值 600 写——锁特效优先。
+	# 帧率优先分支（代码 override 165）由 r220_firephase ④刀14段锚定。
+	PerfGovernor.mode_override = 1
 	_boot_game_loop()
 	EventBus.laser_subbeam_spawned.connect(_on_subbeam_spawned)
 	EventBus.mirror_formed.connect(_on_mirror_formed)
@@ -63,6 +66,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_review1_fixes()
 	EventBus.laser_subbeam_spawned.disconnect(_on_subbeam_spawned)
 	EventBus.mirror_formed.disconnect(_on_mirror_formed)
+	PerfGovernor.mode_override = -1             # R220 刀14 同步：还原读 Meta.settings
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("R187 用例分账：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -603,13 +607,17 @@ func _test_laser_stack_hardcap() -> void:
 	_check("laser·验收2：副束目标两两互斥且落在 4 夹具内（不与主束目标重合）",
 		excl_ok and main_hit == int(e1.get("uid")),
 		"uids=%s main_hit=%d" % [str(uid_set.keys()), main_hit])
-	# 第 4 张：stack_max=3 拒绝 + DebugStats 计数 +1
+	# R226 有意契约变更（用户拍板「肉鸽别搞上限」）：第 4 张 MEC_SPLIT_PRISM 挂载成功
+	#（原 stack_max=3 拒绝拆除）——栈层副束计数 3→4 无帽；活束仍 4（本段不再 drive，
+	# 4 副束的目标耗尽重叠回退路径由 w4_prism 套件口径覆盖）
 	var rej0: int = DebugStats.get_counter(&"trait_attach_rejected_stack")
 	var ok4: bool = w4.attach_trait(prism)
-	_check("laser·验收2：第 4 张被 stack_max=3 拒绝",
-		not ok4 and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej0 + 1,
+	_check("laser·验收2：第 4 张成功（R226 无限叠——原 stack_max=3 拒绝拆除）",
+		ok4 and w4._sub_beam_count() == 4
+			and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej0,
 		"ok=%s" % str(ok4))
-	_check("laser·验收2：拒绝后段数仍==4（副束 cap 生效）", _live_beams(w4).size() == 4)
+	_check("laser·验收2：常驻束随挂载即时重构——4 层棱镜活束==5（第 4 副束目标耗尽走 ×0.5 重叠回退，laser_weapon.gd:18 既有语义）",
+		_live_beams(w4).size() == 5)
 	_kill_weapon(w4)
 	_clear_enemies()
 	# L5 曲线：×0.75（双敌——单敌会走重叠回退 0.5，非真副束寻的）
@@ -1673,8 +1681,9 @@ func _test_prism_capacity_cap() -> void:
 		prism.mirrors.size() == 5, str(prism.mirrors.size()))
 	var rej0: int = DebugStats.get_counter(&"trait_attach_rejected_stack")
 	var ok3: bool = prism.attach_trait(split)
-	_check("prism·验收5：第 3 张 SPLIT 被 stack_max=2 拒绝",
-		not ok3 and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej0 + 1)
+	_check("prism·验收5：第 3 张 SPLIT 挂载成功（R226 无限叠——原 stack_max=2 拒绝拆除），镜面仍 5（绝对帽在 register_mirror 侧不变）",
+		ok3 and prism.mirrors.size() == 5
+			and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej0)
 	var junk := MirrorImage.new()
 	var reg_ok: bool = _gl.player.register_mirror(junk, 5)
 	_check("prism·验收5：register_mirror 帽拒（第 6 面被拒 + mirror_rejected 计数）",

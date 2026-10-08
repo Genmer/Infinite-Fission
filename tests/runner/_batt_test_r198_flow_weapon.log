@@ -1,0 +1,73 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R198 战斗流程验证 ══════════
+── F4 r194-1 空波计数单源化 ──
+WARNING: [WaveDirector] 注册表无敌人数据，波 1 公式构成为空（降级不崩溃）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | F4① start_wave 回退分支：wave_composition_registry_empty 恰 +1（R198 独立计数器）
+ERROR: [WaveDirector] 波 1 零生成请求（构成空/注册表空）——R92 早清钳禁用，走满窗+缓冲（诊断 counter=wave_empty_composition）
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | F4② wave_empty_composition 归 tick 守卫侧：本波恰 +1（修前回退分支双写 +2）
+PASS | F4③ 同波续驱零增量（守卫旗单源每波一次）
+ERROR: [WaveDirector] 波 1 零生成请求（构成空/注册表空）——R92 早清钳禁用，走满窗+缓冲（诊断 counter=wave_empty_composition）
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | F4④ 合法表空 composition：守卫侧计 wave_empty_composition 一次（回退分支不触发）
+── F6 r195-1 激光副束序数归零 ──
+PASS | F6 前置：真卡挂载（res://resources/traits/AFF_PIERCE.tres）
+PASS | F6 前置：真卡挂载（res://resources/traits/MEC_SPLIT_PRISM.tres）
+PASS | F6 前置：真卡挂载（res://resources/traits/SYN_PIERCE_EVO.tres）
+PASS | F6 前置：try_fire 出主束+副束（棱镜 1 副）
+PASS | F6 前置：副束预算恒 1（_hit_budget 副束门不动）
+PASS | F6① 主束序数原样：首目标 pierce_index==2（S4 口径零改动）
+PASS | F6② 主束次目标 pierce_index==3（贯穿累进保持）
+PASS | F6③ 主束 SYN 贡献保持：首跳 ×1.2 / 次跳 ×1.4（mult_product 实录）
+PASS | F6④ 副束首目标 ctx.pierce_index==1（R198 口径：序数加成仅主束）
+PASS | F6⑤ SYN_PIERCE_EVO 副束贡献==0（副束全部结算 mult_product 恒 1.0）
+PASS | F6⑥ 副束乘区逐结算恒 1.0（无任何 SYN 池入账）
+PASS | 前置：GameLoop Boot → MENU → start_run
+── F1 二aw-1 遗物随继续局恢复 ──
+PASS | F1 前置：局内 activate REL_MIDAS
+PASS | F1① serialize_run 含 relics 键
+PASS | F1② relics id 集与 owned 一致且纯基本类型（{id:String}）
+PASS | F1③ 回菜单后 owned 清（_reset_run_state 序——恢复必须在其后的前置）
+PASS | F1④ continue_run 成功（读档恢复进局）
+PASS | F1⑤ 恢复后 owned id 集一致（REL_MIDAS）
+PASS | F1⑥ 常驻位生效（xp_mult_factor==1.2 > 1）
+PASS | F1⑦ 旧档（无 relics 键）continue 成功不崩
+PASS | F1⑧ 旧档恢复后 owned 空（空表兼容）
+── F2 二aw-2 每击谐振慢速武器补偿 ──
+PASS | F2 前置：激活 REL_ATTACK_CDR（.tres 新键 fire_mult_max 过加载）
+PASS | F2 前置：fire_mult_max 参数在档（10.0）
+PASS | F2 前置：激活拉满预算存款（cap=0.6=60 击，回充口径不变）
+PASS | F2① 间隔 0.5s 单击 cdp_eff=0.1s（技能 CD 直减同值）
+PASS | F2② 间隔 0.1s 单击 cdp_eff=0.02s
+PASS | F2③ 每秒收益均 ≈0.2s（2×0.1 == 10×0.02，预算 20 击/s 封顶）
+PASS | F2④ 间隔 5s 单击触顶 ×10 帽（cdp_eff=0.1s，不超帽）
+PASS | F2⑤ 快速武器 0.02s 单击仍 0.01s（clampf 下限 1.0，不低于改前）
+PASS | F2⑥ 守卫链：技能就绪不计费（credits 不变）
+PASS | F2⑦ 存款 <cdp 丢整击（排空前恰 4 击计费，第 5 击拒计）
+PASS | F2⑧ 无参直调=改前口径 0.01s（历史套件直调兼容）+ tick 回充封帽 0.6
+PASS | F2⑨ 计费后存款按 cdp 网格递减（0.6−0.01=0.59，扣减口径不变）
+── F3 R192-low4 告警闸每局复位 ──
+PASS | F3 前置：真管线（DamagePipeline 实例，闸字段在码）
+PASS | F3 前置：reset_run_alarms 在码
+PASS | F3① 首局超线触发 → 告警广播恰 1 次
+PASS | F3② 未 reset 对照：闸已闭仅记审计，不重播（仍 1 次）
+PASS | F3③ reset 后次局同条件再触发仍广播（两局各 +1）
+PASS | F3④ R_rxn 超线触发广播且计数 +1
+PASS | F3⑤ R_rxn 未 reset 对照：不重播
+PASS | F3⑥ R_rxn reset 后再广播（双闸一并复位；reset 后首条超线 rxn 双闸 co-fire +2）
+── F5 P2-escort 护航舰 game_delta ──
+PASS | F5 前置：drone 在列且寿命满 10s
+PASS | F5① 引擎自驱退出：_process 虚方法不再声明（引擎不再自驱）
+PASS | F5② player.tick(1.0) → _life_left 9.0（副本 delta 直源）
+PASS | F5③ 0.5+0.5 → _life_left 8.0（逐值累加无漂移）；浮动相位 _anim_t 自累加 2.0（脱离墙上时钟）
+PASS | F5④ 开火节拍推进：第二拍触发后 _fire_left 重置 0.55s（0.55s 一发口径保持）
+PASS | F5⑤ 零 delta 冻结：_life_left/_anim_t 不动（同步冻结语义）
+PASS | F5⑥ 到期回收：寿命尽 queue_free 置位
+PASS | F5⑦ 预警闪烁值域保持 a∈[0.39,1.0]
+────────────────────────────────────────
+汇总：PASS 53 / FAIL 0（共 53 项）
+════════════════════════════════════════
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

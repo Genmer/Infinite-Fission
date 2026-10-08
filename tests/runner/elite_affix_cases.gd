@@ -132,10 +132,16 @@ func _test_roll_gate() -> void:
 		has_affix = has_affix or not e.elite_affixes.is_empty()
 		double_seen = double_seen or e.elite_affixes.size() == 2
 		for a in e.elite_affixes:
-			_check_inner(a in ["affix_ring", "affix_sniper", "affix_trapper"],
+			# R202 收口：投放池已是五词缀齐（enemy_spawner.gd ELITE_AFFIX_POOL——
+			# charger/caller 二批已下放），原三词缀白名单为 R39 旧契约，rolls 命中
+			# charger/caller 即误报 INNER-FAIL；且 _inner_fail 从未入 fail_count，
+			# 越池只打印不判红。白名单对齐真源 + 抽样完落正式断言（真越池=FAIL）。
+			_check_inner(a in ["affix_ring", "affix_sniper", "affix_trapper",
+					"affix_charger", "affix_caller"],
 				"词缀 %s 越池（扫线/狂暴未下放）" % str(a))
 		(_gl.pools[&"enemy"] as EnemyPool).release(e)
 	_check("wave8+ 精英获得词缀", has_affix)
+	_check("R202：24 次抽样词缀全在五词缀池（越池即红）", not _inner_fail)
 	_check("wave15+ 出现双词缀（24 次抽样 ≥1）", double_seen)
 	var boss: Enemy = _make_elite(10)
 	boss.set_elite_affixes([])               # 清掉 make 时 roll 的词缀（测 Boss 判定本身）

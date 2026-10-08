@@ -182,11 +182,23 @@ func _test_muzzle_alignment() -> void:
 	_check("近战：力场圆心仍在角色中心（不受化身影响）",
 		melee_muzzle.distance_to(_gl.player.global_position) < 0.5,
 		"%.1f" % melee_muzzle.distance_to(_gl.player.global_position))
-	# 激光保持角色中心（持续束锚定）
+	# R201 契约翻案：激光族同样化身出膛（原「锚定角色中心」为 R25 旧契约——且当时
+	# 断言靠「_add 后未驱化身层 → avatar_global 回退 null → 本体位」空转通过）。
+	# 驱层后断新契约：muzzle == 化身枪口 ±2px ∧ 远离玩家中心 ≥30px（mirror_muzzle
+	# C②/C③ 同口径；W4 化身环半径 58+前伸 18 随朝向 40~76px）
+	for i in range(3):
+		layer_process()
 	var laser: WeaponBase = _add(&"W4_pulse_beam")
+	for i in range(3):
+		layer_process()
 	var laser_muzzle: Vector2 = laser.call("muzzle_position")
-	_check("激光：束锚定仍在角色中心", laser_muzzle.distance_to(
-		_gl.player.global_position) < 0.5)
+	var laser_avatar: Vector2 = _gl.player.call("weapon_muzzle_global", laser)
+	_check("激光（R201）：束锚定化身枪口（≠玩家中心）",
+		laser_muzzle.distance_to(laser_avatar) < 2.0
+		and laser_muzzle.distance_to(_gl.player.global_position) >= 30.0,
+		"muzzle=%s avatar=%s player=%s d=%.1f" % [str(laser_muzzle), str(laser_avatar),
+			str(_gl.player.global_position),
+			laser_muzzle.distance_to(_gl.player.global_position)])
 
 
 # ── R33 无敌人不开火门 ────────────────────────────────────────────

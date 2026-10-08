@@ -48,6 +48,9 @@ var _wd_counter: int = 0                       # WeaponData id 确定性计数�
 func run(p_tree: SceneTree) -> void:
 	tree = p_tree
 	seed(42)                                       # 全局 RNG 固定种子（散射抖动确定性）
+	# R220 刀13① 同步：本套件弹寿命断言按旧值口径写（lifetime ×1.5）——锁特效优先
+	#（.tres 原值路径）。帧率优先分支（×1.15）由 r220_firephase ④段锚定。
+	PerfGovernor.mode_override = 1
 	_ensure_autoloads()
 	_setup_test_effects()
 	EventBus.chain_fused.connect(_on_chain_fused)
@@ -87,8 +90,9 @@ func run(p_tree: SceneTree) -> void:
 	_test_orbit_weapon()                          # 要点 10-A
 	_teardown_world()
 	_setup_world()
-	_test_arc_slash()                             # 要点 10-B
+	_test_arc_slash()                           # 要点 10-B
 	_teardown_world()
+	PerfGovernor.mode_override = -1             # R220 刀13 同步：还原读 Meta.settings
 	_summary()
 
 
@@ -397,16 +401,18 @@ func _test_trait_stack_core() -> void:
 	_check("挂载：同 ID 第 2 次叠层成功（layers=2）",
 		s1.attach(d1) and (s1.size() == 1 and s1.traits[0].layers == 2))
 	var rej_stack: int = DebugStats.get_counter(&"trait_attach_rejected_stack")
-	# R196 有意契约变更（原「第 4 次拒绝」）：ADD 池帽放宽至 stack_max + OVERCAP_EXT_MAX
-	# = 3+5 = 8（trait_stack.gd），第 4~8 层超帽可叠（×0.7 计贡献），第 9 层才拒绝 + 计数
+	# R226 有意契约变更（用户拍板「肉鸽别搞上限」）：同 ID 叠层帽全池拆除——第 3~9 层
+	# 全额可叠（R196 的 stack_max+5 帽与 ×0.7 折算一并退役），trait_attach_rejected_stack
+	# 计数器退役恒不增长
 	var att3 := s1.attach(d1)                       # 第 3 层（stack_max 质变层）
 	var s1_ext := true
-	for i in range(TraitStack.OVERCAP_EXT_MAX):
-		s1_ext = s1_ext and s1.attach(d1)           # 第 4~8 层（超帽延伸全成功）
-	_check("挂载：stack_max=3 内第 3 次仍成功（layers=3），第 4~8 层超帽延伸成功（layers=8），第 9 次拒绝 + 计数",
-		att3 and s1_ext and s1.traits[0].layers == 8
-			and ((not s1.attach(d1))
-				and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej_stack + 1))
+	for i in range(6):
+		s1_ext = s1_ext and s1.attach(d1)           # 第 4~9 层（原帽外区间全成功）
+	_check("挂载：stack_max=3 内第 3 次仍成功（layers=3），第 4~9 层无限叠成功（layers=9），无拒绝计数",
+		att3 and s1_ext and s1.traits[0].layers == 9
+			and s1.attach(d1)
+			and s1.traits[0].layers == 10
+			and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej_stack)
 	# 单栈上限 12
 	var s2 := TraitStack.new()
 	var all_ok := true

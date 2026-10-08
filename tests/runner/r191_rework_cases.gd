@@ -384,10 +384,11 @@ func _test_reaction_note_source() -> void:
 
 
 # ══ C. rxn｜registry 数据 + 挂载形态门 + 无难度门节奏（R191#4 数据/门侧） ══
-func _form_weapon(p_form: int) -> WeaponBase:
+func _form_weapon(p_form: int, p_id: StringName = &"") -> WeaponBase:
 	# p_form 锁 WeaponBase——真件武器仅 setup 不开火（四形态 setup 均无池依赖；pkg3 同构）
+	# R243 迁移：可选 p_id（excluded_weapons 门负向用例需按武器 id 构造 W8 桩）
 	var d := WeaponData.new()
-	d.id = StringName("W_RXN_FORM_%d" % p_form)
+	d.id = p_id if String(p_id) != "" else StringName("W_RXN_FORM_%d" % p_form)
 	d.form = p_form
 	var w: WeaponBase
 	match p_form:
@@ -411,8 +412,12 @@ func _test_rxn_data_and_gates() -> void:
 	for id in [&"ELE_IGNITE", &"ELE_SHOCK", &"ELE_FREEZE"]:
 		var td := registry.get_trait(id)
 		var forms: Variant = td.params.get("required_forms", null) if td != null else null
-		_check("C1 registry：%s 在册且 required_forms == [0, 1, 2]（近战死卡下架）" % id,
-			td != null and forms is Array and (forms as Array) == [0, 1, 2], str(forms))
+		# R243 §6.2 迁移：ELE 七卡 required_forms 扩 [0,1,2,3]；W8 附着通道（R186 拆除
+		# 维持）改由 excluded_weapons 按武器 id 精确下架——required_forms 不再承担 W8 锁
+		var excluded: Variant = td.params.get("excluded_weapons", null) if td != null else null
+		_check("C1 registry：%s 在册且 required_forms == [0, 1, 2, 3] + excluded_weapons [W8]（R243 迁移）" % id,
+			td != null and forms is Array and (forms as Array) == [0, 1, 2, 3]
+				and excluded is Array and (excluded as Array) == [&"W8_orbit_field"], str(forms))
 	for id2 in [&"ELE_REACTION_VOID", &"ELE_ARC_SURGE"]:
 		var td2 := registry.get_trait(id2)
 		_check("C2 registry：%s 无 required_forms 键（全形态保留，不设门）" % id2,
@@ -438,10 +443,15 @@ func _test_rxn_data_and_gates() -> void:
 			gate_ok = gate_ok and CardGenerator.mount_gate_allows(t3, w)
 			w.free()
 		_check("C5 形态门：%s 投射物三形态（弹道/激光/自导）全放行" % id3, gate_ok)
+		# R243 §6.2 迁移：form 3 入 required_forms → 一般近战放行；W8 附着 R186 拆除维持
+		# ——改由 excluded_weapons 按武器 id 精确拒之（先例 = MEC_KNOCK 排 W9）
 		var melee := _form_weapon(GameConst.WeaponForm.MELEE)
-		_check("C6 形态门：%s 近战拒绝上架（W8 附着 R186 有意拆除）" % id3,
-			not CardGenerator.mount_gate_allows(t3, melee))
+		var w8 := _form_weapon(GameConst.WeaponForm.MELEE, &"W8_orbit_field")
+		_check("C6 形态门：%s 近战放行 + W8 拒绝上架（R243 迁移——excluded_weapons 精确下架）" % id3,
+			CardGenerator.mount_gate_allows(t3, melee)
+				and not CardGenerator.mount_gate_allows(t3, w8))
 		melee.free()
+		w8.free()
 	# 无难度门（rxn 仲裁口径：反应无难度/等级门，唯一门=卡架来源侧——结算核每帧无条件运行）
 	Meta.set_run_map(&"")                      # 无局口径注入（_run_map 默认 FIRST_MAP_ID）
 	_check("C7 无难度门：无局口径全开（map_index = -1，结算核零难度分支）",
@@ -489,11 +499,11 @@ func _test_tips_detail_card() -> void:
 		if idx == 0 and note_label != null:
 			# 布局契约（autowrap 行高引擎按行数强制最小——高断言取不小于请求行高）
 			var head := section.get_child(0) as Panel
-			_check("A13 机制句行 (58,62) 宽 508 + WORD_SMART + 12pt INK_SOFT + IGNORE + head 100",
+			_check("A13 机制句行 (58,62) 宽 508 + WORD_SMART + 13pt INK_SOFT + IGNORE + head 100（R203 12→13）",
 				note_label.position == Vector2(58.0, 62.0)
 				and note_label.size.x == 508.0 and note_label.size.y >= 34.0
 				and note_label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART
-				and int(note_label.get_theme_font_size("font_size")) == 12
+				and int(note_label.get_theme_font_size("font_size")) == 13
 				and note_label.get_theme_color("font_color") == PopPalette.INK_SOFT
 				and note_label.mouse_filter == Control.MOUSE_FILTER_IGNORE
 				and head != null and head.custom_minimum_size == Vector2(576.0, 100.0),
@@ -1462,12 +1472,16 @@ func _test_channel_unit() -> void:
 	ctx_fir.event = GameConst.TraitEvent.ON_HIT
 	ctx_fir.projectile = p_fir
 	stack.dispatch(GameConst.TraitEvent.ON_HIT, ctx_fir)
-	_check("H1a 火宿主 → attach_request.element == FIR（修复前被挂载序末位覆写为雷）",
-		int(ctx_fir.attach_request.get("element", -1)) == GameConst.Element.FIR,
+	# R243 §6.3 迁移：attach_request 单槽机制升级为 attach_requests 数组全元素并发；
+	# 本夹具 ctx 未投递 host_elements（空池 = 无限制）→ 双卡按挂载序并发输出
+	_check("H1a 双卡并发 → attach_requests 按挂载序 [{FIR},{LTG}]（R243 迁移——全元素并发）",
+		ctx_fir.attach_requests.size() == 2
+			and int(ctx_fir.attach_requests[0].get("element", -1)) == GameConst.Element.FIR
+			and int(ctx_fir.attach_requests[1].get("element", -1)) == GameConst.Element.LTG,
+		str(ctx_fir.attach_requests))
+	_check("H1b 单槽 = 末位条目（R243 迁移——后位覆写兼容：{LTG, 22.0, {}}）",
+		ctx_fir.attach_request == ctx_fir.attach_requests[-1],
 		str(ctx_fir.attach_request))
-	_check("H1b 火宿主请求逐字节 == {FIR, 22.0, {}}",
-		ctx_fir.attach_request == {"element": GameConst.Element.FIR,
-			"value": 22.0, "overrides": {}}, str(ctx_fir.attach_request))
 	var p_ltg := _rxn_spawn_proj({"position": Vector2(150, 150), "velocity": Vector2.ZERO,
 		"lifetime": 10.0, "pierce": 1, "hitbox_radius": 6.0,
 		"element": GameConst.Element.LTG, "attach_value": 0.0, "team": 0})
@@ -1573,8 +1587,10 @@ func _test_overload_chain() -> void:
 	_check("H4b 命中 → 火槽 +22（当发元素附着上槽）",
 		st != null and _approx(st.gauges[GameConst.Element.FIR], 22.0),
 		"fir=%s" % str(st.gauges[GameConst.Element.FIR] if st != null else -1.0))
-	_check("H4c 雷槽未被错元素串写（恒 0）",
-		st == null or _approx(st.gauges[GameConst.Element.LTG], 0.0))
+	# R243 §6.3 迁移：一击全池并发——第 1 发即双槽附着（不再等当发随机交替）
+	_check("H4c 第 1 发双槽并发：雷槽同步 +22（R243 迁移——attach_requests 全池输出）",
+		st != null and _approx(st.gauges[GameConst.Element.LTG], 22.0),
+		"ltg=%s" % str(st.gauges[GameConst.Element.LTG] if st != null else -1.0))
 	# 第 2 发：当发随机元素 = 雷（交替）
 	var p2 := _rxn_spawn_proj({"position": Vector2(360, 640), "velocity": Vector2(100, 0),
 		"lifetime": 10.0, "pierce": 1, "hitbox_radius": 6.0,
@@ -1582,9 +1598,10 @@ func _test_overload_chain() -> void:
 		"panel_snapshot": {"base_atk": 100.0}, "trait_stack": stack.copy_runtime()})
 	_bump_frame()
 	p2.tick(DT)
-	_check("H4d 双槽成对（火=22 且 雷=22 → has_both 达成）",
-		st != null and _approx(st.gauges[GameConst.Element.FIR], 22.0)
-			and _approx(st.gauges[GameConst.Element.LTG], 22.0),
+	# R243 §6.3 迁移：第 2 发再各 +22（每击全池并发；has_both 于第 1 发已达成）
+	_check("H4d 第 2 发双槽累加（火=44 且 雷=44）",
+		st != null and _approx(st.gauges[GameConst.Element.FIR], 44.0)
+			and _approx(st.gauges[GameConst.Element.LTG], 44.0),
 		"fir=%s ltg=%s" % [str(st.gauges[GameConst.Element.FIR] if st != null else -1.0),
 			str(st.gauges[GameConst.Element.LTG] if st != null else -1.0)])
 	# 帧末统一检测（E-07）：过载 RXN_FIR_LTG = 120%ATK × 快照 100

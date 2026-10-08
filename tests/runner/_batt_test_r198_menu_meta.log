@@ -1,0 +1,52 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R198 菜单成长组验收 ══════════
+PASS | 前置：MenuScreen/registry 就绪
+── A 二aw-4：养成面板复活文案对齐 REVIVE_INVULN_S=3.0 ──
+PASS | A1 revive 项在册且 desc 含「3s 无敌」
+PASS | A2 revive desc 无「2s」残留（全表唯一文案源）
+PASS | A3 真值锚：player.gd 含「REVIVE_INVULN_S := 3.0」（文案从实现取值）
+── B 二aw-5：fission/echo 专属技能图标（贴纸口径 64px） ──
+PASS | B1 10 角色 skill_icon 64px 画布全就绪（既有口径）
+PASS | B2 10 角色 skill_icon 像素采样哈希两两互异
+PASS | B3 fission 非默认星（与 `_:` 通用星产物不等）
+PASS | B4 echo 非默认星（与 `_:` 通用星产物不等）
+PASS | B5 默认分支保留（未知 id 仍落通用星兜底）
+── F R192-low8：RxnMult autowrap + 高 34 ──
+PASS | F1 反应页 RxnMult 节点定位
+PASS | F2 RxnMult.autowrap_mode==AUTOWRAP_WORD_SMART（折行已设）
+PASS | F3 RxnMult 高 18→34（宽 148 不变）
+PASS | F4 绽放（RXN_HYD_DEN）倍率行三段串非空（GameConst mult_fmt 真源不动）
+── G P2-skillcopy：诺亚 skill_desc 12% 伴随火力 ──
+PASS | G1 noah skill_desc 含「12%」（伴随火力括注）
+PASS | G2 noah skill_desc 含「伴随火力」措辞
+PASS | G3 选人卡 noah 技能行同现「12%」（menu_screen 渲染链）
+PASS | G4 技能行换行区自检：autowrap 已设且高 36（y72..108 ⊂ 行高 140）
+── C 二aw-6：echo 解锁角标 + toast（边沿信号） ──
+PASS | C1 硬通关（HARD）结算前无档 → echo_unlocked 恰发一次
+PASS | C2 大厅「角色 ·新」角标置位（复用 fissioner 处理器）
+PASS | C3 hard_cleared 落档翻真（#1 分档键）
+PASS | C4 fissioner 边沿未误触（普通门不吃 #1 分档键——R186 口径不回退）
+PASS | C5 已困难通关重复结算 → echo_unlocked 不重发（边沿恰一次）
+PASS | C6 每日局硬通关结算 → 不发 echo_unlocked（分流语义对齐 fission）
+PASS | C7 首次普通通关结算 → fissioner_unlocked 恰发一次（R186 行为不回退）
+PASS | C8 已普通通关重复结算 → fissioner_unlocked 不重发
+── D 二aw-7：fission 锁定句溢出收敛 + autowrap 兜底 ──
+PASS | D1 fission 行 name_l 定位
+PASS | D2 fission hint 以「通关普通难度解锁」开头（压缩句式）
+PASS | D3 fission hint 已删「当前最佳/任一地图」段（取舍：记录/成就面可见）
+PASS | D4 20pt 估宽 ≤406px 格（规划式估宽 + 真字型实测双口径，单行不裁字）
+PASS | D5 name_l.autowrap_mode==AUTOWRAP_WORD_SMART（兜底折行已设）
+PASS | D6 name_l 高度 28 不变（未触发兜底=真单行）
+PASS | D7 打开选人面板清除「·新」角标逻辑不变（:572 同区）
+── E r195-4：LobbyScroll 横向居中锚 ──
+PASS | E1 LobbyScroll/LobbyPanel 节点定位
+PASS | E2 居中锚在位：anchor_l==anchor_r==0.5 且 offset ±296
+PASS | E3 720 域恒等：卡内左缘 28 / 右缘 620 / 宽 592（零变化）
+PASS | E4 纵向锚不动：卡内 y=156 / 高 812（下锚随卡底）
+PASS | E5 960 宽画布域：滚动列中点==卡中点（居中恒等式，±0.5px）
+PASS | E6 960 宽画布域：列左缘 > 28（钉左旧位，右侧留白消除）
+PASS | E7 960 宽画布域：列宽不变 592（±296 偏移恒定）
+────────────────────────────────────────
+汇总：PASS 39 / FAIL 0（共 39 项）
+验收汇总：39/39 通过

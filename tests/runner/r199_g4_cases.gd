@@ -108,26 +108,27 @@ func _test_w3_truth() -> void:
 		"%.2f -> %.2f" % [dps_l3, dps_l4])
 
 
-# ── B. N05+F08 暂停面板词条总值：超帽层 ×0.7 折算（aggregate_panel 同口径） ──
+# ── B. N05+F08 暂停面板词条总值：面板显示=实际生效值（aggregate_panel 同口径；
+#      R226 超帽折算退役——超帽态=全额，显示一致性契约不变） ──
 func _test_panel_overcap_desc() -> void:
-	print("── B. N05+F08 暂停面板超帽折算（R199） ──")
+	print("── B. N05+F08 暂停面板总值一致性（R199 口径，R226 全额化） ──")
 	var t: TraitData = _gl.registry.get_trait(&"AFF_ATK_UP")
 	var w: BallisticWeapon = BallisticWeapon.new()
 	tree.get_root().add_child(w)
 	w.setup(_gl.registry.get_weapon(&"W1_pistol"), null, {})
-	# 超帽态：stack_max=3 + OVERCAP_EXT_MAX=5 → 8 层（体检探针 A0 同场景）
-	for i in range(3 + TraitStack.OVERCAP_EXT_MAX):
+	# 多层态：8 层全额（R226 起 8×0.15=1.20——原「前 3 全额+超帽 ×0.7=0.975」退役）
+	for i in range(8):
 		w.attach_trait(t)
 	var agg: float = float(w.trait_stack.aggregate_panel().get("add_atk", 0.0))
-	_check("B0 真值源 aggregate_panel = 0.975（前 3 层全额 + 超帽 5 层 ×0.7）",
-		absf(agg - 0.975) < 0.001, "agg=%.4f" % agg)
+	_check("B0 真值源 aggregate_panel = 1.20（8 层全额——R226 超帽折算退役）",
+		absf(agg - 1.20) < 0.001, "agg=%.4f" % agg)
 	var tb: TraitBase = w.trait_stack.traits[0]
 	var desc: String = _gl.pause_overlay._trait_desc_bbcode(tb)
 	var rx: RegEx = RegEx.create_from_string("\\+([\\d.]+)%")
 	var m: RegExMatch = rx.search(desc)
 	var shown: float = float(m.get_string(1)) if m != null else -1.0
-	_check("B1 超帽态面板显示 +97.5%（实际生效值，R199 前虚标 +120%）",
-		absf(shown - 97.5) < 0.11, "显示 %s%% vs 实际 97.5%%" % str(shown))
+	_check("B1 多层态面板显示 +120%（显示=实际生效值，N05+F08 契约保持）",
+		absf(shown - 120.0) < 0.11, "显示 %s%% vs 实际 120%%" % str(shown))
 	w.queue_free()
 	# 未超帽回归护栏：2/3 层仍全额（2×0.15=0.30 → +30%）
 	var w2: BallisticWeapon = BallisticWeapon.new()

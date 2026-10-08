@@ -15,6 +15,12 @@ var _gl: GameLoop = null
 func run(p_tree: SceneTree) -> void:
 	tree = p_tree
 	seed(42)
+	# R202 收口：本套三断言（死亡弹爆/枪口闪光/闪光计时）断的是高档表现，而消费口
+	# 全走 fx_quality 门（enemy.gd:852 DeathPop 需 _fx_q()>0；ballistic_weapon.gd:77
+	# 低档直接 return 不显闪）。headless 档位存 user://meta_save_test.cfg 跨套件/
+	# 探针残留（probe_r202_popup.gd 环境还原、render_load_probe C 段离场 0），残留 0
+	# 时三断言全误伤。开跑前显式钉高档，断言语义（高档出厂观感）不变。
+	Meta.set_setting("fx_quality", 2)
 	_boot_game_loop()
 	_test_skill_fx_and_ratio()
 	_test_skill_cast_broadcast()
