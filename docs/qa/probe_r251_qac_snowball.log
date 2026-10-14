@@ -1,0 +1,21 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+════════ QA丙探针②：橙盾扩展 boss 雷海+自爆海 叠加滚雪球 ════════
+── 阶段A：6 颗 BossMine 雷海（威胁圈内武装、爆时未伤人）逐发结算 ──
+OBSERVE-PASS | A-雷0 结算 | exploded=true dodge_events=1 stacks=1 left=10.00
+OBSERVE-PASS | A-雷1 结算 | exploded=true dodge_events=2 stacks=2 left=10.00
+OBSERVE-PASS | A-雷2 结算 | exploded=true dodge_events=3 stacks=3 left=10.00
+OBSERVE-PASS | A-雷3 结算 | exploded=true dodge_events=4 stacks=4 left=10.00
+OBSERVE-PASS | A-雷4 结算 | exploded=true dodge_events=5 stacks=5 left=10.00
+OBSERVE-PASS | A-雷5 结算 | exploded=true dodge_events=6 stacks=5 left=10.00
+── 阶段B：6 只 E4_volatile 自爆海（E6_boss3 召唤批次口径）逐发结算 ──
+OBSERVE-PASS | B-爆0 结算 | armed=true dodge_events=7 stacks=5 left=10.00
+OBSERVE-PASS | B-爆1 结算 | armed=true dodge_events=8 stacks=5 left=10.00
+OBSERVE-PASS | B-爆2 结算 | armed=true dodge_events=9 stacks=5 left=10.00
+OBSERVE-PASS | B-爆3 结算 | armed=true dodge_events=10 stacks=5 left=10.00
+OBSERVE-PASS | B-爆4 结算 | armed=true dodge_events=11 stacks=5 left=10.00
+OBSERVE-PASS | B-爆5 结算 | armed=true dodge_events=12 stacks=5 left=10.00
+── 阶段C：满层吸收验证（每层吞一击；两击间清无敌帧隔离变量）──
+OBSERVE-PASS | C-1 满层连续两击逐层吞（hp 不动=层在吞；层数每击 -1） | stacks_before=5 hp 60.0→60.0→60.0 mid=4 after=3
+OBSERVE-PASS | Z-1 汇总：12 个爆源全躲 → 事件数/最终层数/剩余时长 | dodge_events=12 stacks=3 left=10.00（帽 5、整体刷新 10s）
+════════ 探针②结束（OBSERVE 行为观测数据，不作验收门） ════════

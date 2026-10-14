@@ -1,0 +1,32 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R237（接触伤害去物理化清退刀） 回归 ══════════
+── ① off 默认零扰动（信号通道原语义） ──
+  PASS | ①a 默认旗=false（boot 后读数——vc41 翻开前源默认）
+  PASS | ①b 池敌 HitArea 构建在位（boot-off 实例——_hit_area!=null 信号通道完整）
+  PASS | ①c off 态直驱 tick 不结算（距离内无物理步——R202 ② 白名单语义锁）
+── ② on 态构建清退（新构敌零 HitArea） ──
+  PASS | ②a on 态新构敌 _hit_area==null（敌侧物理面零注册）
+── ③ on 态行为（双半径直判） ──
+  PASS | ③a on 态距离内 tick 结算（hp 减 contact_dmg=25——直驱即结算，混态旗优先）
+  PASS | ③b on 态无敌帧节流（第二 tick 零结算——contact_tick 闸不变）
+  PASS | ③c on 态出圈不结算（reach+2 距离²比较口径）
+  PASS | ③d on 态玩家 _dead 闸（死亡态零结算——闸在 take_contact_damage 内）
+── ③e off 态真物理帧孪生（r202_g3 ②a 同款驱动） ──
+  PASS | ③e off 态物理孪生（信号 arm 后 tick 结算同减量 25——双模等价对拍）
+── ④ player 源级锚（惰化块恰 1 处） ──
+  PASS | ④a player 源级惰化锚（if Enemy.CONTACT_RADIAL: → layer 0+双 monitoring 关 恰 1 处）
+  PASS | ⑤ 旗复位=源默认关态（teardown 后 CONTACT_RADIAL==false）
+  PASS | ⑥ 套件总项数（EXPECTED=12——R231 假绿教训）
+────────────────────────────────────────
+汇总：PASS 12 / FAIL 0（共 12 项）
+验收汇总：12/12 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 96 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

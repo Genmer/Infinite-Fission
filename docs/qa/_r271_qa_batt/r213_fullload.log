@@ -1,0 +1,59 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R213 满载渲染四案回归 ══════════
+── ① 满载门真值与覆写口 ──
+  PASS | 门限常量 FULLLOAD_ENEMY_MIN == 80（素材 A~D 同判据）
+  PASS | 真值门源级锚（mobile ∧ live_count ≥ 门限——headless 不可注入 mobile 特性）
+  PASS | 评审#2 滞回结构在位（开 ≥80 / 关 <72 + 锁存态——防 79/80 震荡闪烁）
+  PASS | headless 缺省门=关（桌面基准零扰动；override=-1 真值）
+  PASS | 覆写口=1 → 门开（headless 模拟满载）
+  PASS | 覆写口=0 → 门关（模拟敌数回落）
+  PASS | 覆写口复位 -1（真值门）
+── ② A 状态件降档 ──
+  PASS | 高档预建：感电弧建件 2（>0，建满前提）
+  PASS | A 门开：_state_fx_q()==0（状态件档归 0）
+  PASS | 满载降档：电弧全隐（预算 0——降档显隐机制）
+  PASS | 满载降档：落雷不可见（低档关）
+  PASS | 满载点燃：余烬光晕同隐（R217 修轮——异贴图桶内断批根修）
+  PASS | 满载点燃：火苗全隐（档 0 预算）
+  PASS | 满载点燃：本体染色保留（self_modulate ≠ 纯白——「在烧」读感）
+  PASS | 门回落：_state_fx_q() 回 _fx_q()（高档 2）
+  PASS | 门回落：火苗复显（敌数回落自动恢复）
+── ③ C 闪白去 shader 化 ──
+  PASS | 满载闪白：不挂 ShaderMaterial（批处理不打断）
+  PASS | 满载闪白：texture==强白变体 且 modulate==WHITE（R237 闪白批化契约迁移——原 modulate 白乘断言改读贴图通道）
+  PASS | 满载闪灭：modulate 复位纯白 + texture 复位本体（R237 契约迁移）
+  PASS | 回落闪白：材质挂回（原路径）
+  PASS | 回落闪白：满载期白乘残留被复位
+  PASS | 窗内切满载：材质摘除 + 强档白变体贴图接管（R237 闪白批化契约迁移）
+  PASS | QA-R213-001：门关后归零口复位白乘/白变体（池复用零残留——R237 契约迁移含贴图通道）
+── ④ D XP 并珠 ──
+  PASS | 门关：两次掉落两颗独立珠
+  PASS | 门开：新掉落不占新珠（并最近）
+  PASS | 并珠目标=最近碎片
+  PASS | 数值守恒：面值合计 == 掉落合计（10+20+40）
+  PASS | 空场边界：无活跃碎片走新珠
+── ⑤ 定标遥测 ──
+  PASS | diag_counts 新键 status_enemies 在位（int ≥0）
+  PASS | 状态敌计数真实值（带元素 1/2）
+  PASS | 诊断行含「态」段（A 案定标口径）
+  PASS | 拆键标签在位（网=grid_rebuild / 磁=feel_shard）
+  PASS | 九段序齐（r207 已锁 size；本套锁两新键在序）
+── ⑥ B 源级锚 + 桌面零扰动 ──
+  PASS | B1 源级锚：普命中粒子满载 return（CRIT 保留）
+  PASS | B1 顿帧/震屏/色差不受门影响（return 在 trauma/chromatic 之后）
+  PASS | B2 源级锚：DOT 跳伤表现满载关（门在预算消费点之前）
+  PASS | 桌面零扰动：fx_quality=0 时 _state_fx_q()==_fx_q()
+  PASS | 桌面零扰动：fx_quality=1 时 _state_fx_q()==_fx_q()
+  PASS | 桌面零扰动：fx_quality=2 时 _state_fx_q()==_fx_q()
+  PASS | 音效门不换口（SfxBank 四处仍 _fx_q——满载不静音）
+────────────────────────────────────────
+汇总：PASS 40 / FAIL 0（共 40 项）
+验收汇总：40/40 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 98 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

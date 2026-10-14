@@ -1,0 +1,32 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══ QA probe R257: demon@hard full journey timeline ══
+[pre] unlocked(demon,1)=true pool(tier)=[&"AFF_MULTI"] auto_restart_mode=0
+[T+74ms] 祝福面板出现（pending=true）
+[T+170ms] PLAYING 开局：hp=60 首帧敌=15
+[T+170ms] state -1→2
+[T+170ms] 首敌入场（15 只）
+[T+5013ms] state 2→4
+[T+5492ms] state 4→2
+[T+9763ms] 首次掉血 hp 60→31
+[GO 边沿 0] T+10972ms _root=true visible=true hud=HUD:<CanvasLayer#199246222692>
+[T+10972ms] state 2→5
+[T+10972ms] 死亡→GAME_OVER
+[GO 边沿 1] T+10994ms _root=true visible=true hud=HUD:<CanvasLayer#199246222692>
+[GO 边沿 2] T+10996ms _root=true visible=true hud=HUD:<CanvasLayer#199246222692>
+[GO 边沿 3] T+11006ms _root=true visible=true hud=HUD:<CanvasLayer#199246222692>
+[GO 边沿 4] T+11008ms _root=true visible=true hud=HUD:<CanvasLayer#199246222692>
+[GO 边沿 5] T+11022ms _root=true visible=true hud=HUD:<CanvasLayer#199246222692>
+[post] 死后 5s：state=5 结算屏可见=true 倒计时=0.0 回菜单=false
+[post] 时间线摘要：首敌=170ms 首伤=9763ms 死亡=10972ms（首伤→死亡 1209ms）
+[diag] 事件行 ×9（独立环——真机导出同形态）：
+  [ev 19:28:34] 状态 0→1
+  [ev 19:28:35] 选关出发钮：map=world_demon 难度=1
+  [ev 19:28:35] 祝福面板弹：池 1 项 · 档 2 · map=world_demon
+  [ev 19:28:35] 祝福确认：（未选直出发）
+  [ev 19:28:35] start_run map=world_demon 难度=1
+  [ev 19:28:35] 状态 1→2
+  [ev 19:28:40] 状态 2→4
+  [ev 19:28:40] 状态 4→2
+  [ev 19:28:46] 状态 2→5
+══ probe done ══

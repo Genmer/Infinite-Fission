@@ -1,0 +1,47 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R220 卡面描述量测菜单期全量预热（刀2） 回归 ══════════
+── ① 菜单期驱动门（D3）──
+  PASS | boot 完成 MENU 态 + 菜单可见
+  PASS | MENU 帧推进自动建队（ensure_built 幂等挂载）
+  PASS | MENU 帧推进消化进度 >0
+  PASS | 预热期量测计入 DebugStats.fit_desc_measures（量测本体计数）
+  PASS | start_run → PLAYING
+  PASS | 离开菜单暂停（PLAYING 帧推进 remaining 不变）
+── ② 变体全清单入缓存 ──
+  PASS | 建队 >0（变体×宽档×紧凑×⇄×行距展开）
+      [info] 变体文本 380 种 × 2 宽档 = 预热键 760
+  PASS | ① 4 稀有度数值重写全在变体（value_scale ×1.0/×1.4/×1.9/×2.6）
+  PASS | ② MASTERY 文案全四态在变体（+1 / +2 史诗连升 / +1 史诗连升(Lv4 封顶) / 已满级）
+  PASS | ②b TRAIT 满层质变尾注变体在列、超帽注记退役（R226）
+  PASS | ③ 双列 ⇄ 行入预热键（对半结构：每变体普通+双列各一键）
+  PASS | ④ value_scale>1 尾行各档入键（×1.4/×1.9/×2.6）
+  PASS | ⑤ 宽档=普通600/非紧凑 + 双列324/紧凑（开窗仅有的两个有效组合）
+  PASS | ⑤b 行距单值同源（全队列同 line_spacing 且 >0）
+  PASS | 全量泵清队（分帧 15 帧，最重帧 14184us）
+  PASS | 预热期量测本体计数 >0（每键入缓存经真实量测）
+  PASS | ⑥ DebugStats.fit_desc_measures 与静态观测口同步（每量测 +1）
+  PASS | 抽测变体全命中（4 稀有度+MASTERY+⇄+尾行 × 两宽档：量测零增量）
+  PASS | 抽测命中计数 == 样本数（16）
+── ③ 分帧预算节奏 ──
+  PASS | pump(0) 恰处理 1 项（预算用尽即停、最小粒度不饿死）
+  PASS | pump(0) 二连仍恰 1 项（每帧独立计时）
+  PASS | 12ms 名义预算分帧消化跨 ≥2 帧（节奏断言）
+  PASS | 单帧墙钟 ≤24ms（12ms 预算 + 单项梯量测原子粒度容忍）
+      [info] 全量 760 键分帧 13 帧，最重帧 12420us（预算 12000us）
+── ④ 排版逐位一致 ──
+  PASS | B 路径全命中（预热后同键零量测）
+  PASS | 预热前后 {fs,need} 逐位一致（同键同值——预热只提前不改变结果）
+── ⑤ 开窗量测增量（≤2）──
+  PASS | 预热后普通开窗（4 稀有度+尾行+MASTERY）量测增量 ≤2
+  PASS | 预热后双列开窗（⇄ 行）量测增量 ≤2
+── ⑥ 真链开窗 / Reroll / 挂机连开 ──
+  PASS | 真链开窗（LEVEL_UP + 货架开）
+  PASS | 真链开窗量测增量 ≤2
+  PASS | Reroll 重发同口径（量测增量 ≤2）
+  PASS | 选卡收口回 PLAYING
+  PASS | 挂机连开每窗 ≤2（总增量 ≤2×连升数）
+      [info] 连升 8 级批内量测增量 0（每窗均值 0.0）
+────────────────────────────────────────
+汇总：PASS 32 / FAIL 0（共 32 项）
+验收汇总：32/32 通过

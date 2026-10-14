@@ -94,7 +94,7 @@ func _test_game_const() -> void:
 	_check("next_uid 递增且非零", u1 > 0 and u2 == u1 + 1, "u1=%d u2=%d" % [u1, u2])
 	_check("HIT_NO_CRIT 掩码 = REACTION|DOT", GameConst.HIT_NO_CRIT == (GameConst.HIT_IS_REACTION | GameConst.HIT_IS_DOT))
 	_check("UID 位宽 2^20（幂等键位拼接约束）", GameConst.UID_MAX == 0xFFFFF)
-	_check("ConditionId.NONE = 8（封闭枚举 9 值）", GameConst.ConditionId.NONE == 8)
+	_check("ConditionId.NONE = 10（封闭枚举 11 值——R72 增 TARGET_HP_BELOW/PLAYER_HP_ABOVE）", GameConst.ConditionId.NONE == 10)
 
 
 # ── 2. ModifierStack（B_spec 公式例） ─────────────────────────────
@@ -150,11 +150,11 @@ func _test_modifier_stack() -> void:
 	stack5.aggregate_add([{"trait_id": &"CURSE", "pool_id": &"add_atk", "layer": 3, "contrib": -0.1, "decay_delta": 0.9, "is_curse": true}], {})
 	_check("诅咒负贡献全额：−0.1×3 = −0.3", is_equal_approx(float(stack5.add_pool_sum[&"add_atk"]), -0.3))
 
-	# F4 池钳（保险丝）
+	# R226 有意契约变更：F4 池钳退役——Σ 全额入账、审计恒空（caps 数据遗留不消费）
 	var stack4 := ModifierStack.new()
 	stack4.audit = DamageAudit.new()
 	stack4.aggregate_add([{"trait_id": &"X", "pool_id": &"add_atk", "layer": 1, "contrib": 3.0, "decay_delta": 0.85, "is_curse": false}], {"add_atk": 2.0})
-	_check("F4 池钳：Σ ≤ cap_add_atk=2.0 + 审计", is_equal_approx(float(stack4.add_pool_sum[&"add_atk"]), 2.0) and stack4.audit.clamped_add.has(&"add_atk"))
+	_check("F4 池钳退役：Σ=3.0 全额 + 审计空（R226 无钳）", is_equal_approx(float(stack4.add_pool_sum[&"add_atk"]), 3.0) and stack4.audit.clamped_add.is_empty())
 
 	# Flat 比例钳制（L3）
 	var stack6 := ModifierStack.new()
@@ -278,19 +278,20 @@ func _test_event_bus() -> void:
 # ── 4. GameConfig ─────────────────────────────────────────────────
 func _test_game_config() -> void:
 	print("── GameConfig ──")
-	_check("cfg 常量：player_base_hp = 100", is_equal_approx(GameConfig.get_constant(&"player_base_hp", 0.0), 100.0))
+	# 字面量 100→60：主控裁定 2026-08-29，cfg 为 HP 唯一真源（张力调校值回注，双轨消除）
+	_check("cfg 常量：player_base_hp = 60", is_equal_approx(GameConfig.get_constant(&"player_base_hp", 0.0), 60.0))
 	_check("cfg 常量：hp_growth_per_wave = 1.12", is_equal_approx(GameConfig.get_constant(&"hp_growth_per_wave", 0.0), 1.12))
 	_check("cfg 常量：player_pickup_radius = 120（B_spec Q-13）", is_equal_approx(GameConfig.get_constant(&"player_pickup_radius", 0.0), 120.0))
 	_check("cfg 常量：缺键回退默认值", is_equal_approx(GameConfig.get_constant(&"nonexistent_key", 42.0), 42.0))
-	_check("池容量：projectile = 640（架构 §5.1）", GameConfig.get_pool_capacity(&"projectile") == 640)
+	_check("池容量：projectile = 820（R188 档0 800 弹锚扩容——640→820，软/硬上限不动）", GameConfig.get_pool_capacity(&"projectile") == 820)
 	_check("池容量：enemy = 128", GameConfig.get_pool_capacity(&"enemy") == 128)
 	_check("池容量：popup = 80", GameConfig.get_pool_capacity(&"popup") == 80)
 	_check("池容量：particle = 64", GameConfig.get_pool_capacity(&"particle") == 64)
 	_check("池容量：laser = 12（架构 §5.1 表）", GameConfig.get_pool_capacity(&"laser") == 12)
 	_check("池容量：xp = 160（架构 §5.1 表）", GameConfig.get_pool_capacity(&"xp") == 160)
 	_check("balance 加载成功且非致命", GameConfig.balance != null and not GameConfig.is_fatal())
-	_check("balance：cap_prod = 8.0（F-16）", is_equal_approx(GameConfig.balance.cap_prod, 8.0))
-	_check("balance：cap_mul_count = 8（名额）", GameConfig.balance.cap_mul_count == 8)
+	_check("balance：cap_prod = 12.0（F-16·R253 调参）", is_equal_approx(GameConfig.balance.cap_prod, 12.0))
+	_check("balance：cap_mul_count = 10（名额·R253 调参）", GameConfig.balance.cap_mul_count == 10)
 	_check("balance：r_alarm_ratio = 500（×500 告警线）", is_equal_approx(GameConfig.balance.r_alarm_ratio, 500.0))
 	_check("balance：decay_delta_max = 0.92（F-21）", is_equal_approx(GameConfig.balance.decay_delta_max, 0.92))
 	_check("balance：软 1500 / 硬 2000", GameConfig.balance.projectile_soft_limit == 1500 and GameConfig.balance.projectile_hard_limit == 2000)
@@ -664,7 +665,11 @@ func _test_data_registry() -> void:
 	_check("报告：total ≥ 1 且 rejected = 0", int(reg.report["total"]) >= 1 and int(reg.report["rejected"]) == 0)
 	_check("get_game_feel 单件入口", reg.get_game_feel() == reg.game_feel)
 	_check("get_weapon 未命中返回 null（fail-fast）", reg.get_weapon(&"W_MISSING") == null)
-	_check("trait_ids_by_pool（ADD）= 12 条内容词条（pkg3 内容落地）", reg.trait_ids_by_pool(GameConst.PoolClass.ADD).size() == 12)
+	# R196 有意契约变更（原 16 条）：AFF_RANGE 广域印刻（add_range 池）上架，
+	# ADD 池内容词条 16 → 17（data_validator.gd:19 add_range 第 16 员追加）
+	# R243 有意契约变更：新增词条卡 MEC_THROW_RANGE（回旋刀范围变长，w2-boom）+
+	# MEC_BULLET_PARRY（挡弹构筑，w3-block）入册 → ADD 池内容词条 17 → 19
+	_check("trait_ids_by_pool（ADD）= 19 条内容词条（R243 迁移：17 + MEC_THROW_RANGE + MEC_BULLET_PARRY）", reg.trait_ids_by_pool(GameConst.PoolClass.ADD).size() == 19)
 	var wave_tbl := reg.get_wave_table()
 	_check("波表加载：30 波 entries（pkg3 内容落地）", wave_tbl != null and wave_tbl.entries.size() == 30)
 	# 注入坏词条 → validate_all 剔除 + 错误清单含文件名/字段名

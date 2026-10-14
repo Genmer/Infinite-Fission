@@ -48,6 +48,9 @@ var _wd_counter: int = 0                       # WeaponData id 确定性计数�
 func run(p_tree: SceneTree) -> void:
 	tree = p_tree
 	seed(42)                                       # 全局 RNG 固定种子（散射抖动确定性）
+	# R220 刀13① 同步：本套件弹寿命断言按旧值口径写（lifetime ×1.5）——锁特效优先
+	#（.tres 原值路径）。帧率优先分支（×1.15）由 r220_firephase ④段锚定。
+	PerfGovernor.mode_override = 1
 	_ensure_autoloads()
 	_setup_test_effects()
 	EventBus.chain_fused.connect(_on_chain_fused)
@@ -87,8 +90,9 @@ func run(p_tree: SceneTree) -> void:
 	_test_orbit_weapon()                          # 要点 10-A
 	_teardown_world()
 	_setup_world()
-	_test_arc_slash()                             # 要点 10-B
+	_test_arc_slash()                           # 要点 10-B
 	_teardown_world()
+	PerfGovernor.mode_override = -1             # R220 刀13 同步：还原读 Meta.settings
 	_summary()
 
 
@@ -397,10 +401,18 @@ func _test_trait_stack_core() -> void:
 	_check("挂载：同 ID 第 2 次叠层成功（layers=2）",
 		s1.attach(d1) and (s1.size() == 1 and s1.traits[0].layers == 2))
 	var rej_stack: int = DebugStats.get_counter(&"trait_attach_rejected_stack")
-	_check("挂载：stack_max=3 内第 3 次仍成功（layers=3），第 4 次拒绝 + 计数",
-		s1.attach(d1) and (s1.traits[0].layers == 3
-			and ((not s1.attach(d1))
-				and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej_stack + 1)))
+	# R226 有意契约变更（用户拍板「肉鸽别搞上限」）：同 ID 叠层帽全池拆除——第 3~9 层
+	# 全额可叠（R196 的 stack_max+5 帽与 ×0.7 折算一并退役），trait_attach_rejected_stack
+	# 计数器退役恒不增长
+	var att3 := s1.attach(d1)                       # 第 3 层（stack_max 质变层）
+	var s1_ext := true
+	for i in range(6):
+		s1_ext = s1_ext and s1.attach(d1)           # 第 4~9 层（原帽外区间全成功）
+	_check("挂载：stack_max=3 内第 3 次仍成功（layers=3），第 4~9 层无限叠成功（layers=9），无拒绝计数",
+		att3 and s1_ext and s1.traits[0].layers == 9
+			and s1.attach(d1)
+			and s1.traits[0].layers == 10
+			and DebugStats.get_counter(&"trait_attach_rejected_stack") == rej_stack)
 	# 单栈上限 12
 	var s2 := TraitStack.new()
 	var all_ok := true
@@ -426,9 +438,9 @@ func _test_trait_stack_core() -> void:
 	s3.attach(d_atk)
 	var panel: Dictionary = s3.aggregate_panel()
 	var entries: Array[Dictionary] = s3.aggregate_add_entries()
-	_check("面板聚合：add_atk 2 层 F3 = 18.5 + add_entries 单项 layer 2",
-		_approx(float(panel.get("add_atk", 0.0)), 18.5, 0.001)
-			and (entries.size() == 1 and int(entries[0]["layer"]) == 2))
+	_check("面板聚合：add_atk 2 层线性 = 20 + add_entries 每层一条（R14 直接叠加）",
+		_approx(float(panel.get("add_atk", 0.0)), 20.0, 0.001)
+			and (entries.size() == 2 and int(entries[0]["layer"]) == 1))
 	# 整数线性池：add_pierce ×2 层 = 2.0（不走 F3）
 	var d_pierce := _make_trait_data("TRAIT_PIERCE", GameConst.PoolClass.ADD, &"add_pierce",
 		&"EF_STAT", 1.0, [])
@@ -677,6 +689,8 @@ func _test_ballistic_weapon() -> void:
 		{"base_atk": 10.0, "rof": 5.0, "pierce": 1, "pellets": 1},
 		{"proj_speed": 600.0, "range": 600.0, "spread_deg": 0.0})
 	var w4 := _make_weapon(GameConst.WeaponForm.BALLISTIC, data4, Vector2(360, 640))
+	var beat_tgt := _spawn_enemy(_make_enemy_data("E_BEAT_T"), Vector2(360.0, 400.0))
+	# R33：tick 无敌人不开火门——节拍用例需在场目标（静止敌 hp1000 扛住 5 发）
 	for i in range(118):
 		w4.tick(DT)
 	_check("射速节拍：rof=5 → 118 tick（0.983s）恰 5 发",
@@ -687,7 +701,7 @@ func _test_ballistic_weapon() -> void:
 		{"base_atk": 10.0, "rof": 90.0, "pierce": 1, "pellets": 1},
 		{"proj_speed": 600.0, "range": 600.0, "spread_deg": 0.0})
 	var w5 := _make_weapon(GameConst.WeaponForm.BALLISTIC, data5, Vector2(360, 640))
-	w5.tick(DT)
+	w5.tick(DT)   # R33 门控：beat_tgt 仍在场（同网格）→ 开火路径不变
 	_check("射速封顶：rof=90 → clamp 30 → 冷却 1/30（性能双护栏）",
 		_approx(w5.cooldown_left, 1.0 / 30.0, 0.0005), "cd=%s" % str(w5.cooldown_left))
 	_nullify_all_proj_pool()
@@ -784,6 +798,9 @@ func _test_laser_spawn_and_depth_gate() -> void:
 		w1.try_fire() and (w1.active_beams.size() == 1
 			and int(_laser_pool.stats()["live"]) == 1))
 	var beam := w1.active_beams[0]
+	# R187 主束常驻化翻转：无 pulse_duration 声明 → spawn lifetime 缺省 0 = 常驻
+	_check("主束常驻化：无 pulse_duration → beam.lifetime == 0（R187 新契约）",
+		_approx(beam.lifetime, 0.0, 0.0001), "lifetime=%s" % str(beam.lifetime))
 	_check("主束参数：depth=0 / dmg_mult=1 / tick_atk=10 / tick_rate=8（rof 口径）",
 		beam.depth == 0 and (_approx(beam.dmg_mult, 1.0) and (_approx(beam.tick_atk, 10.0)
 			and _approx(beam.tick_rate, 8.0))))
@@ -806,7 +823,8 @@ func _test_laser_spawn_and_depth_gate() -> void:
 
 
 func _test_laser_scorch_layers() -> void:
-	print("── LaserBeam 灼焦叠层 ──")
+	print("── LaserBeam 灼焦叠层（R187 目标侧单池） ──")
+	LaserBeam.scorch_pool_reset()             # R187 目标侧单池为静态——跨用例隔离清池
 	var data1: WeaponData = _make_weapon_data(GameConst.WeaponForm.LASER,
 		{"base_atk": 10.0, "rof": 8.0}, {"refract_beams": 0})
 	var w1 := _make_weapon(GameConst.WeaponForm.LASER, data1, Vector2(160, 640)) as LaserWeapon
@@ -814,21 +832,22 @@ func _test_laser_scorch_layers() -> void:
 	w1.try_fire()
 	var beam := w1.active_beams[0]
 	var uid := enemy.uid
+	# R187 API 翻转：灼焦层数读目标侧单池（原束实例私有 scorch_layers 字典退役）
 	# tick(0.26)：叠层先行（_on_hit_target）后结算——每 tick 恰 2 跳（0.26 > 2×0.125）
 	beam.tick(0.26)
-	var layers1: int = int(beam.scorch_layers.get(uid, 0))
+	var layers1: int = LaserBeam.scorch_layers_of(uid)
 	_check("灼焦叠层：持续照射 0.26s → 1 层（1 层/0.25s）", layers1 == 1, "layers=%d" % layers1)
 	_check("灼焦跳伤：1 层 Local 池 ×1.08 → 2 跳共 21.6",
 		_approx(enemy.hp, 978.4, 0.01), "hp=%s" % str(enemy.hp))
 	beam.tick(0.26)
-	var layers2: int = int(beam.scorch_layers.get(uid, 0))
+	var layers2: int = LaserBeam.scorch_layers_of(uid)
 	_check("灼焦叠层：0.52s → 2 层", layers2 == 2, "layers=%d" % layers2)
 	_check("灼焦跳伤：2 层 ×1.16 → 2 跳共 23.2（累计 44.8）",
 		_approx(enemy.hp, 955.2, 0.01), "hp=%s" % str(enemy.hp))
 	# 继续照射至 5 层 cap，再验证 cap 层伤害与节拍/节流计数
 	for i in range(6):
 		beam.tick(0.26)
-	var layers_cap: int = int(beam.scorch_layers.get(uid, 0))
+	var layers_cap: int = LaserBeam.scorch_layers_of(uid)
 	_check("灼焦叠层：cap 于 scorch_max_layers=5", layers_cap == 5, "layers=%d" % layers_cap)
 	_check("灼焦跳伤：层序 [1,2,3,4,5,5,5,5] ×2 跳 → 8 tick 累计 208（5 层后 14/跳）",
 		_approx(enemy.hp, 792.0, 0.05), "hp=%s" % str(enemy.hp))
@@ -1048,17 +1067,21 @@ func _test_split_gates() -> void:
 	var inherit_ok := true
 	var elem_ok := true
 	var attach_ok := true
+	var hitbox_ok := true
 	var angle_set: Array = []
 	for c in children:
 		var child := c as ProjectileBase
 		inherit_ok = (inherit_ok
-			and _approx(float(child.panel_snapshot.get("base_atk", 0.0)), 4.0, 0.001))
+			and _approx(float(child.panel_snapshot.get("base_atk", 0.0)), 7.0, 0.001))
 		elem_ok = (elem_ok and child.element == GameConst.Element.FIR)
 		attach_ok = (attach_ok and _approx(child.attach_value, 0.0))
+		hitbox_ok = (hitbox_ok and _approx(child.hitbox_radius, 4.2, 0.001))
 		angle_set.append(snappedf(child.velocity.angle_to(Vector2(0, -600)), 0.0001))
 	angle_set.sort()
-	_check("分裂继承 F-13：ATK 面板 40%（10 → 4.0）",
+	_check("分裂继承 F-13：ATK 面板 70%（10 → 7.0，二ct 恒值）",
 		inherit_ok and children.size() == 2)
+	_check("分裂尺寸二ct：子代 hitbox=母 6.0 × 70% → 4.2（动态跟随）",
+		hitbox_ok and children.size() == 2)
 	_check("分裂继承：元素继承 / 元素附着不继承（attach_value=0）",
 		elem_ok and attach_ok)
 	_check("分裂继承：夹角 ±28°（spread_deg，均匀分布）",
@@ -1377,17 +1400,13 @@ func _test_orbit_weapon() -> void:
 		{"orbs": 2, "orbit_radius": 90.0, "angular_speed": 0.0, "orb_radius": 16.0,
 		"hit_cd": 0.25, "knockback": 0.0, "nullify": false})
 	var w1 := _make_weapon(GameConst.WeaponForm.MELEE, data1, Vector2(360, 640)) as OrbitWeapon
-	# 谐振轨道通道（MEC_ORBIT_LINK：ctx.weapon = OrbitWeapon 的 ON_SPAWN 派发）
-	var stack := TraitStack.new()
-	stack.attach(_make_trait_data("TRAIT_ORBIT_LINK", GameConst.PoolClass.MECH, &"",
-		&"EF_MECH", 0.0, [GameConst.TraitEvent.ON_SPAWN]))
-	var tctx := TraitContext.new()
-	tctx.event = GameConst.TraitEvent.ON_SPAWN
-	tctx.weapon = w1
-	stack.dispatch(GameConst.TraitEvent.ON_SPAWN, tctx)
-	_check("谐振轨道：MEC_ORBIT_LINK ON_SPAWN → orbs_bonus +1", w1.orbs_bonus == 1)
+	# 谐振轨道通道（R69 重做：旧 ON_SPAWN 派发在实机永不触发——环绕武器不产投射物，
+	# 生产链唯一 ON_SPAWN 派发点在 projectile_base；测试手动派发掩盖成「看似工作」。
+	# 现改参数侧聚合直读挂载表：挂上即 +刀，品质梯 白/蓝/紫/金每层 +1/+2/+3/+4）
+	w1.attach_trait(_make_trait_data("MEC_ORBIT_LINK", GameConst.PoolClass.MECH, &"",
+		&"EF_MECH", 1.45, []))
 	w1.tick(DT)                                    # try_fire → 创建常驻力场
-	_check("力场参数重写：orbs = 表值+加成 = 3 / 半径 90 / 角速度口径",
+	_check("谐振轨道：挂载即聚合直读（R69）orbs = 表值2+round(1.45)×1 = 3",
 		w1.orbit_field != null and (w1.orbit_field.orbs == 3
 			and (_approx(w1.orbit_field.orbit_radius, 90.0)
 				and _approx(w1.orbit_field.angular_speed, 0.0))))
@@ -1413,7 +1432,9 @@ func _test_arc_slash() -> void:
 	var e_in1 := _spawn_enemy(_make_enemy_data("E_SL_A"), Vector2(440, 640))   # 0° 80px
 	var e_in2 := _spawn_enemy(_make_enemy_data("E_SL_B"), Vector2(463.9, 700)) # 30° 120px
 	var e_out := _spawn_enemy(_make_enemy_data("E_SL_C"), Vector2(360, 760))   # 90° 扇外
-	w1.tick(DT)                                    # 开窗（朝向最近敌 → facing 0）+ 首帧判定
+	w1._slash_window(0.0, false)                          # R25 随机砍后：确定性开窗（facing 0 对齐 0°/30° 靶）
+	w1.cooldown_left = 0.5                         # 阻断 tick 内随机重开（保持窗口朝向）
+	w1.tick(DT)                                    # 首帧判定
 	_check("挥斩：扇形内命中（0°/30° 各 −10）",
 		_approx(e_in1.hp, 990.0, 0.01) and _approx(e_in2.hp, 990.0, 0.01),
 		"A=%s B=%s" % [str(e_in1.hp), str(e_in2.hp)])
@@ -1434,11 +1455,15 @@ func _test_arc_slash() -> void:
 			and (DebugStats.get_counter(&"bullet_nullified") == bn0 + 2
 				and int(_proj_pool.stats()["free"]) == free0 + 2))
 	_check("消弹格挡：弧外弹保留存活", not b_out.is_clean and b_out.visible)
-	# 同窗同目标单次 + 窗口 0.15s 过期
-	for i in range(19):
-		w1.tick(DT)                                # 窗口耗尽（0.15s = 18 帧）
-	_check("挥斩窗口：0.15s 判定窗 → 窗口外无判定（visible 复位）",
-		_approx(w1.arc_slash.window_left, 0.0) and not w1.arc_slash.visible)
+	# 同窗同目标单次 + 窗口 0.34s 过期（R65：0.15→0.34——用户点名挥砍动画放慢）
+	for i in range(43):
+		w1.tick(DT)                                # 窗口耗尽（0.34s ≈ 41 帧 @DT）
+	# 二cv#8 帧率随改：visible 断言随 二cv#2 待机范围虚线契约迁移——窗口外本体槽不再
+	# 复位可见性（待机虚线弧接管，_range_dash_active 门：零代+本体槽+fx_quality>0）；
+	# 本断言保留窗口过期核心（window_left 归零=窗口外零判定），visible==虚线门出力。
+	_check("挥斩窗口：0.34s 判定窗 → 窗口外无判定（visible 随 二cv#2 虚线门迁移）",
+		_approx(w1.arc_slash.window_left, 0.0)
+			and w1.arc_slash.visible == w1.arc_slash._range_dash_active())
 	_check("挥斩去重：同窗同目标单次（A/B 不再扣血）",
 		_approx(e_in1.hp, 990.0, 0.01) and _approx(e_in2.hp, 990.0, 0.01))
 	w1.free()
@@ -1451,6 +1476,9 @@ func _test_arc_slash() -> void:
 	var f1 := _spawn_enemy(_make_enemy_data("E_CAP_A"), Vector2(430, 150))
 	var f2 := _spawn_enemy(_make_enemy_data("E_CAP_B"), Vector2(460, 170))
 	var f3 := _spawn_enemy(_make_enemy_data("E_CAP_C"), Vector2(453.9, 210))
+	w2.tick(DT)
+	w2._slash_window(0.0, false)                          # R25：确定性开窗（对齐 f1/f2 扇内）
+	w2.cooldown_left = 0.5
 	w2.tick(DT)
 	var hurt := 0
 	for e in [f1, f2, f3]:

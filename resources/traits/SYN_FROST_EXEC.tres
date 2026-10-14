@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"SYN_FROST_EXEC"
 display_name = "冰渊裁决"
-description = "对寒滞/冻结目标伤害 ×1.5，叠 2 层合并为 ×2.0（A3 §4.3）"
+description = "对寒滞/冻结目标伤害 ×1.5，叠 2 层合并为 ×2.0"
 pool = 1
 pool_id = &"frost_dmg"
 effect_id = &"EF_STAT"

@@ -1,0 +1,378 @@
+{
+	"disclosure": [
+		"MICRO 合成 ctx 为代表负载（base100+1add+2mult+1local+crit0.05）——池数相关 ⑤ 聚合成本低估（R7），FULL/FULL-M 为盲区权威",
+		"boot12 栈 MULT 子集=0（MULTI=ADD 池）——FULL-M（MULT×4 真值条件）补 ② 段主体上界",
+		"FULL 臂 ON_HIT 派发裁剪：boot 栈挂钩载体 handle 在 tctx.weapon=null 形态行为 no-op——裁剪只省时不改计数；dispatch 空转见 STEP sub_dispatch_idle",
+		"MICRO A 臂含 T2 刀1a typed 清扫（无运行期开关，设计如此）——T2 收益在 A/B 两臂共同基线，历史对照=50.1µs r225 档案（跨日披露门 G6*）",
+		"CHURN 臂 A/B 双态测量（A=存 ctx 原路径/B=字段袋）——B−A 顺延差=袋构建代价，刀2 判读=现行路径占比；维护扫描为 _end_frame_pending_maintenance 直调（帧龄 0 纯扫描）",
+		"臂序平衡：偶数轮 B 先 A 后（首轮实测固定 A→B 序带暖机漂移——MICRO A 虚高 13%）；ms 轴散布 ±30-50%（R224 §四）——结论以中位数与比率轴为准",
+		"FULL/MICRO 同轮同进程成对——跨日绝对值不可比（R231 教训）；ms 轴桌面≠真机"
+	],
+	"meta": {
+		"ab": "同进程开关双臂：A=CTX_REUSE/TRAIT_PRECACHE off（改前路径）· B=on（现行刀路径；刀1e AGG_TYPED 收口实测反向 shipped=false，typed 留档）——AC-P1/P2 判定只对同轮 A/B",
+		"boot": "W2_gatling L5 + PIERCE×3/MULTI×2/BOUNCE×3/NOVA×2/FRACTAL×2（r225 同指纹）+ 遗物 GLASS_CANNON/BOSS_TROPHY + FULL-M 变体 MULT×4",
+		"date": "2026-10-05",
+		"full_scope": "窗=①ctx构建+②词条预聚合（relic+collect_mult_pools+vuln）+④resolve；ON_HIT 效果派发=直调链裁剪（AC-1），dispatch 空转由 STEP sub 行披露",
+		"package": "desktop-headless-probe（R232 结算链瘦身 刀0 四臂——STEP/FULL/CHURN/MICRO）",
+		"rounds": 3,
+		"settle_probe_note": "SETTLE_PROBE=T1b 结算段计时包在 resolve 内——A/B 两臂同付常数开销（<0.1µs/结），披露",
+		"step_note": "STEP 12 段直调复刻打点——只做构成占比，禁与 MICRO 绝对值对拍（打点自污染 +3-11%）",
+		"notes": "R232 评审#1 单一口径重述（2026-10-05 修复轮；本 JSON=唯一权威口径）：【MICRO】末轮配对 45.26→44.65µs/结（≈持平，−1.3%）；三轮中位 A=45.26 / B=51.32——B 中位受首轮 83.09µs 暖机+机器持续高载污染，只作披露不作判定；【FULL】三轮中位 86.54→84.95µs/结（−1.8%）；末轮配对 90.17→74.50（−17.4%）——两口径并列如实记；①②构建盲区 35.1-35.5%（B 臂）；【三硬门判定】AC-P1（MICRO<25）=未达成；AC-P2（FULL 降幅≥40%）=未达成（−1.8%~-17.4% 均远低于 40%）；AC-P3（深载方向）=未达成——r224 S1 grid_projectile p50 实测 16.45→17.55 向上，判「PC 分辨力不足」（日漂移 ±30-50% 宽于刀收益，详见 docs/qa/2026-10-05-R232-深载当日门控-QA2复跑.md），vc37 真机为最终判官；【引用纪律】开发会话晨间清洁对（MICRO 44.2→42.6 / FULL 75.3→69.8）未落本 JSON runs（已被同日轮转挤出）——一切对外口径以本 JSON 现存三轮为准，晨间数字不再引用；【刀1e】收口实测反向证伪 shipped=false，证伪档=probe_r232_knife1e_falsified_2026-10-05.json，5_agg_mults 剩余大头归 R233「ctx 侧 typed 结构格式」候选（评审#3 复议记录见设计文档附录）。"
+	},
+	"runs": [
+		{
+			"churn_a": {
+				"bag": false,
+				"cap": 8,
+				"defer_us_per": 7.57142857142857,
+				"flush_us_per": 41.4821428571429,
+				"merge_us_per": 8,
+				"pairs": 56,
+				"scan_us_per_entry": 0.301785714285714
+			},
+			"churn_b": {
+				"bag": true,
+				"cap": 8,
+				"defer_us_per": 13.8928571428571,
+				"flush_us_per": 63.375,
+				"merge_us_per": 7.375,
+				"pairs": 56,
+				"scan_us_per_entry": 0.226785714285714
+			},
+			"full_a": {
+				"build_share_pct": 40.5016298442593,
+				"build_us": 31.0625,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 76.6944444444444,
+				"planned_total": 288,
+				"resolve_us": 45.6319444444444,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"full_b": {
+				"build_share_pct": 35.1224303655371,
+				"build_us": 34.7638888888889,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 98.9791666666667,
+				"planned_total": 288,
+				"resolve_us": 64.2152777777778,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"fullm_a": {
+				"build_share_pct": 43.2926184433164,
+				"build_us": 56.8576388888889,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 131.333333333333,
+				"planned_total": 288,
+				"resolve_us": 74.4756944444444,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"fullm_b": {
+				"build_share_pct": 35.6590883637585,
+				"build_us": 44.2222222222222,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 124.013888888889,
+				"planned_total": 288,
+				"resolve_us": 79.7916666666667,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"micro_a": {
+				"batch_us": {
+					"48": 44.3125,
+					"96": 45.6979166666667,
+					"192": 45.1354166666667
+				},
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"linearity_ratio": 1.03126469205454,
+				"per_settle_us_median": 45.1354166666667,
+				"planned_total": 336,
+				"separate_drop_total": 0,
+				"settles_total": 336
+			},
+			"micro_b": {
+				"batch_us": {
+					"48": 111.4375,
+					"96": 56.34375,
+					"192": 83.0885416666667
+				},
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"linearity_ratio": 1.97781475318913,
+				"per_settle_us_median": 83.0885416666667,
+				"planned_total": 336,
+				"separate_drop_total": 0,
+				"settles_total": 336
+			},
+			"round": 1,
+			"step": {
+				"segments": {
+					"0_sanitize": 2.4765625,
+					"10_finalize": 8.78645833333333,
+					"11_bcast_cache": 2.9375,
+					"1_pregate": 3.53385416666667,
+					"2_stack_audit": 6.58333333333333,
+					"3_agg_add": 2.68489583333333,
+					"4_flat": 1.91145833333333,
+					"5_agg_mults": 24.2578125,
+					"6_local": 1.84114583333333,
+					"7_roll_crit": 2.53125,
+					"8_populate": 4.296875,
+					"9_target_side": 6.02864583333333
+				},
+				"subs": {
+					"sub_breakdown_dict": 1.55859375,
+					"sub_dispatch_idle": 4.265625,
+					"sub_elem_immune": 0.5859375,
+					"sub_read_resist": 1.140625,
+					"sub_read_vuln": 0.81640625,
+					"sub_take_result9b": 7.0234375
+				},
+				"total_us_per": 67.8697916666667
+			}
+		},
+		{
+			"churn_a": {
+				"bag": false,
+				"cap": 8,
+				"defer_us_per": 7.28571428571429,
+				"flush_us_per": 52.875,
+				"merge_us_per": 7.625,
+				"pairs": 56,
+				"scan_us_per_entry": 0.2125
+			},
+			"churn_b": {
+				"bag": true,
+				"cap": 8,
+				"defer_us_per": 13.1607142857143,
+				"flush_us_per": 44.3392857142857,
+				"merge_us_per": 7.75,
+				"pairs": 56,
+				"scan_us_per_entry": 0.225
+			},
+			"full_a": {
+				"build_share_pct": 40.0056170759108,
+				"build_us": 34.6215277777778,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 86.5416666666667,
+				"planned_total": 288,
+				"resolve_us": 51.9201388888889,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"full_b": {
+				"build_share_pct": 35.5119558553035,
+				"build_us": 30.1666666666667,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 84.9479166666667,
+				"planned_total": 288,
+				"resolve_us": 54.78125,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"fullm_a": {
+				"build_share_pct": 43.4793768127101,
+				"build_us": 58.8194444444444,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 135.28125,
+				"planned_total": 288,
+				"resolve_us": 76.4618055555556,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"fullm_b": {
+				"build_share_pct": 36.4956755144647,
+				"build_us": 42.4895833333333,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 116.423611111111,
+				"planned_total": 288,
+				"resolve_us": 73.9340277777778,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"micro_a": {
+				"batch_us": {
+					"48": 46.1875,
+					"96": 47.875,
+					"192": 51.8541666666667
+				},
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"linearity_ratio": 1.12268831754623,
+				"per_settle_us_median": 47.875,
+				"planned_total": 336,
+				"separate_drop_total": 0,
+				"settles_total": 336
+			},
+			"micro_b": {
+				"batch_us": {
+					"48": 47.0625,
+					"96": 51.3229166666667,
+					"192": 53.6510416666667
+				},
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"linearity_ratio": 1.13999557326251,
+				"per_settle_us_median": 51.3229166666667,
+				"planned_total": 336,
+				"separate_drop_total": 0,
+				"settles_total": 336
+			},
+			"round": 2,
+			"step": {
+				"segments": {
+					"0_sanitize": 2.0859375,
+					"10_finalize": 7.41145833333333,
+					"11_bcast_cache": 2.48958333333333,
+					"1_pregate": 3.1328125,
+					"2_stack_audit": 5.55989583333333,
+					"3_agg_add": 2.265625,
+					"4_flat": 1.57291666666667,
+					"5_agg_mults": 19.8645833333333,
+					"6_local": 1.32291666666667,
+					"7_roll_crit": 1.91666666666667,
+					"8_populate": 3.47135416666667,
+					"9_target_side": 3.90364583333333
+				},
+				"subs": {
+					"sub_breakdown_dict": 1.30859375,
+					"sub_dispatch_idle": 4.09375,
+					"sub_elem_immune": 1.5546875,
+					"sub_read_resist": 0.953125,
+					"sub_read_vuln": 0.75,
+					"sub_take_result9b": 5.609375
+				},
+				"total_us_per": 54.9973958333333
+			}
+		},
+		{
+			"churn_a": {
+				"bag": false,
+				"cap": 8,
+				"defer_us_per": 7.64285714285714,
+				"flush_us_per": 39.2321428571429,
+				"merge_us_per": 7.125,
+				"pairs": 56,
+				"scan_us_per_entry": 0.525
+			},
+			"churn_b": {
+				"bag": true,
+				"cap": 8,
+				"defer_us_per": 12.9464285714286,
+				"flush_us_per": 36.9285714285714,
+				"merge_us_per": 6.75,
+				"pairs": 56,
+				"scan_us_per_entry": 0.221428571428571
+			},
+			"full_a": {
+				"build_share_pct": 39.4763188294186,
+				"build_us": 35.5972222222222,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 90.1736111111111,
+				"planned_total": 288,
+				"resolve_us": 54.5763888888889,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"full_b": {
+				"build_share_pct": 35.3017944535073,
+				"build_us": 26.2986111111111,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 74.4965277777778,
+				"planned_total": 288,
+				"resolve_us": 48.1979166666667,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"fullm_a": {
+				"build_share_pct": 43.9366124939258,
+				"build_us": 56.5104166666667,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 128.618055555556,
+				"planned_total": 288,
+				"resolve_us": 72.1076388888889,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"fullm_b": {
+				"build_share_pct": 35.7663996887059,
+				"build_us": 38.2986111111111,
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"per_settle_us": 107.079861111111,
+				"planned_total": 288,
+				"resolve_us": 68.78125,
+				"separate_drop_total": 0,
+				"settles_total": 288
+			},
+			"micro_a": {
+				"batch_us": {
+					"48": 48.8958333333333,
+					"96": 41.2395833333333,
+					"192": 45.2604166666667
+				},
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"linearity_ratio": 1.18565294266229,
+				"per_settle_us_median": 45.2604166666667,
+				"planned_total": 336,
+				"separate_drop_total": 0,
+				"settles_total": 336
+			},
+			"micro_b": {
+				"batch_us": {
+					"48": 44.6458333333333,
+					"96": 43,
+					"192": 45.6302083333333
+				},
+				"deferred_total": 0,
+				"dupe_total": 0,
+				"linearity_ratio": 1.06116763565891,
+				"per_settle_us_median": 44.6458333333333,
+				"planned_total": 336,
+				"separate_drop_total": 0,
+				"settles_total": 336
+			},
+			"round": 3,
+			"step": {
+				"segments": {
+					"0_sanitize": 2.421875,
+					"10_finalize": 9.26822916666667,
+					"11_bcast_cache": 8.11979166666667,
+					"1_pregate": 3.7265625,
+					"2_stack_audit": 6.55729166666667,
+					"3_agg_add": 2.94010416666667,
+					"4_flat": 1.97916666666667,
+					"5_agg_mults": 23.7057291666667,
+					"6_local": 1.95572916666667,
+					"7_roll_crit": 2.33333333333333,
+					"8_populate": 4.0859375,
+					"9_target_side": 5.796875
+				},
+				"subs": {
+					"sub_breakdown_dict": 2.19140625,
+					"sub_dispatch_idle": 7.95703125,
+					"sub_elem_immune": 1.10546875,
+					"sub_read_resist": 1.91796875,
+					"sub_read_vuln": 1.46484375,
+					"sub_take_result9b": 8.9375
+				},
+				"total_us_per": 72.890625
+			}
+		}
+	]
+}

@@ -1,0 +1,197 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R194 移动端统包 ══════════
+PASS | autoload 就绪（EventBus/GameConfig/DebugStats）
+PASS | R194 前置：Boot 进入 MENU + 致命清单空
+── R194 设置键契约（fx_opacity/fps_cap） ──
+PASS | R194 键契约：旧档缺键读口回退 fx_opacity=1.0
+PASS | R194 键契约：旧档缺键读口回退 fps_cap=60
+PASS | R194 键契约：旧档缺键读口回退 show_fps=false（R202 零迁移）
+PASS | R194 键契约：双注册读侧（SETTINGS_DEFAULTS 含 show_fps，R202）
+PASS | R194 键契约：双注册写侧（show_fps true 写入生效，bool 归一非静默丢弃）
+PASS | R194 键契约：双注册读侧（SETTINGS_DEFAULTS 含 fx_opacity/fps_cap）
+PASS | R194 键契约：双注册写侧（fx_opacity 0.5 写入生效，非静默丢弃）
+PASS | R194 键契约：双注册写侧（fps_cap 90 写入生效）
+PASS | R194 键契约：写口下钳 0.29→0.3
+PASS | R194 键契约：写口上钳 2.0→1.0
+PASS | R194 键契约：fps_cap 200→144（clampi 0~144）
+PASS | R194 键契约：fps_cap 145→144
+PASS | R194 键契约：fps_cap -5→0（0=不限）
+PASS | R194 键契约：headless 下 Engine.max_fps 恒 0（mobile 门 false 不应用）
+PASS | R194 键契约：fx_opacity 过 user:// 磁盘写读回路（0.4）
+── R194 fx_opacity 乘区传递 ──
+PASS | R194 fx①：set_setting(0.3) → DamagePopup.fx_opacity==0.3（单源 static 写值）
+PASS | R194 fx②：elemental_fx.modulate.a==0.3（消费点A 层根罩全层）
+PASS | R194 fx③：粒子池发射器全部 modulate.a==0.3（消费点B，64/64）
+PASS | R194 fx④：player.modulate.a==1.0（玩家本体不接入，排除清单口径）
+PASS | R194 fx⑤：跳字 tick 后 modulate.a==0.3×(1−t²)（消费点C 折乘）
+PASS | R194 fx⑥：跳字 _reset_state 后 modulate.a==0.3（复位带乘区，防池复用闪帧）
+PASS | R194 fx⑦：订阅路径 0.5 → elemental_fx.modulate.a==0.5（settings_changed 即时）
+PASS | R194 fx⑧：快照还原后乘区回读口原值（f=1）
+── R194 横屏修复源级断言 ──
+PASS | R194 orient 前置：project.godot 可读（res:// 源文本）
+PASS | R194 orient①：[display] 段内精确行 window/handheld/orientation=1 恰 1 处（G1：int 字面量、不带段前缀）
+PASS | R194 orient②：全文件该行恰 1 处（无重复键/无他段漂移）
+PASS | R194 orient③：[application] 段 config/quit_on_go_back=false（touch 项2，引擎级键不进 Meta.settings）
+PASS | R194 orient④：ProjectSettings 直读 display/window/handheld/orientation==1（引擎解析视图，pkg5 AC 同款互证）
+PASS | R194 orient⑤：物理 120Hz 源级护栏（红线2：project.godot 全局物理时钟不动）
+── R194 boot 空表闸谓词 ──
+WARNING: [DataRegistry] manifest 未声明 weapons 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 enemies 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 traits 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 relics 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 synergies 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 waves 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 gamefeel 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | R194 闸谓词：零类目 manifest → enemies 空 且 report.total==0（_boot_load_data 空表闸判据输入成立）
+── R194 采样守卫 ──
+PASS | R194 采样①：单指 ScreenDrag(index=0,rel=(10,0)) → _drag_accum==(10,0)（1×）
+PASS | R194 采样②：仿真 MouseMotion(device=-1) 丢弃（仍 (10,0)，防双计数）
+PASS | R194 采样③：桌面 MouseMotion(device=0) 累计 → (20,0)（1× 基线）
+PASS | R194 采样④：异 index=1 拖动不累计（仍 (20,0)）
+PASS | R194 采样⑤：ScreenTouch(released,index=0) 清锁 → drag index=1 认领累计（(25,0)）
+── R194 宽限/清锁 ──
+PASS | R194 采样⑥：宽限期投拖动 → tick 消费位移为零（宽限保护未破坏）
+PASS | R194 采样⑦：input_enabled 上升沿 → 首指锁清（-1，由当前手指重认领）
+PASS | R194 采样⑦b：恢复后新指认领（accum==(7,0)）
+PASS | R194 采样⑧：重开清零（restart_run 自 PAUSED 成功 + _drag_accum 归零 + 首指锁 -1）
+── R194 hazard 乘序 ──
+PASS | R194 hazard：乘序路径 (10,0)×0.5 → 位移 (5,0)（先累计后乘，输入输出不变）
+PASS | R194 hazard：到期还原 mult=1.0
+── R194 BuildPanel 松手判定 ──
+PASS | R194 BuildPanel①：press→release（位移 2px<16）→ build_details_requested 恰发 1 次
+PASS | R194 BuildPanel②：press→motion 40px→release → 发 0 次（滑动不误判点击）
+PASS | R194 BuildPanel③：失败释放后再干净点按 → 恰发 1 次（武装态复位）
+── R194 UI 触控目标几何 ──
+PASS | R194 几何①：HUD _auto_btn.size==(56,64)
+PASS | R194 几何①b：HUD _auto_capsule.size==(56,64) 且 644+56≤704、126+64≤190（r188 带内）
+PASS | R194 几何②：HUD _pause_btn.size==(72,72)（66→72 放大）
+PASS | R194 几何③：商店刷新钮 (211,802) 210×56
+PASS | R194 几何④：商店行内购买钮 ≥132×56@(440,16)（全部 5 个）
+PASS | R194 几何⑤：角色行 custom_minimum_size==(576,140)（全部 10 行）
+PASS | R194 几何⑥：初始武器循环钮 ≥300×48@(74,92)
+PASS | R194 几何⑦：图鉴行下移 y=118（96→118 避让放大后循环钮 92-140）
+PASS | R194 几何⑧：选用钮 ≥84×56@(478,38)（44→56 放大）
+PASS | R194 几何⑨：解锁钮 ≥84×56@(478,38)（44→56 放大）
+PASS | R194 几何⑩：出发钮 ≥76×52@(486,32)（选关行 118 内）
+PASS | R194 几何⑪：养成升级买 ≥140×56@(420,6)（全部 8 个）
+── R194 首帧尖峰注入 ──
+PASS | R194 尖峰前置：开局波构成已入队（queue+active=34 ≥10）
+PASS | R194 尖峰①：首帧 3.0s 被 clamp（game_delta_clamped 恰 +1）
+PASS | R194 尖峰②：不跳波（wave 恒 1，窗口实耗 0.2500s ≤0.25s clamp 帽）
+PASS | R194 尖峰③：不吞怪（queue+active 34→34 守恒，至多一批 8 节流出队）
+PASS | R194 尖峰④：spawn_dropped 恒 0（尖峰不引发悬空丢弃）
+PASS | R194 尖峰⑤：尖峰后 2s 内怪正常出生（active>0，波未被吞）
+────────────────────────────────────────
+汇总：PASS 64 / FAIL 0（共 64 项）
+PASS | autoload 就绪（EventBus/GameConfig/DebugStats）
+PASS | 前置：满注册表 Boot 进入 MENU + 致命清单空
+── T1 remap 三态正路径 ──
+PASS | T1 前置：夹具 .tres 落盘（ResourceSaver）
+WARNING: [DataRegistry] manifest 未声明 weapons 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 traits 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 relics 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 synergies 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 waves 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 gamefeel 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | T1① 纯 .tres 目录 load_all → enemies ≥1 且 id 可查
+PASS | T1 前置：载荷 .tres 落盘（扫描域外）
+WARNING: [DataRegistry] manifest 未声明 weapons 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 traits 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 relics 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 synergies 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 waves 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 gamefeel 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | T1② remap 独占目录（零 .tres）load_all → enemies ≥1 且 id 可查（RC2 判别：剥壳缺失=.remap 跳过=size 0）
+PASS | T1③ remap 独占恰 1 条（不重复入表）
+WARNING: [DataRegistry] manifest 未声明 weapons 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] id 重复（后者剔除）：E_R194_T1 ← user://r194_t1_remap/e1.tres
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 traits 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 relics 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 synergies 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 waves 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 gamefeel 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | T1④ 真实 .tres+同 id 壳并存 → 恰 1 条（剥离后同 id 后者剔除）
+── T2 缺 manifest 负路径节奏 ──
+WARNING: [WaveDirector] 注册表无敌人数据，波 1 公式构成为空（降级不崩溃）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+ERROR: [WaveDirector] 波 1 零生成请求（构成空/注册表空）——R92 早清钳禁用，走满窗+缓冲（诊断 counter=wave_empty_composition）
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | T2① 全程零怪（queue+active 恒 0，降级不崩溃）
+PASS | T2② 6.5s 波次不再狂涨（终态 ≤2；修前该路径 ≥3）
+WARNING: [WaveDirector] 注册表无敌人数据，波 2 公式构成为空（降级不崩溃）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | T2③ 零请求波走满窗+缓冲（步差 2426 ∈ [2403, 2445]，非 315 早清带）
+── T3 零请求守卫 + 有请求对照 ──
+WARNING: [WaveDirector] 注册表无敌人数据，波 1 公式构成为空（降级不崩溃）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+ERROR: [WaveDirector] 波 1 零生成请求（构成空/注册表空）——R92 早清钳禁用，走满窗+缓冲（诊断 counter=wave_empty_composition）
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | T3① 零请求波 window_left 不被钳 0.8（≥ 满窗−驱动时 0.25）
+PASS | T3①b wave_composition_registry_empty 计数 ≥1（回退分支独立观察点，R198 单源化）
+PASS | T3①c wave_empty_composition 恰 +1（守卫侧单源每波一次，修前双写 +2）
+PASS | T3② 有请求波构成入队（E1 注入 → queue ≥10，公式 14+3.2×1 口径）
+PASS | T3②b 请求全部生成（queue 空 + 在场 ≥1）
+PASS | T3③ 有请求波秒清 → 早清仍钳 ≤0.8s（R92 语义原样，R194 守卫不误伤）
+── T4 boot 空表闸双态 ──
+PASS | T4① 满注册表 → 正常 boot 到 MENU（boot_fatal 空）
+WARNING: [DataRegistry] manifest 未声明 weapons 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 enemies 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 traits 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 relics 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 synergies 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 waves 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [DataRegistry] manifest 未声明 gamefeel 目录（跳过）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+ERROR: [GameLoop] 空注册表，拒绝进入 MENU：["DataRegistry 空注册表：enemies=0 / weapons=0 / report.total=0 / rejected=0——数据文件缺失（导出 include_filter 或 remap 扫描）"]
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | T4② 空 enemies → boot_fatal 非空 + 停留 BOOT（拒绝入局，唯一合法迁移不可达）
+PASS | T4③ boot_empty_registry 计数 ≥1（DebugStats 诊断）
+── T6 横屏视口模拟 ──
+PASS | T6① 横屏 2400×1080 下敌人入场（active>0）
+PASS | T6② 2s 内敌入逻辑域 (0,0)-(720,1280)（14/16 在域内）
+PASS | T6③ 全员在逻辑域±50px 生成余量带内（spawn 全在 res_logic 空间，零窗口几何读）
+── T7 时序鲁棒 + 巨 delta clamp ──
+PASS | T7① 匀速基线越过硬帽台阶（wave ≥2，hard_cap=26.4s）
+PASS | T7② 零 delta 帧 ×5 → 波号/窗口零推进
+PASS | T7③ 巨 delta clamp：单帧 3.0s 实耗 ≤0.25s（window 差 0.2500，P2-10）
+PASS | T7④ game_delta_clamped 计数 ≥1（1→2）
+PASS | T7⑤ hitch 单帧至多叠 1 波（1→1）
+PASS | T7⑥ 抖动（1/144+零帧+3s 卡顿）波号与匀速基线偏差 ≤1（1 vs 2）
+────────────────────────────────────────
+汇总：PASS 29 / FAIL 0（共 29 项）
+验收汇总：93/93 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

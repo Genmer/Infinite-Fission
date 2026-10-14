@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/enemy_data.gd" id="1_ed"]
+
+[resource]
+script = ExtResource("1_ed")
+id = &"E13_bogspitter"
+display_name = "毒沼喷手"
+behavior = 1
+hp_base = 65.0
+spd_base = 62.0
+dmg_base = 12.0
+exp_base = 10.0
+tp_cost = 1.8
+resist = [0.0, 0.0, 0.0, 0.0]
+immune_mask = 0
+tags = 0
+hitbox_r = 14.0
+ranged = {"bullet_speed": 200.0, "fire_cd": 2.6, "bullet_atk_ratio": 0.8, "spread": 8.0, "fire_range": 350.0}
+elite_mult = {"hp": 3.6, "spd": 0.9, "dmg": 1.4, "exp": 8.0}
+boss = {}
+gold_drop = {"chance": 0.08, "min": 10, "max": 16}

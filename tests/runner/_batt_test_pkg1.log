@@ -1,0 +1,132 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 包 1 伤害管线自测 ══════════
+── AC-12.1 公式结构锚点 ──
+PASS | AC-12.1：(100×(1+0.2+0.3)+10)×1.5×1.4 = 336（非暴击）
+PASS | 面板段 S = 160（panel_snapshot）
+PASS | 乘区段 M = 2.1（钳后）
+PASS | Local 段 L = 1.0（空）
+PASS | 非暴击 C = 1
+PASS | 目标侧 V = 1.0（零抗零易伤）
+PASS | 表现级：NORMAL 跳字 / HIT 分级
+PASS | 审计健康：无压缩/无告警/防御层恒空
+PASS | 乘区明细 pool_breakdown 两条
+PASS | 元数据：source/target/frame 回填
+PASS | killed=false（大血量目标）
+PASS | damage_resolved 每次成功结算广播一次
+── AC-12.2 防御层 ──
+PASS | AC-12.2：同实例重入两条 ×1.5 → 150 而非 225
+PASS | 乘区段 M = 1.5（去重取最大）
+PASS | 防御层审计记录 1 条（>0 即 bug 的遥测口径）
+PASS | 聚合层：多实例合法来源合并加算 ×2.0 → 200
+PASS | 聚合层路径防御层恒空
+── F3 衰减不等式族 ──
+PASS | 首层全额：T(1) = c = 0.2 → S = 120
+PASS | n≥2 严格递减：T(2) = 0.384 → S = 138.4
+PASS | T(2) < 2c（138.4 < 140）
+PASS | 边际严格递减：ΔT(2)=18.4 < ΔT(1)=20
+PASS | T(5)@δ0.92 ≤ 4.3c（≈4.2615）
+PASS | T(5) < 5c（严格递减通式）
+PASS | δ=1.0 边界：线性退化 T(5) = 5c → S = 200
+PASS | δ=0 边界：T(5) = c → S = 120
+PASS | 诅咒负贡献全额不衰减：−0.1×3 → S = 70
+PASS | 诅咒结算 final ≥ 0（下界钳制）
+── F4/Flat 池钳 ──
+PASS | F4 池钳：Σ=3.0 → cap 2.0 → S = 300
+PASS | F4 触发记审计 clamped_add
+PASS | Flat 比例钳：80 → 50 → S = 150
+PASS | Flat 钳制记审计 clamped_flat
+PASS | Flat 未超限全额：S = 130
+PASS | 未触发 Flat 审计
+── 乘区护栏 ──
+PASS | 单区钳制：agg=min(3,2)=2 → M=3.0 → 300
+PASS | 名额截断：10 区 → top-8 + 截断审计 2 条
+PASS | top-8 乘积正确（贡献 0.06~0.20 连乘）
+PASS | 截断区为贡献最小的两区
+PASS | priority 决胜：priority 高的 8 区入选
+PASS | priority 决胜确定性：截断恰为 priority 最低两区
+PASS | F9 整体钳制：∏=64 → 8.0 → 800
+PASS | F9 触发记审计 compressed
+── Local 私有池 ──
+PASS | Local cap_local：Σ=0.6 → 钳 0.5 → L=1.5 → 150
+PASS | Local 独立连乘：1.08×1.2 → 129.6
+PASS | Local 不占名额：10 乘区截断后 pool_count=8
+PASS | Local 不受 cap_prod：L=1.1×1.2 独立连乘生效
+── 目标侧 ──
+PASS | 抗性：r=0.5 → V=0.5 → 50
+PASS | target_factor = (1−r) = 0.5
+PASS | 易伤：+0.25 → V=1.25 → 125
+PASS | 组合：V = 0.5 × 1.25 = 0.625 → 62.5
+PASS | 目标接口收紧：Enemy.get_resist 直读 r=0.3 → V=0.7 → 70
+PASS | 目标缺省：真件 Enemy 零抗零易伤 → V=1.0 中性 → 100
+PASS | 满血真件 Enemy → killed=false
+── 暴击 RNG ──
+PASS | 暴击固定种子复现：同种子同序列
+PASS | 异种子序列不同（RNG 真实生效）
+PASS | 序列非全真非全假（0.5 概率 20 掷）
+PASS | 同实例重置种子 → 序列复位一致
+PASS | chance=1 必暴击 ×2.0 → 200
+PASS | crit_mult 词条加成 1.5 → 150
+PASS | HIT_IS_DOT 不掷暴击（A2 §1.7 排除项）
+PASS | DOT 表现级：DOT 跳字 / HIT 分级
+PASS | 暴击表现级：CRIT 跳字 / CRIT 分级
+── 幂等 / 死亡短路 ──
+WARNING: [EventBus] 事件风暴：damage_resolved 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 幂等：第二次调用返回缓存结果（同一对象）
+PASS | 幂等：不重复扣血（take_count 不变）
+PASS | 幂等：hp 不变
+PASS | 幂等：dropped_dupe 计数 +1
+PASS | begin_frame 清缓存 → 重新结算（take_count +1）
+PASS | 致死结算：killed=true + 目标 dead 置位（死亡只执行一次）
+PASS | 死亡短路：dead 目标 → null 丢弃 + dropped_dead 计数
+PASS | 死亡短路：不再扣血（take_count 仍 1）
+PASS | null 目标 → null 丢弃
+── sanitize 入口防御 ──
+PASS | base_atk=NaN → 丢弃 null
+PASS | base_atk=Inf → 丢弃 null
+PASS | flat=NaN → 丢弃 null
+PASS | 乘区 contrib=NaN → 丢弃 null
+PASS | crit_chance=NaN → 丢弃 null
+PASS | 加算 contrib=Inf → 丢弃 null
+PASS | dropped_invalid 计数 = 6
+PASS | 负 base_atk → 钳 0 继续结算（flat 以钳后 base 为基准同被钳 0）
+PASS | sanitized_negative 计数
+── R_alarm ×500 ──
+PASS | R_alarm 触发：audit.alarm=true
+PASS | R_alarm 口径（抗性前）：ratio = 100×8×1001/100 = 8008
+PASS | 保险钳制：raw=800800 → base×500 = 50000
+PASS | damage_alarm 广播一次
+PASS | 第二次超限：audit.alarm 仍记（遥测口径）
+PASS | alarms 计数累计 = 2
+PASS | damage_alarm 一局一次：广播不重复（仍 1）
+PASS | 易伤不影响抗性前 ratio（仍 8008）
+PASS | 易伤只放大 raw 后仍被保险钳制（50000）
+── 反应独立结算 ──
+PASS | 主结算 panel_snapshot = 160（反应快照源）
+PASS | 反应快照口径：D = 2.0 × 160 = 320
+PASS | 反应不掷暴击（crit_chance=1 仍非暴击）
+PASS | 反应乘区被忽略（不入乘区管线，F20）
+PASS | 反应表现级：REACTION 跳字 / CATALYST 分级
+PASS | reaction_triggered 广播（rxn + target_uid）
+PASS | 反应不吃抗性（F21 无 (1−r) 项）
+PASS | 反应结算也广播 damage_resolved
+PASS | 反应幂等：第二次返回缓存不重复扣血
+PASS | 反应可击杀：320 ≥ hp 200 → killed
+PASS | 反应 NaN 快照 → null
+PASS | 反应负系数 → null
+PASS | 零快照 → D = 0（合法边界）
+── frame hooks / DebugStats ──
+PASS | end_frame 落 DebugStats：settles 增量 4
+PASS | end_frame 落 DebugStats：dropped_dupe 增量 1
+PASS | end_frame 增量口径：无新结算不累计
+PASS | begin_frame() 无参兼容 + 增量 1
+PASS | stats() 键完整（settles/dropped_*/alarms）
+── 确定性 1000 次 ──
+WARNING: [EventBus] 结算风暴：damage_resolved 本帧已派发 600 次（定位：结算条目过多）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 固定种子连跑 1000 次 resolve 哈希一致（同输入同输出）
+PASS | 异种子哈希不同（暴击序列真实影响）
+────────────────────────────────────────
+汇总：PASS 108 / FAIL 0（共 108 项）
+════════════════════════════════════════

@@ -27,14 +27,17 @@ func run(p_tree: SceneTree) -> void:
 	_test_rxn_alarm_line()                        # B.6 R_rxn 反应独立告警线
 	_test_xp_chain()                              # B.1
 	_test_relic_handler()                         # B.2
+	_test_relic_attack_cdr()                      # R186 CD 遗物「每击谐振」
 	_test_ranged_enemy_pool()                     # B.3
 	_test_wave_first_hit()                        # B.4
 	_test_separation_force()                      # B.5
+	_test_separation_shard_wheel()                # B.5b R256 序2：分片轮摊平
 	_test_duck_tightening()                       # B.8
 	_test_ac_core_subset()                        # AC 核心子集
 	_test_battlefield_reset()                     # 审查 Fix 1：重开清场 + 重生无敌回归
 	_test_boss_kill_feel_and_escort_gate()        # 审查 Fix 2/3：Boss 击杀顿帧 + 伴随怪存活闸
 	_test_crit_shard_and_validator()              # 审查 Fix 4：暴击弹片结算 + 悬空 threshold 剔除
+	_test_aff_hp_up_wiring()                      # AFF_HP_UP 死池接线（hp 真源 60 回归）
 	_teardown_game_loop()
 	# 汇总
 	print("────────────────────────────────────────")
@@ -57,6 +60,22 @@ func _ensure_autoloads() -> void:
 
 func _boot_game_loop() -> void:
 	# ★ main.tscn 实例化（入口场景组装验证：根节点即 GameLoop，Boot 全链在 _ready 完成）
+	# 套件隔离（pkg4「夜间R42」先例同款）：boot 前清继续档 + Meta 归零——player._ready
+	# 在 spawn 期直读 Meta.character_id/hp_bonus() 定 max_hp（player.gd:476），前置套件
+	# 经大厅选人（menu_screen.gd:1367 → set_character_id 即时落档 meta_manager.gd:335）
+	# 残留低血量角色（veles base 45）时，REL_HARVEST 回血触 max_hp 钳制
+	#（relic_handler.gd:320）→ 偶发空 detail FAIL（探针实证：veles 残留 → 恰 143/1）；
+	# 字面血量断言（REL_HARVEST 0.4% 口径）假定 sentinel 基线档案
+	RunSave.clear()
+	Meta.upgrades = {}
+	Meta.crystals = 0
+	Meta.character_id = &"sentinel"
+	# R252 迁移：祝福池空 → start_requested 直达战斗（设计 §2.4-1/B2 合规退化口径）。
+	# 环境存档残留 codex_traits/祝福记忆会让 _on_menu_start 弹面板挂起 start_run
+	#（game_loop.gd:1773），AC-16.1 的「信号→PLAYING」同步断言整链变红——与上行
+	# upgrades/crystals 同族套件隔离，boot 前归零。
+	Meta.codex_traits = {}
+	Meta.blessing_trait_id = ""
 	var scene: PackedScene = load(MAIN_SCENE)
 	_gl = scene.instantiate() as GameLoop
 	_gl.name = "GameLoopUnderTest"
@@ -65,6 +84,7 @@ func _boot_game_loop() -> void:
 
 func _teardown_game_loop() -> void:
 	tree.paused = false
+	RunSave.clear()
 	if _gl != null:
 		_gl.free()
 		_gl = null
@@ -88,8 +108,8 @@ func _test_main_scene_assembly() -> void:
 		and inst_ms < 3000.0, "boot=%s ms" % str(_gl._boot_elapsed_ms))
 	_check("切真管线：get_pipeline() 工厂默认真件（九步）",
 		_gl.pipeline is DamagePipeline and not (_gl.pipeline is DamagePipelineStub))
-	_check("组装：池×6 / 遗物处理器 / 菜单屏 / 相机就绪",
-		_gl.pools.size() == 6 and _gl.relic_handler != null
+	_check("组装：池×7 / 遗物处理器 / 菜单屏 / 相机就绪（R94 +homing）",
+		_gl.pools.size() == 7 and _gl.relic_handler != null
 		and _gl.menu_screen != null and _gl.camera != null)
 	_check("组装：MenuScreen 仅 MENU 态可见", _gl.menu_screen.is_menu_visible())
 	_check("冻结契约：Engine.time_scale 未被改写（§8.7）", Engine.time_scale == 1.0)
@@ -99,7 +119,7 @@ func _test_main_scene_assembly() -> void:
 		var pool: ObjectPool = _gl.pools[pool_id]
 		if int(pool.stats()["free"]) != int(pool.stats()["capacity"]):
 			prewarmed = false
-	_check("AC-14.2：六池 Boot 期全量预热（live=0 / free=capacity）", prewarmed)
+	_check("AC-14.2：七池 Boot 期全量预热（live=0 / free=capacity）", prewarmed)
 
 
 # ── AC-16.1 全链冒烟 ──────────────────────────────────────────────
@@ -122,10 +142,12 @@ func _test_full_chain_smoke() -> void:
 	var shards_before: int = _gl.active_shards.size()
 	victim.apply_damage(999999.0)
 	_check("击杀：enemy_killed 广播 + HUD 计数", _gl.hud.kills == kills0 + 1)
-	_check("掉落：经验碎片入场上（面值 = exp_value × 点金手倍率 1.0）",
+	_check("掉落：经验碎片入场上（面值 = exp_value × 点金手 × 早期经验倍率）",
 		_gl.active_shards.size() == shards_before + 1
-		and is_equal_approx(_gl.active_shards[_gl.active_shards.size() - 1].value, exp_value))
-	# 磁吸拾取 → 经验入账（AC-16.1 磁吸段；520px/s 飞行 60px ≈ 12 帧）
+		and is_equal_approx(_gl.active_shards[_gl.active_shards.size() - 1].value,
+			exp_value * _gl.relic_handler.xp_mult() * _gl._early_xp_mult()))
+	# 磁吸拾取 → 经验入账（AC-16.1 磁吸段；R214 单驱动 1040px/s 飞行 60px ≈ 6 帧，
+	# _drive(20) 上界内到达——到达型断言不锁速度）
 	var shard: XpShard = _gl.active_shards[_gl.active_shards.size() - 1]
 	var xp0: float = _gl.player.xp
 	shard.global_position = _gl.player.global_position + Vector2(60.0, 0.0)
@@ -135,6 +157,7 @@ func _test_full_chain_smoke() -> void:
 	# 升级 → 三选一（LEVEL_UP 冻结，AC-16.2）
 	var lv0: int = _gl.player.level
 	_gl.player.gain_xp(_gl.player.xp_need)
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("升级：gain_xp → LEVEL_UP 选卡流打开", _gl.player.level == lv0 + 1
 		and _gl.state == GameConst.GameStatus.LEVEL_UP and _gl.card_select_ui.is_open
 		and _gl.current_candidates.size() >= 3)
@@ -148,22 +171,38 @@ func _test_full_chain_smoke() -> void:
 	# 选卡 → 词条生效 → 恢复 PLAYING
 	var card: Dictionary = _gl.current_candidates[0]
 	var kind := int(card.get("kind", -1))
+	# MASTERY/TRAIT 目标武器随机（多持时 rng 直选）——断言跟卡面目标走（卡池每局随机，
+	# 写死 slots[0] 在随机命中其他武器时误报，2026-09-13 batch5 实测）
 	var w: WeaponBase = _gl.player.weapon_slots[0]
+	if card.get("weapon") is WeaponBase and is_instance_valid(card["weapon"]):
+		w = card["weapon"]                        # MASTERY 目标
+	elif card.get("target_weapon") is WeaponBase and is_instance_valid(card["target_weapon"]):
+		w = card["target_weapon"]                 # TRAIT 目标（随机武器）
 	var traits0: int = w.trait_stack.traits.size()
 	var wlevel0: int = w.level
 	var relics0: int = _gl.card_generator.owned_relics.size()
+	var slots0: int = _gl.player.unlocked_slots
 	_gl.card_select_ui.choose(0)
 	_check("选卡：恢复 PLAYING（AC-16.1 选卡段）",
 		_gl.state == GameConst.GameStatus.PLAYING and not _gl.card_select_ui.is_open)
 	var applied := false
 	match kind:
-		0:                                      # MASTERY：武器 +1 级
-			applied = w.level == wlevel0 + 1
+		0:                                      # MASTERY：武器 +boosts 级（R245 三档分化 白/蓝/紫=+1/+2/+3——卡池每局随机，断言跟卡面 boosts 走）
+			applied = w.level == wlevel0 + maxi(int(card.get("level_boosts", 1)), 1)
 		1:                                      # TRAIT：词条挂载生效
 			applied = w.trait_stack.traits.size() > traits0
 		2:                                      # RELIC：遗物入场
 			applied = _gl.card_generator.owned_relics.size() > relics0 \
 				or _gl.relic_handler.owned_count() > 0
+		4:                                      # WEAPON：新武器装配（apply_choice → Player.add_weapon 首空槽——不挂词条；卡池只上架未持有武器，槽内 id 唯一可查）
+			for slot in _gl.player.weapon_slots:
+				if slot is WeaponBase and is_instance_valid(slot) \
+						and String((slot as WeaponBase).data.id) == String(card.get("id", "")):
+					applied = true
+					break
+		5:                                      # SLOT_BONUS：金卡提前解锁帽内下一槽（grant_slot_bonus；帽内满员幂等拒绝不算失效）
+			applied = _gl.player.unlocked_slots > slots0 \
+				or _gl.player.unlocked_slots >= int(_gl.player.call(&"slot_cap_total"))
 		_:                                      # FALLBACK：+5% 攻击词条
 			applied = w.trait_stack.traits.size() > traits0
 	_check("词条生效：所选卡类别效果落武器（kind=%d）" % kind, applied)
@@ -179,6 +218,7 @@ func _test_full_chain_smoke() -> void:
 		boss_on_field and _gl.boss_bar.is_visible_bar())
 	# F-19：Boss 击杀 → 槽位解锁（EventBus 真实派发序回归——wave_director 读 tags
 	# 必须先于 spawner 归还清零，集成包修复的接线验证；w10 Boss1 → 槽 4）
+	_gl.player.call(&"set_difficulty", 2)   # R183 地狱帽 6（沿用地狱口径保槽 4 解锁稳定）
 	var slots_before: int = _gl.player.unlocked_slots
 	var bosses: Array[Enemy] = []
 	for e in _gl.spawner.active:
@@ -188,7 +228,10 @@ func _test_full_chain_smoke() -> void:
 		b.apply_damage(9999999.0)
 	_check("F-19：Boss1 击杀 → 槽位 4 解锁（真实派发序，修复回归）",
 		_gl.player.unlocked_slots == maxi(slots_before, 4))
-	# 死亡 → 结算 → 重开（AC-16.1 尾段）
+	# 死亡 → 结算 → 重开（AC-16.1 尾段）。R7 备忘：测试存档含养成「应急协议」复活
+	# （verify 养成用例购买后持久化）——死亡用例必须显式清零 revives_left，否则首击被
+	# 复活吃掉回满血（batch26 实测 hp 999999 后仍 60 的根因）
+	_gl.player.revives_left = 0
 	_gl.player.invuln_left = 0.0
 	_gl.player.take_contact_damage(999999.0)
 	_check("死亡仲裁：PLAYING→GAME_OVER（E-16 最高优先）",
@@ -348,6 +391,37 @@ func _test_rxn_alarm_line() -> void:
 	_check("B.6：亚线反应原值通过（200）且审计无告警",
 		r_ok != null and is_equal_approx(r_ok.final_value, 200.0)
 		and r_ok.audit != null and not r_ok.audit.alarm)
+	# —— B.6 [R192 扩] 反应矩阵告警线（R192 §10：管线按「每笔结算 coefficient>50」判，
+	# 配对数结构性不进口径——reaction_table 全 coef 键逐条注入验证）——
+	var coef_keys: Array = []
+	for k in bal.reaction_table:
+		if (bal.reaction_table[k] as Dictionary).has("coef"):
+			coef_keys.append(String(k))
+	_check("B.6-R192：反应表含 coef 键条目 ≥4（现役 2 + 新增伤害反应——矩阵非空）",
+		coef_keys.size() >= 4, "coef_keys=%s" % str(coef_keys))
+	var mat_ok := true
+	var mat_detail := ""
+	pipe._rxn_alarm_emitted = false           # 复位广播闸（验证矩阵首条重新广播、此后保持）
+	var mat_alarm0: int = int(pipe._stats["rxn_alarms"])
+	for i in range(coef_keys.size()):
+		var ctx_m := _pipe_ctx(t, 20 + i)     # 独立 frame_stamp——绕开幂等缓存
+		var r_m: DamageResult = pipe.resolve_reaction(100.0, 60.0, ctx_m)
+		if r_m == null or not is_equal_approx(r_m.final_value, 5000.0) \
+				or r_m.audit == null or not r_m.audit.alarm:
+			mat_ok = false
+			mat_detail = "%s final=%s" % [coef_keys[i],
+				str(r_m.final_value if r_m != null else -1.0)]
+	_check("B.6-R192：全矩阵 coef 键逐条注入 χ=60 → 均钳至 S_snap×50（5000）+ alarm",
+		mat_ok, mat_detail)
+	_check("B.6-R192：矩阵超线计数逐笔累加（+%d）且广播闸一局一次（首条后保持）" % coef_keys.size(),
+		int(pipe._stats["rxn_alarms"]) == mat_alarm0 + coef_keys.size()
+		and bool(pipe._rxn_alarm_emitted))
+	# 最大合法构筑不误报：单源金 φ4.68 × 蒸发 1.5 = 7.02 ≤ 50 → 原值通过、审计干净
+	var ctx_mx := _pipe_ctx(t, 19)
+	var r_mx: DamageResult = pipe.resolve_reaction(100.0, 7.02, ctx_mx)
+	_check("B.6-R192：最大构筑 coef=7.02 不钳不告警（702 原值通过）",
+		r_mx != null and is_equal_approx(r_mx.final_value, 702.0)
+		and r_mx.audit != null and not r_mx.audit.alarm)
 	(_gl.pools[&"enemy"] as EnemyPool).release(t)
 
 
@@ -357,13 +431,14 @@ func _test_xp_chain() -> void:
 	_check("xp 池挂载：容量 160 + 全量预热（AC-14.2）",
 		(_gl.pools[&"xp"] as XPPool).stats()["capacity"] == 160
 		and int((_gl.pools[&"xp"] as XPPool).stats()["free"]) == 160)
-	# 掉落值（exp_value × 点金手倍率）与磁吸边界
+	# 掉落值（exp_value × 点金手倍率 × 早期经验倍率）与磁吸边界
 	var enemy: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
 	enemy.spawn(_make_enemy_data(&"E_XP", 1.0), 1, 0)
 	var shards0: int = _gl.active_shards.size()
 	_gl._on_enemy_killed_drop_xp(enemy)
+	var want_value := 7.0 * _gl.relic_handler.xp_mult() * _gl._early_xp_mult()
 	_check("掉落：碎片面值 = exp_value(7) × 倍率", _gl.active_shards.size() == shards0 + 1
-		and is_equal_approx(_gl.active_shards[_gl.active_shards.size() - 1].value, 7.0))
+		and is_equal_approx(_gl.active_shards[_gl.active_shards.size() - 1].value, want_value))
 	# 磁吸半径外不吸附、半径内吸附
 	var shard: XpShard = _gl.active_shards[_gl.active_shards.size() - 1]
 	var far_pos: Vector2 = _gl.player.global_position + Vector2(_gl.player.pickup_radius + 80.0, 0.0)
@@ -404,7 +479,7 @@ func _test_xp_chain() -> void:
 func _test_relic_handler() -> void:
 	print("── 遗物处理器 ──")
 	var h := _gl.relic_handler
-	_check("遗物注册表：11 件加载", _gl.registry.relics.size() == 11)
+	_check("遗物注册表：40 件加载（R72 增 6 + R186 增 1 + R252 扩容 16 + R253 防御六件）", _gl.registry.relics.size() == 40)
 	# REL_MIDAS：经验倍率
 	_check("REL_MIDAS：激活 + 经验 ×1.2",
 		h.activate(&"REL_MIDAS") and is_equal_approx(h.xp_mult(), 1.2))
@@ -416,7 +491,9 @@ func _test_relic_handler() -> void:
 	_gl.player.hp = 50.0
 	EventBus.emit_enemy_killed(victim)            # spawner 同步归还（池内节点合法）
 	_check("REL_HARVEST：击杀 +0.4% max_hp（50→50.4）",
-		is_equal_approx(_gl.player.hp, 50.0 + _gl.player.max_hp * 0.004))
+		is_equal_approx(_gl.player.hp, 50.0 + _gl.player.max_hp * 0.004),
+		"hp=%s max_hp=%s（max_hp<50.24 即 boot 角色残留钳制——见 _boot_game_loop 隔离）"
+			% [str(_gl.player.hp), str(_gl.player.max_hp)])
 	# REL_OVERCLOCK：精英首杀 → 下一张卡稀有度保底紫+（每波一次）
 	_check("REL_OVERCLOCK：激活", h.activate(&"REL_OVERCLOCK"))
 	EventBus.emit_wave_started(3)
@@ -442,19 +519,44 @@ func _test_relic_handler() -> void:
 	_check("REL_GAMBLER：发牌数 4", h.deal_count() == 4 and h.curse_requested())
 	_gl.player.invuln_left = 0.0
 	EventBus.emit_level_up(2)                     # PLAYING → LEVEL_UP（发牌走遗物参数）
-	_check("REL_GAMBLER：货架 4 张 + 末位诅咒标记",
+	_gl.call(&"_consume_deferred_level_open")     # R215 刀A：开窗延迟帧尾（驱动等价一帧）
+	# 货架末位类别是随机 roll（卡池 start_run randomize）——R246 收紧后仅 TRAIT 末位可
+	# 被打诅咒标记，非词条末位不带标记属业务正确。原无条件 cursed 断言在末位 roll 出
+	# 非词条批必红（QA 报告的预先存在 flaky 根因）→ 改条件式语义锁：末位为词条卡 ⇒ 必带
+	# 诅咒标记（货架发牌数/开窗态恒断言，不随机化）
+	var last4: Dictionary = _gl.current_candidates[3]
+	var last4_trait: bool = int(last4.get("kind", -1)) == CardGenerator.CardKind.TRAIT
+	_check("REL_GAMBLER：货架 4 张 + 末位词条卡必带诅咒标记（R246 仅 TRAIT 可诅咒）",
 		_gl.state == GameConst.GameStatus.LEVEL_UP
 		and _gl.current_candidates.size() == 4
-		and bool(_gl.current_candidates[3].get("cursed", false)))
+		and (not last4_trait or bool(last4.get("cursed", false))),
+		"kind=%s cursed=%s" % [str(last4.get("kind")), str(last4.get("cursed"))])
 	var w: WeaponBase = _gl.player.weapon_slots[0]
 	var traits0: int = w.trait_stack.traits.size()
-	_gl.card_select_ui.choose(3)                  # 选诅咒卡 → 附加 ATK −10% 诅咒词条
+	_gl.card_select_ui.choose(3)                  # 选末位卡出窗（类别随机——效果断言走下方确定性链）
+	_check("REL_GAMBLER：选卡出窗恢复 PLAYING",
+		_gl.state == GameConst.GameStatus.PLAYING and not _gl.card_select_ui.is_open)
+	# 诅咒应用链确定性锁：原「选诅咒卡→GAMBLER_CURSE 挂载」断言依赖末位恰好 roll 成
+	# 词条卡（同上 flaky 根因）→ 手工拼 cursed 词条卡直入 apply_choice——apply 侧
+	# cursed 分支（GAMBLER_CURSE 挂主武器）不再依赖随机，恒测得到
+	var curse_host: Dictionary = {
+		"kind": CardGenerator.CardKind.TRAIT,
+		"id": &"PKG5_CURSE_HOST",
+		"rarity": 0,
+		"data": _gl.registry.get_trait(&"AFF_ATK_UP"),
+		"display_name": "赌徒代价",
+		"description": "",
+		"target_weapon": w,                       # 锁宿主（防 _pick_attach_target 随机漂移）
+		"cursed": true,
+	}
+	_gl.card_generator.apply_choice(curse_host, _gl.player)
 	var has_curse := false
 	for tb in w.trait_stack.traits:
 		if (tb as Object).get("data").id == &"GAMBLER_CURSE":
 			has_curse = true
-	_check("REL_GAMBLER：诅咒卡应用 → GAMBLER_CURSE 词条挂载",
-		has_curse or w.trait_stack.traits.size() > traits0)
+	_check("REL_GAMBLER：cursed 卡应用 → GAMBLER_CURSE 词条挂载（apply 侧确定性锁）",
+		has_curse and w.trait_stack.traits.size() > traits0,
+		"traits=%d base=%d" % [w.trait_stack.traits.size(), traits0])
 	# REL_BOSS_TROPHY：精英/Boss 独立乘区 ×1.25（命中时点注入）
 	_check("REL_BOSS_TROPHY：激活", h.activate(&"REL_BOSS_TROPHY"))
 	var elite3: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
@@ -517,19 +619,44 @@ func _test_relic_handler() -> void:
 	# 幂等口径（修复 B 双保险）：同 GAMBLER——卡牌流提前抽中时已持有即生效
 	_check("REL_BLACK_MARKET：激活（卡牌流提前入场 → 已持有即生效）",
 		h.activate(&"REL_BLACK_MARKET") or h.has_relic(&"REL_BLACK_MARKET"))
-	EventBus.emit_wave_cleared(35)
-	EventBus.emit_wave_cleared(45)
-	EventBus.emit_wave_cleared(36)
-	_check("REL_BLACK_MARKET：w35/w45 排程、w36 不排程（占位计数 2）",
-		h.pending_shop_waves == 2)
+	# 2026-09-13 死数据接线：波清空 → 排程消费 → 真实开店（_on_relic_shop_wave）；
+	# w35/w45 开店、w36 不排程
+	# R10：黑市重调 w8 起每 5 波 + 通关即结算（final 波清空 → 胜利）——换沼泽图（final 30）
+	# 使节拍波 8/13 低于 final，避开胜利结算
+	_gl.current_map_id = &"world_swamp"
+	Meta.set_run_map(&"world_swamp")
+	EventBus.emit_wave_cleared(8)
+	_check("REL_BLACK_MARKET：w8 清空 → 排程消费并开店（LEVEL_UP + 可见）",
+		h.pending_shop_waves == 0 and _gl.state == GameConst.GameStatus.LEVEL_UP
+		and _gl.shop_ui.is_shop_visible())
+	_gl.shop_ui.close()                        # 出击 → PLAYING（含宽限）
+	EventBus.emit_wave_cleared(13)
+	_check("REL_BLACK_MARKET：w13 再次排程开店", _gl.state == GameConst.GameStatus.LEVEL_UP
+		and _gl.shop_ui.is_shop_visible())
+	_gl.shop_ui.close()
+	EventBus.emit_wave_cleared(9)
+	_check("REL_BLACK_MARKET：w9 不排程（保持 PLAYING）",
+		_gl.state == GameConst.GameStatus.PLAYING and not _gl.shop_ui.is_shop_visible())
+	# R7 波末磁吸联动清尾：波清空会强磁吸全屏碎片 → 4.5s 内陆续吸收入账——
+	# 压平经验防 LEVEL_UP 劫持后续死亡仲裁用例，并驱动至碎片清空
+	_gl.player.xp = 0.0
+	_gl.player.xp_need = 999999.0
+	for i in range(240):
+		if _gl.active_shards.is_empty():
+			break
+		_drive(2)
 	# REL_PHOENIX：致死保留 1 HP + 清屏冲击（每场 1 次）——放最后（含死亡分支）
-	_check("REL_PHOENIX：激活", h.activate(&"REL_PHOENIX"))
+	# 幂等护栏（同 REL_GAMBLER/REL_BLACK_MARKET 先例）：冒烟选卡可能随机抽中 PHOENIX
+	# （card_chosen 通道自动激活）→ 显式 activate 被「每场唯一」拒绝属业务正确，已持有即生效
+	_check("REL_PHOENIX：激活（卡牌流提前入场 → 已持有即生效）",
+		h.activate(&"REL_PHOENIX") or h.has_relic(&"REL_PHOENIX"))
 	_gl.player.invuln_left = 0.0
 	_gl.player.hp = 5.0
 	_gl.player.take_contact_damage(999999.0)
 	_check("REL_PHOENIX：致死保留 1 HP（不死鸟触发）",
 		_gl.player.hp == 1.0 and h.phoenix_triggered == 1
 		and _gl.state == GameConst.GameStatus.PLAYING)
+	_gl.player.revives_left = 0                 # R7：同上——测试档养成复活不拦截死亡仲裁
 	_gl.player.invuln_left = 0.0
 	_gl.player.take_contact_damage(999999.0)
 	_check("REL_PHOENIX：次数耗尽 → 死亡放行（E-16）",
@@ -542,6 +669,96 @@ func _test_relic_handler() -> void:
 	for e: Enemy in [elite3, plain3]:
 		if is_instance_valid(e):
 			(_gl.pools[&"enemy"] as EnemyPool).release(e)
+
+
+# ── R186 CD 遗物「每击谐振」（REL_ATTACK_CDR：每击 −0.01s 技能 CD，预算窗封顶） ──
+func _test_relic_attack_cdr() -> void:
+	print("── R186 每击谐振（CD 遗物） ──")
+	var h := _gl.relic_handler
+	h.reset_run()                                 # 净态起步（前序用例遗物残余隔离；末尾 ⑦ 再清）
+	var rd: RelicData = _gl.registry.get_relic(&"REL_ATTACK_CDR")
+	_check("R186：注册可查 + effect_id/unique/params 三键",
+		rd != null and rd.effect_id == &"REL_EF_ATTACK_CDR" and rd.unique
+		and is_equal_approx(float(rd.params.get("cd_per_attack", 0.0)), 0.01)
+		and is_equal_approx(float(rd.params.get("rate_per_sec", 0.0)), 20.0)
+		and is_equal_approx(float(rd.params.get("bank_mult", 0.0)), 3.0))
+	# push 口未持有守卫：静默无效（不写 CD、不计费不耗预算）
+	_gl.player.set("skill_cd_left", 100.0)
+	h.on_attack_fired()
+	_check("R186：未持有 push 静默早退（守卫零副作用）",
+		is_equal_approx(float(_gl.player.get("skill_cd_left")), 100.0)
+		and h.attack_cdr_credits == 0 and h.attack_cdr_seconds == 0.0)
+	# ① 存款拉满：activate 后预算 = 0.60s（60 击信用）
+	_check("R186①：激活 + 预算存款拉满 0.60s",
+		h.activate(&"REL_ATTACK_CDR") and is_equal_approx(h._atk_cdr_budget, 0.6))
+	# ② 直减 + 耗尽：60 击 → CD 119.4 / 预算归零 / 计费 60（snappedf 网格保证第 60 击不丢）
+	_gl.player.set("skill_cd_left", 120.0)
+	for i in range(60):
+		h.on_attack_fired()
+	_check("R186②：60 击直减 → CD 119.4 / 预算归零 / 计费遥测 60",
+		is_equal_approx(float(_gl.player.get("skill_cd_left")), 119.4)
+		and is_equal_approx(h._atk_cdr_budget, 0.0) and h.attack_cdr_credits == 60
+		and is_equal_approx(h.attack_cdr_seconds, 0.6))
+	# ③ 整击丢弃：预算耗尽后再击无部分计费
+	h.on_attack_fired()
+	_check("R186③：预算耗尽 → 整击丢弃（CD/遥测不动）",
+		is_equal_approx(float(_gl.player.get("skill_cd_left")), 119.4)
+		and h.attack_cdr_credits == 60)
+	# ④ 回充 + 帽：1s 回充 0.20s（速率帽 20 击/s）；10s 触存款帽 0.60s
+	h.tick(1.0)
+	_check("R186④：tick(1.0) 回充 +0.20s（20 击/s 预算速率）",
+		is_equal_approx(h._atk_cdr_budget, 0.2))
+	h.tick(10.0)
+	_check("R186④：tick(10.0) 回充触帽 → 停在 0.60s（存款上限）",
+		is_equal_approx(h._atk_cdr_budget, 0.6))
+	# ⑤ 技能就绪不计费不耗预算
+	_gl.player.set("skill_cd_left", 0.0)
+	var credits5: int = h.attack_cdr_credits
+	h.on_attack_fired()
+	_check("R186⑤：技能就绪 → 不计费不耗预算（存款留给下轮）",
+		float(_gl.player.get("skill_cd_left")) == 0.0
+		and h.attack_cdr_credits == credits5 and is_equal_approx(h._atk_cdr_budget, 0.6))
+	# ⑥ 与暴击谐振共存：CRIT_CHAIN 整置 skill_cd_left=0（relic_handler.gd:395）→ 计费早退
+	_check("R186⑥：暴击谐振激活", h.activate(&"REL_CRIT_CHAIN"))
+	_gl.player.set("skill_cd_left", 0.0)          # 暴击谐振整置后的就绪态
+	h.on_attack_fired()
+	_check("R186⑥：整置就绪 → 计费早退、存款保留",
+		float(_gl.player.get("skill_cd_left")) == 0.0
+		and is_equal_approx(h._atk_cdr_budget, 0.6))
+	# ⑩ 正交回归：时之沙乘区不被覆盖 + 同帧越帽封顶（预算 0.6 → 恰 60 击，其余整击丢弃）
+	_check("R186⑩：时之沙激活 → skill_cd_relic_mult = 0.8",
+		h.activate(&"REL_TIMELORD")
+		and is_equal_approx(float(_gl.player.get("skill_cd_relic_mult")), 0.8))
+	_gl.player.set("skill_cd_left", 120.0)
+	var credits10: int = h.attack_cdr_credits
+	for i in range(120):                          # 同帧 120 击轰击：无 tick 回充 → 预算限 60
+		h.on_attack_fired()
+	_check("R186⑩：同帧 120 击越帽 → 计费恰 60（封顶语义）+ CD 119.4",
+		h.attack_cdr_credits - credits10 == 60
+		and is_equal_approx(float(_gl.player.get("skill_cd_left")), 119.4)
+		and is_equal_approx(h._atk_cdr_budget, 0.0))
+	_check("R186⑩：时之沙乘区 0.8 保持（本遗物不写乘区，正交）",
+		is_equal_approx(float(_gl.player.get("skill_cd_relic_mult")), 0.8))
+	# ⑪ 真链接线（生产开火路径计费）：前置用例全部直调 h.on_attack_fired()，无法发现
+	# WeaponBase.tick try_fire 成功位 → relic_handler 的接线缺失（「假遗物」先例）——
+	# 此处走真实 GameLoop 驱动（enemy_grid.rebuild → player.tick → weapon.tick →
+	# try_fire 成功 → on_attack_fired），断言真实开火产生计费遥测。
+	h.tick(10.0)                                  # 存款回满 0.60（⑩ 已耗尽）
+	_gl.player.set("skill_cd_left", 120.0)
+	var credits_chain: int = h.attack_cdr_credits
+	var xp_need0: float = _gl.player.xp_need
+	_gl.player.xp = 0.0
+	_gl.player.xp_need = 999999.0                 # 防 LEVEL_UP 冻结劫持计费窗（遗物段先例）
+	_drive(90)                                    # w1 敌陆续入场 → 起始武器真实开火
+	_check("R186⑪：真链接线（tick→try_fire→on_attack_fired）真实开火计费 >0",
+		h.attack_cdr_credits > credits_chain
+		and float(_gl.player.get("skill_cd_left")) < 120.0)
+	_gl.player.xp_need = xp_need0
+	# ⑦ reset_run 清态（兼本用例收尾隔离——owned 清空不污染后续用例，同 AFF_HP_UP 先例）
+	h.reset_run()
+	_check("R186⑦：reset_run 三态清零 + owned 清空",
+		h._atk_cdr_budget == 0.0 and h.attack_cdr_credits == 0
+		and h.attack_cdr_seconds == 0.0 and h.owned_count() == 0)
 
 
 # ── RANGED 敌弹池化（B.3） ────────────────────────────────────────
@@ -627,6 +844,67 @@ func _test_separation_force() -> void:
 	(_gl.pools[&"enemy"] as EnemyPool).release(b)
 
 
+# ── E-10 分片轮（R256 序2：10Hz 单帧全量尖峰 → 每帧 1 片摊平） ─────
+func _test_separation_shard_wheel() -> void:
+	print("── 敌间分离分片轮 ──")
+	var data := _make_enemy_data(&"E_SEPW", 1.0)
+	data.spd_base = 0.0                           # 静止（位移唯一来源=分离力）
+	data.hitbox_r = 14.0
+	var foes: Array[Enemy] = []
+	for i in 12:
+		var e: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
+		e.spawn(data, 1, 0)
+		e.position = Vector2(360, 640)
+		_gl.spawner.active.append(e)
+		foes.append(e)
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	_gl._reset_separation_wheel()
+	var max_moved := 0
+	var total_moved := 0
+	for f in 7:                                   # 7×0.016s ≈ 0.112s：六片各到期一次
+		var before := PackedVector2Array()
+		for e in foes:
+			before.append(e.global_position)
+		_gl._tick_separation(0.016)
+		var moved := 0
+		for i in foes.size():
+			if foes[i].global_position != before[i]:
+				moved += 1
+		max_moved = maxi(max_moved, moved)
+		total_moved += moved
+	_check("E-10分片：单帧无全量（最大单帧位移敌 %d < 12）" % max_moved,
+		max_moved < foes.size())
+	_check("E-10分片：一轮轮转全员服务（累计 %d == 12）" % total_moved,
+		total_moved == foes.size())
+	var before2 := foes[0].global_position
+	_gl._apply_enemy_separation()
+	_check("E-10分片：全量口径保留（直调全场仍有位移）",
+		foes[0].global_position != before2)
+	_gl._reset_separation_wheel()
+	_check("E-10分片：重置清空轮相位", _gl._sep_due.is_empty())
+	_gl._tick_separation(0.016)
+	_check("E-10分片：惰性重建恰 6 片", _gl._sep_due.size() == 6)
+	# 相位保持（R256 修轮 QA-R256-02）：≥interval 长帧追赶批一次结清后不并相——
+	# 正常帧续推无单帧全量回归（首版 snap-to-now 长帧后相位散布归零=周期性 12/12 锁步）
+	_gl._tick_separation(0.3)                    # 长帧：六片各结一次（追赶批，允许全量）
+	var max_after := 0
+	for f in 12:                                 # 长帧后 12 正常帧：错峰网格应保持（≤4/帧）
+		var before3 := PackedVector2Array()
+		for e in foes:
+			before3.append(e.global_position)
+		_gl._tick_separation(0.016)
+		var moved3 := 0
+		for i in foes.size():
+			if foes[i].global_position != before3[i]:
+				moved3 += 1
+		max_after = maxi(max_after, moved3)
+	_check("E-10分片：长帧后相位保持（12 正常帧最大位移敌 %d ≤ 4）" % max_after,
+		max_after <= 4)
+	for e in foes:
+		_gl.spawner.active.erase(e)
+		(_gl.pools[&"enemy"] as EnemyPool).release(e)
+
+
 # ── duck 收紧回归（B.8） ──────────────────────────────────────────
 func _test_duck_tightening() -> void:
 	print("── duck 收紧第二批 ──")
@@ -657,11 +935,23 @@ func _test_duck_tightening() -> void:
 func _test_ac_core_subset() -> void:
 	print("── AC 核心子集 ──")
 	# AC-01.1：竖屏逻辑分辨率 + 拉伸策略
-	_check("AC-01.1：720×1280 + canvas_items/keep（Q-1 裁定口径）",
+	# R195 契约更新：Q-1 原裁 canvas_items/keep 黑边 → R195 主案 keep→expand（超宽/超长
+	# 窗延伸画布）；运行期窗口高宽比>2.34 由 GameLoop 表现层钳制回落 KEEP 居中黑边
+	#（STRETCH_ASPECT_RATIO_MAX 代码常量，r195_adapt A7 验收）。
+	# R203 真机渲染分辨率帽：mode canvas_items→viewport（1.5K-2K 屏原生光栅化填充
+	# 4-6 倍放大是怪海 5-10 帧主因；viewport 内部按 720 档展开分辨率渲染再 GPU 上采样，
+	# expand 语义由 r195_adapt 七尺寸矩阵全绿证实）——断言值随契约同步，非放宽。
+	_check("AC-01.1：720×1280 + viewport/expand（R203 渲染分辨率帽；R195 曾 keep→expand）",
 		ProjectSettings.get_setting("display/window/size/viewport_width") == 720
 		and ProjectSettings.get_setting("display/window/size/viewport_height") == 1280
-		and String(ProjectSettings.get_setting("display/window/stretch/mode")) == "canvas_items"
-		and String(ProjectSettings.get_setting("display/window/stretch/aspect")) == "keep")
+		and String(ProjectSettings.get_setting("display/window/stretch/mode")) == "viewport"
+		and String(ProjectSettings.get_setting("display/window/stretch/aspect")) == "expand")
+	# R194：Android 竖屏唯一修口 = 项目设置（4.3 导出器清单 screenOrientation 只读
+	# display/window/handheld/orientation；1=PORTRAIT——export_presets 的
+	# screen/orientation 为 3.x 死键已删，导出门禁以重导出包 xmltree=1 为准）
+	_check("R194：window/handheld/orientation=1（竖屏，AC-01.1 同款 ProjectSettings 直读）",
+		int(ProjectSettings.get_setting("display/window/handheld/orientation")) == 1,
+		str(ProjectSettings.get_setting("display/window/handheld/orientation")))
 	# AC-14.4：池满降级（软闸 null + 计数）
 	var tiny := ProjectilePool.new()
 	tree.get_root().add_child(tiny)
@@ -814,6 +1104,7 @@ func _test_battlefield_reset() -> void:
 		"tick_atk": 1.0, "panel_snapshot": {}})
 	_check("清场前：投射物/光束池 live > 0",
 		int(pool.stats()["live"]) > 0 and int(laser_pool.stats()["live"]) > 0)
+	_gl.player.revives_left = 0                 # R7：同前——测试档养成复活不拦截死亡仲裁
 	_gl.player.invuln_left = 0.0
 	_gl.player.take_contact_damage(999999.0)
 	_check("重开前：GAME_OVER（E-16）", _gl.state == GameConst.GameStatus.GAME_OVER)
@@ -903,14 +1194,31 @@ func _test_crit_shard_and_validator() -> void:
 	_check("Fix4：双镜像清单同步（TraitEffect.known_effect_ids / TECH_EFFECT_IDS ∋ EF_CRIT_SHARD）",
 		TraitEffect.known_effect_ids().has(&"EF_CRIT_SHARD")
 		and DataValidator.TECH_EFFECT_IDS.has(&"EF_CRIT_SHARD"))
-	var w: WeaponBase = _gl.player.weapon_slots[0]   # W1_pistol：.tres 声明 TH_CRIT_SHARD(0.6, ratio 0.5)
+	var w: WeaponBase = _gl.player.weapon_slots[0]   # W1_pistol：.tres 声明 TH_CRIT_SHARD(0.35, ratio 0.5)
 	var th: Dictionary = w.get_threshold(&"TH_CRIT_SHARD")
-	_check("Fix4：注册武器 TH_CRIT_SHARD 存活（66 资源 0 rejected 口径不回归）",
+	_check("Fix4：注册武器 TH_CRIT_SHARD 存活（注册资源 0 rejected 口径不回归）",
 		not th.is_empty() and StringName(str(th.get("effect_id", ""))) == &"EF_CRIT_SHARD")
+	# R187 翻转：TH_CRIT_SHARD 0.6→0.35（全武器共享死节点修复——五方向定案统一裁定）
+	_check("R187：TH_CRIT_SHARD 阈值 0.6 → 0.35（注册武器声明翻转）",
+		not th.is_empty() and is_equal_approx(float(th.get("threshold", 0.0)), 0.35),
+		str(th.get("threshold", "null")))
+	# R187 补口（交付抽查发现修复缺口，主控落地）：生产载体——此前 EF_CRIT_SHARD 无任何
+	# 词条 .tres 携带，执行器在生产永不触发（本套件的 TEST_CRIT_SHARD 属内联构造单元路径）
+	var carrier: TraitData = load("res://resources/traits/MEC_CRIT_SHARD.tres")
+	_check("R187 补口：MEC_CRIT_SHARD 生产载体（EF_CRIT_SHARD + ON_HIT 派发 + MECH 池）",
+		carrier != null and carrier.effect_id == &"EF_CRIT_SHARD"
+		and carrier.event_hooks.has(GameConst.TraitEvent.ON_HIT)
+		and carrier.pool == GameConst.PoolClass.MECH)
 	# 弹片结算（真件武器 threshold + 真实管线；主目标 1000000 血，邻近单体半径内/外各一）
 	var main: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
 	main.spawn(_make_enemy_data(&"E_SHARD_MAIN", 1000000.0), 1, 0)
 	main.position = Vector2(360.0, 400.0)
+	# R187 补口：W8 蓄能档位通道 + 头顶读数数据源（「蓄能 x/5」挂 enemy._draw，headless 验数据面）
+	main.add_charge_stacks(3, 5)
+	_check("R187 补口：蓄能档位通道（add 3/5 → 3，帽记录）",
+		main.charge_stacks == 3 and main.charge_cap == 5)
+	main.clear_charge_stacks()
+	_check("R187 补口：蓄能引爆清零（clear → 0）", main.charge_stacks == 0)
 	var near: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
 	near.spawn(_make_enemy_data(&"E_SHARD_NEAR", 1000000.0), 1, 0)
 	near.position = Vector2(380.0, 420.0)            # 弹片半径内
@@ -939,12 +1247,12 @@ func _test_crit_shard_and_validator() -> void:
 	dctx.crit_mult = 2.0
 	dctx.pos = proj.global_position
 	tctx.damage_ctx = dctx
-	# 阈下：暴击率 0.5 < 0.6 → 质变未激活
-	dctx.crit_chance = 0.5
+	# 阈下：暴击率 0.3 < 0.35（R187 阈值翻转）→ 质变未激活
+	dctx.crit_chance = 0.3
 	ef.handle(shard_tb, tctx)
-	_check("Fix4：暴击率 0.5 < 0.6 阈下 → 弹片不结算", is_equal_approx(near.hp, 1000000.0),
+	_check("Fix4：暴击率 0.3 < 0.35 阈下 → 弹片不结算", is_equal_approx(near.hp, 1000000.0),
 		"hp=%s" % str(near.hp))
-	# 阈上：暴击率堆过 0.6 → 弹片 = 0.5 × 暴伤 = base_atk × crit_mult × ratio = 100×2×0.5 = 100
+	# 阈上：暴击率堆过 0.35（R187 翻转后阈值）→ 弹片 = 0.5 × 暴伤 = 100×2×0.5 = 100
 	dctx.crit_chance = 0.65
 	ef.handle(shard_tb, tctx)
 	_check("Fix4：暴击率堆过阈值 → 邻近单体弹片结算（0.5×暴伤 = 100）",
@@ -976,6 +1284,64 @@ func _test_crit_shard_and_validator() -> void:
 		stripped == 1 and wdata.threshold_traits.size() == 1
 		and StringName(str(wdata.threshold_traits[0].get("threshold_id", ""))) == &"TH_CRIT_SHARD"
 		and reg.weapons.has(&"W_SHARD_TEST"))
+
+
+# ── AFF_HP_UP 死池接线（hp 真源 60 + add_hp 池消费回归） ────────────
+func _test_aff_hp_up_wiring() -> void:
+	print("── AFF_HP_UP 死池接线 ──")
+	# 隔离（末位用例）：清遗物常驻位——防此前用例偶得 REL_ECHO 回响复制附加挂载，
+	# 扰动「每层 +25」层数口径；reset_run 不影响任何前序已完成的断言。
+	_gl.relic_handler.reset_run()
+	_gl.card_generator.owned_relics.clear()
+	var t: TraitData = _gl.registry.get_trait(&"AFF_HP_UP")
+	if t == null:
+		_check("AFF_HP_UP 接线：注册表含 AFF_HP_UP（.tres 加载）", false)
+		return
+	# 基线锚定 cfg 真源 60（等价 fresh run：满血、单起始武器在槽 0）
+	_gl.player.max_hp = float(GameConfig.get_constant(&"player_base_hp", 60.0))
+	_gl.player.hp = _gl.player.max_hp
+	# R94 隔离宿主：新装一把干净手枪专测（前序用例可能已把槽 0 词条挂满 12 帽——
+	# attach 拒绝与 HP 池无关；增量口径同 R9b 但宿主零污染）
+	# R189 槽位保障：前序用例升级即选（_ensure_playing/_drive_safe → choose(0)）卡池
+	# 每局随机（start_run randomize），可能抽中 WEAPON 卡占用武器槽——已解锁槽存在
+	# 全满可能，add_weapon 返回 null 属测试装配失败而非产品缺陷。末位用例：先开放
+	# 难度帽内槽位；帽内仍全满则回收槽 1 多余武器腾位（不影响任何前序已完成的断言）。
+	_gl.player.unlock_slot(int(_gl.player.call(&"slot_cap_total")))
+	var host_full := true
+	for i in range(mini(_gl.player.unlocked_slots, _gl.player.weapon_slots.size())):
+		if _gl.player.weapon_slots[i] == null:
+			host_full = false
+			break
+	if host_full and _gl.player.weapon_slots.size() > 1:
+		var drop: WeaponBase = _gl.player.weapon_slots[1]
+		if drop != null and is_instance_valid(drop):
+			drop.queue_free()
+		_gl.player.weapon_slots[1] = null
+	var host_w: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W1_pistol"))
+	if host_w == null:
+		_check("AFF_HP_UP 接线：+2 层（基线 0）→ max_hp = 60+25×2 = 110 且 hp 等量回补",
+			false, "隔离宿主装配失败（无空槽）")
+		return
+	var card := {
+		"kind": CardGenerator.CardKind.TRAIT,
+		"id": &"AFF_HP_UP",
+		"rarity": 0,
+		"data": t,
+		"display_name": String(t.display_name),
+		"description": String(t.description),
+		"target_weapon": host_w,   # R18 挂载侧适配门：显式锁定宿主（双层断言口径）
+	}
+	var base_layers := 0
+	_gl.card_generator.apply_choice(card, _gl.player)   # 第 1 层（选卡应用）
+	_gl.card_generator.apply_choice(card, _gl.player)   # 第 2 层（同 ID 叠层）
+	var layers := 0
+	for tb: TraitBase in host_w.trait_stack.traits:
+		if tb.data.id == &"AFF_HP_UP":
+			layers = tb.layers
+	_check("AFF_HP_UP 接线：+2 层（基线 %d）→ max_hp = 60+25×2 = 110 且 hp 等量回补" % base_layers,
+		layers == base_layers + 2 and is_equal_approx(_gl.player.max_hp, 110.0)
+		and is_equal_approx(_gl.player.hp, 110.0),
+		"layers=%d base=%d max_hp=%s hp=%s" % [layers, base_layers, str(_gl.player.max_hp), str(_gl.player.hp)])
 
 
 # ── 支撑（原有） ──────────────────────────────────────────────────

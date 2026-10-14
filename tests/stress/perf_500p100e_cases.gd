@@ -15,7 +15,10 @@ const DT := 1.0 / 120.0                          # 120Hz 物理帧
 const ORBIT_RADIUS := 260.0                      # 自动移动：屏心绕圈半径 px（敌群拖尾分散口径）
 const ORBIT_SPEED := 1.1                         # 绕圈角速度 rad/s（≈300px/s 切向速度）
 const MAIN_SCENE := "res://scenes/main.tscn"
-const TARGET_PROJ := 500                         # AC-01.2 负载锚
+const TARGET_PROJ := 500                         # AC-01.2 负载锚（缺省档）
+# R187：弹幕化前置性能锚参数化——800 弹档（W1 弹幕态/W6 齐射满配依赖此门）
+# 子类（perf_800p100e_cases）覆写 _target_proj 即可，既有 500 档口径零改动
+var _target_proj: int = TARGET_PROJ
 const TARGET_ENEMIES := 100
 const TARGET_POPUPS := 40
 const TARGET_PARTICLES := 60
@@ -29,6 +32,12 @@ const SUPPLY_POPUP_PER_FRAME := 4
 const PROJ_SPEED := 320.0
 const GRUNT_ID := &"E1_grunt"
 const RUNNER_ID := &"E2_runner"
+# G7 压测覆盖扩展：R72 六新怪入列（盾面判定/反弹盾冷却/法术 telegraph/预判射击/
+# 闪现/地狱火——tick 路径比 grunt 重，性能达标口径须含新内容）
+const NEW_MIX: Array[StringName] = [
+	&"E25_phase_bomber", &"E26_shield_lancer", &"E27_warden_orb",
+	&"E28_hexcaster", &"E29_longbowhawk", &"E30_hellfire_revenant",
+]
 
 var tree: SceneTree
 var _gl: GameLoop = null
@@ -37,6 +46,7 @@ var _rng := RandomNumberGenerator.new()
 var _popup_uid: int = 1
 var _fails: int = 0
 var _over_count: int = 0                       # 超阈帧计数（长尾诊断）
+var _all_stage_sum: Dictionary = {}            # QA：全帧各阶段耗时和（ms）——常量税定位
 var _over_stage_sum: Dictionary = {}           # 超阈帧各阶段耗时和（ms）
 var _over_stage_max: Dictionary = {}           # 超阈帧各阶段耗时峰值（ms）
 
@@ -68,7 +78,11 @@ func _boot() -> void:
 
 
 func _start_run() -> void:
-	_gl.menu_screen.start_requested.emit()
+	# R256 序0：直调绕 R252 祝福面板（emit 经 lambda _on_menu_start 被面板挂起，state 停 MENU
+	# =压力门自 R252 起静默空转 16 天；qa_r255_perf_battle 直调先例）
+	_gl._blessing_pending = false
+	_gl.current_map_id = MapTable.FIRST_MAP_ID
+	_gl._finish_menu_start(MapTable.FIRST_MAP_ID)
 	_gl.stage_probe_enabled = true               # 架构 §5.5 分阶段采样（超阈帧按阶段定位）
 
 
@@ -87,7 +101,7 @@ func _prime_load() -> void:
 func _maintain_load() -> void:
 	# 弹：缺额补给（屏内随机出生 + 随机方向飞行——掠过敌群产生网格碰撞/结算负载）
 	var proj_pool := _gl.pools[&"projectile"] as ProjectilePool
-	var deficit := TARGET_PROJ - _proj_active()
+	var deficit := _target_proj - _proj_active()
 	for i in range(mini(deficit, SUPPLY_PROJ_PER_FRAME)):
 		var proj := proj_pool.acquire()
 		if proj == null:
@@ -128,7 +142,12 @@ func _maintain_load() -> void:
 
 func _enqueue_enemies(p_count: int) -> void:
 	for i in range(p_count):
-		var id := GRUNT_ID if _rng.randf() < 0.8 else RUNNER_ID
+		var id: StringName = GRUNT_ID           # 混编：60% grunt / 20% runner / 20% 六新怪
+		var r := _rng.randf()
+		if r > 0.8:
+			id = RUNNER_ID
+		elif r > 0.6:
+			id = NEW_MIX[_rng.randi_range(0, NEW_MIX.size() - 1)]
 		_gl.spawner.enqueue({"data_id": id, "wave": maxi(_gl.wave_director.current_wave, 1)})
 
 
@@ -155,6 +174,13 @@ func _auto_play() -> void:
 
 # ── 测量 ──────────────────────────────────────────────────────────
 func _measure() -> void:
+	# R256 修轮（评审 M2）：负载在场守卫——「敌 0/停 MENU 仍全绿」的假 PASS 形态
+	# （R252 祝福面板挂起致本系 16 天静默空转事故）结构性堵死
+	if _gl.state != GameConst.GameStatus.PLAYING \
+			or _gl.spawner.active_count() < TARGET_ENEMIES * 4 / 5:
+		print("[perf] 负载在场守卫 FAIL：state=%d 敌 %d（需 PLAYING 且 ≥%d）" % [
+			_gl.state, _gl.spawner.active_count(), TARGET_ENEMIES * 4 / 5])
+		_fails += 1
 	# 预热段
 	for i in range(WARMUP_FRAMES):
 		_auto_play()
@@ -169,6 +195,8 @@ func _measure() -> void:
 		var t0 := Time.get_ticks_usec()
 		_gl._physics_process(DT)
 		_frame_us[i] = float(Time.get_ticks_usec() - t0) / 1000.0
+		for k in _gl.stage_probe_us:
+			_all_stage_sum[k] = float(_all_stage_sum.get(k, 0.0)) + float(_gl.stage_probe_us[k]) / 1000.0
 		if _frame_us[i] >= BUDGET_MS:
 			for k in _gl.stage_probe_us:
 				_over_stage_sum[k] = float(_over_stage_sum.get(k, 0.0)) + float(_gl.stage_probe_us[k]) / 1000.0
@@ -179,6 +207,7 @@ func _measure() -> void:
 				i + 1, MEASURE_FRAMES, _recent_avg(i, 1200), _proj_active(),
 				_gl.spawner.active_count(), _rss_mb()])
 	# 超阈帧分布诊断（长尾定位：分离力 10Hz 相位 = frame % 12）
+	print("[perf][QA] 全帧各阶段均值：%s" % _fmt_stage(_all_stage_sum, float(MEASURE_FRAMES)))
 	if _over_count > 0:
 		print("[perf] 超阈帧 %d 个（%.1f%%）超阈帧内各阶段：均值 %s ms | 峰值 %s ms" % [
 			_over_count, float(_over_count) / float(MEASURE_FRAMES) * 100.0,

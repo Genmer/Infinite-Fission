@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_AEGIS_CLOCK"
+display_name = "金钟罩"
+description = "每 30 秒自动获得 1 层闪避护盾（与躲爆获得的护盾同池，至多 5 层）"
+rarity = 3
+listen_events = []
+effect_id = &"REL_EF_AEGIS_CLOCK"
+params = {"every": 30.0}
+unique = true

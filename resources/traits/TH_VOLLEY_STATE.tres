@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"TH_VOLLEY_STATE"
+display_name = "弹幕态"
+description = "并排 ≥6 弹：4s 内开火间隔 ×0.8 + 并排 +2 → 3s 散热（净 ×1.14 自平衡）"
+pool = 3
+pool_id = &""
+effect_id = &"EF_VOLLEY"
+value = 1.0
+value2 = 0.0
+params = {"threshold_only": true, "metric": "pellets", "threshold": 6.0}
+event_hooks = []
+stack_max = 1
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 3
+tags = 0
+condition = {}

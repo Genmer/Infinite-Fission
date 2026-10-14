@@ -23,11 +23,40 @@ func _run() -> void:
 	# 等引擎注册的 autoload 完成 add_child + _ready（EventBus→GameConfig→DebugStats）
 	await process_frame
 	await process_frame
+	# R188 档0：EventBus E-12 订阅纪律断言挂 dev 开关（默认关）——pkg0 内保证开启，
+	# 用例体的非 Node 订阅拦截口径不受门控影响（入口脚本编译早于 autoload 注册，走运行时路径取节点）。
+	var bus: Node = root.get_node("/root/EventBus")
+	var gate_ok := _probe_end_frame_gate(bus)
 	var cases_script: GDScript = load(CASES_PATH)
 	var cases = cases_script.new()
 	cases.run(self)
 	var fail_count: int = cases.fail_count()
+	if not gate_ok:
+		fail_count += 1
 	if fail_count > 0:
 		quit(1)
 	else:
 		quit(0)
+
+
+# ── R188 档0 验收微探针：end_frame 门控两态计时 ─────────────────────
+# 开启态（_check_node_subscribers 全信号×连接扫描）vs 关闭态（仅风暴计数清零），
+# 1000 次均值（另 50 次预热）；关闭态须较开启态下降 ≥90%（dev 常量税剥离）。
+func _probe_end_frame_gate(bus: Node) -> bool:
+	var on_us := _time_end_frame(bus, true)
+	var off_us := _time_end_frame(bus, false)
+	var drop := 1.0 - (off_us / maxf(on_us, 0.000001))
+	print("[pkg0] end_frame 门控微探针：开启态均值 %.3f µs / 关闭态均值 %.3f µs → 下降 %.1f%%（门槛 ≥90%%）：%s" % [
+		on_us, off_us, drop * 100.0, "PASS" if drop >= 0.9 else "FAIL"])
+	bus.dev_assertions = true   # 用例体（E-12 拦截断言）需要开启态，恢复
+	return drop >= 0.9
+
+
+func _time_end_frame(bus: Node, enabled: bool) -> float:
+	bus.dev_assertions = enabled
+	for i in 50:
+		bus.end_frame()   # 预热（JIT/缓存）
+	var t0 := Time.get_ticks_usec()
+	for i in 1000:
+		bus.end_frame()
+	return float(Time.get_ticks_usec() - t0) / 1000.0

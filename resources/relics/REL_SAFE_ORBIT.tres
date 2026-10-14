@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_SAFE_ORBIT"
+display_name = "磁守结界"
+description = "每次获得闪避护盾时震开周围敌人（击退，越近推得越狠）"
+rarity = 3
+listen_events = []
+effect_id = &"REL_EF_SAFE_ORBIT"
+params = {"radius": 220.0, "force": 340.0}
+unique = true

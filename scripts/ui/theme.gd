@@ -1,0 +1,221 @@
+# scripts/ui/theme.gd
+# 方向 C「晴空糖果」贴纸风主题（美术派发单）：
+# 白圆角面板（纯白 + 藏青描边 3px + 底部厚投影）+ 按下下沉变暗 + SystemFont 中文黑体。
+# 附果冻感工具（squash & stretch 出现 / 脉动 / 下沉 punch）——重要 UI 元素出现时统一入口。
+# 全静态：Theme/字体/StyleBox 惰性缓存共享；Tween 由调用方节点持有（生命周期随节点）。
+class_name StickerTheme
+extends RefCounted
+
+static var _theme: Theme = null
+static var _font: SystemFont = null
+static var _font_bold: SystemFont = null
+static var _rxn_fonts: Array[SystemFont] = [null, null, null]   # R186 反应大字三字型缓存
+static var _btn_styles: Dictionary = {}       # name -> StyleBoxFlat（按钮四态）
+
+
+# ── 字体 ──────────────────────────────────────────────────────────
+static func font() -> SystemFont:
+	# 系统中文黑体（圆角感；字重 700——用户实测反馈：亮底风格禁细字，全局粗体基调）
+	if _font == null:
+		_font = SystemFont.new()
+		_font.font_names = PackedStringArray(["PingFang SC", "Hiragino Sans GB",
+			"Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "sans-serif"])
+		_font.font_weight = 700
+	return _font
+
+
+static func font_bold() -> SystemFont:
+	# 标题特重档（≥700 基调上的再加重意图——与 font() 同为 700，语义位区分保留）
+	if _font_bold == null:
+		_font_bold = SystemFont.new()
+		_font_bold.font_names = font().font_names
+		_font_bold.font_weight = 700
+	return _font_bold
+
+
+static func font_reaction(p_variant: int) -> SystemFont:
+	# R186 反应大字字型（碎裂/过载/超导专属；非法参（负值/越界）一律钳 0——§5 契约）：
+	# 0 直立 weight900 / 1 斜体 weight900 / 2 斜体 weight700——Latin 数字走 Arial Black
+	# 展示体打头，CJK 落既有链兜底；三枚惰性缓存全静态共享（同 font() 纪律）。
+	# 已知漂移：Windows 雅黑仅 Regular/Bold 真字重，900 走合成加粗、italic 为合成斜体
+	# （实机目检不可接受时仅降此处参数，表结构与缓存不动）。
+	var idx := p_variant if (p_variant >= 0 and p_variant <= 2) else 0
+	if _rxn_fonts[idx] == null:
+		var f := SystemFont.new()
+		var names := PackedStringArray(["Arial Black"])
+		names.append_array(font().font_names)
+		f.font_names = names
+		f.font_weight = 700 if idx == 2 else 900
+		f.font_italic = idx >= 1
+		_rxn_fonts[idx] = f
+	return _rxn_fonts[idx]
+
+
+# ── Theme（CanvasLayer 根 Control 挂载，子控件继承） ────────────────
+static func theme() -> Theme:
+	if _theme != null:
+		return _theme
+	var t := Theme.new()
+	t.default_font = font()
+	t.default_font_size = 18                   # 正文下限（用户实测：粗且大）
+	for style_name in ["normal", "hover", "pressed", "disabled"]:
+		t.set_stylebox(style_name, "Button", button_style(style_name))
+	t.set_color("font_color", "Button", PopPalette.INK)
+	t.set_color("font_hover_color", "Button", PopPalette.INK)
+	t.set_color("font_pressed_color", "Button", PopPalette.INK)
+	t.set_color("font_disabled_color", "Button", PopPalette.INK_SOFT)
+	t.set_color("font_color", "Label", PopPalette.INK)
+	t.set_constant("outline_size", "Label", 0)
+	# R191#1 全局 tooltip 换装（引擎默认黑底小字在亮底贴纸风里不可读）：Theme 条目级覆盖
+	# 一处生效——挂本主题子树内所有 tooltip_text 自动继承（HUD 武器栏 / 大厅循环按钮 /
+	# 图鉴行未来 hover），无需 project.godot 工程主题与 set_type_variation。
+	var tsb := panel_style(10.0, 2, true)          # 白实底 PANEL + 藏青描边 2px + 底部投影（现成工厂）
+	tsb.content_margin_left = 12.0
+	tsb.content_margin_right = 12.0
+	tsb.content_margin_top = 6.0
+	tsb.content_margin_bottom = 8.0
+	t.set_stylebox("panel", "TooltipPanel", tsb)
+	t.set_color("font_color", "TooltipLabel", PopPalette.INK)
+	t.set_font("font", "TooltipLabel", font())
+	t.set_font_size("font_size", "TooltipLabel", 20)   # 正文下限 18 之上再抬一档（悬停说明要读清）
+	t.set_constant("outline_size", "TooltipLabel", 0)  # 对齐 Label 条目 outline 0 口径
+	_theme = t
+	return _theme
+
+
+static func button_style(p_state: String) -> StyleBoxFlat:
+	# 贴纸按钮四态：normal/hover 白底厚投影；pressed 下沉变暗（投影收起）；disabled 灰化
+	if _btn_styles.has(p_state):
+		return _btn_styles[p_state] as StyleBoxFlat
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = PopPalette.PANEL
+	sb.border_color = PopPalette.OUTLINE
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(20)
+	sb.content_margin_left = 18.0
+	sb.content_margin_right = 18.0
+	sb.content_margin_top = 10.0
+	sb.content_margin_bottom = 12.0
+	match p_state:
+		"hover":
+			sb.shadow_color = Color(PopPalette.OUTLINE.r, PopPalette.OUTLINE.g, PopPalette.OUTLINE.b, 0.38)
+			sb.shadow_size = 8
+			sb.shadow_offset = Vector2(0.0, 5.0)
+		"pressed":
+			sb.bg_color = PopPalette.PANEL_PRESS
+			sb.shadow_color = Color(PopPalette.OUTLINE.r, PopPalette.OUTLINE.g, PopPalette.OUTLINE.b, 0.18)
+			sb.shadow_size = 2
+			sb.shadow_offset = Vector2(0.0, 1.0)
+			sb.content_margin_top = 12.0
+			sb.content_margin_bottom = 10.0
+		"disabled":
+			sb.bg_color = Color(0.96, 0.97, 1.0)
+			sb.border_color = PopPalette.INK_SOFT
+			sb.shadow_size = 0
+		_:
+			sb.shadow_color = Color(PopPalette.OUTLINE.r, PopPalette.OUTLINE.g, PopPalette.OUTLINE.b, 0.32)
+			sb.shadow_size = 7
+			sb.shadow_offset = Vector2(0.0, 4.0)
+	_btn_styles[p_state] = sb
+	return sb
+
+
+static func panel_style(p_radius: float = 20.0, p_border: int = 3, p_shadow: bool = true) -> StyleBoxFlat:
+	# 贴纸面板：白底 + 藏青描边 + 底部厚投影（每次新实例——调用方独占改色/改角）
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = PopPalette.PANEL
+	sb.border_color = PopPalette.OUTLINE
+	sb.set_border_width_all(p_border)
+	sb.set_corner_radius_all(int(p_radius))
+	if p_shadow:
+		sb.shadow_color = Color(PopPalette.OUTLINE.r, PopPalette.OUTLINE.g, PopPalette.OUTLINE.b, 0.3)
+		sb.shadow_size = 8
+		sb.shadow_offset = Vector2(0.0, 5.0)
+	return sb
+
+
+# ── 果冻感工具（squash & stretch 全局口径） ────────────────────────
+static func squash_pop(p_node: Control, p_delay: float = 0.0,
+		p_end_scale: Vector2 = Vector2.ONE) -> void:
+	# 出现：横向先胖后收的果冻弹跳（0.34s，TRANS_BACK 回弹）
+	# R270 修P1：p_end_scale 终态缩放（降档画布全高卡适配——缺省 ONE，
+	# 既有全部调用点行为逐位不变）
+	if p_node == null:
+		return
+	p_node.pivot_offset = p_node.size * 0.5
+	p_node.scale = Vector2(0.4, 0.25) * p_end_scale
+	var tw := p_node.create_tween()
+	if p_delay > 0.0:
+		tw.tween_interval(p_delay)
+		p_node.modulate.a = 0.0
+		tw.parallel().tween_property(p_node, "modulate:a", 1.0, 0.12)
+	tw.tween_property(p_node, "scale", Vector2(1.12, 0.86) * p_end_scale, 0.14) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(p_node, "scale", Vector2(0.95, 1.05) * p_end_scale, 0.09)
+	tw.tween_property(p_node, "scale", p_end_scale, 0.11)
+
+
+static func pulse(p_node: Control, p_period: float = 1.1, p_amount: float = 0.05) -> Tween:
+	# 果冻脉动循环（出发！按钮；返回 Tween 供宿主管理）
+	if p_node == null:
+		return null
+	p_node.pivot_offset = p_node.size * 0.5
+	var tw := p_node.create_tween().set_loops()
+	tw.tween_property(p_node, "scale", Vector2(1.0 + p_amount, 1.0 - p_amount * 0.6), p_period * 0.5) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(p_node, "scale", Vector2(1.0 - p_amount * 0.5, 1.0 + p_amount * 0.4), p_period * 0.5) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	return tw
+
+
+static func press_punch(p_node: Control) -> void:
+	# 按下 punch（下沉弹回；按钮 pressed 反馈的补充动效）
+	if p_node == null:
+		return
+	p_node.pivot_offset = p_node.size * 0.5
+	var tw := p_node.create_tween()
+	tw.tween_property(p_node, "scale", Vector2(0.9, 0.94), 0.05)
+	tw.tween_property(p_node, "scale", Vector2.ONE, 0.16) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+# ── R230 K4：Label 语义角色量化色板（HUD dc 刀——配色收敛单源口） ──────────
+# HUD 29 处 Label.new 逐件自由 font_color = 逐件唯一 modulate = 断批（同贴图+同 modulate
+# 才合批定律，R214/vc33/R216/R217 四轮真机实证）。全部收口到本表按语义角色取色——同角色
+# Label 共享 modulate 可合批（F9 族 dc 预期 −25~−45，夹具 post-merge 复扫验收）。
+# 语义色保全（R230 设计 v2 硬性子项；R31/R38/R200 用户 UI 色敏感史在案）：正文墨/弱化灰蓝/
+# 品质金/我方蓝/警示红/暗底白六值逐位保真（=PopPalette 单源直引，值零改动）；仅两处运行时
+# lerp 自由色收敛——镜面 toast 冰青（PLAYER.lerp(WHITE,0.62)）入 PLAYER 角色（「禁金」约束
+# 原样成立：PLAYER 与 GOLD 互异）、R187 读数浅紫（SHOCK.lerp(WHITE,0.25)）入 SHOCK 角色
+#（紫族色相保持）。套件断言（互异+明度序+保真+零残留直配）：
+# tests/runner/test_r230_k4_hud_quant.gd。
+enum LabelRole { INK, SOFT, GOLD, PLAYER, SHOCK, ENEMY, WHITE }
+const LABEL_ROLE_COLORS: Array[Color] = [
+	PopPalette.INK,        # 正文墨（明度最低——主读数/正文）
+	PopPalette.INK_SOFT,   # 弱化灰蓝（副文本/说明）
+	PopPalette.GOLD,       # 品质/增益金（XP 同值 #ffc93c——品质金硬保全）
+	PopPalette.PLAYER,     # 我方信息蓝（召唤/刷新类 toast）
+	PopPalette.SHOCK,      # 柔电紫（R187 武器形态读数位）
+	PopPalette.ENEMY,      # 警示红（Boss 横幅/复活耗尽——警示色硬保全）
+	Color.WHITE,           # 暗底卡白字（HoverCard 悬停说明）
+]
+
+
+static func label_color(p_role: int) -> Color:
+	# 语义角色取色（越界钳制——rarity_color 同式防呆；HUD 全部 Label 配色唯一入口）
+	return LABEL_ROLE_COLORS[clampi(p_role, 0, LABEL_ROLE_COLORS.size() - 1)]
+
+
+static func label_sticker(p_label: Label, p_size: int, p_fill: Color = PopPalette.INK,
+		p_outline: int = 0, p_outline_color: Color = Color.WHITE, p_bold: bool = false) -> Label:
+	# 贴纸文字统一装配（字号/描边/字色/字重——跳字、标题、徽章共用口径）
+	if p_label == null:
+		return p_label
+	p_label.add_theme_font_override("font", font_bold() if p_bold else font())
+	p_label.add_theme_font_size_override("font_size", p_size)
+	p_label.add_theme_color_override("font_color", p_fill)
+	if p_outline > 0:
+		p_label.add_theme_constant_override("outline_size", p_outline)
+		p_label.add_theme_color_override("font_outline_color", p_outline_color)
+	p_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return p_label

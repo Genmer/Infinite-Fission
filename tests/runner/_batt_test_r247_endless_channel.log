@@ -1,0 +1,52 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R247 无尽渠道矩阵验收 ══════════
+── G1：表结构（13 角色 / sublime 两键 / endless_depth 成就族） ──
+PASS | G1a CharacterTable：13 角色（R247 +3——medic/vortex/reaper）
+PASS | G1b medic 键齐：血 75 / 攻 +0% / 门 unlock_endless_depth:20 / 技能「应急修复」/ cd 120
+PASS | G1c vortex 键齐：血 55 / 攻 +10% / 门 unlock_endless_depth:50 / 技能「奇点坍缩」/ cd 120
+PASS | G1d reaper 键齐：血 50 / 攻 +20% / 门 unlock_price:240 / 技能「处决时刻」/ cd 120
+PASS | G1e 三新角色均有技能（has_skill 契约——非 no_skill/random_dual，GameLoop 零改动）
+PASS | G1f 存量 10 角色 sublime_name/sublime_desc 全量非空（R246 升华卡文案真源落表）
+PASS | G1g fission 替代升华「本命同调」：sublime_desc 含同调层数口径
+PASS | G1h 三新角色暂无 sublime 键（升华版未设计——cards/sublime 可用性归集成裁定）
+PASS | G1i endless_depth 四档在册（endless_depth_10/20/30/50，奖励 0/0/0/100）
+PASS | G1j 链终档命名/desc：深渊尽头 · 「任意无尽模式深入 50 层」（与选人文案同词）
+PASS | G1k 全表规模（11 手写 + 37 阶梯含新族 + 87 单敌 = 135 ≤ 200 r191 口径）
+PASS | G1l 全表总奖励 1565 ≤ 1600 新封顶（预算 1465→1565 / 封顶 1500→1600 同步）
+PASS | G1m 成就桶注册：_ach_by_type[endless_depth] 恰 4 条（_ready 展开后分桶）
+── G2：聚合读口 best_endless_depth（无后缀/#1/#2 全键取最大） ──
+PASS | G2a 空表 → 0
+PASS | G2b 三键各深度 3/7/5（无后缀/#1/#2）→ 聚合取最大 7
+PASS | G2c 旧读口 endless_depth() 语义不动：分图只认无后缀键（grass=3 / frost 无键=0）
+PASS | G2d 旧档记录缺 endless_depth 键 → 聚合 0（降级不崩）
+PASS | G2e 非字典脏值记录 → 跳过不崩（is Dictionary 守卫）
+── G3：角色门（medic 20 / vortex 50 · #1/#2 分档键同样驱动） ──
+PASS | G3a 深度 0：medic/vortex 双锁
+PASS | G3b 深度 19（无后缀键）：双锁仍持（阈值 20/50）
+PASS | G3c 深度 20：medic 解锁 / vortex 仍锁
+PASS | G3d 困难键（#1）深度 50：vortex 解锁（分档盲区修复——聚合口吃 #N 键）且 medic 恒开
+PASS | G3e 地狱键（#2）深度 49：vortex 锁（49 < 50 阈值边界）
+PASS | G3f reaper 不随深度解锁（唯一直购门 240 结晶）
+── G4：结算全链（GAME_OVER 落账 + 阶梯成就 + 50 档 +100 结晶） ──
+PASS | G4a 每日局分流：不落 map_records（深度零落账）且聚合 0
+PASS | G4b 每日局：不解锁无尽深度成就 + 零结晶产出（分流早退）
+PASS | G4c 每日局：daily_best 照记（best_wave = final+80）
+PASS | G4d 深度 10 落账：endless_depth_10 解锁 / 20 档未达 / 分图读口同步
+PASS | G4e 深度 10：medic 仍锁（19<20）且中间档零结晶通胀（结晶=局产出）
+PASS | G4f 深度 20：endless_depth_20 解锁 + medic 解锁 / vortex 仍锁（门-成就同步边沿）
+PASS | G4g 深度 20：结晶累计 = 两局产出（20 档奖励 0）
+PASS | G4h 深度 50：30/50 档齐解锁 + vortex 解锁（终局双奖励：成就+角色）
+PASS | G4i 深度 50：结晶增量 = 局产出 + 100（链终档唯一奖励点）
+── G5：购买门（reaper 240 结晶：不足/已购/无价格三拒 + 扣费解锁） ──
+PASS | G5a 结晶 239 不足（240 门）→ 拒购且不解锁
+PASS | G5b 240 恰足 → 购买成功 + 扣费归零 + 永久解锁（unlocked_characters 落键）
+PASS | G5c 已购重复购买 → false（幂等拒）
+PASS | G5d 无价格角色拒购：medic（unlock_endless_depth 门，price=0）→ false 且不写购
+── G6：旧档兼容（无 endless_depth 键/成就键的存量档零迁移） ──
+PASS | G6a 旧档（记录无 endless_depth 键 / 成就无新键）：读口 0 + 双门锁 + 成就未达
+PASS | G6b 成就墙计数口不崩（面板消费口；总数 = 全表条数 ≥130）
+PASS | G6c 存档结构零新增键：achievements 段仍仅 done 键（门=派生谓词+achievements_done 既有键）
+────────────────────────────────────────
+汇总：PASS 40 / FAIL 0（共 40 项）
+验收汇总：40/40 通过

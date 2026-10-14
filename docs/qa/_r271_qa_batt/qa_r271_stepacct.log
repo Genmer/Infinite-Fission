@@ -1,0 +1,39 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R271 P 轨二轮定谳键（步闭环/三哨兵/树进出/绘µs/渲帧面/行格式） 回归 ══════════
+── p3 加N/摘N（裸树 add/remove/free） ──
+  PASS | p3 加N：add×5 → 恰 +5
+  PASS | p3 摘N：remove×3 → 恰 +3
+  PASS | p3 摘N：queue_free×2 → 恰 +2（free 出树同发 node_removed）
+  PASS | p3 加N：本窗零 add 噪声（remove/free 段）
+── boot（main.tscn 真链 → MENU 冻结） ──
+── p1 步闭环（直驱 60 步 + await process_frame） ──
+  PASS | p1 步µs > 0 出行
+  PASS | p1 延µs > 0 出行
+  PASS | p1 隙µs > 0 出行
+  PASS | p1 三者和与驱动墙钟差 ≤5%（望远镜和=exec_last−entry_first ≤ 墙钟）
+  读数：步µs=2323 延µs=669 隙µs=633111 延早µs=2756（和=636103 vs 墙钟=636212）
+── p2 三哨兵（p1 窗口径） ──
+  PASS | p2 延早µs ≥ 延µs（步入口哨兵含整步工作）
+  PASS | p2 空转步 延早−延 ≈ 步µs（±10% 或 量化噪声地板 6µs/步 取大者）
+── p4 绘µs（wrap 类 queue_redraw 直驱） ──
+  PASS | p4 绘µs：headless 下 _draw 经 queue_redraw 执行且入账 >0
+── p5 渲帧N/呈帧N/渲峰ms ──
+  PASS | p5 行内渲帧/呈帧/渲峰三键在场
+  PASS | p5 渲帧N 差分==K（await process_frame×30）
+  PASS | p5 呈帧N 差分==get_frames_drawn 同窗差分（同源对拍）
+  PASS | p5 渲峰ms ≥ 渲ms（同窗峰值≥均值）
+── p6 行格式冻结 ──
+  PASS | p6 R269 八键子串逐位在场
+  PASS | p6 新键位在 促 与 尖峰 之间
+  PASS | p6 R271 十一键子串全在场
+────────────────────────────────────────
+汇总：PASS 18 / FAIL 0（共 18 项）
+验收汇总：18/18 通过
+WARNING: 32 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 23 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 160 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"SYN_FIRST_STRIKE"
 display_name = "侦察协议"
-description = "每波首次命中伤害 ×3.0，1 层（A3 §4.3）"
+description = "每波首次命中伤害 ×3.0，1 层"
 pool = 1
 pool_id = &"opening_dmg"
 effect_id = &"EF_STAT"

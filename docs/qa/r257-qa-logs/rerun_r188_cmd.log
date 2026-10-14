@@ -1,0 +1,145 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R188 整案验收（market·buffs·idle·perf） ══════════
+PASS | Boot#1：完成且进入 MENU
+── §M R188-1 黑市供给（验收五断言 + 口径抽查） ──
+PASS | §M 前置：常规局开局
+PASS | §M 前置：null 目标候选全部叠满（枯竭复现，无溢出）
+PASS | §M 前置：补充空栈宿主武器
+PASS | ① 真终局（枯竭循环后）开店 buyable_count() >= 1
+PASS | ② 词条枯竭态货架有非 heal 词条行（口径对齐扩池生效）
+PASS | ② 展示=实挂：购买后词条 id 落在展示 target 的 trait_stack 上
+PASS | ② 购买扣金 + 购买即下架（_wares 行清空）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2（计数 1）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | ③ 前置：取得空栈 target 武器
+PASS | ③ 前置：target 武器直挂 12 条不同词条（TraitStack.MAX_TRAITS 满栈）
+PASS | ③ 前置：取得第 13 条未挂词条（全武器栈均无）
+PASS | ③ 满 12 词条武器为 target 的行：购买不扣金
+PASS | ③ 拒买且第 13 条词条未挂到任何武器（不静默换宿主）
+PASS | ④ 持 REL_BLACK_MARKET 出现金卡行
+PASS | ④ 金卡价 = .tres params.gold_card_price（260，数据驱动无硬编码）
+PASS | ④ 购买金卡 → unlocked_slots +1（SLOT_BONUS 提前解锁帽内下一槽）
+PASS | ④ 购买扣金 260 + 购买即下架
+PASS | ④ 满槽不上架（无金卡行）
+PASS | ⑤ 前置：补充可挂载空栈宿主
+PASS | ⑤ buyable_count()==0 触发终兜底常青货上架（FALLBACK_ATK 运行期构造）
+PASS | ⑤ 保底行可购（buyable_count() >= 1）
+PASS | ⑤ 购买保底行：FALLBACK_ATK 落展示 target 栈 + 金币 25→0
+PASS | ⑤ 清空 _wares 后 open 立即补保底常青行且可购
+PASS | 抽查：刷新价曲线不变 15×market_mult(wave,9)×1.5ⁿ（n=0,1,2 逐点相等）
+PASS | 抽查：关店 _refresh_count 归零（重开回基准价 ==c0）
+PASS | 抽查：R37 玩家侧 5 池词条不出现在黑市货架（扫 3 行）
+PASS | Boot#2：完成且进入 MENU
+── §H R188-2 高位叠层回归（十组「正常」口径锁死） ──
+PASS | §H 前置：常规局开局
+PASS | ①a 1000 层逐层挂载全成功，layers/layer_values 同步 1000
+PASS | ①b 1000 层 aggregate_panel = 150.0（绝对误差 <1e-9，无隐藏饱和）
+PASS | ①c stacked_add_total 与面板同源 150.0
+PASS | ①d 第 1001 层增量恰 +0.15（逐层仍按层生效）
+PASS | ①e 100 层 aggregate_panel = 15.0（±1e-9）
+PASS | ②a 真卡 AFF_ATK_UP attach×10 → 恰 10 层（R226 无限叠），第 11 层也收
+PASS | ②b 运行期 stack_max=99 载体（FALLBACK 口径）attach×200 → 恰 200 层全收（R226 无帽）
+PASS | ③b 99×0.05=4.95 全额入账（R226 F4 钳退役——原钳 2.0+审计拆除）
+PASS | ③c FALLBACK 伤害随层数全额增长：dmg(99) = 100×(1+4.95)=595（R226 无钳）
+PASS | ③d 无钳制审计（clamped_add 恒空）且 R_alarm 不误报
+PASS | ④a 诅咒 99 层线性全额 −9.9（不衰减/不钳——惩罚语义按层全额）
+PASS | ④b 诅咒 1000 层叠层面全额 −100（无 NaN）
+PASS | ④c 诅咒 99 层 → S 转负、终值钳 0（有限、无 NaN、无误告警）
+PASS | ⑤a 单区钳：contrib 5.0/cap_pool 2.0 → merged_M = 3.0
+PASS | ⑤b 乘区名额 top-10（20 区 → 10 入）+ cap_prod 钳 12.0 + 审计 compressed
+PASS | ⑤c add_crit 1000 层 → crit_rate 钳 cap_crit_rate=1.0
+PASS | ⑤d add_skillcdr 1000 层 → 急速无帽全额 ≥100（R226）
+PASS | ⑤e BALLISTIC add_rof 1000 层 → 节拍钳 1/30 s（cap_rof_per_weapon=30）
+PASS | ⑥a 激活拉满存款 0.6（20/s×0.01×3 网格化快照）
+PASS | ⑥b 满 60 击直减 0.6 → CD 119.4（snappedf 网格无浮点漂移）
+PASS | ⑥c 计费遥测 credits==60 / seconds==0.60
+PASS | ⑥d 存款枯竭第 61 击不直减（<1 击预算整击丢弃）
+PASS | ⑥e tick(1s) 回充 0.2（20 击/s 口径）
+PASS | ⑥f 继续回充钳存款帽 0.6
+PASS | ⑥g 同帧 120 击恰 +60 计费 / CD 119.4→118.8（回充-消耗循环无漂移）
+PASS | ⑥h 技能就绪不计费（存款留存）
+PASS | ⑥i 120k×(1/120s) tick soak：预算恰回帽 0.6、计费零增、无 NaN
+PASS | ⑦a 清空后 reaction_mult = 1.0
+PASS | ⑦b 同 uid 重注册覆盖（4.7，非连乘 8.46）
+PASS | ⑦c 1000 注册/注销循环 → 表空 + 聚合归 1.0（注销泄漏回归锁）
+PASS | ⑦d 注销口精确移除 + 幻影 uid 静默
+PASS | ⑦e 局清空回 1.0（start_run/continue_run 两口同源）
+PASS | ⑧a +15%×2 → 「+30%」（金色高亮），不再渲染「+0.3…」
+PASS | ⑧b +25×4 → 「+100」，不再渲染「1005」
+PASS | ⑧c +8%×3 → 「+24%」
+PASS | ⑧d +1×2 → 「+2」
+PASS | ⑧e 1 层描述逐字不变（不改写）
+PASS | ⑧f 负值×2 → 「-20%」红高亮（R242 契约迁移）
+N= 100 | aggregate_panel   48.433 µs/次
+N=1000 | aggregate_panel  407.238 µs/次
+PASS | ⑨a 成本随层数线性标度（1000 层/100 层比值 ∈[5,15]——O(总层数) 无超线性爆炸）
+PASS | ⑨b copy_full 混品级保真：源 37.5 → 克隆 37.5（±1e-9）且逐层条目 150 保真
+PASS | ⑩a layers 往返保真：存 3 = 落盘回读 3 = 恢复实挂 3，聚合 0.45→0.45
+PASS | ⑩b 恢复无钳：存 99 → 回读恰 99（R226 无限叠，不越帽概念退役）
+PASS | ⑩c-预 满层挂载质变 value_mult==1.6（0.15×3×1.6=0.72）
+PASS | ⑩c 恢复后满层质变再触发：3 层 + value_mult==1.6 + 聚合 0.72
+PASS | Boot#3：完成且进入 MENU
+── §P R188-4 性能纵深（门控/脏标记/LOD 墓碑/建波钳制/连升合并/池扩容） ──
+PASS | §P 前置：常规局开局
+PASS | P1 池预热扩容：pool_prewarm.projectile = 820（≥820，800 弹锚容量前提）
+PASS | P1 软/硬限不动（1500/2000——仅预热容量一处变更）
+PASS | P2 EventBus.end_frame 门控：关闭 0.208µs vs 开启 947.551µs → 下降 100.0%（≥90%）
+PASS | P2 复位：dev_assertions 回默认 false
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：
+   at: push_error (core/variant/variant_utility.cpp:1092)
+PASS | P3 同帧 10 次 enemy_killed → refresh_stats 恰 1 次（脏标记合并）
+PASS | P3 displayed_kills 口径逐位一致（+10）
+PASS | P3 观测口读数不触发二次 flush（已同帧消化）
+PASS | P4 LOD 已拆墓碑：GameLoop 无 _enemy_lod_full_rate 方法（R189c 拆，R199 清账）
+PASS | P4 LOD 已拆墓碑：GameLoop 无 enemy_lod_skipped/enemy_lod_tick2x 遥测属性（R199）
+WARNING: [WaveDirector] 波 233 生成请求钳制 →200（溢出转 HP×221.98/攻×14.90）——后续钳制仅计数
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | P5 w233 start_wave 稳态单帧 0.915 ms（≤5.0，原 w293=221.7ms 已结构性消除）
+PASS | P5 生成请求恰 200（WAVE_COUNT_CLAMP 钳制生效）
+PASS | P5 pressure 乘区下发（221.98 ≥ 1.0——变强不变多）
+WARNING: [EnemySpawner] spawn_queue 达高水位 600：拒收后续投放请求（一次告警）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | P6 高水位 600 拒收：队列不越线（600）且 queue_rejected +1
+PASS | P6 DebugStats 计数同步（spawn_queue_rejected ≥1）
+[perf-probe] gain_xp(1e12) 帧耗 35.57 ms | 连升 47958 级 | 排队 3（帽 3）| 溢出批 47954
+[perf-probe] P7 连升爆发帧 35.6 ms ≤ 50 ms（§4.8-9 单帧预算内——R199/H05 记录线）
+PASS | P7 连升 47958 级 → 选卡排队 ≤3（PENDING_LEVEL_UP_CAP 合并帽）
+PASS | P7 溢出批不排队（merged_overflow >0，消除 4.8 万张选卡冻结）
+PASS | P7 真实弹窗批恰 1 窗（溢出批零弹窗——自动选卡计时器只消化真实批）
+[perf-probe] P7 choose 收口帧 34.02 ms ≤ 50 ms（真链首选预算内——R199/H05 记录线）
+ERROR: BUG: Unreferenced static string to 0: .
+   at: unref (core/string/string_name.cpp:127)
+ERROR: BUG: Unreferenced static string to 0: @export_multiline
+   at: unref (core/string/string_name.cpp:129)
+ERROR: BUG: Unreferenced static string to 0: @export_node_path
+   at: unref (core/string/string_name.cpp:129)
+ERROR: BUG: Unreferenced static string to 0: @export_flags
+   at: unref (core/string/string_name.cpp:129)
+ERROR: BUG: Unreferenced static string to 0: @export_placeholder
+   at: unref (core/string/string_name.cpp:129)
+ERROR: BUG: Unreferenced static string to 0: @icon
+   at: unref (core/string/string_name.cpp:129)
+WARNING: A Thread object is being destroyed without its completion having been realized.
+Please call wait_to_finish() on it to ensure correct cleanup.
+     at: ~Thread (core/os/thread.cpp:105)
+ERROR: Pages in use exist at exit in PagedAllocator: N7Variant5Pools11BucketLargeE
+   at: ~PagedAllocator (./core/templates/paged_allocator.h:170)

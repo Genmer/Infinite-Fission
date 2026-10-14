@@ -1,0 +1,92 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R188-3 挂机全链路验收 ══════════
+PASS | Boot：完成且进入 MENU
+── A 设置段（auto_select_on / auto_restart_mode 双接线） ──
+PASS | A 出厂默认：auto_select_on == false
+PASS | A 出厂默认：auto_restart_mode == 0
+PASS | A 越界钳制：9 → 2
+PASS | A 越界钳制：-3 → 0
+PASS | A 合法值：1 → 1
+PASS | A 未知键忽略：读口 null
+PASS | A 未知键忽略：未入 _settings
+PASS | A 磁盘回路：写即落盘（settings/values.auto_select_on==true）
+PASS | A 磁盘回路：_load() 回读 true
+PASS | A 快照还原：_settings 一致
+── B AUTO 开关（几何与可见性） ──
+PASS | B 开关存在（AUTO 胶囊按钮挂 HUD）
+PASS | B 开关几何：落位 x∈[644,704]×y∈[126,190] 唯一空闲带
+PASS | B 开关几何：与暂停钮矩形不相交
+PASS | B 开关几何：与波次徽章矩形不相交
+PASS | B 点击翻转：Meta 落值取反
+PASS | B 点击翻转：写即落盘
+PASS | B 二次点击：回原值（无缓存态）
+PASS | B 可见性：MENU 隐藏
+PASS | B 可见性：PLAYING 显示
+PASS | B 可见性：LEVEL_UP 显示
+PASS | B 清场：选卡回 PLAYING
+PASS | B 可见性：PAUSED 隐藏
+PASS | B 可见性：GAME_OVER 隐藏
+PASS | B 可见性：回 MENU 隐藏
+── C 选卡真链 ──
+PASS | C 前置：常规局开局
+PASS | C1 前置：升级弹卡（LEVEL_UP）
+PASS | C1 pkg4:296 口径：0.5s 展示窗内 LEVEL UP 文案不变
+PASS | C1 0.6s 内自动选完成
+PASS | C1 choice_made 恰一次（普通单张）
+PASS | C1 card_chosen 恰 +1（图鉴口径）
+PASS | C1 state 回 PLAYING
+PASS | C2 前置：双级连升首级弹卡 + 排队 1（投喂 2 次）
+PASS | C2 逐次消化：两次各选 1 次后回 PLAYING
+PASS | C2 card_chosen 恰 +2
+PASS | C3 前置：地狱成对货架 6 卡
+PASS | C3 成对策略槽位 ∈[4,9]
+PASS | C3 成对整行：choice_made 载荷 2 张
+PASS | C3 card_chosen 恰 +2（成对两卡各应用一次）
+PASS | C4 诅咒硬不变量：200 seed 扫描（含成对 6 卡）恒指向非诅咒卡/行
+PASS | C5 前置：OFF 弹卡
+PASS | C5 OFF 零干预：1s 后仍 LEVEL_UP 未选
+PASS | C5 清场：回 PLAYING
+── D 商店自动离店 ──
+PASS | D1 前置：黑市开店（LEVEL_UP）
+PASS | D1 0.8s 后自动离店
+PASS | D1 state 回 PLAYING
+PASS | D1 金币零变动（不代买不烧金）
+PASS | D2 前置：战前补给开店
+PASS | D2 战前补给自动离店
+PASS | D2 金币零变动
+── E 结算自动重开 ──
+PASS | E1 前置：死亡进 GAME_OVER
+PASS | E1 mode0 负向：5s 仍 GAME_OVER 不重开
+PASS | E1 mode0 负向：无倒计时挂起
+PASS | E1 mode0 结算恰 +1
+PASS | E1 mode0 手动重开放行（既有契约）
+PASS | E2 mode1 倒计时挂起（GameLoop 每帧喂秒）
+PASS | E2 倒计时文案：卡面内 Label（N 秒后自动再来一局 · 点按取消）
+PASS | E2 前置：RestartButton 在
+PASS | E2 点按取消：立即回 PLAYING
+PASS | E2 点按取消：倒计时撤销 + 文案收起
+PASS | E2 点按取消：无二次重开（wave_started 不再派发）
+PASS | E2 mode1 结算恰 +1（无双记）
+PASS | E3 mode1 ~3s 自动重开
+PASS | E3 mode1 结算恰 +1（无双记）
+PASS | E4 前置：非每日局
+PASS | E4 前置：通关收尾窗 → 通关屏（无尽出口可见）
+PASS | E4 mode2 ~3s 自动无尽
+PASS | E4 波次越过 final_wave（continue_endless 真链）
+PASS | E5 前置：每日局开局
+PASS | E5 每日局 mode2 回退：5s 仍 GAME_OVER
+PASS | E5 每日局手动重开放行
+PASS | E5 每日局 mode1 回退：5s 仍 GAME_OVER
+── F 全链 soak ──
+PASS | F 前置：常规局开局
+PASS | F soak：LEVEL_UP 连续停留 ≤10s（1200 帧）
+PASS | F soak：GAME_OVER 连续停留 ≤10s（1200 帧）
+PASS | F soak：波次单调不减（重开瞬间豁免）
+[auto_idle soak] 遥测：max_wave=2 自动选卡 2 次 max_lu=60帧 max_go=0帧 波次违例=0
+────────────────────────────────────────
+R188-3 用例分账：PASS 76 / FAIL 0（共 76 项）
+══════════════════════════════════════════════════
+验收汇总：FAIL 0
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

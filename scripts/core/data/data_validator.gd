@@ -15,29 +15,41 @@ const SEV_WARNING := "warning"
 # 加算池 id 全集（A3 §4.2 十二条；BalanceTables.add_pool_caps 覆盖前五项的池钳）
 const ADD_POOL_IDS: Array[StringName] = [
 	&"add_atk", &"add_rof", &"add_cdr", &"add_crit", &"add_critdmg",
-	&"add_spd", &"add_hp", &"add_move", &"add_pickup", &"add_size", &"add_pierce", &"add_pellets",
+	&"add_spd", &"add_hp", &"add_skillcdr", &"add_pickup", &"add_size", &"add_pierce", &"add_pellets", &"add_xp", &"add_knock", &"add_gold",
+	&"add_range",   # R196 武器范围池（AFF_RANGE 广域印刻）：环绕轨道半径与挥砍范围 +18%/层（第 16 员，追加不重排）
+	&"add_block",   # R243 挡弹池（MEC_BULLET_PARRY 弹反刀意）：近战挡弹概率 +8%/层（第 17 员，追加不重排）
+	&"add_boom_range",   # R243 回旋甩程池（MEC_THROW_RANGE 回旋远掷）：甩程 +18%/层（第 18 员，追加不重排）
 ]
 # 独立乘区池 id 全集（§三.5 + A3 §4.3；vuln 为目标侧易伤区，A2 §1.8）
 const MULT_POOL_IDS: Array[StringName] = [
 	&"frost_dmg", &"burn_dmg", &"bounce_dmg", &"pierce_dmg",
 	&"fury_dmg", &"opening_dmg", &"elite_dmg", &"vuln",
+	# R72 新乘区（遗物注入 + 新词条）：感电特攻 / 处决线 / 壁垒线 / 狂热 / 双发 / 玻璃
+	&"shocked_dmg", &"execute_dmg", &"bulwark_dmg", &"frenzy_dmg", &"double_tap", &"glass_dmg",
 ]
 # Local 私有池 id 全集（F-15：当前唯一实例 = 光束灼焦）
 const LOCAL_POOL_IDS: Array[StringName] = [&"scorch"]
-# EventBus 事件名注册表镜像（§2.1 18 信号清单——包 0 冻结；与 autoload/event_bus.gd 信号表双源，改动需同步）
+# EventBus 事件名注册表镜像（§2.1 18 信号清单——包 0 冻结；与 autoload/event_bus.gd 信号表双源，改动需同步；
+# R187 追加 laser_subbeam_spawned/mirror_formed/w8_detonated——遗物 listen_events 校验域同步）
 const EVENT_NAMES: Array[StringName] = [
 	&"state_changed", &"config_fatal", &"data_validated", &"damage_resolved", &"damage_alarm",
 	&"enemy_killed", &"boss_spawned", &"player_hit", &"player_died", &"level_up", &"xp_gained",
 	&"wave_started", &"wave_cleared", &"slot_unlocked", &"reaction_triggered", &"pool_exhausted",
 	&"chain_fused", &"card_chosen",
+	&"laser_subbeam_spawned", &"mirror_formed", &"w8_detonated",
 ]
 # contribution_expr 白名单模板（§三.5：两个模板，编译期映射；禁运行时 Expression）
 const CONTRIBUTION_EXPRS: Array[String] = ["value", "value * (ctx.pierce_index - 1)"]
 # builtin 效果处理器注册表镜像（AC-13.3；与 TraitEffect._BUILTIN_PATHS 七家族键对账——
 # EF_CRIT_SHARD 随审查 Fix 4 落地，双清单必须同步）
+# R187 新 EF 六件：EF_CHOIR（TH_PRISM_CHOIR 副束合唱）/ EF_SWARM_NOVA（TH_SWARM_NOVA
+# 蜂群新星）/ EF_VOLLEY（TH_VOLLEY_STATE 弹幕态）/ EF_BANK（TH_BANK_SHOT 黄金弹）/
+# EF_DETONATION_ECHO（TH_DETONATION_ECHO 引爆回响）/ EF_RING_PRESSURE（TH_RING_PRESSURE 环压）
 const TECH_EFFECT_IDS: Array[StringName] = [
 	&"EF_STAT", &"EF_SIZE", &"EF_FRACTAL", &"EF_BOUNCE", &"EF_ELEMENTAL", &"EF_MECH",
-	&"EF_CRIT_SHARD",
+	&"EF_CRIT_SHARD", &"EF_HIT_BURST",
+	&"EF_CHOIR", &"EF_SWARM_NOVA", &"EF_VOLLEY", &"EF_BANK",
+	&"EF_DETONATION_ECHO", &"EF_RING_PRESSURE",
 ]
 # F-21 硬约束（与 BalanceTables.decay_delta_max 默认值一致；单一常数避免加载循环依赖）
 const MAX_DECAY_DELTA := 0.92
@@ -108,17 +120,43 @@ func validate_weapon(w: WeaponData) -> Array:
 			_validate_homing_segment(w.homing, out)
 		GameConst.WeaponForm.MELEE:
 			_validate_melee_segment(w.melee, out)
+	# R187 通用补口：任何 <key>_levels 数组长度 ≠ upgrade_table 长度报 error——
+	# 此前 <key>_levels 数组零校验，长度错位时 _leveled_param 按 level 取下标静默越界/错级。
+	# 四形态段统一扫（含未启用段——数据在册即校验，防换形态携带坏表）
+	_validate_levels_lengths(w, out)
 	return out
+
+
+func _validate_levels_lengths(w: WeaponData, out: Array) -> void:
+	# R187 §三.3 通用补口：<key>_levels 数组长度必须 == upgrade_table 长度（恰 5 级表，
+	# 上文已断言）。现网全量核查通过（10 武器全部 _levels 恒 5——R187 前夜基线）
+	for seg_name in ["ballistic", "laser", "homing", "melee"]:
+		var seg_v: Variant = w.get(seg_name)
+		if not (seg_v is Dictionary):
+			continue
+		var seg: Dictionary = seg_v
+		for key in seg:
+			if not String(key).ends_with("_levels"):
+				continue
+			var lv: Variant = seg[key]
+			if not (lv is Array):
+				_err(out, StringName(seg_name + "." + String(key)), true,
+					"%s 须为数组（当前 %s）" % [String(key), type_string(typeof(lv))])
+				continue
+			_err(out, StringName(seg_name + "." + String(key)),
+				(lv as Array).size() != w.upgrade_table.size(),
+				"%s 长度必须 == upgrade_table 长度（%d），当前 %d"
+					% [String(key), w.upgrade_table.size(), (lv as Array).size()])
 
 
 func validate_enemy(e: EnemyData) -> Array:
 	# 单类校验（规则见 §三.2）
 	var out: Array = []
 	_err(out, &"id", e.id == &"", "id 非空")
-	_err(out, &"behavior", e.behavior < 0 or e.behavior > 4, "behavior ∈ EnemyBehavior 枚举")
-	if e.behavior > GameConst.EnemyBehavior.RANGED:
-		# M1 只支持 CHASE/RANGED：其余告警降级为 CHASE（§三.2 校验列）
-		_warn(out, &"behavior", true, "M1 仅支持 CHASE/RANGED，降级为 CHASE")
+	_err(out, &"behavior", e.behavior < 0 or e.behavior > GameConst.EnemyBehavior.BLINK, "behavior ∈ EnemyBehavior 枚举")
+	if e.behavior > GameConst.EnemyBehavior.RANGED and e.behavior != GameConst.EnemyBehavior.BLINK:
+		# M1 只支持 CHASE/RANGED（BLINK R16 起支持）：其余告警降级为 CHASE（§三.2 校验列）
+		_warn(out, &"behavior", true, "仅支持 CHASE/RANGED/BLINK，降级为 CHASE")
 		e.behavior = GameConst.EnemyBehavior.CHASE
 	_err(out, &"hp_base", e.hp_base <= 0.0, "hp_base > 0")
 	_err(out, &"spd_base", e.spd_base < 0.0 or e.spd_base > 600.0, "spd_base ∈ [0, 600]")
@@ -129,6 +167,9 @@ func validate_enemy(e: EnemyData) -> Array:
 	for i in range(e.resist.size()):
 		_err(out, StringName("resist[%d]" % i), e.resist[i] < -0.8 or e.resist[i] > 0.8, "resist[%d] ∈ [-0.8, 0.8]" % i)
 	_err(out, &"immune_mask", e.immune_mask & ~(GameConst.IMMUNE_FREEZE | GameConst.IMMUNE_CHILL | GameConst.IMMUNE_BURN | GameConst.IMMUNE_SHOCK) != 0, "immune_mask 已知位组合（IMMUNE_* 位）")
+	_err(out, &"elem_immune", e.elem_immune & ~(GameConst.ELEM_IMMUNE_FIR | GameConst.ELEM_IMMUNE_ICE | GameConst.ELEM_IMMUNE_LTG
+		| GameConst.ELEM_IMMUNE_HYD | GameConst.ELEM_IMMUNE_ANE | GameConst.ELEM_IMMUNE_GEO | GameConst.ELEM_IMMUNE_DEN) != 0,
+		"elem_immune 仅允许 ELEM_IMMUNE_FIR/ICE/LTG/HYD/ANE/GEO/DEN 位组合（R192 白名单拓宽，非绕过）")
 	_err(out, &"tags", e.tags & ~(GameConst.TAG_ELITE | GameConst.TAG_BOSS) != 0, "tags 仅 TAG_ELITE/TAG_BOSS 位")
 	_err(out, &"hitbox_r", e.hitbox_r <= 0.0 or e.hitbox_r > 64.0, "hitbox_r ∈ (0, 64]")
 	if e.behavior == GameConst.EnemyBehavior.RANGED:
@@ -137,10 +178,54 @@ func validate_enemy(e: EnemyData) -> Array:
 			_err(out, StringName("ranged." + key), not e.ranged.has(key), "ranged 缺键 %s" % key)
 		if e.ranged.has("fire_cd"):
 			_err(out, &"ranged.fire_cd", float(e.ranged["fire_cd"]) <= 0.0, "fire_cd > 0")
+	if e.behavior == GameConst.EnemyBehavior.BLINK:
+		# 行为族逐族必填断言（ENEMY_PATTERNS_BASIC §6.4）：闪现引信/爆半径缺一不可结算
+		for key in ["fuse", "blast_r"]:
+			_err(out, StringName("special." + key), not e.special.has(key), "BLINK 必填 special.%s" % key)
 	if e.tags & GameConst.TAG_BOSS:
 		_err(out, &"boss", e.boss.is_empty(), "tags 含 BOSS 必填 boss 段")
-		for key in ["phases", "bullet_patterns", "summons", "phase2_resist"]:
+		for key in ["phases", "summons", "phase2_resist"]:
 			_err(out, StringName("boss." + key), not e.boss.has(key), "boss 缺键 %s" % key)
+		# 弹幕段（ENEMY_BOSS_TELEGRAPH.md §4）：barrage 为新真源；存量 bullet_patterns 读入时
+		# 由 Enemy._resolve_barrage 折算（暂收 + 告警提示迁移，P2 清零双轨）
+		_err(out, &"boss.barrage", not e.boss.has("barrage") and not e.boss.has("bullet_patterns"),
+			"boss 缺弹幕段（barrage；存量 bullet_patterns 暂收）")
+		_warn(out, &"boss.bullet_patterns", e.boss.has("bullet_patterns"),
+			"存量 bullet_patterns 折算运行（ENEMY_BOSS_TELEGRAPH.md §4 迁移口径）")
+		if e.boss.has("barrage"):
+			var barr: Variant = e.boss["barrage"]
+			_err(out, &"boss.barrage", not barr is Array, "barrage 须为 Array")
+			if barr is Array:
+				_warn(out, &"boss.barrage", (barr as Array).is_empty(), "barrage 为空数组（Boss 无弹幕技）")
+				for i in range(barr.size()):
+					var bf := "boss.barrage[%d]." % i
+					var bad_entry: bool = not (barr[i] is Dictionary) or (barr[i] as Dictionary).is_empty()
+					_err(out, StringName(bf + "entry"), bad_entry, "条目须为非空 Dictionary")
+					if bad_entry:
+						continue
+					var b: Dictionary = barr[i]
+					for key in ["type", "cd", "telegraph", "telegraph_s", "dmg"]:
+						_err(out, StringName(bf + key), not b.has(key), "缺键 %s" % key)
+					if b.has("type"):
+						_err(out, StringName(bf + "type"),
+							not ["ring", "aimed_spread", "spiral", "mine", "laser_sweep"].has(String(b["type"])),
+							"type ∈ 弹幕技能库型（B1~B7：ring/aimed_spread/spiral/mine/laser_sweep）")
+					if b.has("telegraph"):
+						_err(out, StringName(bf + "telegraph"),
+							not ["swell", "circle", "line", "fan"].has(String(b["telegraph"])),
+							"telegraph ∈ 四类警示件（swell/circle/line/fan）")
+					if b.has("telegraph_s"):
+						_err(out, StringName(bf + "telegraph_s"),
+							not [0.4, 0.7, 1.0].has(float(b["telegraph_s"])),
+							"telegraph_s ∈ 三档 {0.4, 0.7, 1.0}（§1.3）")
+					if b.has("dmg"):
+						var dmg_pct := float(b["dmg"]) / 60.0 * 100.0
+						_err(out, StringName(bf + "dmg"), dmg_pct < 8.0 or dmg_pct > 50.0,
+							"dmg 平值对应 pct ∈ [8, 50]（60HP 基准，当前 %.1f%%）" % dmg_pct)
+					if b.has("phase"):
+						_err(out, StringName(bf + "phase"), int(b["phase"]) < 1, "phase ≥ 1")
+					if b.has("cd"):
+						_err(out, StringName(bf + "cd"), float(b["cd"]) <= 0.0, "cd > 0")
 	return out
 
 
@@ -159,7 +244,16 @@ func validate_trait(t: TraitData) -> Array:
 			_err(out, &"pool_id", t.pool_id == &"" or not LOCAL_POOL_IDS.has(t.pool_id), "pool_id 必填且 ∈ Local 池封闭注册表")
 	# effect_id 必填且 ∈ builtin 处理器注册表（AC-13.3 悬空 effect_id 剔除）
 	_err(out, &"effect_id", t.effect_id == &"" or not TECH_EFFECT_IDS.has(t.effect_id),
-		"effect_id 必填且 ∈ TECH_EFFECT_IDS（EF_STAT/EF_SIZE/EF_FRACTAL/EF_BOUNCE/EF_ELEMENTAL/EF_MECH/EF_CRIT_SHARD）")
+		"effect_id 必填且 ∈ TECH_EFFECT_IDS（EF_STAT/EF_SIZE/EF_FRACTAL/EF_BOUNCE/EF_ELEMENTAL/EF_MECH/EF_CRIT_SHARD/EF_HIT_BURST + R187 六新 EF）")
+	# R262b L11：R187 六新 EF 无 TraitEffect 处理器（行为内联武器 threshold_traits）——
+	# 声明它们的词条必须 threshold_only（TH_* 全满足零行为变化）；否则未来任何可上架
+	# 词条声明六 EF 会过白名单→resolve 恒 null→can_trigger 恒 false=静默死卡。
+	# 启动期拦截把该后果提到加载报告。
+	if t.effect_id != &"" and TECH_EFFECT_IDS.has(t.effect_id):
+		var no_handler_ef := t.effect_id in [&"EF_CHOIR", &"EF_SWARM_NOVA", &"EF_VOLLEY",
+			&"EF_BANK", &"EF_DETONATION_ECHO", &"EF_RING_PRESSURE"]
+		_err(out, &"effect_id", no_handler_ef and not bool(t.params.get("threshold_only", false)),
+			"%s 无内置处理器（行为内联武器阈值链）——仅 threshold_only 词条可声明" % String(t.effect_id))
 	_err(out, &"stack_max", t.stack_max < 1, "stack_max ≥ 1")
 	if t.pool == GameConst.PoolClass.ADD:
 		_err(out, &"decay_delta", t.decay_delta <= 0.0 or t.decay_delta > MAX_DECAY_DELTA,
@@ -175,7 +269,7 @@ func validate_trait(t: TraitData) -> Array:
 		_err(out, &"condition.condition_id", not t.condition.has("condition_id"), "MULT 类 condition 缺 condition_id")
 		if t.condition.has("condition_id"):
 			var cid := int(t.condition["condition_id"])
-			_err(out, &"condition.condition_id", cid < 0 or cid > GameConst.ConditionId.NONE, "condition_id ∈ ConditionId 枚举（0~8）")
+			_err(out, &"condition.condition_id", cid < 0 or cid > GameConst.ConditionId.NONE, "condition_id ∈ ConditionId 枚举（0~NONE，R262b L16 文案对齐：已扩至 PLAYER_HP_ABOVE=9）")
 	return out
 
 
@@ -197,7 +291,7 @@ func validate_synergy(s: SynergyRuleData) -> Array:
 	var out: Array = []
 	_err(out, &"id", s.id == &"", "id 非空")
 	_err(out, &"pool_id", s.pool_id == &"" or not MULT_POOL_IDS.has(s.pool_id), "pool_id ∈ 乘区封闭枚举")
-	_err(out, &"condition_id", s.condition_id < 0 or s.condition_id > GameConst.ConditionId.NONE, "condition_id ∈ ConditionId 枚举（0~8）")
+	_err(out, &"condition_id", s.condition_id < 0 or s.condition_id > GameConst.ConditionId.NONE, "condition_id ∈ ConditionId 枚举（0~NONE，R262b L16 文案对齐：已扩至 PLAYER_HP_ABOVE=9）")
 	_err(out, &"contribution_expr", not CONTRIBUTION_EXPRS.has(s.contribution_expr),
 		"contribution_expr ∈ 白名单模板（禁运行时 Expression）：%s" % s.contribution_expr)
 	_err(out, &"cap_pool_p", s.cap_pool_p <= 0.0, "cap_pool_p > 0 必填（F-14）")
@@ -319,6 +413,8 @@ func validate_balance(bt: BalanceTables) -> Array:
 	_nf(out, "spd_growth_per_wave", bt.spd_growth_per_wave < 0.0, "spd_growth_per_wave ≥ 0")
 	_nf(out, "exp_inflation_per_wave", bt.exp_inflation_per_wave <= 0.0, "exp_inflation_per_wave > 0")
 	_nf(out, "xp_curve", float(bt.xp_curve.get("base", 0.0)) <= 0.0 or float(bt.xp_curve.get("power", 0.0)) <= 0.0, "xp_curve 值 > 0")
+	_nf(out, "early_xp_boost", float(bt.early_xp_boost.get("mult", 0.0)) < 1.0
+		or int(bt.early_xp_boost.get("until_wave", 0)) < 1, "early_xp_boost：mult ≥1 且 until_wave ≥1")
 	var weight_sum := 0
 	for k in bt.rarity_weights:
 		weight_sum += int(bt.rarity_weights[k])
@@ -328,19 +424,106 @@ func validate_balance(bt: BalanceTables) -> Array:
 		cat_sum += int(bt.category_weights[k])
 	_nf(out, "category_weights", cat_sum <= 0, "category_weights 权重和 > 0")
 	_nf(out, "cd_rxn", bt.cd_rxn <= 0.0, "cd_rxn > 0（F-34）")
-	_nf(out, "element_decay_lambda", bt.element_decay_lambda.size() != 3, "element_decay_lambda 恰好 3 项（FIR/ICE/LTG）")
+	_nf(out, "element_decay_lambda", bt.element_decay_lambda.size() != 7, "element_decay_lambda 恰好 7 项（FIR/ICE/LTG/HYD/ANE/GEO/DEN——漏改＝整个字段静默回退仅告警，比报错更险）")
 	for i in range(bt.element_decay_lambda.size()):
 		_nf(out, "element_decay_lambda", bt.element_decay_lambda[i] <= 0.0, "element_decay_lambda[%d] > 0（F-22）" % i)
 	for k in [&"burn", &"freeze", &"shock"]:
 		_nf(out, "element_states", not bt.element_states.has(String(k)), "element_states 缺状态 %s（§2.10 契约键）" % String(k))
-	var bad_rxn := false
+	var bad_coef := false
+	var bad_resist_delta := false
+	var bad_span := false
 	for k in bt.reaction_table:
 		var rule: Dictionary = bt.reaction_table[k]
-		if rule.has("coef") and float(rule["coef"]) <= 0.0:
-			bad_rxn = true
-	_nf(out, "reaction_table", bad_rxn, "reaction_table 系数 > 0（§2.4）")
+		if rule.has("coef") and (float(rule["coef"]) <= 0.0 or float(rule["coef"]) > 2.0):
+			bad_coef = true
+		if rule.has("resist_delta") and (float(rule["resist_delta"]) < -0.8 or float(rule["resist_delta"]) > 0.8):
+			bad_resist_delta = true
+		for span_key in ["radius", "duration", "delay"]:
+			if rule.has(span_key) and float(rule[span_key]) <= 0.0:
+				bad_span = true
+	_nf(out, "reaction_table", bad_coef, "reaction_table coef ∈ (0, 2.0]（§2.4 + R192 χ≤2.0 上限——r_rxn_ratio=50 告警线推导依赖）")
+	_nf(out, "reaction_table", bad_resist_delta, "reaction_table resist_delta ∈ [-0.8, 0.8]（对齐运行时抗性钳）")
+	_nf(out, "reaction_table", bad_span, "reaction_table radius/duration/delay > 0")
+	_check_reaction_sources(out, bt)
 	_nf(out, "event_storm_threshold", bt.event_storm_threshold <= 0, "event_storm_threshold > 0（§六.4）")
 	return out
+
+
+func _check_reaction_sources(out: Array, bt: BalanceTables) -> void:
+	# R192 反应四源键集双射闸（wire T3；M1 恰 3 时即激活，扩容后动态成立）：
+	# ReactionType 枚举成员集 == reaction_table 键集 == reaction_note 可枚举键集
+	# == REACTION_LOOKS 整型键集。另守：每键 note 7 字段非空（name/recipe/elements/
+	# effect/unlock/mult_fmt/sample）、mult_fmt token 键 ⊆ rule 键（{key_pc:spec} 剥
+	# _pc 后缀比对）、elements 恰 2。任一缺项 → _nf 告警（字段级回退语义，不拒启动）
+	# ——半接线启动期报红，不可静默。
+	var enum_strs: Array = []
+	var enum_ints := {}
+	for mid in GameConst.ReactionType.keys():
+		enum_strs.append(String(mid))
+		enum_ints[int(GameConst.ReactionType[mid])] = true
+	var table_strs: Array = []
+	for k in bt.reaction_table:
+		table_strs.append(String(k))
+	var looks_ints := {}
+	for lk in DamagePopup.REACTION_LOOKS:
+		looks_ints[int(lk)] = true
+	# ① 枚举 ↔ reaction_table 双射
+	var miss_table: Array = []
+	for rid: String in enum_strs:
+		if not table_strs.has(rid):
+			miss_table.append(rid)
+	var extra_table: Array = []
+	for tid: String in table_strs:
+		if not enum_strs.has(tid):
+			extra_table.append(tid)
+	_nf(out, "reaction_table", not miss_table.is_empty() or not extra_table.is_empty(),
+		"reaction_table 键集 != ReactionType 枚举成员（缺: %s 多: %s）"
+			% [", ".join(miss_table), ", ".join(extra_table)])
+	# ② 枚举 ↔ reaction_note 可枚举键集 + 7 字段 + token ⊆ rule + elements==2
+	var rxn_token_rx := RegEx.new()
+	rxn_token_rx.compile("\\{([A-Za-z_][A-Za-z0-9_]*):[^}]*\\}")
+	var miss_note: Array = []
+	var bad_note: Array = []
+	for rid: String in enum_strs:
+		var note: Dictionary = GameConst.reaction_note(rid)
+		if note.is_empty():
+			miss_note.append(rid)
+			continue
+		var fields_ok := true
+		for fkey in ["name", "recipe", "elements", "effect", "unlock", "mult_fmt", "sample"]:
+			var v: Variant = note.get(fkey)
+			if v == null or (v is String and (v as String).is_empty()) \
+					or (v is Array and (v as Array).is_empty()):
+				fields_ok = false
+		if (note.get("elements", []) as Array).size() != 2:
+			fields_ok = false
+		if not fields_ok:
+			bad_note.append(rid)
+			continue
+		var rule: Dictionary = bt.reaction_table.get(rid, {})
+		for m: RegExMatch in rxn_token_rx.search_all(String(note.get("mult_fmt", ""))):
+			var tkey := m.get_string(1)
+			if tkey.ends_with("_pc"):
+				tkey = tkey.trim_suffix("_pc")
+			if not rule.has(tkey):
+				bad_note.append(rid)
+				break
+	_nf(out, "reaction_note", not miss_note.is_empty(),
+		"reaction_note 缺枚举成员条目（缺: %s）" % ", ".join(miss_note))
+	_nf(out, "reaction_note", not bad_note.is_empty(),
+		"reaction_note 7 字段非空/elements==2/mult_fmt token ⊆ rule 键违例（%s）" % ", ".join(bad_note))
+	# ③ 枚举 ↔ REACTION_LOOKS 整型键集双射（表现层漏件＝哑不崩但 rxn_codex 假绿，启动期报红）
+	var miss_looks: Array = []
+	for rid: String in enum_strs:
+		if not looks_ints.has(int(GameConst.ReactionType[rid])):
+			miss_looks.append(rid)
+	var extra_looks: Array = []
+	for li: int in looks_ints:
+		if not enum_ints.has(li):
+			extra_looks.append(str(li))
+	_nf(out, "reaction_looks", not miss_looks.is_empty() or not extra_looks.is_empty(),
+		"REACTION_LOOKS 键集 != ReactionType 枚举成员（缺: %s 多: %s）"
+			% [", ".join(miss_looks), ", ".join(extra_looks)])
 
 
 func check_references(registry: DataRegistry) -> Array:
@@ -442,17 +625,38 @@ func _validate_ballistic_segment(seg: Dictionary, out: Array) -> void:
 	_err(out, &"ballistic.pierce", int(seg.get("pierce", 0)) < 0, "pierce ≥ 0")
 	var pellets := int(seg.get("pellets", 0))
 	_err(out, &"ballistic.pellets", pellets < 1 or pellets > 16, "pellets ∈ [1, 16]")
+	# R187 W1 跳弹增值轴：bounce_levels 逐级 ∈[0,5]（反弹预算上限 5；lateral_gap_levels /
+	# converge_pct_levels 长度由通用 _levels 补口覆盖——规格未定值域，不越权加域）
+	if seg.has("bounce_levels"):
+		_validate_level_array_f(seg, "bounce_levels", 0.0, 5.0, true, out, &"ballistic.bounce_levels")
 
 
 func _validate_laser_segment(seg: Dictionary, out: Array) -> void:
 	_err(out, &"laser", seg.is_empty(), "form=LASER 必填 laser 段")
 	if seg.is_empty():
 		return
-	var tick := float(seg.get("tick_rate", 0.0))
-	_err(out, &"laser.tick_rate", tick <= 0.0 or tick > 30.0, "tick_rate ∈ (0, 30]")
+	# R187：tick_rate 改可选（W4 常驻化删死键 pulse_duration/tick_rate 后零告警——
+	# _leveled_param 从不读 tick_rate；在册时仍守域）
+	if seg.has("tick_rate"):
+		var tick := float(seg["tick_rate"])
+		_err(out, &"laser.tick_rate", tick <= 0.0 or tick > 30.0, "tick_rate ∈ (0, 30]")
 	var layers := int(seg.get("scorch_max_layers", 0))
 	_err(out, &"laser.scorch_max_layers", layers < 1 or layers > 8, "scorch_max_layers ∈ [1, 8]")
+	# R187：refract_* 五键随 W5 本体退役折射真删——缺省零告警（原 refract_depth≤2 保留在册守域）
 	_err(out, &"laser.refract_depth", int(seg.get("refract_depth", 0)) > 2, "refract_depth ≤ 2（B_spec 上限，超限剔除）")
+	# R187 激光段新键（W4 副束 / W5 镜面）：标量与 _levels 逐级同域
+	# · sub_ratio ∈ (0, 0.75]（副束伤害比，L5 ×0.75 封顶）
+	# · mirrors_count ∈ [0, 5]（镜数绝对帽 5）
+	# · mirror_ratio ∈ (0, 0.7]（镜面强度比，TH_MIRROR_CHOIR 有效帽 0.7）
+	_validate_level_array_f(seg, "sub_ratio_levels", 0.0, 0.75, false, out, &"laser.sub_ratio")
+	_validate_level_array_f(seg, "mirrors_count_levels", 0.0, 5.0, true, out, &"laser.mirrors_count")
+	_validate_level_array_f(seg, "mirror_ratio_levels", 0.0, 0.7, false, out, &"laser.mirror_ratio")
+	if seg.has("mirror_budget_per_s"):
+		_err(out, &"laser.mirror_budget_per_s", float(seg["mirror_budget_per_s"]) <= 0.0,
+			"mirror_budget_per_s > 0（镜面组发射预算）")
+	if seg.has("mirror_laser_cap"):
+		_err(out, &"laser.mirror_laser_cap", int(seg["mirror_laser_cap"]) < 0,
+			"mirror_laser_cap ≥ 0（激光镜面数帽）")
 
 
 func _validate_homing_segment(seg: Dictionary, out: Array) -> void:
@@ -465,6 +669,13 @@ func _validate_homing_segment(seg: Dictionary, out: Array) -> void:
 	_err(out, &"homing.blast_r", blast <= 0.0 or blast > 128.0, "blast_r ∈ (0, 128]")
 	var sub := int(seg.get("sub_count", 0))
 	_err(out, &"homing.sub_count", sub < 0 or sub > 8, "sub_count ∈ [0, 8]")
+	# R187 双火箭 30% 规格：volley_count ∈[1,5]（齐射硬顶 5 枚）、blast_r_levels 逐级
+	# ∈(0,128]、blast_atk_ratio ∈(0,1]（溅射伤比 0.6/1.0）
+	_validate_level_array_f(seg, "volley_count_levels", 1.0, 5.0, true, out, &"homing.volley_count")
+	_validate_level_array_f(seg, "blast_r_levels", 0.0, 128.0, false, out, &"homing.blast_r")
+	if seg.has("blast_atk_ratio"):
+		var ratio := float(seg["blast_atk_ratio"])
+		_err(out, &"homing.blast_atk_ratio", ratio <= 0.0 or ratio > 1.0, "blast_atk_ratio ∈ (0, 1]")
 
 
 func _validate_melee_segment(seg: Dictionary, out: Array) -> void:
@@ -475,7 +686,78 @@ func _validate_melee_segment(seg: Dictionary, out: Array) -> void:
 	_err(out, &"melee.arc_deg", arc <= 0.0 or arc > 360.0, "arc_deg ∈ (0, 360]")
 	var orbs := int(seg.get("orbs", 0))
 	_err(out, &"melee.orbs", orbs < 1 or orbs > 8, "orbs ∈ [1, 8]")
-	_err(out, &"melee.hit_cd", float(seg.get("hit_cd", 0.0)) <= 0.0, "hit_cd > 0")
+	# R187：hit_cd 改可选（W8 蓄能化后 hit_cd 语义由 charge_gain_cd 承接，宿主可删键；
+	# 在册时仍守域——W9 斩击等既有数据零回归）
+	if seg.has("hit_cd"):
+		_err(out, &"melee.hit_cd", float(seg["hit_cd"]) <= 0.0, "hit_cd > 0")
+	# R187 W8 蓄能状态机新键（全可选——W9 斩击无这些键零告警；在册即守域）：
+	# charge_max ∈[3,8] / charge_gain_cd ∈(0,1] / detonate_mult ∈(0,10] /
+	# detonate_radius ∈(0,128] / pulse_cd ∈(0,30] / effective_blade_cap ∈[1,16]
+	var charge_max := int(seg.get("charge_max", 0))
+	if seg.has("charge_max"):
+		_err(out, &"melee.charge_max", charge_max < 3 or charge_max > 8, "charge_max ∈ [3, 8]")
+	_validate_level_array_f(seg, "charge_gain_cd_levels", 0.0, 1.0, false, out, &"melee.charge_gain_cd")
+	if seg.has("detonate_mult"):
+		_err(out, &"melee.detonate_mult", float(seg["detonate_mult"]) <= 0.0 or float(seg["detonate_mult"]) > 10.0,
+			"detonate_mult ∈ (0, 10]")
+	if seg.has("detonate_radius"):
+		_err(out, &"melee.detonate_radius", float(seg["detonate_radius"]) <= 0.0 or float(seg["detonate_radius"]) > 128.0,
+			"detonate_radius ∈ (0, 128]")
+	if seg.has("pulse_cd"):
+		_err(out, &"melee.pulse_cd", float(seg["pulse_cd"]) <= 0.0 or float(seg["pulse_cd"]) > 30.0,
+			"pulse_cd ∈ (0, 30]")
+	if seg.has("effective_blade_cap"):
+		var cap := int(seg["effective_blade_cap"])
+		_err(out, &"melee.effective_blade_cap", cap < 1 or cap > 16, "effective_blade_cap ∈ [1, 16]")
+	# R243 类别键域（§1.5，全可选——在册即守域；旧数据缺省回落零告警）：
+	# weapon_class ∈ {melee, talisman} / mode ∈ {orbit, slash, cleave, swords, axe} /
+	# block_chance ∈ [0,1] / shock_radius ∈ (0,128]（W12 落地震荡半径，对齐 detonate_radius 同域）
+	if seg.has("weapon_class"):
+		_err(out, &"melee.weapon_class", not ["melee", "talisman"].has(String(seg["weapon_class"])),
+			"weapon_class ∈ {melee, talisman}（当前 %s）" % String(seg["weapon_class"]))
+	if seg.has("mode"):
+		_err(out, &"melee.mode", not ["orbit", "slash", "cleave", "swords", "axe"].has(String(seg["mode"])),
+			"mode ∈ {orbit, slash, cleave, swords, axe}（当前 %s）" % String(seg["mode"]))
+	if seg.has("block_chance"):
+		var blk := float(seg["block_chance"])
+		_err(out, &"melee.block_chance", blk < 0.0 or blk > 1.0, "block_chance ∈ [0, 1]（当前 %.3f）" % blk)
+	if seg.has("shock_radius"):
+		var shock := float(seg["shock_radius"])
+		_err(out, &"melee.shock_radius", shock <= 0.0 or shock > 128.0, "shock_radius ∈ (0, 128]（当前 %.3f）" % shock)
+	_validate_level_array_f(seg, "shock_radius_levels", 0.0, 128.0, false, out, &"melee.shock_radius")
+	# R243 质变形态键（§7，全可选）：transcend 若在册必须是 Dictionary 且 name 非空
+	if seg.has("transcend"):
+		var tc: Variant = seg["transcend"]
+		_err(out, &"melee.transcend", not (tc is Dictionary), "transcend 须为 Dictionary（当前 %s）" % type_string(typeof(tc)))
+		if tc is Dictionary:
+			_err(out, &"melee.transcend.name", String((tc as Dictionary).get("name", "")).is_empty(),
+				"transcend.name 非空（质变形态名）")
+
+
+func _validate_level_array_f(seg: Dictionary, p_key: String, p_min: float, p_max: float,
+		p_inclusive_min: bool, out: Array, p_field: StringName) -> void:
+	# R187：<key>_levels 逐级域校验（标量键与数组同域——数组在册时逐元素守域）。
+	# p_inclusive_min=false = 开区间下界 (p_min, p_max]；true = 闭区间 [p_min, p_max]。
+	if not seg.has(p_key):
+		return
+	var lv: Variant = seg[p_key]
+	# 域文案用 %s+str()：Godot 4.3 String % 不支持 %g（variant_op 报 unsupported format
+	# character——启动期逐 _levels 键刷引擎噪声；域文案仅入错误清单展示，无断言依赖）
+	var domain_txt := ("[%s, %s]" % [str(p_min), str(p_max)]) if p_inclusive_min \
+		else ("(%s, %s]" % [str(p_min), str(p_max)])
+	if lv is Array:
+		for i in range((lv as Array).size()):
+			var v := float((lv as Array)[i])
+			var bad := (v < p_min or v > p_max) if p_inclusive_min \
+				else (v <= p_min or v > p_max)
+			if bad:
+				_err(out, StringName(String(p_field) + "_levels[%d]" % i), true,
+					"%s[%d] ∈ %s（当前 %.3f）" % [String(p_key), i, domain_txt, v])
+	else:
+		var v0 := float(lv)
+		var bad0 := (v0 < p_min or v0 > p_max) if p_inclusive_min \
+			else (v0 <= p_min or v0 > p_max)
+		_err(out, p_field, bad0, "%s ∈ %s（当前 %.3f）" % [String(p_key), domain_txt, v0])
 
 
 func _err(out: Array, field: StringName, bad: bool, message: String) -> void:

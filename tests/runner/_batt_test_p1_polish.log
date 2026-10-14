@@ -1,0 +1,25 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · P1 清账批次自测 ══════════
+── 战前补给商店 ──
+PASS | 前置：草原 final_wave 在册（>1）
+PASS | 战前补给：普通波清空不开店
+PASS | 战前补给：Boss 前一波清空开店
+PASS | 战前补给：标题 = 战前补给
+PASS | 战前补给：关店回 PLAYING
+PASS | 战前补给：final 波清空不复开店
+PASS | 黑市：常规开店标题 = 战地黑市
+PASS | 黑市：货架无玩家侧池词条（12 轮重抽纯净）
+PASS | AFF_GOLD：词条入注册表
+PASS | AFF_GOLD：pool=ADD / add_gold 通道 / gold_pct 消费键
+PASS | AFF_GOLD：资源裸名 + 池属玩家侧（前缀由卡面运行期拼接——R81 双前缀根修）
+PASS | 消费端：挂卡后 gold_find_pct() = +20%
+PASS | 提速③：手枪 L1 基伤 12→14
+PASS | 提速③：手枪 L2 基伤 →16
+PASS | 提速②：槽2 解锁波 = 2
+PASS | 提速①：前期货架保底武器卡（24 次重抽扫描）
+PASS | 提速①：WEAPON 类别权重 10→14
+────────────────────────────────────────
+汇总：PASS 17 / FAIL 0（共 17 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

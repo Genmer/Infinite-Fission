@@ -1,0 +1,69 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R188-1 黑市供给回归 ══════════
+── R188-1 ①② 真终局供给 + 展示=实挂 ──
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | R188-1 前置：null 目标候选全部叠满（枯竭复现，无溢出）
+PASS | R188-1 前置：补充空栈宿主武器
+PASS | ① 真终局（枯竭循环后）开店 buyable_count() >= 1
+PASS | ② 词条枯竭态货架有非 heal 词条行（口径对齐扩池生效）
+PASS | ② 展示=实挂：购买后词条 id 落在展示 target 的 trait_stack 上
+PASS | ② 购买扣金 + 购买即下架（_wares 行清空）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R188-1 ③ 满 12 词条 target 拒买不扣金 ──
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | ③ 前置：取得空栈 target 武器
+PASS | ③ 前置：target 武器直挂 12 条不同词条（TraitStack.MAX_TRAITS 满栈）
+PASS | ③ 前置：取得第 13 条未挂词条（全武器栈均无）
+PASS | ③ 满 12 词条武器为 target 的行：购买不扣金
+PASS | ③ 拒买且第 13 条词条未挂到任何武器（不静默换宿主）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R188-1 ④ REL_BLACK_MARKET 金卡行 ──
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | ④ 持 REL_BLACK_MARKET 出现金卡行
+PASS | ④ 金卡价 = .tres params.gold_card_price（260，数据驱动无硬编码）
+PASS | ④ 购买金卡 → unlocked_slots +1（SLOT_BONUS 提前解锁帽内下一槽）
+PASS | ④ 购买扣金 260 + 购买即下架
+PASS | ④ 满槽不上架（无金卡行）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R188-1 ⑤ 终兜底常青货 ──
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | R188-1 前置：补充可挂载空栈宿主
+PASS | ⑤ buyable_count()==0 触发终兜底常青货上架（FALLBACK_ATK 运行期构造）
+PASS | ⑤ 保底行可购（buyable_count() >= 1）
+PASS | ⑤ 购买保底行：FALLBACK_ATK 落展示 target 栈 + 金币 25→0
+PASS | ⑤ 清空 _wares 后 open 立即补保底常青行且可购
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── R188-1 口径抽查：刷新价曲线 / 关店归零 / R37 ──
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 1
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 刷新价曲线不变：15×market_mult(wave,9)×1.5ⁿ（n=0,1,2 逐点相等）
+PASS | 刷新价累进读感（c2≈2.25·c0）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 关店 _refresh_count 归零（重开回基准价 ==c0）
+PASS | R37：黑市货架无玩家侧池词条（扫 3 行）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+────────────────────────────────────────
+汇总：PASS 25 / FAIL 0（共 25 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

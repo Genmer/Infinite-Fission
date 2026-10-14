@@ -1,0 +1,75 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_level_stats.gd" id="2_wls"]
+
+[sub_resource type="Resource" id="WeaponLevelStats_l1"]
+script = ExtResource("2_wls")
+base_atk = 13.0
+rof = 2.6
+cd = 0.0
+pierce = 1
+pellets = 1
+note = "定距甩出后翻转加速返航：去回双程都能命中，碰到弹开不消失，同敌 0.4s 一跳——每把 13 伤 × 2.6 把/s"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l2"]
+script = ExtResource("2_wls")
+base_atk = 15.0
+rof = 2.6
+cd = 0.0
+pierce = 1
+pellets = 1
+note = "每把 13→15 伤，面板 DPS 39（双程约 78）"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l3"]
+script = ExtResource("2_wls")
+base_atk = 17.0
+rof = 3.1
+cd = 0.0
+pierce = 1
+pellets = 1
+note = "投掷节奏 2.6→3.1 把/s——回旋刃命中不耗穿透，出刀密度即清场密度"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l4"]
+script = ExtResource("2_wls")
+base_atk = 18.0
+rof = 3.1
+cd = 0.0
+pierce = 1
+pellets = 1
+note = "每把 15→18 伤，面板 DPS 56（双程贯穿实际更高）"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l5"]
+script = ExtResource("2_wls")
+base_atk = 14.0
+rof = 3.1
+cd = 0.0
+pierce = 1
+pellets = 2
+note = "双刃齐掷：一次甩出 2 把（各 14 伤），两条独立回旋轨迹全程贯穿"
+
+[resource]
+script = ExtResource("1_wd")
+id = &"W10_boomerang"
+display_name = "回旋刃"
+form = 0
+crit_rate = 0.05
+crit_dmg = 2.0
+hitbox_r = 7.0
+unlock_rarity = 1
+threshold_traits = [{
+"threshold_id": &"TH_SIZE_NOVA", "metric": "size_mult", "threshold": 3.0,
+"effect_id": &"EF_SIZE", "params": {"radius_mult": 1.5, "atk_ratio": 0.4}
+}, {
+"threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
+"effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
+}, {
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.35,
+"effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
+}]
+ballistic = {
+"proj_speed": 520.0, "range": 380.0, "spread_deg": 3.0,
+"pierce": 1, "pellets": 1, "spin_up_time": 0.0, "rof_hot": 0.0,
+"boomerang": true
+}
+upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

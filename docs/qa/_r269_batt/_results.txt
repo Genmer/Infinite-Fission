@@ -1,0 +1,22 @@
+qa_r269_boostmode | exit=0 | 验收汇总：66/66 通过
+qa_r269_bucketprobe | exit=0 | 验收汇总：29/29 通过
+test_r220_governor | exit=0 | 验收汇总：66/66 通过
+test_qa_r220_mode | exit=0 | 验收汇总：67/67 通过
+test_fx_quality | exit=0 | 
+test_qa_r218_probe | exit=0 | 验收汇总：48/48 通过
+test_r218_simbound | exit=0 | 验收汇总：17/17 通过
+test_r230_k2_deathcap | exit=0 | 验收汇总：54/54 通过
+test_r229_pool_valve | exit=0 | 验收汇总：56/56 通过
+test_r212_poolwarm | exit=0 | 验收汇总：48/48 通过
+test_r213_fullload | exit=0 | 验收汇总：40/40 通过
+test_r202_g3_enemyhot | exit=0 | 
+test_pkg0 | exit=0 | 
+test_pkg3 | exit=0 | 
+qa_r268_physphase | exit=0 | 验收汇总：PASS 31 / FAIL 0
+test_r195_adapt | exit=0 | 验收汇总：580/580 通过
+test_pkg4 | exit=0 | 
+test_verify_feedback | exit=0 | 验收汇总：PASS 685 / FAIL 0（共 685 项）
+qa_r267_crystal_blade | exit=0 | 验收汇总：PASS 54 / FAIL 0
+test_r267_runstart_prewarm | exit=0 | 验收汇总：PASS 25 / FAIL 0
+qa_r228_diagfreeze | exit=0 | 验收汇总：7/7 通过
+BATTERY_DONE

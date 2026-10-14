@@ -1,0 +1,58 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R269 B 轨八键探针（死µs/警µs/桶µs/延µs/释N/敌弹N/拒N/促N） ══════════
+── b1 死µs/警µs/桶µs 三夹具（wrap 落位 → 秒窗累计 >0 + 行含键） ──
+  PASS | b1死µs：DeathPop.pop 直调 → 秒窗累计 >0（wrap 含创建/挂树/配置全程）
+  PASS | b1死µs：行含「死µs」键（1Hz 行尾新段）
+  PASS | b1警µs：Enemy._ready（引信环创建/挂树/配置）→ 秒窗累计 >0
+  PASS | b1警µs：行含「警µs」键
+ERROR: Node needs a parent to be reparented.
+   at: (scene/main/node.cpp:1874)
+  PASS | b1桶µs：贴图桶 place → 秒窗累计 >0
+  PASS | b1桶µs：行含「桶µs」键
+── b2 延µs 哨兵（物理相尾 call_deferred → 冲刷点收差值入秒窗桶） ──
+  PASS | b2前置：复位后 flush 桶==0（干净起点）
+  PASS | b2延µs：直驱物理帧 + 冲刷两帧后 ≥0 出现在秒窗桶（X 口径不锁值）
+  PASS | b2延µs：行尾含「延µs」键
+  PASS | b2复位：秒窗重开后 flush 桶==0（旧值清零不跨窗携带）
+  PASS | b2再驱动：二次直驱后新值独立入桶 ≥0（差分基线对齐既有键口径）
+── b3 释N 差分（拉取立基线 / queue_free wrap 触发 / 重复拉取 0） ──
+  PASS | b3释N：wrap 点触发 → 差分恰 1
+  PASS | b3释N：重复拉取增量=0（拉取立基线口径）
+  PASS | b3释N：空清（无可释放件）不计数
+  PASS | b3释N：行含「释」键（行尾新段）
+── b4 行格式冻结（既有子串逐位 / 八键插入位 挡 后行尾前） ──
+  PASS | b4既有子串逐位：补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 在位
+  PASS | b4八键在位且序=挡 < 死µs < 警µs < 桶µs < 延µs < 释 < 敌弹 < 拒 < 促（行尾段）
+  PASS | b4促N 缺省 0（boost 关 + boost_override -1 → boost_diag_state 单源）
+  PASS | b4促N boost 强开 → 促1（状态键随模式翻转）
+  PASS | b4尾锚正则全匹配（r229/r230/qa_r228/R271 迁移后兼容形状）
+── b5 敌弹N 当秒末直读 / 拒N 差分 / boost 关零拒绝 ──
+  PASS | b5敌弹N：注入 N=7 → 行含「敌弹7」（当秒末直读非差分）
+  PASS | b5敌弹N：缺省无注入 → 敌弹0（counts 缺键兜底 0）
+  PASS | b5敌弹N 真源：acquire(1)×3 后 diag_counts.enemy_bullets_live==前值+3（实扫真值——修1 recount 口径）
+  PASS | b5拒N：boost 开 ∧ team1_live=320 → acquire(1)×3 全拒（null）
+  PASS | b5拒N：差分==3（boost_bullet_capped 逐发计数）
+  PASS | b5拒N：行含「拒」键
+  PASS | b5帽只锁 team-1：boost 开 acquire(0) 正常获取（玩家弹不受敌弹帽）
+  PASS | b5boost 关同计数 320：acquire(1)×3 正常获取（门不触——关路径逐位）
+  PASS | b5boost 关零拒绝（拒N 恒 0）
+── b6 反射盾 team 翻转 → team1_live 精确同步 + 敌弹N 真值（修1） ──
+  PASS | b6前置：反射前 team1_live==0（玩家弹不计）
+  PASS | b6翻转计数：try_reflect true → note_team1_flip +1（team1_live==1 精确同步）
+  PASS | b6真值：recount_team1 实扫==1 ∧ 写回（b.team 真翻 1——反弹后活弹计入）
+  PASS | b6敌弹N 真值：GL 池 acquire(1)×2 → diag_counts==前值+2（1Hz 实扫自愈口径）
+  PASS | b6自愈：计数器打脏 99 → recount_team1()==1 归真（兜底语义）
+  PASS | b6冷却期：try_reflect false → 计数不动（team1_live==1）
+────────────────────────────────────────
+汇总：PASS 35 / FAIL 0（共 35 项）
+验收汇总：35/35 通过
+WARNING: 5 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 98 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

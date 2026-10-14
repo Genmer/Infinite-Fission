@@ -1,0 +1,12 @@
+{
+  "direct": {
+    "grunt": 0,
+    "volatile_scared": 0
+  },
+  "display": "Windows",
+  "pass": true,
+  "vflipped": {
+    "grunt": 0.069274662528187,
+    "volatile_scared": 0.125992518214237
+  }
+}

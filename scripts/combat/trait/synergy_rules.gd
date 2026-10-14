@@ -44,6 +44,20 @@ static func condition_met(p_condition_id: int, p_params: Dictionary, p_ctx: Trai
 			if p_ctx.damage_ctx != null:
 				return p_ctx.damage_ctx.is_first_hit_of_wave
 			return false
+		GameConst.ConditionId.TARGET_HP_BELOW:
+			# R72 处决线：目标血线低于阈值（MEC_OVERKILL 类「收割残血」乘区）
+			if p_ctx.target == null:
+				return false
+			var thp: Variant = p_ctx.target.get("hp")
+			var tmhp: Variant = p_ctx.target.get("max_hp")
+			if thp == null or tmhp == null or float(tmhp) <= 0.0:
+				return false
+			return float(thp) / float(tmhp) < float(p_params.get("pct", 0.3))
+		GameConst.ConditionId.PLAYER_HP_ABOVE:
+			# R72 壁垒线：玩家血线高于阈值（满血压制流乘区）
+			if p_ctx.damage_ctx == null:
+				return false
+			return p_ctx.damage_ctx.player_hp_pct > float(p_params.get("pct", 0.7))
 		GameConst.ConditionId.TARGET_TAG_IN:
 			if p_ctx.target == null:
 				return false

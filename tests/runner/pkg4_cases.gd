@@ -22,6 +22,9 @@ func run(p_tree: SceneTree) -> void:
 	seed(42)
 	_ensure_autoloads()
 	_boot_game_loop()
+	_gl.player.unlocked_slots = 99   # R183 套件级隔离：金卡「武器槽+1」替换门恒关
+	                                #（UI choose(0) 选中金卡会 grant_slot_bonus 污染
+	                                #  槽位态，「空注册表全 fallback」断言随 Meta 持久态偶发红）
 	_test_state_machine()                         # 要点 1
 	_test_hit_stop_and_dual_channel()             # 要点 2 / 3
 	_test_trauma_levels_and_decay()               # 要点 4
@@ -29,6 +32,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_hud_binding()                           # 要点 6
 	_test_popup_pool()                            # 要点 7
 	_test_card_flow()                             # 要点 8
+	_test_pause_system()                          # 要点 11（用户反馈 2026-08-29：暂停系统）
 	_teardown_game_loop()
 	_test_volatile_bug()                          # 要点 9（脱离 GameLoop 的独立环境）
 	_test_boss_escort()                           # 要点 10
@@ -48,11 +52,18 @@ func fail_count() -> int:
 func _ensure_autoloads() -> void:
 	_check("autoload 就绪（EventBus/GameConfig/DebugStats）",
 		EventBus != null and GameConfig != null and DebugStats != null)
+	# Meta 测试隔离（角色/养成落地后）：重置局外状态——pkg 字面量断言（HP 60 等）假定全新档案
+	if Meta != null:
+		Meta.upgrades = {}
+		Meta.crystals = 0
+		Meta.character_id = &"sentinel"
+		Meta.maps_cleared = {}
 	_check("GameConfig 非致命（balance 加载）", not GameConfig.is_fatal() and GameConfig.balance != null)
 
 
 func _boot_game_loop() -> void:
 	# GameLoop 完整 Boot（架构 §六.2 序列）：fatal 检查 → registry → 池×5 → 子系统 → MENU
+	RunSave.clear()                           # 夜间R42：清继续档残留（防恢复链混入非 sentinel 角色血量——偶发「HP 55/95」根因）
 	_gl = GameLoop.new()
 	_gl.name = "GameLoopUnderTest"
 	tree.get_root().add_child(_gl)
@@ -64,7 +75,7 @@ func _boot_game_loop() -> void:
 		and _gl.popup_manager != null and _gl.card_generator != null and _gl.card_select_ui != null)
 	_check("Boot：双网格持有（§1.3-6）", _gl.enemy_grid != null and _gl.enemy_bullet_grid != null)
 	# 集成包 xp 池挂载（B.1）授权更新：池×5 → 池×6（唯一改动的 pkg4 断言，其余语义不变）
-	_check("Boot：池×6 就绪（含 xp——集成包经验链路挂载）", _gl.pools.size() == 6
+	_check("Boot：池×7 就绪（xp + homing——R94 导弹真件池挂载）", _gl.pools.size() == 7
 		and _gl.pools[&"projectile"] != null and _gl.pools[&"enemy"] != null
 		and _gl.pools[&"popup"] != null and _gl.pools[&"particle"] != null
 		and _gl.pools[&"laser"] != null and _gl.pools[&"xp"] != null)
@@ -75,6 +86,7 @@ func _boot_game_loop() -> void:
 
 func _teardown_game_loop() -> void:
 	tree.paused = false
+	RunSave.clear()
 	if _gl != null:
 		_gl.free()
 		_gl = null
@@ -116,6 +128,7 @@ func _test_state_machine() -> void:
 		and _gl.player.level == 1 and _gl.player.weapon_slots[0] != null)
 	# 升级仲裁：PLAYING → LEVEL_UP（选卡流打开）——详细流程在卡牌用例
 	EventBus.emit_level_up(2)
+	_gl.call(&"_consume_deferred_level_open")     # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("升级仲裁：PLAYING→LEVEL_UP", _gl.state == GameConst.GameStatus.LEVEL_UP and tree.paused)
 	# LEVEL_UP 中再收升级 → 排队
 	EventBus.emit_level_up(3)
@@ -184,6 +197,9 @@ func _test_trauma_levels_and_decay() -> void:
 	var feel := _gl.game_feel
 	var shake := feel.shake
 	shake.trauma = 0.0
+	# 震屏分档断言前置（默认 true，显式钉死——R196 批新增套件曾以「写即存」
+	# 把 shake_on=false 落进测试档，跨进程污染本组断言）
+	Meta.set_setting("shake_on", true)
 	# 档位：shake_trauma=[0.15,0.4,0.5,1.0]（pkg0 锁定）
 	var tra: Array[float] = feel.feel_config.shake_trauma
 	_check("档位真源：shake_trauma=[0.15,0.4,0.5,1.0]",
@@ -258,7 +274,14 @@ func _test_hud_binding() -> void:
 	_check("HUD HP 绑定", hud.displayed_hp_text() == "HP %d/%d" % [int(player.hp), int(player.max_hp)])
 	player.hp = 55.0
 	hud.refresh_stats()
-	_check("HUD HP 刷新（55/100）", hud.displayed_hp_text() == "HP 55/100")
+	# 断言字面量 55/60（用户实测反馈 2026-08-29：初始 HP 100→60，现 cfg player_base_hp=60
+	# 唯一真源——张力调校值已回注 cfg、代码侧双轨常量已删；显示串口径不变）。
+	# 动因/证据见交付报告「HP 相关测试断言的处理」。
+	# R183 加固：断言自洽口径「显示 = 当前实值」——前序 UI choose(0) 用例偶发选中金品质
+	# AFF_HP_UP（25×2.6=+65 → max 125）击穿字面量 55/60；字面 60 只在零养成+零挂卡成立
+	_check("HUD HP 刷新（显示随实值）",
+		hud.displayed_hp_text() == "HP 55/%d" % int(player.max_hp),
+		"text=%s max=%s lv=%s" % [hud.displayed_hp_text(), str(player.max_hp), str(player.level)])
 	EventBus.emit_wave_started(7)
 	_check("HUD 波次绑定（wave_started）", hud.displayed_wave() == 7)
 	var k0: int = hud.displayed_kills()
@@ -272,6 +295,7 @@ func _test_hud_binding() -> void:
 	_check("HUD 等级绑定（升级后）", hud.displayed_level_text() == "Lv %d" % player.level
 		and player.level == lv0 + 1,
 		"text=%s lv=%d lv0=%d xp=%f need=%f" % [hud.displayed_level_text(), player.level, lv0, player.xp, player.xp_need])
+	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	_check("升级仲裁联动：gain_xp → LEVEL_UP 选卡流打开", _gl.state == GameConst.GameStatus.LEVEL_UP
 		and _gl.card_select_ui.is_open)
 	_check("HUD 状态提示（LEVEL_UP 覆盖显示）", _gl.hud._state_label.visible
@@ -321,6 +345,106 @@ func _test_popup_pool() -> void:
 		and pm.dropped_count() > 0)
 	pm.tick(10.0)
 	_check("上限流量全量归还", pm.active_popups == 0)
+	# ── R202 伤害数字节流回归（断言面新增 R202：层1 存活并入 + CRIT 升格 + element
+	# 刷新 + 层2 满池全局 1/8 采样——消费端两态口径，详见 popup_manager.gd 头注） ──
+	var q_prev: int = int(Meta.settings("fx_quality"))
+	var provider_prev: Callable = pm.baseline_provider
+	Meta.set_setting("fx_quality", 2)              # 高档钉死（cap 80 / 窗 0.12s——计数断言确定性）
+	pm.baseline_provider = Callable()              # 量级档关闭（本段只锁样式/合并语义）
+	# 层1：窗过期后同目标存活即并入——0.2s > 0.12s 高档窗（旧口径此处强制新起第 2 张）
+	var rl := DamageResult.new()
+	rl.final_value = 6.0
+	rl.target_uid = 2101
+	rl.pos = Vector2(100, 200)
+	rl.popup_style = GameConst.PopupStyle.NORMAL
+	pm.on_damage_resolved(rl)
+	pm.tick(0.2)                                   # 窗过期（0.2>0.12）、popup 仍活（<0.6s）
+	var rl2 := DamageResult.new()
+	rl2.final_value = 4.0
+	rl2.target_uid = 2101
+	rl2.pos = Vector2(100, 200)
+	rl2.popup_style = GameConst.PopupStyle.NORMAL
+	pm.on_damage_resolved(rl2)
+	_check("R202 层1：窗过期同目标存活即并入（active 仍 1 / 值累计 6+4）",
+		pm.active_popups == 1
+			and absf((pm._active_list[0] as DamagePopup).merged_value - 10.0) <= 0.001)
+	# 层1 CRIT 升格：NORMAL 宿主吃 CRIT 并入 → 原地升样式不新起（防暴击可见性回归）
+	var rl3 := DamageResult.new()
+	rl3.final_value = 5.0
+	rl3.target_uid = 2101
+	rl3.pos = Vector2(100, 200)
+	rl3.popup_style = GameConst.PopupStyle.CRIT
+	pm.on_damage_resolved(rl3)
+	var crit_host: DamagePopup = pm._active_list[0]
+	pm.tick(DT)                                    # 合并置脏 → tick 一次刷新文案/样式（R189）
+	_check("R202 层1 CRIT 升格：宿主原地升 CRIT（active 不涨 / 值累计 15 / 40px 字号）",
+		pm.active_popups == 1 and crit_host.style == GameConst.PopupStyle.CRIT
+			and absf(crit_host.merged_value - 15.0) <= 0.001
+			and crit_host._label.get_theme_font_size("font_size") == DamagePopup.FONT_SIZE_CRIT)
+	pm.tick(10.0)
+	# 层1 element 刷新：异元素并入 → 颜色随最新命中元素（不停在第跳）
+	var re := DamageResult.new()
+	re.final_value = 3.0
+	re.target_uid = 2102
+	re.pos = Vector2(100, 200)
+	re.popup_style = GameConst.PopupStyle.NORMAL
+	re.element = GameConst.Element.FIR
+	pm.on_damage_resolved(re)
+	var re2 := DamageResult.new()
+	re2.final_value = 3.0
+	re2.target_uid = 2102
+	re2.pos = Vector2(100, 200)
+	re2.popup_style = GameConst.PopupStyle.NORMAL
+	re2.element = GameConst.Element.HYD
+	pm.on_damage_resolved(re2)
+	var elem_host: DamagePopup = pm._active_list[-1]
+	pm.tick(DT)
+	_check("R202 层1 element 刷新：异元素并入颜色随新元素（FIR→HYD）",
+		elem_host.element == GameConst.Element.HYD
+			and elem_host._label.self_modulate == PopPalette.ELEMENT_COLORS[GameConst.Element.HYD])
+	pm.tick(10.0)
+	# 层2：满池全局单例 1/8 采样（仅 bucket0 直击 NORMAL 新起）——先填满 80（未满池
+	# 全显 N=1 零行为变化），再 16 发白字新起尝试：确定性 mod 恰 2 发放行（任意起点
+	# 连续 16 计数恰含 2 个 8 的倍数）、14 发采样丢弃计入 dropped；放行挤最老非反应
+	# 槽腾位（active 恒 == cap 80）
+	var uid_base := 3000
+	for i in range(80):
+		var rf2 := DamageResult.new()
+		rf2.final_value = 1.0
+		rf2.target_uid = uid_base + i
+		rf2.pos = Vector2(10 + i, 10)
+		rf2.popup_style = GameConst.PopupStyle.NORMAL
+		pm.on_damage_resolved(rf2)
+	_check("R202 层2 前置：未满池全显（80 目标 80 条）", pm.active_popups == 80)
+	var dropped_s0: int = pm.dropped_count()
+	for i in range(16):
+		var rs2 := DamageResult.new()
+		rs2.final_value = 1.0
+		rs2.target_uid = uid_base + 100 + i
+		rs2.pos = Vector2(10, 10)
+		rs2.popup_style = GameConst.PopupStyle.NORMAL
+		pm.on_damage_resolved(rs2)
+	_check("R202 层2：满池 NORMAL 1/8 采样（16 发 2 显 / 采样丢弃 +14 / active 恒==cap）",
+		pm.active_popups == 80 and pm.dropped_count() == dropped_s0 + 14)
+	# CRIT 必显通道：满池下 CRIT 新起绕过采样（不丢弃、挤最老非反应槽）
+	var dropped_s1: int = pm.dropped_count()
+	var rc2 := DamageResult.new()
+	rc2.final_value = 1.0
+	rc2.target_uid = uid_base + 200
+	rc2.pos = Vector2(10, 10)
+	rc2.popup_style = GameConst.PopupStyle.CRIT
+	pm.on_damage_resolved(rc2)
+	var crit_seen := false
+	for p: DamagePopup in pm._active_list:
+		if p.style == GameConst.PopupStyle.CRIT:
+			crit_seen = true
+	_check("R202 层2 CRIT 必显：满池绕过采样（active 恒 80 / 不丢 / 在册）",
+		pm.active_popups == 80 and pm.dropped_count() == dropped_s1 and crit_seen)
+	pm.tick(10.0)
+	_check("R202 层2 流量归还（清场）", pm.active_popups == 0)
+	# 复位（防污染后续用例）
+	Meta.set_setting("fx_quality", q_prev)
+	pm.baseline_provider = provider_prev
 
 
 # ── 要点 8：三选一卡牌流 ─────────────────────────────────────────
@@ -329,7 +453,7 @@ func _test_card_flow() -> void:
 	var gen := _gl.card_generator
 	gen.rng.seed = 1234
 	var player := _gl.player
-	# roll 数量与形状
+	# roll 数量与形状（R183 金卡替换门已套件级钉死——见 run() 注释）
 	var cands := gen.generate_candidates({"player": player, "wave": 5})
 	_check("三选一 roll 数量 = 3", cands.size() == 3)
 	var kinds_ok := true
@@ -337,21 +461,27 @@ func _test_card_flow() -> void:
 		if not c.has("kind") or not c.has("id") or not c.has("display_name"):
 			kinds_ok = false
 	_check("卡面字段齐全（kind/id/display_name）", kinds_ok)
-	# 稀有度 roll（A3 §6.1 权重分布抽样：金卡概率 2/100 → 500 抽 0~30 张）
+	# 稀有度 roll（用户反馈 2026-08-29 提金率：基础 {46,30,15,6} → w5 金卡 6% → 500 抽期望 30）
 	var gold := 0
 	gen.rng.seed = 777
 	for i in range(500):
 		if gen._roll_rarity(5) == 3:
 			gold += 1
-	_check("稀有度权重分布合理（金卡 500 抽 ≤40，w<10 基础权重 2%）", gold <= 40, "gold=%d" % gold)
-	# 池过滤：叠层上限（AFF_ATK_UP stack_max=3，§6.4 至上限移出池）
+	_check("稀有度权重分布合理（金卡 500 抽 ≤55，w<10 基础权重 6%）", gold <= 55, "gold=%d" % gold)
+	# 池过滤：R226 有意契约变更（用户拍板「肉鸽别搞上限」）——上架叠层帽全池拆除
+	#（原 §6.4「满 stack_max 移出池」→ R196 放宽 ADD 池 stack_max+5 → 本轮无限）
 	var atk := _gl.registry.get_trait(&"AFF_ATK_UP")
 	_check("夹具：AFF_ATK_UP 存在（stack_max=3）", atk != null and atk.stack_max == 3)
 	var weapon: WeaponBase = player.weapon_slots[0]
 	for i in range(atk.stack_max):
 		weapon.attach_trait(atk)
 	var add_pool := gen._trait_candidates("ADD", player, [])
-	_check("叠层上限过滤：满层 ID 移出候选池", not add_pool.has(&"AFF_ATK_UP"))
+	_check("叠层过滤拆除：满 stack_max 层 ID 仍上架", add_pool.has(&"AFF_ATK_UP"))
+	for i in range(5):
+		weapon.attach_trait(atk)                    # 续挂至 8 层（原满帽点）
+	var add_pool_full := gen._trait_candidates("ADD", player, [])
+	_check("叠层过滤拆除：满 8 层（原 stack_max+5 帽点）仍上架（R226 无限供给）",
+		add_pool_full.has(&"AFF_ATK_UP"))
 	# 同批去重
 	var dup := gen._trait_candidates("ADD", player, [&"AFF_HP_UP"] as Array[StringName])
 	_check("同批货架去重（picked 过滤）", not dup.has(&"AFF_HP_UP"))
@@ -361,18 +491,34 @@ func _test_card_flow() -> void:
 	empty_gen.rng.seed = 42
 	var lv_keep: int = weapon.level
 	weapon.level = WeaponBase.MAX_LEVEL            # 满 5 级 → 精通池空（A3 §3.10 封顶移出）
+	# R183 确定性收口：精通候选源 = 玩家已装备武器（非注册表）——UI choose(0) 用例装入的
+	# 新武器若不满级，空注册表也 roll 出 MASTERY 击穿「全 fallback」断言 → 全武器满级
+	var extra_weapons: Array[WeaponBase] = []
+	for w_v: WeaponBase in player.weapon_slots:
+		if w_v != null and is_instance_valid(w_v) and w_v != weapon:
+			extra_weapons.append(w_v)
+			w_v.level = WeaponBase.MAX_LEVEL
 	var fb := empty_gen.generate_candidates({"player": player, "wave": 1})
 	var all_fallback := true
 	for c in fb:
 		if int(c["kind"]) != CardGenerator.CardKind.FALLBACK:
 			all_fallback = false
 	_check("卡池耗尽 → 全 fallback（AC-16.4）", fb.size() == 3 and all_fallback)
-	# fallback 应用：+5% 攻击入主武器栈
+	# R262d 迁移：fallback 应用走全局授予（player.add_fallback_atk）——原「主武器栈
+	# +1」口径退役（不再挂武器栈，全武器生效）
 	var stack_before: int = weapon.trait_stack.size()
+	var fb_pct0: float = float(player.get("run_fallback_atk_pct"))
 	empty_gen.apply_choice(empty_gen._fallback_stat_card(), player)
-	_check("fallback 应用：主武器栈 +1", weapon.trait_stack.size() == stack_before + 1)
+	_check("fallback 应用：全局累计 +5%（主武器栈不变）",
+		is_equal_approx(float(player.get("run_fallback_atk_pct")) - fb_pct0, 0.05)
+			and weapon.trait_stack.size() == stack_before)
 	weapon.level = lv_keep                          # 恢复等级（后续 MASTERY 用例需要未满级）
+	for w_v: WeaponBase in extra_weapons:
+		if w_v != null and is_instance_valid(w_v):
+			w_v.level = maxi(w_v.level - 1, 1)      # R183：额外武器回退一级（恢复未满级态）
 	# MASTERY 应用：武器等级 +1（≤MAX_LEVEL）
+	weapon.level = 1                          # 夜间R42：自足夹具（隔离前序用例的等级推进——偶发 lv0=5 封顶根因）
+	weapon.call(&"_invalidate_panel")
 	var lv0: int = weapon.level
 	var mastery := {
 		"kind": CardGenerator.CardKind.MASTERY, "id": weapon.data.id, "rarity": 0,
@@ -403,6 +549,55 @@ func _test_card_flow() -> void:
 
 func _on_card_chosen(p_id: StringName, p_kind: int) -> void:
 	_card_chosen_log.append([p_id, p_kind])
+
+
+# ── 要点 11：暂停系统（用户反馈 2026-08-29：按钮/面板/回主菜单/暂停重开/恢复宽限） ──
+func _test_pause_system() -> void:
+	print("── 暂停系统 ──")
+	var hud := _gl.hud
+	var overlay := _gl.pause_overlay
+	_check("组装：暂停遮罩面板就绪", overlay != null)
+	# 暂停按钮可见性（仅 PLAYING 态显示；LEVEL_UP/GAME_OVER 同口径隐藏）
+	_check("暂停按钮：PLAYING 显示", hud._pause_btn.visible)
+	_gl.request_pause()
+	_check("暂停按钮：PAUSED 隐藏 + 面板显示",
+		not hud._pause_btn.visible and overlay.is_pause_visible())
+	# GameFeel 计时冻结（顿帧/震屏衰减暂停期不走）
+	_gl.game_feel.shake.trauma = 0.5
+	_gl._physics_process(DT)
+	_check("暂停冻结：trauma 不衰减（GameFeel 计时冻结）",
+		absf(_gl.game_feel.shake.trauma - 0.5) <= 0.0001)
+	_gl.game_feel.shake.trauma = 0.0
+	# 按钮信号链：hud.pause_requested → request_pause（已在 PAUSED → 非法迁移拒绝计数）
+	var rej0: int = _gl.rejected_transitions
+	hud.pause_requested.emit()
+	_check("暂停按钮信号：仲裁接通（重复暂停被拒）", _gl.state == GameConst.GameStatus.PAUSED
+		and _gl.rejected_transitions == rej0 + 1)
+	# 面板「继续」信号链 + 恢复输入宽限期
+	overlay.resume_requested.emit()
+	_check("暂停面板：继续 → PLAYING + 面板收起 + 宽限期置位",
+		_gl.state == GameConst.GameStatus.PLAYING and not overlay.is_pause_visible()
+		and _gl.resume_grace_left > 0.0 and not _gl.player.input_enabled)
+	_gl.player.hp = _gl.player.max_hp
+	_gl.player.invuln_left = 99.0                 # 宽限驱动期防接触伤害（观测隔离）
+	for i in range(120):
+		_gl._physics_process(DT)
+	_check("恢复宽限：0.5s 后输入使能恢复", _gl.resume_grace_left == 0.0
+		and _gl.player.input_enabled)
+	_gl.player.invuln_left = 0.0
+	# 暂停中重开（restart_run 自 PAUSED 放行；PAUSED→PLAYING 为既有合法迁移）
+	_gl.request_pause()
+	_check("暂停中重开：restart_run 自 PAUSED 放行（波次重开）", _gl.restart_run()
+		and _gl.state == GameConst.GameStatus.PLAYING
+		and _gl.wave_director.current_wave == 1)
+	# 回主菜单（新增合法迁移 PAUSED→MENU；清场 + 面板收起 + 菜单屏显示）
+	_gl.request_pause()
+	overlay.menu_requested.emit()
+	_check("回主菜单：PAUSED→MENU 合法迁移 + 面板收起 + 战场清空",
+		_gl.state == GameConst.GameStatus.MENU and not overlay.is_pause_visible()
+		and _gl.spawner.active_count() == 0 and _gl.menu_screen.is_menu_visible())
+	_check("非法迁移回归：MENU→PAUSED 仍拒绝（矩阵不回归）",
+		not _gl.change_state(GameConst.GameStatus.PAUSED))
 
 
 # ── 要点 9：爆虫自爆（引爆时序 / 警示圈 / 击退打断 / 半径判定） ────

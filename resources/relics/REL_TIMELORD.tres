@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_TIMELORD"
+display_name = "时之沙"
+description = "角色技能冷却 -20%（当前倒计时同比缩短）"
+rarity = 3
+listen_events = [&"wave_started"]
+effect_id = &"REL_EF_SKILL_HASTE"
+params = {"mult": 0.8}
+unique = true

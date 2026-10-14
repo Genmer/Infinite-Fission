@@ -1,0 +1,37 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 加成生效全量审计 ══════════
+── ADD 池 ×15 生效审计 ──
+PASS | 审计 攻击力 add_atk：真卡上架 + add_entries 入面板（管线消费）
+PASS | 审计 射速 add_rof：消费点生效（0.200 → 0.179）
+PASS | 审计 冷却 add_cdr：消费点生效（1.600 → 1.440）
+PASS | 审计 暴击率 add_crit：消费点生效（0.050 → 0.130）
+PASS | 审计 爆伤 add_critdmg：消费点生效（2.000 → 2.300）
+PASS | 审计 弹速 add_spd：消费点生效（620.000 → 731.600）
+PASS | 审计 弹丸数 add_pellets：消费点生效（1.000 → 2.000）
+PASS | 审计 穿透 add_pierce：消费点生效（1.000 → 2.000）
+PASS | 审计 击退 add_knock：消费点生效（0.000 → 60.000）
+PASS | 审计 弹丸体积 add_size：真卡上架 + 聚合在册（hitbox spawn 消费 pkg 锁定）
+PASS | 审计 生命上限 add_hp：消费点生效（1000000.000 → 1000025.000）
+PASS | 审计 技能冷却 add_skillcdr：消费点生效（120.000 → 105.600）
+PASS | 审计 磁吸 add_pickup：消费点生效（120.000 → 156.000）
+PASS | 审计 经验获取 add_xp：消费点生效（0.000 → 0.150）
+PASS | 审计 金币获取 add_gold：消费点生效（0.100 → 0.320）
+PASS | 池完整性：15 个 ADD 池全部有真卡上架（0 死池）
+PASS | 卡面口径：穿透卡描述说明「贯穿敌人数」机制
+── R187 新词条上架审计 ──
+PASS | R187 审计：25 个新词条 id 全部注册（全局唯一）
+PASS | R187 审计：TH_* 全部带 threshold_only 门（不上卡架）
+PASS | R187 审计：MECH 候选集不含任何 TH_*（卡架过滤生效）
+PASS | R187 审计：COUNT_TRAIT_IDS 增补 SPLIT_PRISM/MIRROR_SPLIT/HIVE_RACK
+PASS | R187 审计：laser_topology 互斥组（挂 TRACK 后 FAN 不上架）
+PASS | R187 审计：required_weapon 门（HIVE_RACK 拒上 W4）
+PASS | R187 审计：6 新 EF 入 TECH_EFFECT_IDS 白名单
+PASS | R187 审计：MEC_KNOCK required_forms 扩 [0,2,3]
+PASS | R187 审计：MEC_FRACTAL inheritable == true（分裂子代继承）
+────────────────────────────────────────
+汇总：PASS 26 / FAIL 0（共 26 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

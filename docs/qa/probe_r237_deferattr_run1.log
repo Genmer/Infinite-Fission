@@ -1,0 +1,43 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+OpenGL API 3.3.0 NVIDIA 610.62 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 4070 Laptop GPU
+
+DEFERATTR 环境头：rendering(project/旗标扫)=forward_plus adapter_api=3.3.0 NVIDIA 610.62 headless=false user_dir=E:/Code/Agent/Infinite-Fission/.qa_sandbox_r237/Godot/app_userdata/Infinite Fission phys_hz=120
+══ R237 延迟桶归因：D0 基线 / D1 popup / D2 死亡表现 / D3 fx 抑制 + D0B 漂移钉（窗口 gl_compatibility 档）══
+  PASS | G-沙箱 user:// 重定向生效（含 .qa_sandbox_r237）（user_dir=E:/Code/Agent/Infinite-Fission/.qa_sandbox_r237/Godot/app_userdata/Infinite Fission）
+boot.词条：PIERCE×3/3 MULTI×2/2 BOUNCE×3/3 NOVA×2/2 FRACTAL×2/2
+boot：grove w16 构成 42 敌种池（E1_grunt×26 E2_runner×7 E3_bastion×3 E10_woodbird×6）压血×1.00；物理引擎自然驱动 60Hz；构筑=W2 L5 五词条（无棱镜）+ 风筝
+── D0 基线深载（现状：跳字开 / DeathPop 自然发射 / fx 层自然） ──
+读数：resid_alt=15735.8µs/活跃帧（p95=29979.0，钳负帧占90%）｜物步µs=0.0｜mon=5063.3µs/步 段和=17028.9µs/步｜步/帧=6.37 样本=319 步=2036 墙=40.1s
+负载：敌 p50=117 弹 p50=297 跳 p50=79 fps=8.5｜死亡/s=24.2（补位/s=23.9）跳字起跳/s=91.6 DeathPop发射/s=24.2 Telegraph活口p50=128
+  PASS | G-D0 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=319 步=2036 墙=40.1s（帽 75s/6000 步内收口））
+  PASS | G-D0 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——physattr 带）（敌=117/120 弹=297 跳=79）
+── D1 popup 抑制（damage_numbers_on=false 内存注入+发信号——入口短路） ──
+读数：resid_alt=17164.8µs/活跃帧（p95=27879.0，钳负帧占54%）｜物步µs=0.0｜mon=8202.2µs/步 段和=15185.2µs/步｜步/帧=3.83 样本=568 步=2184 墙=40.1s
+负载：敌 p50=117 弹 p50=302 跳 p50=0 fps=15.4｜死亡/s=26.4（补位/s=26.0）跳字起跳/s=0.0 DeathPop发射/s=26.4 Telegraph活口p50=128
+  PASS | G-D1 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=568 步=2184 墙=40.1s（帽 75s/6000 步内收口））
+  PASS | G-D1 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——physattr 带）（敌=117/120 弹=302 跳=0）
+  PASS | G-D1 抑制生效：跳字起跳/s ≤1.0（damage_numbers_on 入口短路）（起跳/s=0.00（跳 p50=0））
+── D2 死亡表现抑制（deathpop_cap_override=1 + Enemy._fx_quality_cache=0——DeathPop 发射归零；帽0 无注入口的代码现实偏差见头注） ──
+读数：resid_alt=16454.0µs/活跃帧（p95=28958.0，钳负帧占81%）｜物步µs=0.0｜mon=5391.8µs/步 段和=17113.5µs/步｜步/帧=6.08 样本=333 步=2032 墙=40.1s
+负载：敌 p50=117 弹 p50=308 跳 p50=79 fps=8.1｜死亡/s=24.2（补位/s=23.7）跳字起跳/s=89.9 DeathPop发射/s=0.0 Telegraph活口p50=128
+  PASS | G-D2 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=333 步=2032 墙=40.1s（帽 75s/6000 步内收口））
+  PASS | G-D2 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——physattr 带）（敌=117/120 弹=308 跳=79）
+  PASS | G-D2 抑制生效：DeathPop 发射/s ≤1.0（_fx_q 门+K2c 帽）（发射/s=0.00）
+── D3 fx 抑制（elemental_fx 层根+色差件逐帧隐藏 + fx_opacity=0.3 地板） ──
+读数：resid_alt=18297.7µs/活跃帧（p95=32898.0，钳负帧占84%）｜物步µs=0.0｜mon=5401.3µs/步 段和=17229.1µs/步｜步/帧=6.46 样本=308 步=1998 墙=40.2s
+负载：敌 p50=116 弹 p50=310 跳 p50=79 fps=8.4｜死亡/s=24.2（补位/s=23.7）跳字起跳/s=91.3 DeathPop发射/s=24.2 Telegraph活口p50=128
+  PASS | G-D3 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=308 步=1998 墙=40.2s（帽 75s/6000 步内收口））
+  PASS | G-D3 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——physattr 带）（敌=116/120 弹=310 跳=79）
+  PASS | G-D3 抑制生效：fx 层隐藏采样占比 ≥99%%（隐藏占比=1.00）
+── D0B 基线复跑（漂移钉——与 D0 同参，差=场非平稳漂移带） ──
+读数：resid_alt=17650.5µs/活跃帧（p95=29251.0，钳负帧占88%）｜物步µs=0.0｜mon=5262.3µs/步 段和=16933.2µs/步｜步/帧=6.50 样本=306 步=1995 墙=40.1s
+负载：敌 p50=117 弹 p50=294 跳 p50=78 fps=7.7｜死亡/s=24.4（补位/s=23.5）跳字起跳/s=89.5 DeathPop发射/s=24.4 Telegraph活口p50=128
+  PASS | G-D0B 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=306 步=1995 墙=40.1s（帽 75s/6000 步内收口））
+  PASS | G-D0B 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——physattr 带）（敌=117/120 弹=294 跳=78）
+── 派生：D0 resid_alt=15735.8｜D1=17164.8（Δ-1429.1，-9.1%）D2=16454.0（Δ-718.2，-4.6%）D3=18297.7（Δ-2561.9，-16.3%）｜D0B=17650.5 漂移带=11.5%（≈902.4µs）｜三臂合计=0.0µs（0.0%）→ 其他=100.0%
+留档：res://docs/qa/probe_r237_deferattr.json
+PROBE 汇总：硬门全过（四臂数字已留档 docs/qa/probe_r237_deferattr.json）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

@@ -1,0 +1,37 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 全池 buff 行为审计 ══════════
+── 背水协议（fury_dmg） ──
+PASS | 前置：SYN_LOWHP_FURY 入注册表
+PASS | 背水：满血无乘区（≈100）
+PASS | 背水：HP<35% → ×1.6（未挂卡也基线 100——卡未挂时无差异）
+PASS | 背水：真卡挂载
+PASS | 背水：挂卡后 HP<35% → ≈160
+PASS | 背水：挂卡后满血无乘区（≈100）
+── 贯穿协鸣（pierce_dmg ramp） ──
+PASS | 前置：SYN_PIERCE_EVO 入注册表
+PASS | 贯穿协鸣：真卡挂载
+PASS | 贯穿协鸣：首穿无加成（≈100）
+PASS | 贯穿协鸣：穿 3 → ×1.4（+0.2×2）
+── 死亡新星（kill_blast） ──
+PASS | 死亡新星：真卡挂载
+PASS | 死亡新星：击杀弹过期触发新星广播（ON_EXPIRE→settle_aoe）
+── 几何分裂（fractal） ──
+PASS | 几何分裂：真卡挂载
+PASS | 几何分裂：母弹消亡分裂子代（≥2 枚 generation=1）
+PASS | 几何分裂：母弹回收（live 净增 = 子代数）
+── ADD 数值表 ──
+PASS | 数值表：14 张 ADD 卡 value 与定版一致（防漂移）
+PASS | 数值表：MEC_KNOCK 击退 +60（R18 归位 ADD）
+PASS | 卡面完整性：全部词条描述非空（0 空描述）
+── 元素附魔 ──
+PASS | 前置：无附魔 → KIN
+PASS | 附魔：挂点燃卡成功
+PASS | 附魔：点燃 → 出膛元素 FIR（跳字橙）
+PASS | 附魔：挂冰卡成功
+PASS | 附魔：双元素随机（FIR/ICE 均出现——「一会红一会蓝」）
+PASS | 附魔：实弹 element ∈ 附魔集合（FIR/ICE，随机分布由 _shot_element 60 采样锁定）
+────────────────────────────────────────
+汇总：PASS 24 / FAIL 0（共 24 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

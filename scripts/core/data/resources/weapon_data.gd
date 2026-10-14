@@ -38,4 +38,10 @@ extends Resource
 	"orbit_radius": 90.0, "angular_speed": 240.0, "orbs": 2, "hit_cd": 0.5,
 	"knockback": 40.0, "slash_radius": 150.0, "arc_deg": 120.0,
 	"max_targets": 8, "nullify": false,
+	# R243 类别键（§1.2，全可选——旧数据缺省回落，现网 W8/W9 行为逐位不变）：
+	# weapon_class ∈ {melee, talisman}（缺省 melee）
+	# mode ∈ {orbit, slash, cleave, swords, axe}（缺省回落 nullify→slash 否则 orbit）
+	# block_chance ∈ [0,1]（挡弹基线，缺省 0.0）
+	# shock_radius ∈ (0,128]（W12 落地震荡半径，可选无缺省——validator 在册守域）
+	"weapon_class": "melee", "mode": "orbit", "block_chance": 0.0,
 }

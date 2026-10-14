@@ -1,0 +1,173 @@
+# scripts/ui/confetti.gd
+# 方向 C「晴空糖果」签名瞬间：Boss 死亡 = 全屏彩纸屑爆发 + 「叮！」大跳字。
+# 多色小矩形/圆（共享 TextureFactory 贴图，self_modulate 上色），简单抛体物理下落 1.5s
+# 后清理本轮节点——宿主随 GameLoop 常驻，w10/w20/w30 每次 Boss 死亡均可再次爆发。
+# 订阅 enemy_killed（连接序：GameLoop 在 spawner 入树前挂本节点——
+# Boss tags 读取先于死亡归还清零，GameFeel.early_bind 同纪律）。
+class_name ConfettiBurst
+extends Node2D
+
+const PIECE_COUNT := 64
+const RAIN_COUNT := 26                       # 顶部全宽落雨枚数（全屏覆盖）
+const LIFE_TIME := 1.1                       # R26：1.5→1.1s（用户点名「球还在」——庆典更干脆）
+const FADE_LAST := 0.35                       # 末段淡出
+const GRAVITY := 920.0
+const DRAG := 0.9                             # 空气阻尼（每秒保留比例）
+
+# E4 单节点化（self-evolution）：90 枚 Sprite2D 子节点 → 自身单 draw pass
+#（draw_polygon 逐枚直绘，物理推进不变）——子树遍历/每枚 transform/贴图绑定归零，
+# 节点创建 90 次/爆发 → 0 次。视觉等价（矩形彩纸 draw_polygon + 旋转 + 末段淡出）。
+var _pieces: Array[Dictionary] = []           # {pos, vel, spin, rot, left, col, size}
+var _ding: Label = null
+var _origin: Vector2 = Vector2.ZERO          # 本轮爆发爆点（Boss 死亡位置）
+var _alive: bool = false
+
+
+func _ready() -> void:
+	# R18 残留根修：PROCESS_MODE_ALWAYS——Boss 死亡若紧接升级选卡/暂停（tree.paused
+	# 冻结 PAUSABLE 节点），彩纸仍按真实时间下落淡出 1.5s 自清，不再「冻在半空的球」
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	z_index = 50                                 # 世界顶层（庆祝覆盖）
+	EventBus.enemy_killed.connect(_on_enemy_killed)
+
+
+func _on_enemy_killed(p_enemy: Node2D) -> void:
+	# Boss 死亡 → 全屏彩纸屑（连接序在 spawner 之前，tags/位置读取安全）
+	if p_enemy == null:
+		return
+	var tags_v: Variant = p_enemy.get("tags")
+	var tags := int(tags_v) if tags_v != null else 0
+	if (tags & GameConst.TAG_BOSS) == 0:
+		return
+	_celebrate(p_enemy.global_position)
+
+
+func _celebrate(p_pos: Vector2) -> void:
+	# 一次性爆发：彩纸 fountain（全扇面上抛）+ 顶部全宽落雨（「全屏」观感，与 Boss
+	# 死亡位置无关）+「叮！」果冻跳字（上轮残留跳字先清）
+	if _ding != null and is_instance_valid(_ding):
+		_ding.queue_free()
+	_ding = null
+	_origin = p_pos
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var piece_count := PIECE_COUNT
+	for i in range(piece_count):
+		# 全扇面上抛（-180°~0°：左右铺开为主，少量近垂直——爆点上方也有效覆盖）
+		var ang := deg_to_rad(rng.randf_range(-180.0, 0.0))
+		var speed := rng.randf_range(320.0, 780.0)
+		_pieces.append(_make_piece_data(rng,
+			_origin + Vector2(rng.randf_range(-14.0, 14.0), rng.randf_range(-10.0, 10.0)),
+			Vector2(cos(ang), sin(ang)) * speed,
+			LIFE_TIME * rng.randf_range(0.8, 1.0)))
+	# 顶部全宽落雨（跨屏铺开、初速向下小——保证「全屏」覆盖观感）
+	# r195-5（R198）量纲修正：本节点挂 GameLoop 世界（game_loop.gd:1366-1368 前置组装），
+	# piece 坐标属 720×1280 世界逻辑域——落雨带恒用世界设计域宽 720（同 cloud_backdrop
+	# DESIGN_CANVAS 兜底口径），不再读 viewport 实宽：get_visible_rect 是画布域，与世界
+	# 域量纲错配（3:4 画布 960 宽时 720 世界可见带 [-120,840] ⊇ [0,720] 落雨带全覆盖；
+	# EXPAND 延伸区画布实宽 ≠ 世界宽，R195 收口 final_transform 教训同源）。叮字钳制
+	# （_spawn_ding 内 20~700/260~1120）仍为 720×1280 设计域版面位（不受本修正影响）
+	var rain_w := 720.0                          # 世界设计域宽（720×1280 逻辑域，恒定）
+	for i in range(RAIN_COUNT):
+		_pieces.append(_make_piece_data(rng,
+			Vector2(rng.randf_range(0.0, rain_w), rng.randf_range(-80.0, -10.0)),
+			Vector2(rng.randf_range(-60.0, 60.0), rng.randf_range(60.0, 200.0)),
+			LIFE_TIME * rng.randf_range(0.85, 1.0)))
+	_spawn_ding(p_pos)
+	_alive = true
+	queue_redraw()
+
+
+func _make_piece_data(p_rng: RandomNumberGenerator, p_pos: Vector2, p_vel: Vector2,
+		p_left: float) -> Dictionary:
+	# 单枚彩纸纯数据（R26 口径：只出矩形——圆点被认成「球」；E4 不再建节点）
+	return {
+		"pos": p_pos,
+		"vel": p_vel,
+		"spin": p_rng.randf_range(-9.0, 9.0),
+		"rot": p_rng.randf_range(0.0, TAU),
+		"left": p_left,
+		"col": PopPalette.CONFETTI[p_rng.randi_range(0, PopPalette.CONFETTI.size() - 1)],
+		"size": Vector2(p_rng.randf_range(0.85, 1.5), p_rng.randf_range(0.85, 1.5)),
+	}
+
+
+func _spawn_ding(p_pos: Vector2) -> void:
+	# 「叮！」大跳字（柠檬金 + 藏青厚描边，果冻弹跳后上浮）
+	_ding = Label.new()
+	StickerTheme.label_sticker(_ding, 76, PopPalette.GOLD, 14, PopPalette.OUTLINE, true)
+	_ding.text = Lore.BOSS_DING
+	add_child(_ding)
+	_ding.reset_size()
+	var pos := p_pos - _ding.size * 0.5 - Vector2(0.0, 60.0)
+	pos.x = clampf(pos.x, 20.0, 700.0 - _ding.size.x)   # 跳字不出屏
+	pos.y = clampf(pos.y, 260.0, 1120.0)                # 避让 HUD 顶带与底部构筑条
+	_ding.position = pos
+	_ding.pivot_offset = _ding.size * 0.5
+	_ding.scale = Vector2(0.2, 0.2)
+	var tw := _ding.create_tween()
+	tw.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)  # R18：跳字真实时间演完自清（暂停不冻结）
+	tw.tween_property(_ding, "scale", Vector2(1.25, 0.9), 0.12) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(_ding, "scale", Vector2.ONE, 0.14)
+	tw.tween_property(_ding, "position:y", _ding.position.y - 46.0, 0.9) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_callback(_ding.queue_free)   # 跳字演完自清（下次爆发新建）
+
+
+func _process(p_delta: float) -> void:
+	# 彩纸抛体推进（视觉层；到期摘数组——R68 冻结根修纪律保留：数组内恒为有效数据）。
+	# E4：数据推进 + queue_redraw 单点重绘（不再逐 Sprite transform）
+	if not _alive:
+		return
+	var dirty := false
+	var i := _pieces.size() - 1
+	while i >= 0:
+		var piece: Dictionary = _pieces[i]
+		var left: float = piece["left"] - p_delta
+		if left <= 0.0:
+			_pieces.remove_at(i)                     # R68 纪律：到期当帧摘出（不存死项）
+			i -= 1
+			dirty = true
+			continue
+		piece["left"] = left
+		var vel: Vector2 = piece["vel"]
+		vel.y += GRAVITY * p_delta
+		vel *= pow(DRAG, p_delta)
+		piece["vel"] = vel
+		piece["pos"] = (piece["pos"] as Vector2) + vel * p_delta
+		piece["rot"] = float(piece["rot"]) + float(piece["spin"]) * p_delta
+		dirty = true
+		i -= 1
+	if dirty:
+		queue_redraw()
+	if _pieces.is_empty():                          # 复位待发（w10/w20/w30 每次 Boss 死亡都爆发）
+		_alive = false
+		queue_redraw()
+
+
+func _draw() -> void:
+	# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+	# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+	DebugStats.bucket_begin(&"draw")
+	_draw_r271()
+	DebugStats.bucket_end(&"draw")
+
+
+func _draw_r271() -> void:
+	# E4 单 draw pass：矩形彩纸逐枚直绘（旋转 + 末段淡出与旧 Sprite 版视觉等价）
+	for piece: Dictionary in _pieces:
+		var left := float(piece["left"])
+		var a := clampf(left / FADE_LAST, 0.0, 1.0) if left < FADE_LAST else 1.0
+		var col: Color = piece["col"]
+		col.a = a
+		var rot := float(piece["rot"])
+		var sz := (piece["size"] as Vector2) * 7.0   # 旧贴图基准（随机缩放 0.85~1.5 倍矩形）
+		var c := Vector2(-sz.x * 0.5, -sz.y * 0.5)
+		var pts := PackedVector2Array([
+			c.rotated(rot),
+			Vector2(c.x + sz.x, c.y).rotated(rot),
+			Vector2(c.x + sz.x, c.y + sz.y).rotated(rot),
+			Vector2(c.x, c.y + sz.y).rotated(rot),
+		])
+		draw_polygon(pts, PackedColorArray([col, col, col, col]))

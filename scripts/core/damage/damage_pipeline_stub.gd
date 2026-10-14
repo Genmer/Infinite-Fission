@@ -29,8 +29,9 @@ func bind_rng_stream(p_stream_id: int, p_seed: int) -> void:
 	_rng_streams[p_stream_id] = rng
 
 
-func begin_frame() -> void:
+func begin_frame(_frame: int = -1, _combat: bool = true) -> void:
 	# 真件：清幂等缓存（GameLoop 投射物阶段前调用）；桩：仅计数
+	# R223 修轮：签名随真件加 frame/combat 双参（桩侧均忽略——GameLoop 统一传参不分支）
 	_stats["begins"] = int(_stats["begins"]) + 1
 
 

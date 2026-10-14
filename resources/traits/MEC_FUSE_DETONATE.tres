@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"MEC_FUSE_DETONATE"
+display_name = "定向爆破"
+description = "集束火箭爆炸消耗引信：追加 0.5/层×ATK 余波（每敌 0.5s 护栏）；需引信涂层铺设"
+pool = 3
+pool_id = &""
+effect_id = &"EF_MECH"
+value = 0.5
+value2 = 0.0
+params = {"required_weapon": [&"W7_cluster_rocket"]}
+event_hooks = []
+stack_max = 2
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 2
+tags = 0
+condition = {}

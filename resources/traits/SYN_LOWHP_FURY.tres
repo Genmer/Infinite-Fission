@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"SYN_LOWHP_FURY"
 display_name = "背水协议"
-description = "自身 HP<35% 时伤害 ×1.6，1 层（A3 §4.3）"
+description = "自身 HP<35% 时伤害 ×1.6，1 层"
 pool = 1
 pool_id = &"fury_dmg"
 effect_id = &"EF_STAT"

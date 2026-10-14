@@ -93,9 +93,16 @@ func _scan_category(category: StringName, cfg: ConfigFile, manifest_key: String,
 	var files := DirAccess.get_files_at(dir_path)
 	files.sort()   # 文件名序 = 确定性加载顺序
 	for file_name in files:
-		if not String(file_name).ends_with(".tres"):
+		# R194 remap 感知（bug#4 RC2）：导出管线把 .tres 改名为 .tres.remap（导出包内
+		# .tres 计 0），按列举名直接过滤会把全部数据文件漏掉 → 空注册表。剥壳后再过
+		# .tres 过滤：编辑器态（.tres 直存）与导出态（.tres.remap）两态通用；load() 调用
+		# 不动——ResourceLoader 对 .remap 透明，传剥壳后逻辑路径即可正常解析。
+		var stem := String(file_name)
+		if stem.ends_with(".remap"):
+			stem = stem.trim_suffix(".remap")
+		if not stem.ends_with(".tres"):
 			continue
-		var path := dir_path + "/" + String(file_name)
+		var path := dir_path + "/" + stem
 		var res: Resource = load(path)
 		if res == null or res.get_script() != expected:
 			push_warning("[DataRegistry] 类型不符（剔除）：%s 期望 %s" % [path, expected.resource_path])
@@ -124,9 +131,14 @@ func _scan_single(category: StringName, cfg: ConfigFile, manifest_key: String, e
 	var files := DirAccess.get_files_at(dir_path)
 	files.sort()
 	for file_name in files:
-		if not String(file_name).ends_with(".tres"):
+		# R194 remap 感知（同 _scan_category）：.remap 剥壳 → .tres 过滤 → 逻辑路径加载，
+		# 编辑器/导出两态通用（load() 调用不动）
+		var stem := String(file_name)
+		if stem.ends_with(".remap"):
+			stem = stem.trim_suffix(".remap")
+		if not stem.ends_with(".tres"):
 			continue
-		var path := dir_path + "/" + String(file_name)
+		var path := dir_path + "/" + stem
 		var res: Resource = load(path)
 		if res == null or res.get_script() != expected:
 			push_warning("[DataRegistry] 类型不符（剔除）：%s 期望 %s" % [path, expected.resource_path])

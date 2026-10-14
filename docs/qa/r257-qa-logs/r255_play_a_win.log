@@ -1,0 +1,81 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4070 Laptop GPU
+
+[entry] 局=a cases=res://tests/qa_r255_play_a.gd
+══ QA-play R255 局A：普通·晴空草原 完整对局 ══
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+[A] boot 0.9s · 已解锁图鉴词条 45 · blessing=
+  SHOT#01 [主菜单·选关面板（默认普通档）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-01.png (720x1280)
+[A] 难度档=0（0=普通）· 点第一行出发
+  SHOT#02 [祝福·开局自选面板（普通蓝池）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-02.png (720x1280)
+[A] 祝福选中=AFF_AREA
+[A] 祝福面板 → 出发按钮
+[A] state=2（2=PLAYING）· map=world_grass · 角色=fission · 开局武器=<null>
+[A] wave 0 → 1（t=1.4s hp=115/115 lv1）
+  SHOT#03 [升级三选一·第1次（lv2）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-03.png (720x1280)
+[A] 选卡#1 手动点卡面[3/3]：?(r0) | ?(r0) | ?(r2)
+[A] wave 1 → 2（t=23.4s hp=105/115 lv3）
+  SHOT#04 [战斗中·第2波（HUD 血条/波次）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-04.png (720x1280)
+[A] wave 2 → 3（t=39.9s hp=115/115 lv4）
+[A] wave 3 → 4（t=54.2s hp=115/115 lv5）
+  SHOT#05 [战斗中·第4波] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-05.png (720x1280)
+[A] wave 4 → 5（t=68.5s hp=115/115 lv7）
+[A] 战地黑市开张（wave=5 金币=197）
+  SHOT#06 [战地黑市·第5波行情] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-06.png (720x1280)
+[A] 购买：38 金币
+  SHOT#07 [战地黑市·购买后（金币=159）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-07.png (720x1280)
+[A] 刷新货架（刷新货架 (14)）
+[A] 点「出击！」离店
+[A] wave 5 → 6（t=82.6s hp=115/115 lv8）
+  SHOT#08 [战斗中·第6波（第5波商店之后）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-08.png (720x1280)
+  SHOT#09 [升级三选一·第2次（lv9）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-09.png (720x1280)
+[A] 选卡#2 交给 auto_select_on（0.5s 展示窗后自动选）
+SCRIPT ERROR: Invalid type in function 'inject_hit_relic_pools' in base 'GDScript'. The Object-derived class of argument 3 (previously freed) is not a subclass of the expected argument class.
+          at: BallisticProjectile._prepare_hit_traits (res://scripts/combat/projectile/projectile_base.gd:886)
+SCRIPT ERROR: Invalid type in function 'inject_hit_relic_pools' in base 'GDScript'. The Object-derived class of argument 3 (previously freed) is not a subclass of the expected argument class.
+          at: BallisticProjectile._prepare_hit_traits (res://scripts/combat/projectile/projectile_base.gd:886)
+SCRIPT ERROR: Invalid type in function 'inject_hit_relic_pools' in base 'GDScript'. The Object-derived class of argument 3 (previously freed) is not a subclass of the expected argument class.
+          at: BallisticProjectile._prepare_hit_traits (res://scripts/combat/projectile/projectile_base.gd:886)
+SCRIPT ERROR: Invalid type in function 'inject_hit_relic_pools' in base 'GDScript'. The Object-derived class of argument 3 (previously freed) is not a subclass of the expected argument class.
+          at: BallisticProjectile._prepare_hit_traits (res://scripts/combat/projectile/projectile_base.gd:886)
+SCRIPT ERROR: Invalid type in function 'inject_hit_relic_pools' in base 'GDScript'. The Object-derived class of argument 3 (previously freed) is not a subclass of the expected argument class.
+          at: BallisticProjectile._prepare_hit_traits (res://scripts/combat/projectile/projectile_base.gd:886)
+SCRIPT ERROR: Invalid type in function 'inject_hit_relic_pools' in base 'GDScript'. The Object-derived class of argument 3 (previously freed) is not a subclass of the expected argument class.
+          at: BallisticProjectile._prepare_hit_traits (res://scripts/combat/projectile/projectile_base.gd:886)
+SCRIPT ERROR: Invalid type in function 'inject_hit_relic_pools' in base 'GDScript'. The Object-derived class of argument 3 (previously freed) is not a subclass of the expected argument class.
+          at: BallisticProjectile._prepare_hit_traits (res://scripts/combat/projectile/projectile_base.gd:886)
+SCRIPT ERROR: Invalid type in function 'inject_hit_relic_pools' in base 'GDScript'. The Object-derived class of argument 3 (previously freed) is not a subclass of the expected argument class.
+          at: BallisticProjectile._prepare_hit_traits (res://scripts/combat/projectile/projectile_base.gd:886)
+SCRIPT ERROR: Invalid type in function 'inject_hit_relic_pools' in base 'GDScript'. The Object-derived class of argument 3 (previously freed) is not a subclass of the expected argument class.
+          at: BallisticProjectile._prepare_hit_traits (res://scripts/combat/projectile/projectile_base.gd:886)
+SCRIPT ERROR: Invalid type in function 'inject_hit_relic_pools' in base 'GDScript'. The Object-derived class of argument 3 (previously freed) is not a subclass of the expected argument class.
+          at: BallisticProjectile._prepare_hit_traits (res://scripts/combat/projectile/projectile_base.gd:886)
+SCRIPT ERROR: Invalid type in function 'inject_hit_relic_pools' in base 'GDScript'. The Object-derived class of argument 3 (previously freed) is not a subclass of the expected argument class.
+          at: BallisticProjectile._prepare_hit_traits (res://scripts/combat/projectile/projectile_base.gd:886)
+[A] wave 6 → 7（t=106.5s hp=115/115 lv9）
+[A] wave 7 → 8（t=128.3s hp=115/115 lv10）
+[A] wave 8 → 9（t=153.1s hp=115/115 lv12）
+[A] wave 9 → 10（t=179.8s hp=115/115 lv13）
+  SHOT#10 [升级三选一·第3次（lv16）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-10.png (720x1280)
+[A] 选卡#3 交给 auto_select_on（0.5s 展示窗后自动选）
+[A] wave 10 → 11（t=212.3s hp=115/115 lv16）
+[A] 玩家死亡（wave=11 hp=115.0）→ GAME_OVER 结算屏
+  SHOT#11 [死亡结算·GAME_OVER（wave=11 lv=18）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-11.png (720x1280)
+[A] 点结算/暂停「回主菜单」按钮
+[A] 回主菜单 state=1（0=MENU）
+[A] Meta 内存已还原（records keys=5 blessing=）
+[A] 结束：选卡开窗 3 次（手动 1）· 商店进店 2 次
+══ 局A done（234.9s）══
+WARNING: 36 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 79 RID allocations of type 'N10RendererRD14TextureStorage7TextureE' were leaked at exit.
+WARNING: 88 RIDs of type "Texture" were leaked.
+     at: finalize (servers/rendering/rendering_device.cpp:5758)
+ERROR: 166 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

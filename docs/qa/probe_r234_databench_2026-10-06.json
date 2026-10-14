@@ -1,0 +1,258 @@
+{
+	"disclosure": [
+		"桌面≠真机（R224 声明 ×0.5-2；R210 前科：Variant/属性跨界在 ARM 代价放大 3-10×）——本系数用于路线判别，绝对 ms 不外推真机",
+		"A/D 臂节点为裸 Node2D 无 Sprite2D 子节点——现网弹体带 Visual Sprite2D 子节点（变换脏标记会传导子 canvas item），A 臂读数为属性轴下界口径（生产每弹略贵于本读数）",
+		"E 臂克隆体去掉了网格预检/命中链/回收（恒活不可达路径）——E/F 对只覆盖运动学核；查询链（query_circle_snap 桌面 ~4.3µs/弹）与命中/结算链（R232 已到底 37-103µs/结）不在 E/F 对内",
+		"E 臂数组为无类型 Array（元素 BenchBullet 脚本类直调）；现网 _proj_pfast_buf 为 Array[Node2D] 需 cast 后调用——E 臂读数为方法轴下界口径（生产每弹调用略贵于本读数）",
+		"F 臂 GDScript 批处理循环（非 GDExtension）——若路线走 C++/扩展则系数另行实测",
+		"同进程同日六臂交错 3 轮取中位——机器态漂移防单轮极值主导；跨日复测按 R231 坑 3 纪律（性能前提当日同进程复测）"
+	],
+	"gates": {
+		"G1 样本完整：3 轮 × 6 臂 × 100 帧全部采样（n==FRAMES）": {
+			"detail": "rounds=3",
+			"ok": true
+		},
+		"G2* 方向读数 A>B（属性轴贵于数组轴——路线前提方向性成立）": {
+			"detail": "A=4.934 B=0.407 A/B=12.1×",
+			"disclosed": true,
+			"ok": true
+		},
+		"G3* 方向读数 E>F（方法调用形态贵于批处理形态）": {
+			"detail": "E=9.426 F=2.206 E/F=4.3×",
+			"disclosed": true,
+			"ok": true
+		},
+		"G4 夹具自证：E/F 臂全程恒活（100+20 帧漂移后仍在界内 → 每帧全实体完整工作量）": {
+			"detail": "min_x=20 max_y=890 界=[-102,1382]",
+			"ok": true
+		}
+	},
+	"median": {
+		"A_node2d_global": {
+			"mean": 4.98842,
+			"n": 100,
+			"p50": 4.934,
+			"p95": 5.874,
+			"per_entity_us": 0.4934
+		},
+		"B_packed32": {
+			"mean": 0.43814,
+			"n": 100,
+			"p50": 0.407,
+			"p95": 0.591,
+			"per_entity_us": 0.0407
+		},
+		"C_refobj_member": {
+			"mean": 1.33414,
+			"n": 100,
+			"p50": 1.271,
+			"p95": 2.056,
+			"per_entity_us": 0.1271
+		},
+		"D_node2d_local": {
+			"mean": 2.77401,
+			"n": 100,
+			"p50": 2.684,
+			"p95": 3.651,
+			"per_entity_us": 0.2684
+		},
+		"E_method_tick_clone": {
+			"mean": 9.58021,
+			"n": 100,
+			"p50": 9.426,
+			"p95": 11.124,
+			"per_entity_us": 0.9426
+		},
+		"F_batch_arrays": {
+			"mean": 2.32605,
+			"n": 100,
+			"p50": 2.206,
+			"p95": 3.133,
+			"per_entity_us": 0.2206
+		}
+	},
+	"meta": {
+		"arm_A": "Array[Node2D]（树内、原点根、无 Sprite 子节点）读 global_position 写 global_position —— 任务书臂 A，镜像 _tick_fast 运动核属性形状",
+		"arm_B": "PackedFloat32Array SoA px/py 读+写（读入局部再写回）——任务书臂 B",
+		"arm_C": "RefCounted 脚本成员 x/y 读+写——任务书臂 C（中间态对照）",
+		"arm_D": "Array[Node2D] local position 读+写——披露臂（视觉壳候选路径；桶原点无变换 local≡global）",
+		"arm_E": "BenchBullet.tick_fast_clone 逐弹方法调用——披露臂（现架构形态；projectile_base._tick_fast_player :447-490 克隆：寿命/swept/直线/traveled/range/出界，去网格查询与命中链；恒活夹具）",
+		"arm_F": "同语义 PackedFloat32Array 批处理循环——披露臂（目标架构形态；swept 暂存数据化下免费=步前值，E 臂照付）",
+		"date": "2026-10-06",
+		"delta_per_frame": {
+			"x": 1.5,
+			"y": -0.75
+		},
+		"drive": "headless 紧循环（无引擎迭代穿插）；计时=Time.get_ticks_usec() 包每帧循环本体",
+		"dt": 0.0166666666666667,
+		"engine": "4.3-stable (official)",
+		"frames": 100,
+		"n_entities": 10000,
+		"off_margin": 102,
+		"package": "desktop-headless-microbench（R234 弹段数据化路线收益系数实证——Node2D 属性轴 vs typed 数组轴）",
+		"rounds": 3,
+		"screen": [
+			720,
+			1280
+		],
+		"seed": 20261006,
+		"seed_note": "夹具无 RNG 消费（初始位确定性公式 _pos_x/_pos_y）——种子常量入档备查",
+		"warmup_frames": 20
+	},
+	"rounds": [
+		{
+			"A_node2d_global": {
+				"max": 6.267,
+				"mean": 5.00292,
+				"n": 100,
+				"p50": 4.982,
+				"p95": 5.874
+			},
+			"B_packed32": {
+				"max": 1.038,
+				"mean": 0.44908,
+				"n": 100,
+				"p50": 0.433,
+				"p95": 0.591
+			},
+			"C_refobj_member": {
+				"max": 2.473,
+				"mean": 1.36864,
+				"n": 100,
+				"p50": 1.285,
+				"p95": 2.056
+			},
+			"D_node2d_local": {
+				"max": 4.51,
+				"mean": 2.93053,
+				"n": 100,
+				"p50": 2.886,
+				"p95": 3.651
+			},
+			"E_method_tick_clone": {
+				"max": 14.748,
+				"mean": 9.58021,
+				"n": 100,
+				"p50": 9.426,
+				"p95": 11.108
+			},
+			"F_batch_arrays": {
+				"max": 3.673,
+				"mean": 2.50587,
+				"n": 100,
+				"p50": 2.477,
+				"p95": 3.133
+			},
+			"round": 0
+		},
+		{
+			"A_node2d_global": {
+				"max": 6.297,
+				"mean": 4.93879,
+				"n": 100,
+				"p50": 4.878,
+				"p95": 5.9
+			},
+			"B_packed32": {
+				"max": 0.625,
+				"mean": 0.40643,
+				"n": 100,
+				"p50": 0.396,
+				"p95": 0.505
+			},
+			"C_refobj_member": {
+				"max": 3.397,
+				"mean": 1.3311,
+				"n": 100,
+				"p50": 1.174,
+				"p95": 2.1
+			},
+			"D_node2d_local": {
+				"max": 4.516,
+				"mean": 2.77401,
+				"n": 100,
+				"p50": 2.684,
+				"p95": 3.843
+			},
+			"E_method_tick_clone": {
+				"max": 20.242,
+				"mean": 10.08282,
+				"n": 100,
+				"p50": 9.467,
+				"p95": 14.17
+			},
+			"F_batch_arrays": {
+				"max": 3.94,
+				"mean": 2.32605,
+				"n": 100,
+				"p50": 2.176,
+				"p95": 3.194
+			},
+			"round": 1
+		},
+		{
+			"A_node2d_global": {
+				"max": 6.284,
+				"mean": 4.98842,
+				"n": 100,
+				"p50": 4.934,
+				"p95": 5.712
+			},
+			"B_packed32": {
+				"max": 0.681,
+				"mean": 0.43814,
+				"n": 100,
+				"p50": 0.407,
+				"p95": 0.606
+			},
+			"C_refobj_member": {
+				"max": 2.046,
+				"mean": 1.33414,
+				"n": 100,
+				"p50": 1.271,
+				"p95": 1.825
+			},
+			"D_node2d_local": {
+				"max": 4.049,
+				"mean": 2.5723,
+				"n": 100,
+				"p50": 2.512,
+				"p95": 3.511
+			},
+			"E_method_tick_clone": {
+				"max": 14.454,
+				"mean": 9.36543,
+				"n": 100,
+				"p50": 9.144,
+				"p95": 11.124
+			},
+			"F_batch_arrays": {
+				"max": 3.547,
+				"mean": 2.28667,
+				"n": 100,
+				"p50": 2.206,
+				"p95": 2.928
+			},
+			"round": 2
+		}
+	],
+	"verdict": {
+		"a_p50_ms": 4.934,
+		"a_per_entity_us": 0.4934,
+		"b_p50_ms": 0.407,
+		"b_per_entity_us": 0.0407,
+		"c_p50_ms": 1.271,
+		"c_per_entity_us": 0.1271,
+		"d_p50_ms": 2.684,
+		"d_per_entity_us": 0.2684,
+		"e_p50_ms": 9.426,
+		"e_per_entity_us": 0.9426,
+		"f_p50_ms": 2.206,
+		"f_per_entity_us": 0.2206,
+		"ratio_a_over_b": 12.1228501228501,
+		"ratio_a_over_c": 3.88198269079465,
+		"ratio_a_over_d": 1.83830104321908,
+		"ratio_c_over_b": 3.12285012285012,
+		"ratio_e_over_f": 4.27289211242067
+	}
+}

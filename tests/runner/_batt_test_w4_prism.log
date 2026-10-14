@@ -1,0 +1,91 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · W4 激光组（主束常驻化+棱镜副束）自测 ══════════
+── W4 .tres 数据锚 ──
+PASS | 数据锚：真实 W4_pulse_beam.tres 可加载
+PASS | 数据锚：base_atk 重定价 6/7/7/9/11（A3 tick_atk 锚兑现）
+PASS | 数据锚：跳频=L 表 rof 8/8/9/9/9
+PASS | 数据锚：主束 DPS 48/56/63/81/99
+PASS | 数据锚：pulse_duration 死键删除（spawn lifetime 走缺省 0=常驻）
+PASS | 数据锚：tick_rate 死键删除（跳频回退 L 表 rof 通道）
+PASS | 数据锚：折射死键退役（refract 三键不在 W4 段）
+PASS | 数据锚：focus_ramp 保留（W4 聚焦专属）
+PASS | 数据锚：sub_ratio_levels=[0.6,0.6,0.6,0.6,0.75]（长度 5）
+PASS | 数据锚：scorch_max_layers_levels 末级 8（灼焦 ≤8 单池口径）
+PASS | 阈值：三条弹道死声明已删（SIZE_NOVA/FRACTAL_ECHO/BOUNCE_ETERNAL）
+PASS | 阈值：TH_PRISM_CHOIR（sub_beam_count≥3 → EF_CHOIR tick_rate_bonus 2）
+PASS | 阈值：TH_CRIT_SHARD 0.6→0.35
+── 默认单束（验收 1） ──
+PASS | 默认单束：seed(42)+静止敌夹具 try_fire 成功
+PASS | 默认单束：laser 段计数==1（active_beams==1 且池 live==1）
+PASS | 默认单束：lifetime==0（主束常驻化——pulse_duration 删除后缺省）
+PASS | 默认单束：depth=0 / dmg_mult=1 / 主束标识（非副束非折射）
+PASS | 默认单束：跳频 = L 表 rof 8（死键删除后回退通道）
+PASS | 默认单束：锁定最近敌（last_hit_uid==E_NEAR）
+PASS | 默认单束：束归属字段 weapon_uid==武器 uid
+── 叠束硬帽（验收 2） ──
+PASS | 叠束：挂 3 张 MEC_SPLIT_PRISM 全成功（stack_max=3）
+PASS | 叠束：第 4 张被拒且 DebugStack 计数 +1
+PASS | 叠束：段数==4（主束 1 + 副束 3）
+PASS | 叠束：副束 dmg_mult == 主×0.6 ±1e-6（L1 sub_ratio）
+PASS | 叠束：主束 dmg_mult==1（副束折价只作用于副束）
+PASS | 叠束：目标两两互斥（3 副束 target_uid 互异、非空、不与主束同目标）
+PASS | 叠束：副束标识 sub_beam / focus_mult 恒 1.0 / 无回退 / 非折射
+PASS | 叠束：L5 副束 dmg_mult == 主×0.75 ±1e-6
+── 重叠回退 ×0.5 / 不叠灼焦 ──
+PASS | 重叠回退：目标不足 → 3 副束全部并入主束目标
+PASS | 重叠回退：并入束 dmg_mult==0.5 ±1e-6 且 fallback 标识
+PASS | 重叠回退：回退束不叠灼焦（层数==纯主束对照 4）
+── 聚焦归属（验收 3） ──
+PASS | 聚焦：主束 6.7s focus_mult==2.0±0.05
+PASS | 聚焦：副束补位 3 条且 focus_mult 恒 1.0（主束保持 ×2）
+WARNING: [EventBus] 事件风暴：damage_resolved 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：beam_impact 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 聚焦：PHASE_SYNC 副束≥2 → 3.35s 爬满 ×2±0.05
+PASS | 聚焦：未挂 PHASE_SYNC 3.35s 仅 ×1.5（15%/s 基速对照）
+PASS | 聚焦：AFF_CDR 预热 4s 同目标计时成立
+PASS | 聚焦：AFF_CDR×4 换目标保留 50%±2%（计帧断言）
+PASS | 聚焦：无 AFF_CDR 换目标归零重聚（既有口径）
+── 灼焦目标侧单池（验收 4） ──
+PASS | 灼焦单池：单束 0.5/1.0/2.0s 层数曲线 [2,4,8]（≤8）
+PASS | 灼焦单池：两束共照 2s 曲线==单束对照 [2,4,8]
+PASS | 灼焦单池：双束读数同源（束实例无私有层表）
+PASS | 灼焦单池：sweep 后存活目标层数保留（回收口可用）
+── 束间拓扑（laser_topology 三选一） ──
+PASS | 拓扑 FAN：2 副束固定角 ±12°（FAN_GAP 24° 对称）不索敌
+PASS | 拓扑 FAN：无目标常驻不回收（反挂机）
+PASS | 拓扑 COFOCUS：全束钉单体（副束 target_uid==主束聚焦目标）
+PASS | 拓扑 TRACK：缺省拓扑解析为 track（独立寻的）
+── 节奏词条（BEAM_LAG / TH_PRISM_CHOIR / SPECTRA） ──
+PASS | BEAM_LAG：无副束主束跳频==L 表 rof 9
+PASS | BEAM_LAG：3 存活副束 → 主束跳频 9+1.5=10.5（钳 [0.5,30]）
+PASS | TH_PRISM_CHOIR：3 副束跳频 8+2=10 / 主束保持 8
+PASS | TH_PRISM_CHOIR：2 副束（<3 阈值）跳频不加成
+PASS | SPECTRA：副束按锁定次序轮转元素池 [FIR,ICE,FIR]
+PASS | SPECTRA：主束元素=附魔 dominant（ctx.element KIN 硬编码已删）
+PASS | SPECTRA：未挂载副束随主束附魔元素（不轮转）
+── 遗物乘区接线（inject_relic_pools） ──
+PASS | 遗物接线：无遗物一跳 10（对照）
+PASS | 遗物接线：激光跳伤路径消费 inject_relic_pools（一跳 10×1.4=14）
+── 预算与池满拒绝（验收 5a：池帽 12） ──
+PASS | 预算：双激光满配全场段峰值 ≤12（池帽钳制 live==12）
+PASS | 预算：每束结算 ≤30 跳/s（tick_rate 钳制）
+PASS | 预算：池满副束拒绝计数 laser_subbeam_rejected +1 以上
+── L5 单体满配 DPS（验收 5b） ──
+PASS | 满配：聚焦 ×2 与灼焦 8 层同时在场
+PASS | 满配：单跳伤害 36.08±0.5（tick_atk×聚焦×灼焦）
+PASS | 满配：L5 单体满配 DPS 324.8±5（36.08 × 跳频 9）
+── R183 复制体折减（只主束 + 灰染） ──
+PASS | R183：源武器满配 4 段（对照）
+PASS | R183：复制体词条栈==源栈层数（copy_full），但计数口被折减为 0
+PASS | R183：复制体 try_fire 只出主束（并发束==1）
+PASS | R183：复制体并发束==1（维持期不回潮）
+PASS | R183：复制体主束灰染 flag（RARITY_NORMAL 灰蓝束）
+PASS | R183：源武器束不灰染（对照）
+PASS | R183/信号：laser_subbeam_spawned 已入 EventBus（共享组契约）
+PASS | R183/信号：源武器 3 条副束事件归属==SUBBEAM_OWNER_BODY（复制体零事件）
+────────────────────────────────────────
+汇总：PASS 69 / FAIL 0（共 69 项）
+════════════════════════════════════════

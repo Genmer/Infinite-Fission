@@ -1,0 +1,72 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R229 弹池静载阀门 ══════════
+── ③ 桌面零扰动（无注入 boot） ──
+  PASS | [projectile] 容量真源对账 ==820（balance_tables.tres 原值）
+  PASS | [enemy] 容量真源对账 ==128（balance_tables.tres 原值）
+  PASS | [popup] 容量真源对账 ==80（balance_tables.tres 原值）
+  PASS | [particle] 容量真源对账 ==64（balance_tables.tres 原值）
+  PASS | [laser] 容量真源对账 ==12（balance_tables.tres 原值）
+  PASS | [xp] 容量真源对账 ==160（balance_tables.tres 原值）
+  PASS | [homing] 容量真源对账 ==24（balance_tables.tres 原值）
+  PASS | 弹池 boot 后 free==820 / live==0（无注入零扰动）
+  PASS | boot 后会话闩未置位（_pool_valve_done==false）
+  PASS | boot 后 proj_pool_trim 计数 ==0（阀门未触发）
+  PASS | 真值门密封：tier2+帧率优先（无 -3 哨兵）headless 三帧不裁
+  PASS | 触发前弹池直接子节点 ==821（820 free + 1 TexBuckets host）
+  PASS | 单弹树节点数实测 ==2（R228 对象谱 ×2 件口径）
+  PASS | 弹族树节点（扣池根/host）触发前 ==1688（820×2+24×2）
+── ④a 诊断行冻结基线（L1=触发前） ──
+  PASS | diag_counts 出键 pool_trimmed（首拉立基线 ==0）
+  PASS | L1 行尾段「 补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0」（追加位在位、触发前读 0——R231 快N/R232 T1b 结µs/R233 T1 插µs/R233 修轮 插模拟µs+派deferred/派drop 追加在裁N 后；预置格式化后同步零帧 → 插模拟µs0 确定值）
+── ① 注入触发（-3 + tier2 + mode0）──
+  PASS | 触发后 capacity==448
+  PASS | 触发后 free+live==448（live==0 / free==448）
+  PASS | 触发后 runtime_inst==0（懒增长口仍封死——AC-14.1）
+  PASS | 触发过程零 miss（裁闲不是丢弃）
+  PASS | proj_pool_trim 计数 ==372（820−448 裁掉件数）
+  PASS | 会话闩置位（_pool_valve_done==true）
+  PASS | 会话内单向：后续帧不再裁/不再计（counter 恒 372、free 恒 448）
+  PASS | HomingPool 不动（cap==24 / free==24 / live==0）
+  PASS | EnemyPool 不动（cap==128 / free==128）
+  PASS | popup/particle/laser/xp 四池不动（容量与空闲原值）
+── ④b 诊断行冻结对拍 + 裁N 一次性 ──
+  PASS | L2 行尾六段在位「 裁372 快0 结µs0 插µs0 插模拟µsX 派deferred0 派drop0」（裁372 触发后下一采样行 >0；X=时序读数不断言值）
+  PASS | L3 行尾「 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0」（之后归 0——一次性读数）
+  PASS | L2 既有子串逐位不变（去 裁N 后 ==L1 同段——触发零上游泄漏）
+  PASS | L3 既有子串逐位不变（去 裁N 后 ==L1 同段）
+  PASS | diag_counts 再拉 pool_trimmed==0（一次性语义——差分已清）
+  PASS | R226/R227 段原样（位图/翻/补 在 裁 之前）
+── ①b 树实减（queue_free 帧末摘树） ──
+  PASS | 弹池子节点数 ==live+free+1（448 实体 + TexBuckets host——树实减）
+  PASS | 子节点数 −372（821→449——裁掉件帧末摘树）
+  PASS | 分桶 host 子树 ==1（零桶建出——空闲件无桶悬挂，全在池根）
+  PASS | 子树实体件 ==live+free×单弹节点数（448×2+host+池根对账）
+  PASS | 弹族树节点（扣池根/host）1688→944（−744——expectedReduction 口径）
+  PASS | 树减量 ==裁掉数×单弹节点数（372×2）
+── ② 裁后 550 并发 acquire（AC-14.4） ──
+  PASS | 550 发全部返回（无崩溃——AC-14.4 降级不阻塞）
+  PASS | 前 448 发全命中 + 之后 102 发全 null（448 帽内/外）
+  PASS | 第 449 发起 miss（首个 null 落在 449 发）
+  PASS | 全程 free+live 恒==capacity（无懒增长回填）
+  PASS | 550 发后 runtime_inst 仍 ==0（懒增长口封死——容量先降语义）
+  PASS | 超帽 102 发全部计 miss（misses +102——丢弃可观测）
+  PASS | 全归还后 free==448 / live==0 / 拒还 0 / 活跃表空（归还语义原样）
+  PASS | 归还全程 free+live 恒==capacity
+  PASS | 全归还后 runtime_inst 仍 ==0
+── ⑤ 会话内单向（新局不恢复） ──
+  PASS | 新局后 capacity 仍 ==448（闩单向——无 prewarm 回 820 恢复通道）
+  PASS | 新局后 proj_pool_trim 计数不增（无二次裁）
+  PASS | 新局后 free==448 / live==0（静止满容）
+── ⑥ 门控密封（-1/-2/tier3/特效优先 不触发） ──
+  PASS | ②GL boot 容量 820（静态 override 复位不跨实例）
+  PASS | ⑥真值门（-1）headless 不触发
+  PASS | ⑥-2 强制关不触发
+  PASS | ⑥-3 + tier3 不触发（tier≤2 门）
+  PASS | ⑥-3 + 特效优先不触发（帧率优先门）
+  PASS | ⑥-3 + tier1 + 帧率优先 触发（cap 820→448）
+────────────────────────────────────────
+汇总：PASS 56 / FAIL 0（共 56 项）
+验收汇总：56/56 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

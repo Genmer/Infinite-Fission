@@ -6,7 +6,7 @@
 script = ExtResource("1_rd")
 id = &"REL_OVERCLOCK"
 display_name = "超频核心"
-description = "每波首次击杀精英后，本波下一张卡稀有度保底紫+，每波 1 次（A3 §5）"
+description = "每波首次击杀精英后，本波下一张卡稀有度保底紫+，每波 1 次"
 rarity = 3
 listen_events = [&"enemy_killed"]
 effect_id = &"REL_EF_ELITE_KILL_LUCK"

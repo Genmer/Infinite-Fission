@@ -1,0 +1,39 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R225 满载敌视觉再降回归 ══════════
+── ① 精英装饰门开关 ──
+  PASS | ①门关基线：皇冠建件且可见（want 语义零扰动）
+  PASS | ①门关基线：底影可见（精英悬浮件）
+  PASS | ①门关基线：微光粒 2 颗全可见
+  PASS | ①门开：皇冠/底影/微光粒全隐（R225 满载纯装饰门）
+  PASS | ①门开：本体 Sprite 不动（visible 保持——只隐装饰不隐敌）
+  PASS | ①门关：皇冠复显（want 单源复显）
+  PASS | ①门关：底影/微光粒复显
+── ② Boss 装饰门 ──
+  PASS | ②门关基线：卫星球 boss1=2 颗可见 + 底影可见（分型 want 原样）
+  PASS | ②门开：卫星球与底影全隐（3 节点含 boss1 超编第 3 球）
+  PASS | ②门关：卫星球复显恰 2 颗（_ensure_satellites 单源——第 3 球保持隐藏非全显）
+  PASS | ②门关：底影复显
+── ③ 满载出生即隐 ──
+  PASS | ③满载出生：spawn 返回即隐（tick 前无首帧闪现窗口）
+  PASS | ③满载出生：tick 后保持隐（门态幂等）
+── ④ 池复用重推导 ──
+  PASS | ④门开：装饰隐（前置）
+  PASS | ④取回同一池实例（复用前提成立）
+  PASS | ④门关重生：装饰随 want 复显（门标志经池归还清零重推导——不复用旧隐藏态）
+── ⑤ 断批口径不回归 ──
+  PASS | ⑤门开装饰隐：无状态敌 is_batch_broken 仍 false（装饰隐藏不入断批账）
+  PASS | ⑤门开装饰隐：sprite_modulate_key 仍纯白键（分组N 口径不被装饰扰动）
+  PASS | ⑤闪白口径（R237 闪白批化契约迁移）：满载强白变体贴图 + modulate 恒白 + is_batch_broken false（闪白期敌不再断批——原 r217 白乘契约已迁移）
+  PASS | ⑤闪白归零：贴图回本体 + 口径回 false（两通道互复位如旧——R237 迁移）
+── ⑥ fullload_flips 稳定 ──
+  PASS | ⑥覆写口往返×4：fullload_flips 计数不增（新隐件门不触滞回锁存）
+  PASS | ⑥滞回锁存态保持 false（headless 覆写口不读不写锁存）
+── ⑦ 红线锁 ──
+  PASS | ⑦满载：甲板仍可见（半身剪影非纯装饰——本批不砍，用户可否决再议）
+  PASS | ⑦满载：本体仍可见（敌不消失）
+  PASS | ⑦源级锚：_apply_fullload_decor 双覆盖点（spawn 即刻隐 + tick 翻转落位）
+  PASS | ⑦源级锚：余烬满载门保持原样（R217 契约未被本批改写）
+────────────────────────────────────────
+汇总：PASS 26 / FAIL 0（共 26 项）
+验收汇总：26/26 通过

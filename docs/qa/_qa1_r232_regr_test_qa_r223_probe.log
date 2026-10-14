@@ -1,0 +1,58 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R223 QA 独立探针（跨局残留/订阅者/幂等边角/反应通道/EMA 首采/真链） ══════════
+── P0 出厂静态面门控密封（A6 前提） ──
+  PASS | P0 headless 出厂态结算帽 0（既有套件零扰动前提独立复核）
+── P1 调速器全新实例：首采/vc29 全链/假升档窗/暂停门 ──
+  PASS | P1.1 菜单 6 采样 EMA 保持 -1（未初始化）且零档变/零校验臂
+  PASS | P1.2 首战斗采样直赋 80.0（EMA=-1 不参与混合/无假初始化）
+  PASS | P1.3a 深载降档链 3→2→1（transitions=2 · ≤10 采样收敛）
+  PASS | P1.3b 选卡窗 6s：EMA 逐位不动 + tier 钉 1 + 校验 hold 战斗秒冻结（pre-fix 会 +6s）
+  PASS | P1.3c 恢复战斗 6s：无效降档判回升+冻结（tier=2 · trans=3 · frozen）——vc29 判别器
+  PASS | P1.4a 单档降基线（tier=2 · trans=1）
+  PASS | P1.4b 长选卡 5s：不开假升档窗（tier 仍 2 · _recover_acc=0 · EMA 不动）
+  PASS | P1.5a 暂停 2s：EMA 不动（paused 挂起口）+ tier 不变
+  PASS | P1.5b 战斗内真恢复通道照常（5s 持续 → tier 回 3）
+── P2a 亡目标判定先于预算闸 ──
+  PASS | P2a 预算尽+亡目标 → dropped_dead 短路（null · 不入顺延队）
+── P2b settle_aoe 端到端：零值占位无双血 + 门关冲刷 DPS 守恒 ──
+  PASS | P2b 帽1 下三目标 AOE：恰 1 真结算入队 + 2 顺延（占位不入队）
+  PASS | P2b 顺延期零落血（三敌总血量恰 -10——无双血）
+  PASS | P2b 门关帧头全量冲刷：FIFO 清空 + DPS 守恒（总血量恰 -30）+ 结N=真结算 3
+── P2c1 重启形态：清场后顺延残留一帧头全清（无幻影） ──
+  PASS | P2c1 前置：帽内 1 真结算 + 5 对顺延在队
+  PASS | P2c1 亡目标零成本丢弃不耗预算：5 项一帧头全清（fifo=0 · dead+5）
+  PASS | P2c1 池 LIFO：新局出怪复用即归调节点
+  PASS | P2c1 新局敌人满血（跨局零幻影伤害）
+── P2c2 同帧击杀→池复用复活：顺延项幻影伤害判别 ──
+  PASS | P2c2 前置：活目标顺延占位（跨帧头存活前提）
+  PASS | P2c2 池 LIFO：出怪复用即刚亡节点（同帧复活形态成立）
+  PASS | P2c2 复活节点新身份（uid 单调不复用 · 满血）
+  PASS | P2c2【修后契约】冲刷 uid 复验 → 新身份复活敌零幻影（Δhp=0 · reuse +1）
+  PASS | P2c2【修后契约】零幻影事件派发（8401 无事件——消费面无死锚）
+── P2d 过期强冲恒等式 + D1 派发兼容 ──
+  PASS | P2d 前置：1 真结算 + 30 对顺延
+  PASS | P2d 账目恒等：deferred(30) = 预算冲刷(13) + 过期强冲(17) + 亡丢(0) + 超载丢(0)
+  PASS | P2d 伤害守恒 + 结N=真结算数（1+30=31）
+  PASS | P2d D1 兼容：12 帧强冲窗 ⊂ 30 帧派发守卫窗（31 条全量派发 · 队列清空）
+── P3 订阅者面：零派发顺延 / 每对恰一条 / popup 合并桶 / HUD 累计 ──
+  PASS | P3 顺延期 EventBus 零派发（spy 0 · 仅帽内 1 条入队待派发）
+  PASS | P3 冲刷后每对恰一条事件（spy 3 · final 全 >0 · 无零值占位泄漏）
+  PASS | P3 popup 合并桶：每目标恰 1 条跳字（3 目标零重复）
+  PASS | P3 HUD 直消费累计守恒（total +30.0）
+── P4 幂等边角：真结算 dupe 折返 / 顺延后 dupe 合并偏差 ──
+  PASS | P4a 真结算 dupe 预算尽仍折返缓存真结果（同实例 · 不占预算不顺延）
+  PASS | P4b【修后契约】顺延后同键 dupe 折返占位（同实例 · 不再并入 base）
+  PASS | P4b 冲刷单次落账（hp -20：真结算 10 + 顺延 10——pre-budget 幂等语义恢复）
+── P5 反应通道预算豁免 ──
+  PASS | P5 预算耗尽下反应通道全额真结算（非占位 · final>0 · 落血=final）
+  PASS | P5 反应计数/零顺延/事件恰一条（reaction_settles+1 · settle_deferred 不变 · triggered=1）
+── P6 真链：_physics_process 整帧驱动（弹段→顺延→帧头冲刷→⑧派发） ──
+  PASS | P6 帧1：帽1 恰 1 真结算即时派发 + 2 弹顺延占位（恰一敌 -10 · 余零落血）
+  PASS | P6 帧2：帧头冲刷顺延对 1 → e2 落血 10（次帧 ⑧ 派发累计 spy 2）
+  PASS | P6 帧3：冲刷顺延对 2 → e3 落血 10（spy 3 · DPS 守恒 30）
+  PASS | P6 穿透侧语义：占位被当真命中消费——三弹全部回收（pierce 耗尽）
+  PASS | P6 结N=真结算数 3（顺延不计）+ 派发零零值（final 全 >0）
+────────────────────────────────────────
+汇总：PASS 41 / FAIL 0（共 41 项）
+验收汇总：41/41 通过

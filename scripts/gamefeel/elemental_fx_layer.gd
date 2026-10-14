@@ -1,0 +1,1296 @@
+# scripts/gamefeel/elemental_fx_layer.gd
+# 方向 C 元素签名特效层（用户反馈 2026-08-29「能不能做出闪电、灼烧等特效」→ 引擎能力证明）：
+# 世界空间一次性表现件宿主，GameLoop ⑦ feel 阶段 raw 通道驱动 tick（暂停/顿帧自然冻结）。
+# · 感电连锁主锯齿闪电（签名特效）：订阅 EventBus.chain_lightning（源敌→被链敌），
+#   粗白芯 + 葡萄紫辉外层双层折线，全程 0.12s、逐段抖动（顶点池轮换）+ 中点闪光。
+# · 碎裂橙色冲击小环：订阅 EventBus.reaction_triggered（rxn==RXN_FIR_ICE，管线广播）。
+# · 燎原传火原点橙环：订阅 EventBus.burn_spread_ignited（R199 F17 独立表现通道——
+#   传火不再冒用 reaction_triggered）。
+# · 点燃 DOT 火星小喷：订阅 EventBus.elemental_dot_fired（每跳结算瞬间 3 粒上飘火星）。
+# 全部对象 _ready 预建轮换复用（0 运行期实例化）；折线顶点预生成池轮换；共享贴图、
+# 无 shader、零数值副作用（纯表现层，订阅事件只读位置）。
+# R229：sprite 族渐隐 alpha 全写点四分档量化（_qa，0/0.25/0.5/0.75/1.0）——同族
+# live 件按（贴图×色×alpha 档）合批（R216/R217 断批定律反用），dc 从 live 件数坍缩；
+# 视觉代价=0.16-0.55s 寿命件渐隐变 4 档阶梯（R217 敌染色量化同一定案路线，非阀门）。
+class_name ElementalFxLayer
+extends Node2D
+
+const BOLT_COUNT := 8                         # 连锁闪电并发池（轮换复用）
+const BOLT_LIFE := 0.12                       # 主闪电全程时长 s（任务口径）
+const BOLT_PATTERNS := 10                     # 预生成抖动系数组数（轮换）
+const BOLT_SEGMENTS := 6                      # 折线段数（顶点 = 段数 + 1）
+const SPARK_COUNT := 24                       # DOT 火星并发池（30+ 敌叠加预算封顶口径）
+const SPARK_LIFE := 0.32                      # 火星存活时长 s
+const RING_COUNT := 6                         # 碎裂冲击环并发池
+const RING_LIFE := 0.26                       # 冲击环时长 s
+const RING_R0 := 14.0                         # 冲击环起始半径 px
+const RING_R1 := 62.0                         # 冲击环结束半径 px
+const RIPPLE_COUNT := 12                      # 青色涟漪并发池（护盾格挡 / 弧斩消弹共用）
+const RIPPLE_LIFE := 0.24                     # 涟漪时长 s
+const ZAP_COUNT := 12                         # 电花碎屑并发池（闪电落点迸溅——用户反馈「是个球」）
+const ZAP_LIFE := 0.2                         # 电花碎屑时长 s
+const GLOW_COUNT := 8                         # DOT 橙光晕并发池（点燃跳伤瞬间体周闪光）
+const GLOW_LIFE := 0.18                       # 橙光晕时长 s
+# r195-6（R198）扩容 10→20：需求槽 ≈ tick_rate × 目标数 × IMPACT_LIFE × 并行束数
+#（8 跳/s × 4 目标 × 0.16s × 主+3 副束 ≈ 20）——高射速×穿透下 10 槽欠配 ~2×（迸裂星闪
+# 轮转提前覆写，观感断续）。每槽仍预建 Node2D 组 3-4 sprite 静态池（_build_impacts），
+# 零运行期实例化；_impact_idx 轮转取槽口径不动。
+const IMPACT_COUNT := 20                      # 光束命中迸裂并发池（脉冲激光每跳，用户反馈 2026-08-31）
+const IMPACT_LIFE := 0.16                     # 迸裂星闪时长 s
+const IMPACT_SPARKS := 3                      # 每次迸裂迸溅火花数（束色圆珠）
+const IMPACT_CD := 0.07                       # R202 ⑨：光束命中迸裂全局节流（0.05~0.09s 档——
+                                            # 激光 tick 8/s × 多目标 × 主副束同帧多触发的观感
+                                            # 上限，DEVOUR_CD 同款先例；纯表现层节流，消费侧
+                                            # 激光结算通道不动）
+const DEVOUR_COUNT := 10                      # 烈焰吞噬内聚并发池（burn_dmg 乘区生效，2026-09-13）
+const DEVOUR_LIFE := 0.3                      # 吞噬内聚时长 s
+const DEVOUR_SPARKS := 4                      # 每次内卷火苗数（外圈 → 命中点）
+const DEVOUR_R0 := 26.0                       # 火苗起始半径 px
+const DEVOUR_CD := 0.09                       # 全局节流（激光每跳同源多触发的观感上限）
+const KNOCKTEXT_COUNT := 8                    # 击退小字并发池（R7：强击退提示）
+const KNOCKTEXT_LIFE := 0.55                  # 击退小字时长 s
+const KNOCKTEXT_CD := 0.12                    # 击退小字全局节流（多目标同帧去 spam）
+
+# ── R188 档2 表现收口（fx_quality 档内预算开关，照 DOT 火苗 [0,2,4] 预算先例——
+#    低档关 / 中档减量 / 高档全量；高档口径逐位不变，档位数值与缺省 fx_quality=2 不动） ──
+const DOT_SPARK_BUDGET := [0, 2, 4]           # 每跳点燃火星数（高档 = 原 4 粒口径）
+const BOLT_ZAP_BUDGET := [0, 1, 3]            # 每道连锁闪电落点电花数（0 = 整体关；高档 = 原 3）
+const KILLBLAST_QUALITY_MIN := 1              # kill_blast 低档关（中/高档四层爆口径不变）
+# 二cu 灵剑剑痕（W11 命中反馈——用户「目标身上会有对应的剑痕（斜着的剑痕 小范围性的）」）：
+# 池容量 = 齐射 7 + 分裂子剑 8 同帧峰值；每槽 Node2D + 2×Line2D（主痕 + 偏移副痕）
+const MARK_COUNT := 16                        # 剑痕并发池
+const MARK_LIFE := 0.22                       # 剑痕时长 s（小范围短闪读感）
+const MARK_MAIN_COL := Color(0.82, 0.92, 1.0, 0.95)   # 主痕银蓝白
+const MARK_ECHO_COL := Color(0.45, 0.65, 0.95, 0.55)  # 副痕深蓝
+const SWORD_MARK_BUDGET := [0, 1, 2]          # 剑痕层数分档（低档关 / 中档主痕 / 高档主+副）
+
+# ── R229 渐隐 alpha 量化（4 档）——sprite 族共享贴图合批 ──────────────
+# z=5 层内 sprite 族全部共享贴图（flame_bit / ring_tex+modulate 上色 / soft_dot /
+# bead / star / confetti），但逐帧连续渐隐 modulate.a → 逐件唯一 modulate = 逐件
+# 独立 dc（R216/R217 真机断批定律）。全部 fade 写点过 _qa() 落 0.25 步进后，同族
+# live 件按（贴图×色×alpha 档）合批，dc 从 live 件数坍缩到 ~族数×档数。
+# 与 R217 敌染色量化 / enemy.gd:566-568 入场渐显 4 档同一定案路线；非阀门
+# （无条件、桌面 mobile 同口径）。不碰：_tick_bolts（Line2D 折线不与精灵同批，
+# 量化无收益）、毒云 _draw、MissileBlastFx 内类（_draw 件）、池容量/寿命/订阅。
+const Q_ALPHA_STEPS := 4                       # 渐隐量化档数（a ∈ {0, 0.25, 0.5, 0.75, 1.0}）
+
+
+static func _qa(p_a: float) -> float:
+	# alpha 四分档量化（写点处包整体表达式——最终乘积量化）
+	return float(roundi(clampf(p_a, 0.0, 1.0) * Q_ALPHA_STEPS)) / float(Q_ALPHA_STEPS)
+
+
+func _fx_quality() -> int:
+	# 特效质量档读取（钳制 [0,2]；Meta 单一真源）
+	# R204：mobile 门内高档降中档——与 Enemy._fx_q()/命中粒子门同口径
+	#（DOT 火花/电光花族在怪海下逐宿主常驻）
+	# R269 必改1：本口直读 Meta.settings 不经调速器帽（PerfGovernor.fx_quality_cap——
+	# 分析轮坐实），保帧模式钉 0 在此独立加分支：boost 开 → 0（DOT 火花/电光花/涟漪/
+	# 光晕族预算表 [0,2,4] 落 0 档）；关=现状逐位（r213_fullload/test_fx_quality/
+	# r202_g3 复跑门）
+	var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
+	if OS.has_feature("mobile"):
+		q = mini(q, 1)
+	if PerfGovernor.boost_mode():
+		return 0
+	return q
+
+var _bolts: Array[Dictionary] = []            # [{root, core, glow, flash, left}]（池条目）
+var _bolt_idx: int = 0
+var _bolt_patterns: Array[PackedFloat32Array] = []   # 预生成垂直抖动系数池（轮换）
+var _pattern_idx: int = 0
+var _sparks: Array[Dictionary] = []           # [{sprite, vel, left}]
+var _spark_idx: int = 0
+var _rings: Array[Dictionary] = []            # [{sprite, left}]
+var _ring_idx: int = 0
+var _ripples: Array[Dictionary] = []          # [{sprite, left, r0, r1}]（青色涟漪池）
+var _ripple_idx: int = 0
+var _zaps: Array[Dictionary] = []             # [{sprite, vel, rot_vel, left}]（电花碎屑池）
+var _zap_idx: int = 0
+var _glows: Array[Dictionary] = []            # [{sprite, left}]（DOT 橙光晕池）
+var _glow_idx: int = 0
+var _impacts: Array[Dictionary] = []          # [{flash, sparks[], vels[], left}]（光束命中迸裂池）
+var _impact_idx: int = 0
+var _impact_cd: float = 0.0                   # R202 ⑨：迸裂全局节流计时（IMPACT_CD 口径）
+var _devours: Array[Dictionary] = []          # [{flash, sparks[], vels[], left}]（吞噬内聚池）
+var _devour_idx: int = 0
+var _devour_cd: float = 0.0                   # 吞噬特效全局节流计时
+var _ktexts: Array[Dictionary] = []           # [{label, vel_y, left}]（击退小字池）
+var _ktext_idx: int = 0
+var _ktext_cd: float = 0.0                    # 击退小字节流
+var _poison := {"active": false, "center": Vector2.ZERO, "radius": 300.0,
+	"left": 0.0, "dur": 6.0, "anim": 0.0}     # 毒云领域持续表现（R10）
+var _blasts: Array[Dictionary] = []           # 爆炸层池（R35 火箭筒级：[{flash,fire,ring,smoke, left, r1}]）
+var _blast_idx: int = 0
+var _skill_rings: Array[Dictionary] = []      # 技能施放金环槽池（R19）
+var _skill_ring_idx: int = 0
+var _rxn_rings: Array[Dictionary] = []        # 反应专属环槽池（R22：过载双环/超导雾环）
+var _rxn_ring_idx: int = 0
+var _marks: Array[Dictionary] = []            # [{root, main, echo, left}]（二cu 灵剑剑痕池）
+var _mark_idx: int = 0
+
+
+func _ready() -> void:
+	# 预建全部表现件（池化轮换，运行期零实例化）+ 订阅表现层专用广播（本类 extends Node ✓）
+	z_index = 5                                  # 世界层最上（敌/玩家/弹同 z=0 树序层之上）/ HUD（CanvasLayer）之下
+	_build_bolts()
+	_build_sparks()
+	_build_rings()
+	_build_ripples()
+	_build_zaps()
+	_build_glows()
+	_build_impacts()
+	_build_devours()
+	_build_knocktexts()
+	_build_marks()
+	EventBus.chain_lightning.connect(_on_chain_lightning)
+	EventBus.knockback_hit.connect(_on_knockback_hit)
+	EventBus.poison_cloud_cast.connect(_on_poison_cloud_cast)
+	EventBus.poison_cloud_tick.connect(_on_poison_cloud_tick)
+	EventBus.poison_cloud_end.connect(_on_poison_cloud_end)     # R199 H01：云结束即渐隐
+	EventBus.kill_blast.connect(_on_kill_blast)
+	EventBus.missile_blast.connect(_on_missile_blast)
+	EventBus.skill_cast.connect(_on_skill_cast)   # R19：角色技能施放金环
+	EventBus.elemental_dot_fired.connect(_on_dot_fired)
+	EventBus.burn_spread_ignited.connect(_on_burn_spread_ignited)   # R199 F17：燎原传火原点橙环
+	EventBus.reaction_triggered.connect(_on_reaction_triggered)
+	EventBus.shield_blocked.connect(_on_shield_blocked)
+	EventBus.bullet_nullified.connect(_on_bullet_nullified)
+	EventBus.beam_impact.connect(_on_beam_impact)
+	EventBus.burn_devour_proc.connect(_on_burn_devour)
+	EventBus.sword_mark.connect(_on_sword_mark)
+
+func tick(p_raw_delta: float) -> void:
+	# GameLoop ⑦ feel 阶段驱动（raw 通道）；非战斗状态不被驱动 → 表现件自然冻结
+	_tick_bolts(p_raw_delta)
+	_tick_sparks(p_raw_delta)
+	_tick_rings(p_raw_delta)
+	_tick_ripples(p_raw_delta)
+	_tick_zaps(p_raw_delta)
+	_tick_glows(p_raw_delta)
+	_tick_impacts(p_raw_delta)
+	_tick_devours(p_raw_delta)
+	_tick_knocktexts(p_raw_delta)
+	_tick_poison(p_raw_delta)
+	_tick_blasts(p_raw_delta)
+	_tick_skill_rings(p_raw_delta)
+	_tick_rxn_rings(p_raw_delta)
+	_tick_marks(p_raw_delta)
+
+
+# ── 感电连锁主锯齿闪电（签名特效） ────────────────────────────────
+func _build_bolts() -> void:
+	for i in range(BOLT_COUNT):
+		var root := Node2D.new()
+		root.name = "ChainBolt%d" % i
+		root.visible = false
+		var glow := Line2D.new()
+		glow.name = "Glow"
+		glow.width = 15.0
+		glow.default_color = Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g, PopPalette.SHOCK.b, 0.55)
+		glow.joint_mode = Line2D.LINE_JOINT_ROUND
+		glow.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		glow.end_cap_mode = Line2D.LINE_CAP_ROUND
+		root.add_child(glow)
+		var core := Line2D.new()
+		core.name = "Core"
+		core.width = 6.0
+		core.default_color = Color.WHITE
+		core.joint_mode = Line2D.LINE_JOINT_ROUND
+		core.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		core.end_cap_mode = Line2D.LINE_CAP_ROUND
+		root.add_child(core)
+		var flash := Sprite2D.new()
+		flash.name = "Flash"
+		# 星形爆闪（用户反馈「感电是个球」→ soft_dot 球换四角星 + 起始小尺寸速缩）
+		flash.texture = TextureFactory.star(48, Color.WHITE)
+		flash.modulate = Color(1.0, 1.0, 1.0, 0.9)
+		flash.visible = true
+		root.add_child(flash)
+		add_child(root)
+		_bolts.append({"root": root, "core": core, "glow": glow, "flash": flash,
+			"pts": PackedVector2Array(), "left": 0.0})   # R188⑩：每槽折线顶点缓冲（复用）
+
+
+func _on_chain_lightning(p_from: Vector2, p_to: Vector2) -> void:
+	# 取池内下一道闪电（轮换）：定位源敌 → 重铺双层折线 + 中点星闪 + 落点电花迸溅；
+	# 终点存 meta（生命期逐帧重铺折线复用；R188⑩ 顶点按槽复用后，逐帧重铺确为零新建
+	# 分配——旧注释「零额外分配」与每帧新建 pts 的事实不符，现改如实描述）。
+	# R188 档2：电花数接 fx_quality 档预算 [0,1,3]（0 = 闪电整体关；高档口径不变 3）
+	var zap_budget: int = BOLT_ZAP_BUDGET[_fx_quality()]
+	if zap_budget <= 0:
+		return
+	var bolt: Dictionary = _bolts[_bolt_idx % BOLT_COUNT]
+	_bolt_idx += 1
+	var root: Node2D = bolt["root"]
+	var local_to: Vector2 = p_to - p_from
+	root.position = p_from
+	root.rotation = 0.0
+	root.set_meta(&"bolt_to", local_to)
+	root.visible = true
+	root.modulate.a = 1.0
+	_layout_bolt(bolt, local_to, 1.0)
+	bolt["left"] = BOLT_LIFE
+	for i in range(zap_budget):
+		_fire_zap(p_to)
+
+
+func _layout_bolt(p_bolt: Dictionary, p_local_to: Vector2, p_amp: float) -> void:
+	# 双层折线铺点（白芯 + 紫辉同形）：沿线插值 + 预生成垂直抖动系数 × 包络 × 段长
+	# R188⑩：顶点缓冲按槽复用（原每调新建 PackedVector2Array+append——每活雷每帧
+	# 常量税）；resize+下标赋值原地重铺。core/glow.points 赋值仍引擎侧 COW 拷贝——
+	# 本缓冲下帧再改不回写已上屏折线（Line2D 自持独立副本），语义逐位不变
+	var patterns := _get_bolt_patterns()
+	var offsets: PackedFloat32Array = patterns[_pattern_idx % patterns.size()]
+	_pattern_idx += 1
+	var pts: PackedVector2Array = p_bolt["pts"]
+	pts.resize(BOLT_SEGMENTS + 1)
+	var perp := Vector2(p_local_to.y, -p_local_to.x).normalized()
+	if perp == Vector2.ZERO:
+		perp = Vector2.UP
+	for i in range(BOLT_SEGMENTS + 1):
+		var t := float(i) / float(BOLT_SEGMENTS)
+		var amp := 0.0 if i == 0 or i == BOLT_SEGMENTS \
+			else offsets[i % offsets.size()] * p_amp * p_local_to.length() * 0.16
+		pts[i] = p_local_to * t + perp * amp
+	var core: Line2D = p_bolt["core"]
+	var glow: Line2D = p_bolt["glow"]
+	core.points = pts
+	glow.points = pts
+	var flash: Sprite2D = p_bolt["flash"]
+	flash.position = p_local_to * 0.5
+	flash.scale = Vector2.ONE * clampf(p_local_to.length() / 260.0, 0.35, 0.75)
+
+
+func _tick_bolts(p_raw_delta: float) -> void:
+	for bolt: Dictionary in _bolts:
+		var left := float(bolt["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		bolt["left"] = left
+		var root: Node2D = bolt["root"]
+		if left <= 0.0:
+			root.visible = false
+			continue
+		var progress := 1.0 - left / BOLT_LIFE
+		# 逐段抖动：生命期每帧轮换预生成顶点池重铺折线，包络 0→1→0 + 尾段淡出
+		var local_to: Vector2 = root.get_meta(&"bolt_to") as Vector2
+		_layout_bolt(bolt, local_to, maxf(sin(progress * PI), 0.35))
+		root.modulate.a = clampf(1.15 - progress * 0.9, 0.25, 1.0)
+		# 中点星闪随生命期收缩旋转（爆裂感，替代原「球」观感）
+		var flash: Sprite2D = bolt["flash"]
+		flash.rotation += p_raw_delta * 14.0
+		flash.scale = flash.scale * maxf(1.0 - progress * 5.0 * p_raw_delta, 0.1)
+
+
+func _get_bolt_patterns() -> Array[PackedFloat32Array]:
+	# 预生成抖动系数池（10 组 × 中段 4 系数，[-1,1] 混合锯齿形；轮换零运行期生成）
+	if _bolt_patterns.is_empty():
+		for i in range(BOLT_PATTERNS):
+			var arr := PackedFloat32Array()
+			for j in range(4):
+				var ph := TAU * (float(i) * 0.37 + float(j) * 0.61)
+				arr.append(sin(ph) * (0.55 + 0.45 * sin(ph * 2.3)))
+			_bolt_patterns.append(arr)
+	return _bolt_patterns
+
+
+# ── 点燃 DOT 火星（每跳结算瞬间小喷） ─────────────────────────────
+func _build_sparks() -> void:
+	for i in range(SPARK_COUNT):
+		var sp := Sprite2D.new()
+		sp.name = "DotSpark%d" % i
+		sp.texture = TextureFactory.flame_bit()
+		sp.visible = false
+		add_child(sp)
+		_sparks.append({"sprite": sp, "vel": Vector2.ZERO, "left": 0.0})
+
+
+func _on_dot_fired(p_pos: Vector2) -> void:
+	# 跳伤瞬间：橙光晕一闪 + 火星上飘（用户反馈「燃烧特效没看见」→ 加量）。
+	# R188 档2：火星数接 fx_quality 档预算 [0,2,4]（低档全关；高档口径不变 4 粒）
+	# R213 B案：满载门——DOT 跳伤表现（光晕+火星）整体关（敌身火苗/染色保留读感，
+	# enemy 侧 A 案；敌数回落自动恢复）
+	if Enemy.fullload_dim():
+		return
+	var budget: int = DOT_SPARK_BUDGET[_fx_quality()]
+	if budget <= 0:
+		return
+	var glow: Dictionary = _glows[_glow_idx % GLOW_COUNT]
+	_glow_idx += 1
+	var gs: Sprite2D = glow["sprite"]
+	gs.position = p_pos
+	gs.visible = true
+	glow["left"] = GLOW_LIFE
+	gs.scale = Vector2.ONE * 0.5
+	gs.modulate.a = 0.5
+	for i in range(budget):
+		var spark: Dictionary = _sparks[_spark_idx % SPARK_COUNT]
+		_spark_idx += 1
+		var sp: Sprite2D = spark["sprite"]
+		sp.position = p_pos + Vector2(randf_range(-7.0, 7.0), randf_range(-5.0, 3.0))
+		sp.visible = true
+		sp.scale = Vector2.ONE * randf_range(0.85, 1.4)
+		spark["vel"] = Vector2(randf_range(-80.0, 80.0), randf_range(-210.0, -120.0))
+		spark["left"] = SPARK_LIFE
+
+
+func _tick_sparks(p_raw_delta: float) -> void:
+	for spark: Dictionary in _sparks:
+		var left := float(spark["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		spark["left"] = left
+		var sp: Sprite2D = spark["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		var vel: Vector2 = spark["vel"]
+		vel.y += 320.0 * p_raw_delta             # 火星上抛后回落（重力）
+		spark["vel"] = vel
+		sp.position += vel * p_raw_delta
+		sp.modulate.a = _qa(clampf(left / SPARK_LIFE * 1.3, 0.0, 1.0))
+
+
+# ── 碎裂冲击小环（RXN_FIR_ICE 结算瞬间；夜间R58 主环改冰蓝——用户反馈「冰冻的
+# 爆炸波纹改成蓝色，现在是黄橙色」：碎裂主体是冰，火源读感降为窄橙内环） ──
+const SHATTER_ICE_COL := PopPalette.ELEMENT_COLORS[GameConst.Element.ICE]   # 冰蓝（色表单源——与 ELE 冻结/跳字冰色同源）
+
+func _build_rings() -> void:
+	for i in range(RING_COUNT):
+		var ring := Sprite2D.new()
+		ring.name = "ShatterRing%d" % i
+		ring.texture = TextureFactory.ring_tex(
+			SHATTER_ICE_COL, 48, 4.0)      # 冰蓝主环（碎裂主体读感）
+		ring.visible = false
+		add_child(ring)
+		_rings.append({"sprite": ring, "left": 0.0})
+
+
+func _on_reaction_triggered(p_rxn: int, p_pos: Vector2, _p_target_uid: int) -> void:
+	# R22 反应专属特效补全（此前仅碎裂有橙环）→ R192 族化扩 20 臂（族级配色复用
+	# _spawn_reaction_ring；取色全部单源 PopPalette.ELEMENT_COLORS / RXN 表）：
+	# · 碎裂 FIR+ICE：冰蓝主环（既有池）+ 窄橙内环
+	# · 过载 FIR+LTG：紫橙双环冲击（火橙外环 + 雷紫内环）
+	# · 超导 ICE+LTG：冰紫雾环慢扩散（全抗削减的减益光环读感）
+	# · 蒸发/绽放/冻结/感电/燃烧/激化：双元素双色环 / 减益单色环
+	# · 扩散族×5：风淡青大环 + 被扩元素色内环（满槽转移读感）
+	# · 结晶族×6：岩金黄晶环 + 元素色内环（晶盾获得感读感）
+	match p_rxn:
+		GameConst.ReactionType.RXN_FIR_ICE:
+			var ring: Dictionary = _rings[_ring_idx % RING_COUNT]
+			_ring_idx += 1
+			var sp: Sprite2D = ring["sprite"]
+			sp.position = p_pos
+			sp.visible = true
+			ring["left"] = RING_LIFE
+			_layout_ring(ring, 0.0)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR], 0.22, 1.3)   # 窄橙内环（火源提示）
+		GameConst.ReactionType.RXN_FIR_LTG:
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR], 0.38, 2.6)
+			_spawn_reaction_ring(p_pos, PopPalette.SHOCK, 0.3, 1.6)
+		GameConst.ReactionType.RXN_ICE_LTG:
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.ICE].lerp(Color.WHITE, 0.4), 0.55, 3.0)
+			_spawn_reaction_ring(p_pos, PopPalette.SHOCK, 0.45, 2.0)
+		GameConst.ReactionType.RXN_FIR_HYD:
+			# 蒸发：火橙外环 + 水蓝内环（汽化白雾读感）
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR], 0.38, 2.2)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.HYD].lerp(Color.WHITE, 0.3), 0.3, 1.4)
+		GameConst.ReactionType.RXN_HYD_DEN:
+			# 绽放：水蓝外环 + 草绿内环（种子萌发读感）
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.HYD], 0.42, 2.4)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.DEN], 0.34, 1.5)
+		GameConst.ReactionType.RXN_ICE_HYD:
+			# 冻结：冰蓝雾环慢扩散 + 水蓝内环（封冻读感）
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.ICE].lerp(Color.WHITE, 0.4), 0.5, 2.8)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.HYD], 0.32, 1.4)
+		GameConst.ReactionType.RXN_LTG_HYD:
+			# 感电：雷紫外环 + 水蓝内环（导电读感）
+			_spawn_reaction_ring(p_pos, PopPalette.SHOCK, 0.38, 2.4)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.HYD], 0.3, 1.4)
+		GameConst.ReactionType.RXN_FIR_DEN:
+			# 燃烧：火橙双环（炽燃读感）
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR], 0.4, 2.2)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR].lerp(Color.WHITE, 0.35), 0.28, 1.3)
+		GameConst.ReactionType.RXN_LTG_DEN:
+			# 激化：雷紫单环（减益光环读感）
+			_spawn_reaction_ring(p_pos, PopPalette.SHOCK, 0.45, 2.2)
+		GameConst.ReactionType.RXN_FIR_ANE, GameConst.ReactionType.RXN_ICE_ANE, \
+		GameConst.ReactionType.RXN_LTG_ANE, GameConst.ReactionType.RXN_HYD_ANE, \
+		GameConst.ReactionType.RXN_ANE_DEN:
+			# 扩散族×5：风淡青大环 + 被扩元素色内环
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.ANE].lerp(Color.WHITE, 0.4), 0.46, 2.8)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[_spread_carry_element(p_rxn)], 0.3, 1.5)
+		GameConst.ReactionType.RXN_FIR_GEO, GameConst.ReactionType.RXN_ICE_GEO, \
+		GameConst.ReactionType.RXN_LTG_GEO, GameConst.ReactionType.RXN_HYD_GEO, \
+		GameConst.ReactionType.RXN_DEN_GEO, GameConst.ReactionType.RXN_ANE_GEO:
+			# 结晶族×6：岩金黄晶环 + 元素色内环
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.GEO], 0.42, 2.2)
+			_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[_crystal_carry_element(p_rxn)].lerp(Color.WHITE, 0.3), 0.3, 1.3)
+
+
+func _spread_carry_element(p_rxn: int) -> int:
+	# 扩散族被扩元素读数（族配色展示用；配对真源=ElementalSystem.RXN_PAIRS 语义）
+	match p_rxn:
+		GameConst.ReactionType.RXN_FIR_ANE:
+			return GameConst.Element.FIR
+		GameConst.ReactionType.RXN_ICE_ANE:
+			return GameConst.Element.ICE
+		GameConst.ReactionType.RXN_LTG_ANE:
+			return GameConst.Element.LTG
+		GameConst.ReactionType.RXN_HYD_ANE:
+			return GameConst.Element.HYD
+		_:
+			return GameConst.Element.DEN            # RXN_ANE_DEN（草）
+
+
+func _crystal_carry_element(p_rxn: int) -> int:
+	# 结晶族配对元素读数（族配色展示用）
+	match p_rxn:
+		GameConst.ReactionType.RXN_FIR_GEO:
+			return GameConst.Element.FIR
+		GameConst.ReactionType.RXN_ICE_GEO:
+			return GameConst.Element.ICE
+		GameConst.ReactionType.RXN_LTG_GEO:
+			return GameConst.Element.LTG
+		GameConst.ReactionType.RXN_HYD_GEO:
+			return GameConst.Element.HYD
+		GameConst.ReactionType.RXN_DEN_GEO:
+			return GameConst.Element.DEN
+		_:
+			return GameConst.Element.ANE            # RXN_ANE_GEO（风+岩）
+
+
+func _spawn_reaction_ring(p_pos: Vector2, p_color: Color, p_life: float, p_scale: float) -> void:
+	# 反应环槽池（白环贴图 + modulate 上色——零贴图重建）；扩散 + 淡出
+	if _rxn_rings.is_empty():
+		for i in range(6):
+			var sp := Sprite2D.new()
+			sp.name = "RxnRing%d" % i
+			sp.texture = TextureFactory.ring_tex(Color.WHITE, 48, 4.0)
+			sp.visible = false
+			add_child(sp)
+			_rxn_rings.append({"sprite": sp, "left": 0.0, "life": 0.3, "scale": 2.0})
+	var slot: Dictionary = _rxn_rings[_rxn_ring_idx % _rxn_rings.size()]
+	_rxn_ring_idx += 1
+	var sp: Sprite2D = slot["sprite"]
+	sp.position = p_pos
+	sp.modulate = p_color
+	sp.visible = true
+	sp.scale = Vector2.ONE * 0.3
+	sp.modulate.a = 1.0
+	slot["left"] = p_life
+	slot["life"] = p_life
+	slot["scale"] = p_scale
+
+
+func _tick_rxn_rings(p_raw_delta: float) -> void:
+	for slot: Dictionary in _rxn_rings:
+		var left := float(slot["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		slot["left"] = left
+		var sp: Sprite2D = slot["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		var t := 1.0 - left / float(slot["life"])
+		sp.scale = Vector2.ONE * lerpf(0.3, float(slot["scale"]), t)
+		sp.modulate.a = _qa(1.0 - t)
+
+
+func _layout_ring(p_ring: Dictionary, p_progress: float) -> void:
+	var sp: Sprite2D = p_ring["sprite"]
+	var r: float = lerpf(RING_R0, RING_R1, p_progress)
+	sp.scale = Vector2.ONE * (r / 19.0)          # 贴图环半径 19px 口径
+	sp.modulate.a = _qa(clampf(1.0 - p_progress, 0.0, 1.0) * 0.95)
+
+
+# ── 青色涟漪（护盾格挡 / 弧斩消弹——2026-08-29 用户反馈「格挡要看得见」） ──
+func _build_ripples() -> void:
+	var cyan := PopPalette.PLAYER.lerp(Color.WHITE, 0.18)
+	for i in range(RIPPLE_COUNT):
+		var sp := Sprite2D.new()
+		sp.name = "CyanRipple%d" % i
+		sp.texture = TextureFactory.ring_tex(cyan, 48, 4.0)
+		sp.visible = false
+		add_child(sp)
+		_ripples.append({"sprite": sp, "left": 0.0, "r0": 8.0, "r1": 30.0})
+
+
+func _on_shield_blocked(p_pos: Vector2) -> void:
+	# 格挡力场挡下伤害：大涟漪（与 Player._shield_ring 脉冲同源互补）
+	_fire_ripple(p_pos, 16.0, 56.0)
+
+
+func _on_bullet_nullified(p_pos: Vector2) -> void:
+	# 弧斩消弹（W9 NULLIFIED 路径）：小涟漪
+	_fire_ripple(p_pos, 6.0, 24.0)
+
+
+func _fire_ripple(p_pos: Vector2, p_r0: float, p_r1: float) -> void:
+	var ripple: Dictionary = _ripples[_ripple_idx % RIPPLE_COUNT]
+	_ripple_idx += 1
+	var sp: Sprite2D = ripple["sprite"]
+	sp.position = p_pos
+	sp.visible = true
+	ripple["left"] = RIPPLE_LIFE
+	ripple["r0"] = p_r0
+	ripple["r1"] = p_r1
+	_layout_ripple(ripple, 0.0)
+
+
+func _layout_ripple(p_ripple: Dictionary, p_progress: float) -> void:
+	var sp: Sprite2D = p_ripple["sprite"]
+	var r: float = lerpf(float(p_ripple["r0"]), float(p_ripple["r1"]), p_progress)
+	sp.scale = Vector2.ONE * (r / 19.0)
+	sp.modulate.a = _qa(clampf(1.0 - p_progress, 0.0, 1.0) * 0.85)
+
+
+func _tick_ripples(p_raw_delta: float) -> void:
+	for ripple: Dictionary in _ripples:
+		var left := float(ripple["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		ripple["left"] = left
+		var sp: Sprite2D = ripple["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		_layout_ripple(ripple, 1.0 - left / RIPPLE_LIFE)
+
+
+func _tick_rings(p_raw_delta: float) -> void:
+	for ring: Dictionary in _rings:
+		var left := float(ring["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		ring["left"] = left
+		var sp: Sprite2D = ring["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		_layout_ring(ring, 1.0 - left / RING_LIFE)
+
+
+# ── 电花碎屑（闪电落点迸溅——用户反馈「感电是个球」的去球化配套） ──
+func _build_zaps() -> void:
+	var zap_col := PopPalette.SHOCK.lerp(Color.WHITE, 0.4)
+	for i in range(ZAP_COUNT):
+		var sp := Sprite2D.new()
+		sp.name = "ZapBit%d" % i
+		sp.texture = TextureFactory.confetti_piece(0)   # 细长小矩形（电花碎屑观感）
+		sp.modulate = zap_col
+		sp.visible = false
+		add_child(sp)
+		_zaps.append({"sprite": sp, "vel": Vector2.ZERO, "rot_vel": 0.0, "left": 0.0})
+
+
+func _fire_zap(p_pos: Vector2) -> void:
+	var zap: Dictionary = _zaps[_zap_idx % ZAP_COUNT]
+	_zap_idx += 1
+	var sp: Sprite2D = zap["sprite"]
+	var ang := randf() * TAU
+	sp.position = p_pos
+	sp.rotation = ang
+	sp.visible = true
+	sp.scale = Vector2.ONE * randf_range(0.7, 1.2)
+	zap["vel"] = Vector2.from_angle(ang) * randf_range(130.0, 260.0)
+	zap["rot_vel"] = randf_range(-14.0, 14.0)
+	zap["left"] = ZAP_LIFE
+
+
+func _tick_zaps(p_raw_delta: float) -> void:
+	for zap: Dictionary in _zaps:
+		var left := float(zap["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		zap["left"] = left
+		var sp: Sprite2D = zap["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		var vel: Vector2 = zap["vel"]
+		vel *= maxf(1.0 - 6.0 * p_raw_delta, 0.0)   # 快出快停（迸溅阻尼）
+		zap["vel"] = vel
+		sp.position += vel * p_raw_delta
+		sp.rotation += float(zap["rot_vel"]) * p_raw_delta
+		sp.modulate.a = _qa(clampf(left / ZAP_LIFE * 1.4, 0.0, 1.0))
+
+
+# ── DOT 橙光晕（点燃跳伤瞬间体周一闪） ───────────────────────────
+func _build_glows() -> void:
+	for i in range(GLOW_COUNT):
+		var sp := Sprite2D.new()
+		sp.name = "DotGlow%d" % i
+		sp.texture = TextureFactory.soft_dot(64)
+		sp.modulate = Color(PopPalette.ENEMY.lerp(PopPalette.XP, 0.55), 0.5)
+		sp.visible = false
+		add_child(sp)
+		_glows.append({"sprite": sp, "left": 0.0})
+
+
+func _tick_glows(p_raw_delta: float) -> void:
+	for glow: Dictionary in _glows:
+		var left := float(glow["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		glow["left"] = left
+		var sp: Sprite2D = glow["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		var t := 1.0 - left / GLOW_LIFE
+		sp.scale = Vector2.ONE * lerpf(0.5, 1.15, t)   # 扩散
+		sp.modulate.a = _qa(0.5 * (1.0 - t))                # 渐隐
+
+
+# ── 光束命中迸裂（脉冲激光每跳结算：星闪 + 束色火花迸溅） ──────────
+func _build_impacts() -> void:
+	# 预建池：每槽 = 四角星闪 ×1 + 圆珠火花 ×3（贴图共享，运行期零实例化）
+	for i in range(IMPACT_COUNT):
+		var root := Node2D.new()
+		root.name = "BeamImpact%d" % i
+		root.visible = false
+		var flash := Sprite2D.new()
+		flash.name = "Flash"
+		flash.texture = TextureFactory.star(44, PopPalette.PLAYER.lerp(Color.WHITE, 0.55))
+		flash.modulate = Color(1.0, 1.0, 1.0, _qa(0.95))   # R229：常亮底 alpha 上网格（tick 只重写 root/火花，flash.a 不再逐帧写——族内全域四分档）
+		root.add_child(flash)
+		var sparks: Array[Sprite2D] = []
+		for j in range(IMPACT_SPARKS):
+			var sp := Sprite2D.new()
+			sp.name = "Spark%d" % j
+			sp.texture = TextureFactory.bead(PopPalette.PLAYER, 24, false)
+			sp.modulate = Color(1.0, 1.0, 1.0, _qa(0.9))   # R229：建槽底 alpha 上网格（tick 逐帧重写，此值仅首发帧前生效）
+			root.add_child(sp)
+			sparks.append(sp)
+		add_child(root)
+		_impacts.append({"root": root, "flash": flash, "sparks": sparks,
+			"vels": PackedVector2Array(), "left": 0.0})
+
+
+func _on_beam_impact(p_pos: Vector2, p_dir: Vector2) -> void:
+	# 取池内下一槽（轮换）：星闪原地爆散（旋转 + 快缩）+ 火花朝束反向半球迸溅（快出快停）
+	# R202 ⑨：全局节流（_devour_cd 先例——激光每跳同源多触发的观感上限；CD 窗内静默
+	# 吞触发，不影响 EventBus.beam_impact 广播契约与激光侧结算）
+	if _impact_cd > 0.0:
+		return
+	_impact_cd = IMPACT_CD
+	var impact: Dictionary = _impacts[_impact_idx % IMPACT_COUNT]
+	_impact_idx += 1
+	var root: Node2D = impact["root"]
+	root.position = p_pos
+	root.rotation = p_dir.angle()                   # 星闪沿束向（迸裂方向读感）
+	root.visible = true
+	root.modulate.a = 1.0
+	var flash: Sprite2D = impact["flash"]
+	flash.rotation = randf() * TAU
+	flash.scale = Vector2.ONE * randf_range(0.85, 1.15)
+	var vels := PackedVector2Array()
+	var sparks: Array = impact["sparks"]
+	for j in range(sparks.size()):
+		var sp: Sprite2D = sparks[j]
+		sp.position = Vector2.ZERO
+		sp.scale = Vector2.ONE * randf_range(0.55, 0.85)
+		sp.visible = true
+		# 迸溅向：束反向 ±70° 扇区（打在目标表面弹开的观感）
+		var ang := (-p_dir).angle() + randf_range(-1.2, 1.2)
+		vels.append(Vector2.from_angle(ang) * randf_range(120.0, 240.0))
+	impact["vels"] = vels
+	impact["left"] = IMPACT_LIFE
+
+
+func _tick_impacts(p_raw_delta: float) -> void:
+	_impact_cd = maxf(_impact_cd - p_raw_delta, 0.0)   # R202 ⑨：迸裂节流计时推进
+	for impact: Dictionary in _impacts:
+		var left := float(impact["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		impact["left"] = left
+		var root: Node2D = impact["root"]
+		if left <= 0.0:
+			root.visible = false
+			continue
+		var progress := 1.0 - left / IMPACT_LIFE
+		var flash: Sprite2D = impact["flash"]
+		flash.rotation += p_raw_delta * 18.0
+		flash.scale = flash.scale * maxf(1.0 - progress * 5.0 * p_raw_delta, 0.1)
+		var sparks: Array = impact["sparks"]
+		var vels: PackedVector2Array = impact["vels"]
+		for j in range(sparks.size()):
+			var sp: Sprite2D = sparks[j]
+			if not sp.visible:
+				continue
+			var vel: Vector2 = vels[j]
+			vel *= maxf(1.0 - 7.0 * p_raw_delta, 0.0)
+			vels[j] = vel
+			sp.position += vel * p_raw_delta
+			sp.modulate.a = _qa(clampf(left / IMPACT_LIFE * 1.4, 0.0, 1.0))
+		root.modulate.a = _qa(clampf(1.2 - progress, 0.0, 1.0))
+
+
+# ── 烈焰吞噬内聚（burn_dmg 乘区生效：外圈火苗向命中点旋入——2026-09-13 用户反馈） ──
+func _build_devours() -> void:
+	# 预建池：每槽 = 橙色四角星闪 ×1 + 火苗 ×4（由外圈向命中点内卷，与点燃火星同源贴图）
+	for i in range(DEVOUR_COUNT):
+		var root := Node2D.new()
+		root.name = "BurnDevour%d" % i
+		root.visible = false
+		var flash := Sprite2D.new()
+		flash.name = "Flash"
+		flash.texture = TextureFactory.star(46, PopPalette.ENEMY.lerp(PopPalette.XP, 0.55))
+		flash.modulate = Color(1.0, 1.0, 1.0, 0.9)
+		root.add_child(flash)
+		var sparks: Array[Sprite2D] = []
+		for j in range(DEVOUR_SPARKS):
+			var sp := Sprite2D.new()
+			sp.name = "Flame%d" % j
+			sp.texture = TextureFactory.flame_bit()
+			root.add_child(sp)
+			sparks.append(sp)
+		add_child(root)
+		_devours.append({"root": root, "flash": flash, "sparks": sparks,
+			"vels": PackedVector2Array(), "left": 0.0})
+
+
+func _on_burn_devour(p_pos: Vector2) -> void:
+	# 取池内下一槽（轮换）+ 全局节流：星闪原地放大渐隐 + 火苗切向内卷（吞噬观感）
+	if _devour_cd > 0.0:
+		return
+	_devour_cd = DEVOUR_CD
+	var dv: Dictionary = _devours[_devour_idx % DEVOUR_COUNT]
+	_devour_idx += 1
+	var root: Node2D = dv["root"]
+	root.position = p_pos
+	root.visible = true
+	root.modulate.a = 1.0
+	var flash: Sprite2D = dv["flash"]
+	flash.rotation = randf() * TAU
+	flash.scale = Vector2.ONE * 0.7
+	var sparks: Array = dv["sparks"]
+	var vels := PackedVector2Array()
+	for j in range(sparks.size()):
+		var sp: Sprite2D = sparks[j]
+		var ang := TAU * float(j) / float(sparks.size()) + randf_range(-0.3, 0.3)
+		var dir := Vector2.from_angle(ang)
+		sp.position = dir * DEVOUR_R0 * randf_range(0.85, 1.15)
+		sp.scale = Vector2.ONE * randf_range(0.8, 1.2)
+		sp.visible = true
+		# 内卷速度：指向中心为主 + 0.35 切向（旋入）；稍快于 R0/LIFE 保证贴到中心才熄
+		vels.append((-dir + Vector2.from_angle(ang + PI * 0.5) * 0.35).normalized()
+			* (DEVOUR_R0 / DEVOUR_LIFE * 1.15))
+	dv["vels"] = vels
+	dv["left"] = DEVOUR_LIFE
+
+
+func _tick_devours(p_raw_delta: float) -> void:
+	_devour_cd = maxf(_devour_cd - p_raw_delta, 0.0)
+	for dv: Dictionary in _devours:
+		var left := float(dv["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		dv["left"] = left
+		var root: Node2D = dv["root"]
+		if left <= 0.0:
+			root.visible = false
+			continue
+		var progress := 1.0 - left / DEVOUR_LIFE
+		var flash: Sprite2D = dv["flash"]
+		flash.rotation += p_raw_delta * 16.0
+		flash.scale = Vector2.ONE * lerpf(0.7, 1.3, progress)   # 中心星闪放大 = 汲取聚拢
+		flash.modulate.a = _qa(0.9 * (1.0 - progress))
+		var sparks: Array = dv["sparks"]
+		var vels: PackedVector2Array = dv["vels"]
+		for j in range(sparks.size()):
+			var sp: Sprite2D = sparks[j]
+			if not sp.visible:
+				continue
+			sp.position += vels[j] * p_raw_delta
+			sp.scale = sp.scale * maxf(1.0 - 2.5 * p_raw_delta, 0.25)   # 卷入即缩（被吞）
+			sp.modulate.a = _qa(clampf(left / DEVOUR_LIFE * 1.5, 0.0, 1.0))
+
+
+# ── 击退小字（强击退生效提示——R7 用户反馈「击退小字蹦出来」） ──────────
+func _build_knocktexts() -> void:
+	for i in range(KNOCKTEXT_COUNT):
+		var lb := Label.new()
+		lb.name = "KnockText%d" % i
+		StickerTheme.label_sticker(lb, 15, PopPalette.ENEMY, 3, Color.WHITE, true)
+		lb.text = "击退!"
+		lb.visible = false
+		lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(lb)
+		_ktexts.append({"label": lb, "left": 0.0})
+
+
+func _on_knockback_hit(p_pos: Vector2) -> void:
+	if _ktext_cd > 0.0:
+		return
+	_ktext_cd = KNOCKTEXT_CD
+	var slot: Dictionary = _ktexts[_ktext_idx % KNOCKTEXT_COUNT]
+	_ktext_idx += 1
+	var lb: Label = slot["label"]
+	lb.position = p_pos + Vector2(randf_range(-10.0, 10.0), -30.0)
+	lb.visible = true
+	lb.modulate.a = 1.0
+	slot["left"] = KNOCKTEXT_LIFE
+
+
+func _tick_knocktexts(p_raw_delta: float) -> void:
+	_ktext_cd = maxf(_ktext_cd - p_raw_delta, 0.0)
+	for slot: Dictionary in _ktexts:
+		var left := float(slot["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		slot["left"] = left
+		var lb: Label = slot["label"]
+		if left <= 0.0:
+			lb.visible = false
+			continue
+		lb.position.y -= 46.0 * p_raw_delta          # 上飘
+		lb.modulate.a = clampf(left / KNOCKTEXT_LIFE * 1.5, 0.0, 1.0)
+
+
+# ── 毒云领域持续表现（薇拉技能——R10 用户反馈「只有白色掉血没特效」） ────
+func _on_poison_cloud_cast(p_pos: Vector2, p_radius: float, p_dur: float = 6.0) -> void:
+	# R246：p_dur 默认 6.0（普通版）——r199_g6 两参直调硬依赖保持兼容；vera 升华
+	# 「毒理学终章」7s 窗经 player 侧 emit 第三参传入（不再第 6s 提前渐隐）
+	_poison["active"] = true
+	_poison["center"] = p_pos
+	_poison["radius"] = p_radius
+	_poison["left"] = p_dur
+	_poison["dur"] = p_dur
+	_poison["anim"] = 0.0
+	queue_redraw()
+
+
+func _on_poison_cloud_tick(p_pos: Vector2, p_radius: float) -> void:
+	# R199 H01：每跳只刷新中心（跟随玩家）——left 改剩余时长语义（cast 置 6.0 后
+	# 自然衰减，与技能持续同起同灭），不再每跳重置 6.0（旧口径技能结束后特效仍
+	# 全亮滞留 4.0s + 渐隐 1.5s，视觉上「还在转的毒圈」其实已不掉血不减速）
+	_poison["active"] = true
+	_poison["center"] = p_pos
+	_poison["radius"] = p_radius
+	queue_redraw()
+
+
+func _on_poison_cloud_end() -> void:
+	# R199 H01：云结束广播 → 剩余时长钳入渐隐窗（即刻入渐隐；未激活零操作——
+	# 换角/重开清口同通道，天然对冲 raw/game 双时钟漂移与提前清场的滞留）
+	if not bool(_poison["active"]):
+		return
+	_poison["left"] = minf(float(_poison["left"]), 1.5)
+	queue_redraw()
+
+
+func _on_burn_spread_ignited(p_pos: Vector2) -> void:
+	# R199 F17：燎原传火原点橙环（此前借道 reaction_triggered(RXN_FIR_ICE) 的碎裂环——
+	# 表现保留、通道矫正：真反应图鉴/成就计数不再被传火冒名；配色单源 ELEMENT_COLORS）
+	_spawn_reaction_ring(p_pos, PopPalette.ELEMENT_COLORS[GameConst.Element.FIR], 0.3, 1.8)
+
+
+func _tick_poison(p_raw_delta: float) -> void:
+	if not bool(_poison["active"]):
+		return
+	_poison["left"] = maxf(float(_poison["left"]) - p_raw_delta, 0.0)
+	_poison["anim"] = float(_poison["anim"]) + p_raw_delta
+	if float(_poison["left"]) <= 0.0:
+		_poison["active"] = false
+	queue_redraw()
+
+
+func _draw() -> void:
+	# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+	# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+	DebugStats.bucket_begin(&"draw")
+	_draw_r271()
+	DebugStats.bucket_end(&"draw")
+
+
+func _draw_r271() -> void:
+	# 毒圈：半透绿盘 + 双层呼吸描边 + 8 颗毒泡（相位漂移）；末 1.5s 渐隐
+	if not bool(_poison["active"]):
+		return
+	var center: Vector2 = _poison["center"]
+	var radius: float = float(_poison["radius"])
+	var left: float = float(_poison["left"])
+	var dur: float = float(_poison["dur"])
+	var anim: float = float(_poison["anim"])
+	var fade := clampf(left / minf(1.5, dur), 0.0, 1.0)
+	var pulse := 1.0 + 0.03 * sin(anim * 5.2)
+	# 毒盘
+	draw_circle(center, radius * pulse, Color(0.36, 0.85, 0.35, 0.14 * fade))
+	draw_circle(center, radius * 0.82 * pulse, Color(0.30, 0.78, 0.30, 0.10 * fade))
+	# 双层呼吸描边
+	draw_arc(center, radius * pulse, 0, TAU, 64, Color(0.45, 0.95, 0.4, 0.75 * fade), 3.5)
+	draw_arc(center, radius * 0.82 * pulse, 0, TAU, 48, Color(0.55, 1.0, 0.45, 0.4 * fade), 2.0)
+	# 毒泡（8 颗，相位漂移 + 呼吸）
+	for i in range(8):
+		var ang := TAU * float(i) / 8.0 + anim * (0.35 + 0.05 * float(i % 3))
+		var rr := radius * (0.45 + 0.4 * (0.5 + 0.5 * sin(anim * 1.7 + float(i) * 1.3)))
+		var pos := center + Vector2(cos(ang), sin(ang)) * rr
+		draw_circle(pos, 7.0 + 3.0 * sin(anim * 4.0 + float(i)), Color(0.5, 1.0, 0.42, 0.5 * fade))
+
+
+# ── 死亡新星爆炸环（击杀爆炸结算瞬间——R13 用户反馈「加个特效」） ──────
+func _on_skill_cast(p_pos: Vector2, _p_character_id: String) -> void:
+	# R19 技能施放金环（金外圈+白内芯双层贴图同一槽推进，0.4s——「技能开了」一眼可读）
+	if _skill_rings.is_empty():
+		for i in range(4):
+			var sp := Sprite2D.new()
+			sp.name = "SkillRing%d" % i
+			sp.texture = TextureFactory.ring_tex(Color(1.0, 0.85, 0.3, 1.0), 48, 4.5)
+			sp.visible = false
+			add_child(sp)
+			_skill_rings.append({"sprite": sp, "left": 0.0})
+	var slot2: Dictionary = _skill_rings[_skill_ring_idx % _skill_rings.size()]
+	_skill_ring_idx += 1
+	var sp2: Sprite2D = slot2["sprite"]
+	sp2.position = p_pos
+	sp2.visible = true
+	sp2.scale = Vector2.ONE * 0.3
+	sp2.modulate.a = 1.0
+	slot2["left"] = 0.4
+
+
+func _on_missile_blast(p_pos: Vector2, p_radius: float) -> void:
+	# R83 导弹专用爆炸件：独立 MissileBlastFx（白核闪光→火球→双冲击环→碎片→烟柱，
+	# 0.72s 全程动画）——不再复用 kill_blast 六槽（Boss 战击杀爆密集时立刻冲掉，
+	# 用户实测「还是一样」的根因之一）。震屏 CRIT 级 + 低音在 GameLoop 侧接线。
+	# R188 档0：入池复用（MissileBlastFx.spawn——原每次爆 new+queue_free 自毁，
+	# 碎片/烟柱随机参数随发射重掷，读感与新建逐帧一致）
+	var fx = MissileBlastFx.spawn(self, p_pos, maxf(p_radius, 70.0) * 1.35,
+		clampi(int(Meta.settings("fx_quality")), 0, 2),
+		1.2 if p_radius >= 100.0 else 1.0)       # 大范围爆（Boss 级目标/满级 blast_r）再加码
+
+
+func _on_kill_blast(p_pos: Vector2, p_radius: float, p_life := 0.5) -> void:
+	# R35 火箭筒级四层爆（用户反馈「没有那种用火箭筒的效果」）：白核闪光 + 橙红火球
+	# + 双重冲击波环 + 烟尘余辉；复用通道（死亡新星/Blink/击杀迸裂）同享升级。
+	# R188 档2：低档（fx_quality=0）整体关（中/高档四层爆口径不变）
+	if _fx_quality() < KILLBLAST_QUALITY_MIN:
+		return
+	if _blasts.is_empty():
+		for i in range(6):
+			var flash := Sprite2D.new()
+			flash.name = "BlastFlash%d" % i
+			flash.texture = TextureFactory.soft_dot(64)
+			flash.visible = false
+			add_child(flash)
+			var fire := Sprite2D.new()
+			fire.name = "BlastFire%d" % i
+			fire.texture = TextureFactory.soft_dot(64)
+			fire.visible = false
+			add_child(fire)
+			var ring := Sprite2D.new()
+			ring.name = "BlastRing%d" % i
+			ring.texture = TextureFactory.ring_tex(Color(1.0, 0.62, 0.22, 1.0), 48, 5.0)
+			ring.visible = false
+			add_child(ring)
+			var smoke := Sprite2D.new()
+			smoke.name = "BlastSmoke%d" % i
+			smoke.texture = TextureFactory.soft_dot(64)
+			smoke.visible = false
+			add_child(smoke)
+			_blasts.append({"flash": flash, "fire": fire, "ring": ring, "smoke": smoke,
+				"left": 0.0, "r1": 70.0})
+	var slot: Dictionary = _blasts[_blast_idx % _blasts.size()]
+	_blast_idx += 1
+	var r1: float = maxf(p_radius, 40.0) * 1.25
+	slot["left"] = p_life
+	slot["r1"] = r1
+	for key: String in ["flash", "fire", "ring", "smoke"]:
+		var sp: Sprite2D = slot[key]
+		sp.position = p_pos
+		sp.visible = true
+		sp.modulate.a = 1.0
+	(slot["flash"] as Sprite2D).scale = Vector2.ONE * (r1 * 0.35 / 32.0)
+	(slot["fire"] as Sprite2D).scale = Vector2.ONE * (r1 * 0.25 / 32.0)
+	(slot["ring"] as Sprite2D).scale = Vector2.ONE * 0.3
+	(slot["smoke"] as Sprite2D).scale = Vector2.ONE * (r1 * 0.5 / 32.0)
+	(slot["fire"] as Sprite2D).modulate = PopPalette.ELEMENT_COLORS[GameConst.Element.FIR]
+	(slot["flash"] as Sprite2D).modulate = Color(1.0, 0.97, 0.88, 1.0)
+	(slot["smoke"] as Sprite2D).modulate = Color(0.45, 0.38, 0.34, 0.55)
+
+
+func _tick_skill_rings(p_raw_delta: float) -> void:
+	# 技能施放金环推进（扩散 + 淡出；槽池轮换）
+	for slot: Dictionary in _skill_rings:
+		var left := float(slot["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		slot["left"] = left
+		var sp: Sprite2D = slot["sprite"]
+		if left <= 0.0:
+			sp.visible = false
+			continue
+		var t := 1.0 - left / 0.4
+		sp.scale = Vector2.ONE * lerpf(0.3, 2.6, t)
+		sp.modulate.a = _qa(1.0 - t)
+
+
+func _tick_blasts(p_raw_delta: float) -> void:
+	# R35 四层推进：闪光 0→0.15s 白核快闪即散 / 火球 0→0.5s 主导膨胀由橙转暗 /
+	# 冲击环 0.05s 起追到 1.1×r1 / 烟尘 0.1s 起慢散上浮（半透明灰橙）
+	for slot: Dictionary in _blasts:
+		var left := float(slot["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		slot["left"] = left
+		if left <= 0.0:
+			for key: String in ["flash", "fire", "ring", "smoke"]:
+				(slot[key] as Sprite2D).visible = false
+			continue
+		var t := 1.0 - left / 0.5
+		var r1: float = float(slot["r1"])
+		var flash: Sprite2D = slot["flash"]
+		if t < 0.3:
+			flash.modulate.a = _qa(1.0 - t / 0.3)
+			flash.scale = Vector2.ONE * flash.scale.x * (1.0 + p_raw_delta * 6.0)
+		else:
+			flash.visible = false
+		var fire: Sprite2D = slot["fire"]
+		var ft := clampf(t / 0.75, 0.0, 1.0)
+		fire.scale = Vector2.ONE * lerpf(r1 * 0.25 / 32.0, r1 * 0.78 / 32.0, ft)
+		fire.modulate = Color(1.0, _qa(lerpf(0.55, 0.30, ft)), _qa(lerpf(0.18, 0.10, ft)),
+			_qa(1.0 - ft * 0.9))
+		var ring: Sprite2D = slot["ring"]
+		if t > 0.08:
+			var rt := clampf((t - 0.08) / 0.92, 0.0, 1.0)
+			ring.scale = Vector2.ONE * lerpf(0.3, r1 * 1.12 / 19.0, rt)
+			ring.modulate.a = _qa(0.95 * (1.0 - rt))
+		else:
+			ring.modulate.a = 0.0
+		var smoke: Sprite2D = slot["smoke"]
+		if t > 0.18:
+			var st := clampf((t - 0.18) / 0.82, 0.0, 1.0)
+			smoke.position.y -= p_raw_delta * 26.0
+			smoke.scale = Vector2.ONE * lerpf(r1 * 0.5 / 32.0, r1 * 0.95 / 32.0, st)
+			smoke.modulate.a = _qa(0.5 * (1.0 - st))
+		else:
+			smoke.modulate.a = 0.0
+
+
+class MissileBlastFx:
+	# R83 导弹爆炸专用件（一次性自清，Node2D 程序化绘制——零贴图零共享槽）：
+	# 五层时序——白核闪光(0~0.13s) → 橙红火球扩散(0~0.32s) → 双冲击环(全程) →
+	# 12 枚旋转碎片(重力抛物线 0.6s) → 3 团烟柱上浮(0.72s 全程)。
+	# quality 0（低特效档）= 只留双环（读感保底）；1/2 全量。
+	# R188 档0：入池复用（静态池协议同 enemy.gd DeathPop——发射期碎片/烟柱随机参数重掷，
+	# 读感与新建一致；归还时 visible=false+停处理，悬挂引用 is_instance_valid 剔除）。
+	extends Node2D
+
+	const LIFE := 0.72
+	const POOL_MAX := 8                          # 池上限（导弹爆并发峰值余量）
+
+	static var _free: Array = []                 # 空闲件栈（LIFO）
+	static var _active: int = 0                   # 在外活跃数（acquire/release 双向记账）
+	static var _pool_news: int = 0
+	static var _pool_hits: int = 0
+
+	var radius := 120.0
+	var quality := 2
+	var _t := 0.0
+	var _debris: Array = []                      # {ang, spd, spin, rot, size}
+	var _smoke: Array = []                       # {off, r}
+
+	# R188 档0 池化发射口（替代 add_child(new)；p_extra_radius_mult = 大范围爆加码系数）
+	static func spawn(p_layer: Node, p_pos: Vector2, p_radius: float,
+			p_quality: int, p_extra_radius_mult: float) -> Object:
+		if p_layer == null:
+			return null
+		var item = _acquire(p_layer)
+		item.position = p_pos
+		item.radius = p_radius * p_extra_radius_mult
+		item.quality = p_quality
+		item._t = 0.0
+		item._reroll()
+		item.visible = true
+		item.set_process(true)
+		item.queue_redraw()
+		return item
+
+	static func _acquire(p_layer: Node) -> Object:
+		while not _free.is_empty():
+			var cand = _free.pop_back()
+			if cand != null and is_instance_valid(cand):
+				_pool_hits += 1
+				if cand.get_parent() != p_layer:
+					cand.get_parent().remove_child(cand)
+					p_layer.add_child(cand)
+				return cand
+		_pool_news += 1
+		var item = MissileBlastFx.new()
+		p_layer.add_child(item)
+		_active += 1
+		return item
+
+	static func _release(p_item) -> void:
+		if p_item == null or not is_instance_valid(p_item):
+			return
+		_active -= 1
+		if _free.size() < POOL_MAX and not _free.has(p_item):
+			p_item.visible = false
+			p_item.set_process(false)
+			_free.append(p_item)
+		else:
+			p_item.queue_free()
+
+	static func fx_pool_stats() -> Dictionary:
+		# 基准池对账口径扩展（R188 档0）：{live, free, news, hits}——live 双向记账（在 ReleaseDiscard 场景下仍准确）
+		return {"live": _active, "free": _free.size(), "news": _pool_news, "hits": _pool_hits}
+
+	func _init() -> void:
+		z_index = 40
+		_reroll()
+
+	func _reroll() -> void:
+		# 碎片/烟柱随机参数（原 _init 体；复用发射期重掷保持读感）
+		_debris.clear()
+		_smoke.clear()
+		for i in range(12):
+			_debris.append({
+				"ang": TAU * float(i) / 12.0 + randf() * 0.35,
+				"spd": randf_range(240.0, 430.0),
+				"spin": randf_range(-14.0, 14.0),
+				"rot": randf() * TAU,
+				"size": randf_range(4.0, 8.0),
+			})
+		for i in range(3):
+			_smoke.append({"off": Vector2(randf_range(-0.3, 0.3), randf_range(-0.1, 0.15)) * 1.0,
+				"r": randf_range(0.18, 0.30)})
+
+	func _process(p_delta: float) -> void:
+		_t += p_delta
+		if _t >= LIFE:
+			_release(self)
+			return
+		queue_redraw()
+
+	func _draw() -> void:
+		# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+		# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+		DebugStats.bucket_begin(&"draw")
+		_draw_r271()
+		DebugStats.bucket_end(&"draw")
+
+
+	func _draw_r271() -> void:
+		var k := clampf(_t / LIFE, 0.0, 1.0)
+		var fire := PopPalette.ELEMENT_COLORS[GameConst.Element.FIR]   # 火球主色（色表单源）
+		var ember := fire.darkened(0.45)                               # 余烬深红（派生渐变）
+		# ① 白核闪光（前 18% 寿命）
+		if k < 0.18:
+			var fk := k / 0.18
+			draw_circle(Vector2.ZERO, radius * 0.55 * (1.0 - fk * 0.5),
+				Color(1.0, 0.97, 0.88, (1.0 - fk)))
+		# ② 火球（前 45% 寿命）：easeOut 扩散 + 内芯更亮
+		if k < 0.45:
+			var bk := k / 0.45
+			var br := radius * (1.0 - pow(1.0 - bk, 3.0))
+			draw_circle(Vector2.ZERO, br, Color(fire.r, fire.g, fire.b, 0.75 * (1.0 - bk)))
+			draw_circle(Vector2.ZERO, br * 0.6, Color(1.0, 0.85, 0.4, 0.55 * (1.0 - bk)))
+		# ③ 双冲击环（全程；第二环延迟 12% 起）
+		var e1 := 1.0 - pow(1.0 - k, 3.0)
+		draw_arc(Vector2.ZERO, radius * (0.3 + 1.15 * e1), 0.0, TAU, 40,
+			Color(1.0, 0.82, 0.5, pow(1.0 - k, 1.5)), lerpf(7.0, 1.5, k), true)
+		if k > 0.12:
+			var e2 := 1.0 - pow(1.0 - (k - 0.12) / 0.88, 3.0)
+			draw_arc(Vector2.ZERO, radius * (0.2 + 0.9 * e2), 0.0, TAU, 32,
+				Color(fire.r, fire.g, fire.b, 0.6 * pow(1.0 - k, 2.0)), lerpf(4.0, 1.0, k), true)
+		if quality <= 0:
+			return                              # 低特效档：双环即止（碎片/烟柱砍掉）
+		# ④ 碎片：抛物线飞散（初速沿 ang + 重力 620），旋转矩形渐隐
+		var dk := clampf(_t / 0.6, 0.0, 1.0)
+		for d in _debris:
+			var flight := _t * float(d["spd"]) - 310.0 * _t * _t
+			var pos := Vector2.from_angle(float(d["ang"])) * flight
+			pos.y += 620.0 * _t * _t * 0.5
+			var rot := float(d["rot"]) + float(d["spin"]) * _t
+			var s := float(d["size"]) * (1.0 - dk * 0.6)
+			var col := fire.lerp(ember, dk)
+			draw_set_transform(pos, rot, Vector2.ONE)
+			draw_rect(Rect2(-s * 0.5, -s * 0.22, s, s * 0.44),
+				Color(col.r, col.g, col.b, 1.0 - dk), true)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		# ⑤ 烟柱：三团灰烟上浮涨大渐隐（全程）
+		for sm in _smoke:
+			var sp := Vector2(float(sm["off"].x), float(sm["off"].y)) * radius 				+ Vector2(0.0, -46.0 * k)
+			draw_circle(sp, radius * float(sm["r"]) * (0.6 + 0.6 * k),
+				Color(0.45, 0.40, 0.38, 0.30 * (1.0 - k)))
+
+
+# ── 二cu 灵剑剑痕（W11 命中反馈——斜置剑痕小范围闪现，池化 Line2D） ──
+func _build_marks() -> void:
+	# 每槽 Node2D 容器 + 2×Line2D（主痕银蓝白 + 副痕深蓝偏移）——_ready 预建轮换，
+	# 运行期零实例化（本层纪律同 zaps/glows）；rot/pos 由 _fire_mark 落位
+	for i in range(MARK_COUNT):
+		var root := Node2D.new()
+		root.name = "SwordMark%d" % i
+		var main := Line2D.new()
+		main.points = PackedVector2Array([Vector2(-13.0, 0.0), Vector2(13.0, 0.0)])
+		main.width = 2.8
+		main.default_color = MARK_MAIN_COL
+		main.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		main.end_cap_mode = Line2D.LINE_CAP_ROUND
+		var echo := Line2D.new()
+		echo.points = PackedVector2Array([Vector2(-8.0, 4.5), Vector2(10.0, 3.0)])
+		echo.width = 1.4
+		echo.default_color = MARK_ECHO_COL
+		echo.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		echo.end_cap_mode = Line2D.LINE_CAP_ROUND
+		root.add_child(main)
+		root.add_child(echo)
+		root.visible = false
+		add_child(root)
+		_marks.append({"root": root, "main": main, "echo": echo, "left": 0.0})
+
+
+func _on_sword_mark(p_pos: Vector2, p_angle: float) -> void:
+	# 剑痕落位：目标位 + 来速角 +45° 斜置（「斜着的剑痕」——直角入射也呈斜痕）+ 槽序
+	# 微抖动防齐射同角度平行痕；质量分档（低档整体关 / 中档主痕 / 高档主+副）
+	if int(SWORD_MARK_BUDGET[_fx_quality()]) <= 0:
+		return
+	var mark: Dictionary = _marks[_mark_idx % MARK_COUNT]
+	_mark_idx += 1
+	var root: Node2D = mark["root"]
+	root.position = p_pos
+	root.rotation = p_angle + PI * 0.25 + float(_mark_idx % 3 - 1) * 0.10
+	root.visible = true
+	(mark["echo"] as Line2D).visible = int(SWORD_MARK_BUDGET[_fx_quality()]) >= 2
+	mark["left"] = MARK_LIFE
+
+
+func _tick_marks(p_raw_delta: float) -> void:
+	for mark: Dictionary in _marks:
+		var left := float(mark["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		mark["left"] = left
+		var root: Node2D = mark["root"]
+		if left <= 0.0:
+			root.visible = false
+			continue
+		var t := 1.0 - left / MARK_LIFE
+		# 前段快速张开（0.55→1.12）后整体渐隐 + 痕宽收细（划开读感，R229 _qa 量化渐隐）
+		root.scale = Vector2.ONE * lerpf(0.55, 1.12, minf(t * 2.6, 1.0))
+		var main: Line2D = mark["main"]
+		var echo: Line2D = mark["echo"]
+		main.modulate.a = _qa(1.0 - t)
+		echo.modulate.a = _qa((1.0 - t) * 0.7)
+		main.width = lerpf(2.8, 1.2, t)
+		echo.width = lerpf(1.4, 0.6, t)

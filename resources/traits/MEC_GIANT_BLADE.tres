@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"MEC_GIANT_BLADE"
+display_name = "巨刃"
+description = "刀体 +25% 且攻击范围 +20%（近战/法器），可叠 2 层"
+pool = 3
+pool_id = &""
+effect_id = &"EF_STAT"
+value = 0.25
+value2 = 0.0
+params = {"knife_scale": true, "required_weapon": [&"W8_orbit_field", &"W9_arc_slash", &"W11_spirit_sword", &"W12_ground_axe", &"W13_great_sword"]}
+event_hooks = []
+stack_max = 2
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 2
+tags = 0
+condition = {}

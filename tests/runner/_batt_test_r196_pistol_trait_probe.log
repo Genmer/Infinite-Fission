@@ -1,0 +1,68 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R196 手枪词条家族探针 ══════════
+── A1 基线：W1 L1 裸装 ──
+PASS | A1 前置：装配
+PASS | A1：_pellet_count==1 / _pierce_count==1
+PASS | A1：实发 1 弹
+  [A1] uid=34 pos=360.0,900.0 vel=-16.5,-619.8 偏角=1.5° pierce_left=1
+── A2 ★反馈#2 复现：L1 + 白板 AFF_MULTI（+1 丸） ──
+PASS | A2：_pellet_count==2（词条聚合链工作）
+  [A2] uid=35 pos=360.0,900.0 vel=-21.6,-619.6 偏角=2.0° pierce_left=1
+  [A2] uid=36 pos=360.0,900.0 vel=21.6,-619.6 偏角=2.0° pierce_left=1
+PASS | A2：实发 2 弹（数值上多重已生效）
+PASS | A2：两弹可辨（散角>0.1°，不再同点同速像素重合——R196 FIX-1）
+── A3 L1 + AFF_MULTI×2 层（+3 丸） ──
+PASS | A3：_pellet_count==4（1+round(2.9)=4）
+  [A3] uid=37 pos=360.0,900.0 vel=-21.6,-619.6 偏角=2.0° pierce_left=1
+  [A3] uid=38 pos=360.0,900.0 vel=-7.2,-620.0 偏角=0.7° pierce_left=1
+  [A3] uid=39 pos=360.0,900.0 vel=7.2,-620.0 偏角=0.7° pierce_left=1
+  [A3] uid=40 pos=360.0,900.0 vel=21.6,-619.6 偏角=2.0° pierce_left=1
+PASS | A3：实发 4 弹
+PASS | A3：四弹可辨（散角>0.1°——R196 FIX-1）
+── B1 ★L5 无词条基线：三线收束=3 个散发子弹 ──
+PASS | B1：零词条 _pellet_count==3（L5 表值）
+  [B1] uid=41 pos=372.0,899.7 vel=-36.4,-618.9 偏角=3.4° pierce_left=2
+  [B1] uid=42 pos=360.0,900.0 vel=-16.5,-619.8 偏角=1.5° pierce_left=2
+  [B1] uid=43 pos=348.0,900.3 vel=3.4,-620.0 偏角=0.3° pierce_left=2
+PASS | B1：实发 3 弹（与「选了穿透弹头后射 3 个散发子弹」同画面）
+PASS | B1：三弹呈散布（弹间散角>0.5°——L5 编队收束几何出 fan）
+PASS | B1：无背向弹（全弹偏角<90°）
+── B2 ★L5 + AFF_PIERCE：弹数不变（归因排除） ──
+PASS | B2：_pierce_count==3（L5 表值 2+白板 1）
+  [B2] uid=44 pos=372.0,899.7 vel=-36.4,-618.9 偏角=3.4° pierce_left=3
+  [B2] uid=45 pos=360.0,900.0 vel=-16.5,-619.8 偏角=1.5° pierce_left=3
+  [B2] uid=46 pos=348.0,900.3 vel=3.4,-620.0 偏角=0.3° pierce_left=3
+PASS | B2：实发仍 3 弹（穿透弹头不产生多发——#3 的「多发」另有真源）
+── C1 L1 + 白板 AFF_PIERCE：预算/贯穿/金丝雀 ──
+PASS | C1：_pierce_count==2（1+1）
+PASS | C1：实发 1 弹
+  [C1] uid=50 pos=360.0,900.0 vel=-16.5,-619.8 偏角=1.5° pierce_left=2
+PASS | C1：pierce_left==2（预算随词条）
+PASS | C1：方向朝前（偏角<30°）
+  [C1 dbg] frame 0：弹 pos=359.9,894.8 pierce_left=2 | e1.hp=1000000 e2.hp=1000000 e3.hp=1000000
+  [C1 dbg] frame 10：弹 pos=358.5,843.2 pierce_left=2 | e1.hp=1000000 e2.hp=1000000 e3.hp=1000000
+  [C1 dbg] frame 20：弹 pos=357.1,791.5 pierce_left=2 | e1.hp=1000000 e2.hp=1000000 e3.hp=1000000
+  [C1 dbg] frame 30：弹 pos=355.7,739.9 pierce_left=1 | e1.hp=999986 e2.hp=1000000 e3.hp=1000000
+  [C1 dbg] frame 40：弹 pos=354.4,688.2 pierce_left=1 | e1.hp=999986 e2.hp=1000000 e3.hp=1000000
+  [C1 dbg] frame 50：弹 pos=353.0,636.6 pierce_left=1 | e1.hp=999986 e2.hp=1000000 e3.hp=1000000
+  [C1 dbg] frame 60：弹 pos=351.6,584.9 pierce_left=1 | e1.hp=999986 e2.hp=1000000 e3.hp=1000000
+PASS | C1：首敌命中
+  [C1] e1 实伤=14.0（单发 14；R196 FIX-2 同敌不重击——无 ≈28 双跳）
+PASS | C1：贯穿第 2 敌成立（预算花在换目标——R196 FIX-2）
+PASS | C1：首敌恰 1 击（同敌生命周期不重击——R196 FIX-2）
+PASS | C1：金丝雀满血（预算耗尽即停——无超发）
+── C2 白板 AFF_PIERCE + 首敌可杀（hp=10）：贯穿成立对照 ──
+PASS | C2：首敌被杀
+PASS | C2：★命中即杀时贯穿第 2 敌成立（穿透可见性=击杀门控）
+── D1 L3 无词条：并排双管（gap=12，无收束） ──
+  [D1] uid=54 pos=366.0,899.8 vel=-16.5,-619.8 偏角=1.5° pierce_left=2
+  [D1] uid=55 pos=354.0,900.2 vel=-16.5,-619.8 偏角=1.5° pierce_left=2
+PASS | D1：实发 2 弹（L3 表值）
+PASS | D1：双弹横向错开（±6px——L3 起编队可见，fan 感起点）
+────────────────────────────────────────
+汇总：PASS 27 / FAIL 0（共 27 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

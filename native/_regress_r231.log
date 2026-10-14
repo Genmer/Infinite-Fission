@@ -1,0 +1,69 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R231 刀A SpaceGrid 读路径快照化自测 ══════════
+── T1 三查询 + snap vs 暴力参考 ──
+  PASS | T1 随机布局 40 查询点×4 方法 vs 暴力参考全等
+  PASS | T1 边界恰等（d²==reach²）：snap 含入
+  PASS | T1 边界恰等：live 同判含入
+  PASS | T1 远出网格钳制：右外远点可查（snap）
+  PASS | T1 远出网格钳制：live 同判
+  PASS | T1 远出网格钳制：查询点更远处空结果（无越界串桶）
+── T2 _radii 删除等价 ──
+  PASS | T2 insert 小半径不缩口径：d=30 命中（旧 r=5 语义必 miss）
+  PASS | T2 同上：live 查询同口径
+  PASS | T2 insert 大半径不扩口径：d=100 不命中（旧 r=500 语义必 hit）
+  PASS | T2 max_entity_radius 只读口 = configure 值
+  PASS | T2 重复 insert：snap 双候选契约
+  PASS | T2 重复 insert：live 双候选契约同保留
+  PASS | T2 边界余量锁定：查询点自身命中
+  PASS | T2 边界余量锁定：d=1000 邻点不被 84 口径误收（超集不增员）
+  PASS | T2 边界余量锁定：snap 同判
+  PASS | T2 自定义保守半径 90：只读口生效
+  PASS | T2 自定义保守半径：d=70 命中（64 口径必 miss）
+── T3 快照语义双口径 ──
+  PASS | T3 snap 用旧位：A 点命中
+  PASS | T3 snap 用旧位：B 点不命中（快照仍在 A，d=140>64）
+  PASS | T3 live 用新位：A 点不命中
+  PASS | T3 live 用新位：B 点命中（r=70 覆盖旧桶格）
+  PASS | T3 同覆盖对照：snap 同参不命中（d=140>134）
+  PASS | T3 query_nearest live 新位：A 点 null
+  PASS | T3 query_nearest live 新位：B 点 = n（r=70 覆盖旧桶格）
+  PASS | T3 query_arc live 新位：B 点半圆含入（r=70 覆盖旧桶格）
+  PASS | T3 query_arc live 新位：A 点不含（若误快照化则 140px d 判旧位 A 命中）
+── T4 _check_collision 命中集 vs 暴力参考 ──
+  PASS | T4 粗判超集含窄相带内三敌
+  PASS | T4 粗判排除粗判外敌
+  PASS | T4 命中集与暴力窄相参考一致（{E1,E4}，边界恰等含入）
+  PASS | T4 窄相外敌零伤：r231_b
+  PASS | T4 窄相外敌零伤：r231_c
+  PASS | T4 窄相外敌零伤：r231_e
+  PASS | T4 窄相外敌零伤：r231_f
+── T5 ④ 内死亡-回池语义 ──
+  PASS | T5 死亡敌已出 active
+  PASS | T5 死亡敌 dead 置位
+  PASS | T5 回池不改位（AC-2：reparent keep_global+原点桶）
+  PASS | T5 回池敌仍在网格快照（下帧 rebuild 前口径）
+  PASS | T5 死亡敌恰一次结算（P1；P2 dead 短路）
+  PASS | T5 活敌两弹各结算一次（后续弹最终命中与旧语义一致）
+── T6 消弹 query_arc live 口径 ──
+  PASS | T6 live 口径：移动出扇（63°>45°）后不消弹
+  PASS | T6 扇内两弹命中（18.4°/40°）
+  PASS | T6 扇外弹排除（50°）
+  PASS | T6 距离恰等 d²==reach² 含入（450+64=514）
+  PASS | T6 距离超界排除（515）
+── T7 纪戳/清桶/跨帧复用 ──
+  PASS | T7 rebuild 全量可见
+  PASS | T7 清桶：旧条目随 rebuild 消失（A 位空）
+  PASS | T7 清桶：新条目可见
+  PASS | T7 波内补插当帧可见
+  PASS | T7 跨帧补插清干净
+  PASS | T7 连续 rebuild 后补插恰一候选
+  PASS | T7 缓冲不串查：已复制的前查不被后续 snap 查询覆写
+  PASS | T7 缓冲不串查：snap 后 live 查询独立
+  PASS | T7 双实例隔离：临时网格查自身
+  PASS | T7 双实例隔离：enemy_grid 查同位仍只 own 成员
+  PASS | T7 virgin-insert 回归：空 rebuild 后查询空（无悬挂索引/幽灵候选）
+  PASS | T7 virgin-insert 回归：收缩 rebuild 后仅新员可见（快照索引不越界）
+────────────────────────────────────────
+汇总：PASS 56 / FAIL 0（共 56 项）
+验收汇总：56/56 通过

@@ -1,0 +1,112 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4070 Laptop GPU
+
+══ R255 play: 大厅全漫游（真实 UI 链路）══
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+START btn=true text=出发！
+CONTINUE visible=true text=继续上次进度：晴空草原 · 第1波 · Lv1
+LOBBY[codex] text=图鉴 77/155 disabled=false
+LOBBY[ach] text=成就 49/160 disabled=false
+LOBBY[records] text=记录 disabled=false
+LOBBY[char] text=角色 disabled=false
+LOBBY[upgrade] text=养成 376 disabled=false
+LOBBY[daily] text=每日挑战 disabled=false
+LOBBY[settings] text=设置 disabled=false
+SHOT menu-01   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-01.png (720x1280 err=0)
+CLICK 出发！(StartButton) →  21.4 ms（含 2 帧重建）
+[DIFF:普通档] 普通(dis=false,亮=白) 困难(dis=false,亮=灰) 地狱(dis=false,亮=灰) | 现行口径 · 无附赠复活 · 近战/法器类不开放
+[MAP:普通] 出发钮总数=5
+        晴空草原（10 波 · 已通关 ★）[出发]
+        寒霜冰原（15 波 · 已通关 ★）[出发]
+        紫晶魔域（20 波 · 已通关 ★）[出发]
+        翡翠树海（25 波 · 已通关 ★）[出发]
+        翠毒沼泽（30 波 · 已通关 ★）[出发]
+SHOT menu-02   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-02.png (720x1280 err=0)
+CLICK 难度·困难          →  13.1 ms（含 2 帧重建）
+[DIFF:困难档] 普通(dis=false,亮=灰) 困难(dis=false,亮=白) 地狱(dis=false,亮=灰) | 敌 HP/攻击 ×3 · 复活 +1 · 升级 5% 概率成对抉择 · 解锁近战/法器首批（第 4 关起）
+[MAP:困难] 出发钮总数=1
+        晴空草原（10 波 · 可挑战）[出发]
+        寒霜冰原（15 波 · 通关上一关解锁）[锁]
+        紫晶魔域（20 波 · 通关上一关解锁）[锁]
+        翡翠树海（25 波 · 通关上一关解锁）[锁]
+        翠毒沼泽（30 波 · 通关上一关解锁）[锁]
+SHOT menu-03   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-03.png (720x1280 err=0)
+CLICK 难度·地狱          →  12.2 ms（含 2 帧重建）
+[DIFF:地狱档] 普通(dis=false,亮=灰) 困难(dis=false,亮=灰) 地狱(dis=false,亮=白) | 敌 HP/攻击 ×9 · 复活 +3 · 每次升级成对抉择 · 近战/法器全开（按大关推进）
+[MAP:地狱] 出发钮总数=1
+        晴空草原（10 波 · 可挑战）[出发]
+        寒霜冰原（15 波 · 通关上一关解锁）[锁]
+        紫晶魔域（20 波 · 通关上一关解锁）[锁]
+        翡翠树海（25 波 · 通关上一关解锁）[锁]
+        翠毒沼泽（30 波 · 通关上一关解锁）[锁]
+SHOT menu-04   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-04.png (720x1280 err=0)
+CLICK 难度·普通(复位)      →  12.8 ms（含 2 帧重建）
+CLICK 返回大厅           →  64.4 ms（含 2 帧重建）
+CLICK 图鉴             →  71.8 ms（含 2 帧重建）
+[CODEX 怪物] 行数=29
+SHOT menu-05   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-05.png (720x1280 err=0)
+CLICK 图鉴页签·武器        →   5.5 ms（含 2 帧重建）
+[CODEX 武器] 行数=13
+SHOT menu-06   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-06.png (720x1280 err=0)
+CLICK 图鉴页签·祝福        →  32.7 ms（含 2 帧重建）
+[CODEX 祝福] 行数=73
+SHOT menu-07   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-07.png (720x1280 err=0)
+CLICK 图鉴页签·反应        →  25.1 ms（含 2 帧重建）
+[CODEX 反应] 行数=21
+SHOT menu-08   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-08.png (720x1280 err=0)
+CLICK 图鉴页签·遗物        →   9.0 ms（含 2 帧重建）
+[CODEX 遗物] 行数=40
+SHOT menu-09   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-09.png (720x1280 err=0)
+CLICK 返回大厅           →   1.7 ms（含 2 帧重建）
+CLICK 成就             →  63.0 ms（含 2 帧重建）
+[ACH 全部] 1/7
+SHOT menu-10   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-10.png (720x1280 err=0)
+CLICK 成就页签·猎杀        →  17.9 ms（含 2 帧重建）
+[ACH 猎杀] 1/5
+SHOT menu-11   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-11.png (720x1280 err=0)
+CLICK 成就·下一页         →  16.6 ms（含 2 帧重建）
+[ACH 翻页] 2/5
+CLICK 返回大厅           →  60.2 ms（含 2 帧重建）
+CLICK 记录             →  65.8 ms（含 2 帧重建）
+[RECORDS] 行数=12
+SHOT menu-12   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-12.png (720x1280 err=0)
+CLICK 返回大厅           →   2.0 ms（含 2 帧重建）
+CLICK 角色             → 271.1 ms（含 2 帧重建）
+        CHAR1 哨兵-9
+        CHAR2 裂变者·薇拉
+        CHAR3 堡垒·磐
+        CHAR4 游侠·岚　结晶解锁 80（当前 391）
+        CHAR5 演算者·零　结晶解锁 160（当前 391）
+        CHAR9 改造者·枢　✓ 当前
+        CHAR12 坍缩者·汐　任意无尽模式深入 50 层解锁（当前 26）
+        CHAR13 处刑者·刈　结晶解锁 240（当前 391）
+[CHAR] 行数=13 当前=处刑者·刈　结晶解锁 240（当前 391）
+SHOT menu-13   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-13.png (720x1280 err=0)
+CLICK 返回大厅           →   1.9 ms（含 2 帧重建）
+CLICK 养成             →  66.0 ms（含 2 帧重建）
+[UPGRADE] 行数=10
+SHOT menu-14   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-14.png (720x1280 err=0)
+CLICK 返回大厅           →   2.0 ms（含 2 帧重建）
+CLICK 每日挑战           →  63.9 ms（含 2 帧重建）
+[DAILY] 行数=6
+SHOT menu-15   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-15.png (720x1280 err=0)
+CLICK 返回大厅           →   2.1 ms（含 2 帧重建）
+CLICK 设置             →  68.9 ms（含 2 帧重建）
+[SETTINGS] is_open=true
+SHOT menu-16   → E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/menu-16.png (720x1280 err=0)
+CLICK 设置·返回          →   1.7 ms（含 2 帧重建）
+[SETTINGS] 关闭后 is_open=false 菜单可见=true
+══ TOUR DONE shots=16 ══
+WARNING: 842 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 102 RID allocations of type 'N10RendererRD14TextureStorage7TextureE' were leaked at exit.
+WARNING: 156 RIDs of type "Texture" were leaked.
+     at: finalize (servers/rendering/rendering_device.cpp:5758)
+ERROR: 1034 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 5 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

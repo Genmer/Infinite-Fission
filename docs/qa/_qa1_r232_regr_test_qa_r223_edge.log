@@ -1,0 +1,32 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R223 修轮 QA 复测边角（回填链/FIFO 中段复用/暂停泄漏/遥测差分） ══════════
+── E1 Homing kill_backlink：builder 挂链 + 顺延冲刷击杀回填功能链 ──
+  PASS | E1a Homing 直击 ctx 挂 kill_backlink（weakref 指回本弹——builder 单口三位共用）
+  PASS | E1b Homing 顺延冲刷击杀回填 killed_target（_live 守卫内 · 死亡新星消费面）
+── E2a 冲刷队头 uid 复用连续丢弃不耗预算 ──
+  PASS | E2a 前置：双顺延在队
+  PASS | E2a 队头双复用丢弃不耗预算（reuse+2 · flush+0 · FIFO 清空——drop 让预算留给后续项）
+  PASS | E2a 零幻影落账（复活节点 Δhp=0 · 帽内敌 Δ=-10）+ 恒等式 deferred2=复用2
+── E2b FIFO 中段 uid 复用：头项丢弃 + 后项照常真结算 ──
+  PASS | E2b 中段复用丢弃后预算照常冲尾项（reuse+1 · flush+1 · FIFO 清空）
+  PASS | E2b 账目逐位（复活节点 Δ0 · ed Δ-20 真结算+冲刷 · 恒等式 deferred2=flush1+reuse1）
+── E2c 过期强冲窗：真结算×2 + 中段复用丢弃混合账目 ──
+  PASS | E2c 前置：16 对顺延在队
+  PASS | E2c 混合强冲账目（stale+2 真结算 · reuse+1 · flush+15 · FIFO 清空）
+  PASS | E2c 伤害守恒（enE Δ-15=13 预算+2 强冲 · enF 帽内真结算落账 hp_f_mid=hp_f-10）
+  PASS | E2c F1 复用零幻影 + 恒等式 deferred16=13+2+1（复活节点满血 · def 计 16）
+── E3 暂停窗泄漏 resolve：顺延占位 + 同键折返 + 窗内不强冲 + 恢复冲刷 ──
+  PASS | E3 泄漏命中走顺延占位（预算未武装）+ 同键 dupe 折返同一占位（幂等跨战斗门成立）
+  PASS | E3 暂停窗零冲刷零强冲（窗龄 15 超过期窗仍挂起——AC-16.2 冻结契约）
+  PASS | E3 恢复战斗冲刷落账（Δ-10 · FIFO 清空）
+── E4 顺/冲/弃 diag 差分：立基线 / 变更差分 / 重复拉取归零 ──
+  PASS | E4 变更期差分逐轴对账（顺+2 冲+1 弃+1[亡] 结+2——pull0→pull1 间仅本用例变更）
+  PASS | E4 重复拉取增量归零（1Hz 语义——无重复计数）
+────────────────────────────────────────
+汇总：PASS 16 / FAIL 0（共 16 项）
+验收汇总：16/16 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

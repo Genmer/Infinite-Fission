@@ -1,0 +1,71 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_level_stats.gd" id="2_wls"]
+
+[sub_resource type="Resource" id="WeaponLevelStats_l1"]
+script = ExtResource("2_wls")
+base_atk = 64.0
+rof = 0.3448
+cd = 2.9
+pierce = 1
+pellets = 1
+note = "每 2.9s 原地朝最近敌人抡出 130px/140° 大弧（至多 10 目标、击退 100），单挥 DPS 22.1"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l2"]
+script = ExtResource("2_wls")
+base_atk = 76.0
+rof = 0.3448
+cd = 2.9
+pierce = 1
+pellets = 1
+note = "巨斩伤害 64→76，单挥 DPS 26.2"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l3"]
+script = ExtResource("2_wls")
+base_atk = 76.0
+rof = 0.3704
+cd = 2.7
+pierce = 1
+pellets = 1
+note = "巨斩间隔 2.9s→2.7s，斩击半径 140→155，单挥 DPS 28.1"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l4"]
+script = ExtResource("2_wls")
+base_atk = 92.0
+rof = 0.3704
+cd = 2.7
+pierce = 1
+pellets = 1
+note = "巨斩伤害 76→92，弧度 140°→160°，单挥 DPS 34.1"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l5"]
+script = ExtResource("2_wls")
+base_atk = 105.0
+rof = 0.4167
+cd = 2.4
+pierce = 1
+pellets = 1
+note = "巨斩伤害 92→105、间隔 2.4s，斩击半径 170→190、弧度 180°，单挥 DPS 43.8"
+
+[resource]
+script = ExtResource("1_wd")
+id = &"W13_great_sword"
+display_name = "近战·阔剑"
+form = 3
+crit_rate = 0.05
+crit_dmg = 2.0
+hitbox_r = 6.0
+unlock_rarity = 1
+threshold_traits = []
+melee = {
+"weapon_class": "melee", "mode": "cleave", "nullify": false,
+"orbs": 1,
+"block_chance": 0.30, "knockback": 100.0, "max_targets": 10,
+"slash_radius": 130.0, "arc_deg": 140.0,
+"slash_radius_levels": [130.0, 140.0, 155.0, 170.0, 190.0],
+"arc_deg_levels": [140.0, 140.0, 140.0, 160.0, 180.0],
+"transcend": {"name": "裂地斩", "atk_mult": 1.2, "arc_bonus_deg": 90.0,
+"knockback_add": 80.0}
+}
+upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

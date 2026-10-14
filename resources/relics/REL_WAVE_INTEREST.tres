@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_WAVE_INTEREST"
+display_name = "低息存款"
+description = "波结束时每持有 100 金币 +5 金币利息（每波至多 +30）"
+rarity = 3
+listen_events = [&"wave_cleared"]
+effect_id = &"REL_EF_WAVE_INTEREST"
+params = {"per": 100, "gain": 5, "cap": 30}
+unique = true

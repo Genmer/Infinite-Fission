@@ -6,7 +6,7 @@
 script = ExtResource("1_rd")
 id = &"REL_BOSS_TROPHY"
 display_name = "猎首者"
-description = "对精英/Boss 伤害 ×1.25（独立乘区 elite_dmg，目标 tag 判定）（A3 §5）"
+description = "对精英/Boss 伤害 ×1.25（独立乘区 elite_dmg，目标 tag 判定）"
 rarity = 3
 listen_events = [&"damage_resolved"]
 effect_id = &"REL_EF_ELITE_DMG"

@@ -1,0 +1,661 @@
+# scripts/ui/pause_overlay.gd
+# 方向 C 暂停遮罩面板（用户反馈 2026-08-29「没有暂停的地方」）：全屏压暗 + 「暂停中」
+# 大标题白卡 + 四按钮（继续 / 重新开始 / 回主菜单 / 设置——P3 设置页入口，纯 UI 不改
+# 暂停态）。仅 PAUSED 态显示（state_changed 绑定）。
+# process_mode = ALWAYS（tree.paused 期间 UI 照常，Q-14 口径）；申请经信号 → GameLoop
+# 仲裁（迁移矩阵唯一裁决位，E-16 同源）：resume→PLAYING / restart→restart_run /
+# menu→quit_to_menu（PAUSED→MENU 合法迁移，pkg4 非法迁移枚举不含此对，证据见交付报告）。
+class_name PauseOverlay
+extends CanvasLayer
+
+signal resume_requested()                     # → GameLoop.request_resume()（PAUSED → PLAYING）
+signal restart_requested()                    # → GameLoop.restart_run()（PAUSED → PLAYING 重开）
+signal menu_requested()                       # → GameLoop.quit_to_menu()（PAUSED → MENU）
+signal settings_requested()                   # → GameLoop 接线 SettingsPanel.open（P3，纯 UI 不改状态）
+
+var _root: Control = null
+var _card: Panel = null
+# 构筑详情模式（用户反馈 2026-08-29「点击左下角，可以看 buff 详情」）：左下角构筑面板
+# 点击 → GameLoop 申请暂停 + 进入详情卡；详情/暂停两卡互斥显示，PAUSED 态内可切换。
+var _details_mode: bool = false
+var _details_card: Panel = null
+var _details_list: Control = null
+var _player_ref: Node = null
+var _relics_ref: Array = []                    # 已获遗物 [{name, desc}]（R13 遗物区块）
+
+
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	_build_ui()
+	_build_details_ui()
+	_root.visible = false
+	# R195 适配：安全区接入（底座组 SafeAreaHelper 单点引用，不复写）。守卫外
+	# （桌面窗口化/headless）insets 恒零 → offset 写 0 = 默认窗逐位恒等；真机延迟
+	# ≥1 帧重读兜首帧 transform 未定型，size_changed/重获焦点由 helper 重放回调。
+	_apply_safe_area()
+	if SafeAreaHelper.enabled(get_window()):          # 守卫外恒零→零协程悬挂（headless 全绿面）
+		_apply_safe_area_deferred()                # 真值环境延迟重读（SafeAreaHelper 契约）
+	SafeAreaHelper.bind_reread(get_window(), _apply_safe_area)
+	EventBus.state_changed.connect(_on_state_changed)
+
+
+func _apply_safe_area() -> void:
+	# R195 安全区应用（消费式契约=SafeAreaHelper.insets 注释）：根 FULL_RECT
+	# offset 左/上取正、右/下取负；dim FULL_RECT 子件随根。居中锚卡组随根域居中。
+	# 仅 realize/size_changed/焦点事件驱动，非每帧路径（R188 纪律）。
+	var ins := SafeAreaHelper.insets(get_window())
+	_root.offset_left = ins.position.x
+	_root.offset_top = ins.position.y
+	_root.offset_right = -ins.size.x
+	_root.offset_bottom = -ins.size.y
+
+
+func _apply_safe_area_deferred() -> void:
+	# realize 后延迟 ≥1 帧重读（首帧查询为未 realize 真值——SafeAreaHelper 契约）；
+	# 协程即发即续，不阻塞 _ready（调用方已守卫 enabled 才进来；二次应用幂等）
+	await SafeAreaHelper.read_deferred(get_window())
+	_apply_safe_area()
+
+
+func is_pause_visible() -> bool:
+	# 测试观测口
+	return _root != null and _root.visible
+
+
+func is_details_visible() -> bool:
+	# 测试观测口（构筑详情卡可见性）
+	return _details_card != null and _details_card.visible
+
+
+func open_details(p_player: Node, p_relics: Array = []) -> void:
+	# 构筑详情模式开启（GameLoop 暂停仲裁通过后调用；注入 player + 遗物清单供内容刷新）
+	_player_ref = p_player
+	_relics_ref = p_relics
+	_details_mode = true
+	_refresh_cards()
+
+
+func toggle_details() -> void:
+	# PAUSED 态内：暂停卡 ↔ 详情卡切换（再次点击左下角同效）
+	_details_mode = not _details_mode
+	_refresh_cards()
+
+
+func _on_state_changed(p_state: int) -> void:
+	var show := p_state == GameConst.GameStatus.PAUSED
+	_root.visible = show
+	if show:
+		_refresh_cards()
+	else:
+		_details_mode = false
+
+
+func _refresh_cards() -> void:
+	# 双卡互斥：PAUSED 且详情模式 → 详情卡；否则暂停卡
+	var paused := _root != null and _root.visible
+	_card.visible = paused and not _details_mode
+	_details_card.visible = paused and _details_mode
+	if _card.visible:
+		StickerTheme.squash_pop(_card)
+	if _details_card.visible:
+		_rebuild_details()
+		StickerTheme.squash_pop(_details_card)
+
+
+func _build_ui() -> void:
+	_root = Control.new()
+	_root.name = "PauseRoot"
+	_root.theme = StickerTheme.theme()
+	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_root)
+
+	# 全屏压暗（藏青半透——战斗画面隐约可见，暂停观感）
+	var dim := ColorRect.new()
+	dim.name = "PauseDim"
+	dim.color = PopPalette.DIM
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(dim)
+
+	# 暂停白卡（贴纸面板：圆角 24 + 藏青描边 + 底部厚投影；P3 加高容纳第四钮「设置」）
+	# R195 适配分区：整体居中锚（PRESET_CENTER，offset=卡位−设计中心(360,640)：
+	# (120,378)480×524 → ±240/±262；720×1280 恒等，任意视口下居中，卡内父相对零改动）
+	_card = Panel.new()
+	_card.name = "PauseCard"
+	_card.add_theme_stylebox_override("panel", StickerTheme.panel_style(24.0, 4, true))
+	_card.anchor_left = 0.5
+	_card.anchor_right = 0.5
+	_card.anchor_top = 0.5
+	_card.anchor_bottom = 0.5
+	_card.offset_left = -240.0
+	_card.offset_right = 240.0
+	_card.offset_top = -262.0
+	_card.offset_bottom = 262.0
+	_card.pivot_offset = _card.size * 0.5
+	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_card)
+
+	# 卡顶 ▶ 小徽标（压在卡沿上——贴纸叠贴感，与暂停按钮同源图形）
+	var glyph := TextureRect.new()
+	glyph.name = "PauseGlyph"
+	glyph.texture = TextureFactory.ui_glyph(1)
+	glyph.position = Vector2(208.0, -46.0)
+	glyph.custom_minimum_size = Vector2(84.0, 84.0)
+	glyph.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	glyph.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_card.add_child(glyph)
+
+	var title := Label.new()
+	StickerTheme.label_sticker(title, 40, PopPalette.INK, 0, Color.WHITE, true)
+	title.text = "暂停中"
+	title.position = Vector2(0.0, 56.0)
+	title.size = Vector2(480.0, 48.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_card.add_child(title)
+
+	var hint := Label.new()
+	StickerTheme.label_sticker(hint, 15, PopPalette.INK_SOFT)
+	hint.text = "Esc / P 也可继续战斗"
+	hint.position = Vector2(0.0, 116.0)
+	hint.size = Vector2(480.0, 20.0)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_card.add_child(hint)
+
+	_add_card_button("ResumeButton", "继续", Vector2(140.0, 156.0), _on_resume_pressed)
+	_add_card_button("RestartButton", "重新开始", Vector2(140.0, 246.0), _on_restart_pressed)
+	_add_card_button("MenuButton", "回主菜单", Vector2(140.0, 336.0), _on_menu_pressed)
+	_add_card_button("SettingsButton", "设置", Vector2(140.0, 426.0), _on_settings_pressed)
+
+
+func _add_card_button(p_name: String, p_text: String, p_pos: Vector2, p_handler: Callable) -> void:
+	# 卡内贴纸按钮（四态由 Theme 承担 + 按下 punch）
+	var btn := Button.new()
+	btn.name = p_name
+	btn.text = p_text
+	btn.add_theme_font_size_override("font_size", 22)
+	btn.add_theme_font_override("font", StickerTheme.font_bold())
+	btn.position = p_pos
+	btn.size = Vector2(200.0, 72.0)
+	btn.pivot_offset = btn.size * 0.5
+	btn.pressed.connect(p_handler)
+	btn.button_down.connect(func() -> void: StickerTheme.press_punch(btn))
+	_card.add_child(btn)
+
+
+func _on_resume_pressed() -> void:
+	_details_mode = false
+	resume_requested.emit()
+
+
+# ── 构筑详情卡（buff 详情：武器 × 词条全量列表） ─────────────────────
+func _build_details_ui() -> void:
+	# R195 适配分区：整体居中锚（offset=卡位−设计中心(360,640)：(44,120)632×1000 →
+	# ±316/−520+480——卡心 y=620 恒等保持现位上偏；任意视口下居中随动）
+	_details_card = Panel.new()
+	_details_card.name = "DetailsCard"
+	_details_card.add_theme_stylebox_override("panel", StickerTheme.panel_style(24.0, 4, true))
+	_details_card.anchor_left = 0.5
+	_details_card.anchor_right = 0.5
+	_details_card.anchor_top = 0.5
+	_details_card.anchor_bottom = 0.5
+	_details_card.offset_left = -316.0
+	_details_card.offset_right = 316.0
+	_details_card.offset_top = -520.0
+	_details_card.offset_bottom = 480.0
+	_details_card.pivot_offset = _details_card.size * 0.5
+	_details_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_details_card.visible = false
+	_root.add_child(_details_card)
+
+	var glyph := TextureRect.new()
+	glyph.name = "DetailsGlyph"
+	glyph.texture = TextureFactory.type_icon(1, 3)
+	glyph.position = Vector2(274.0, -40.0)
+	glyph.custom_minimum_size = Vector2(84.0, 84.0)
+	glyph.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	glyph.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_details_card.add_child(glyph)
+
+	var title := Label.new()
+	StickerTheme.label_sticker(title, 34, PopPalette.INK, 0, Color.WHITE, true)
+	title.text = "构筑详情"
+	title.position = Vector2(0.0, 40.0)
+	title.size = Vector2(632.0, 44.0)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_details_card.add_child(title)
+
+	var hint := Label.new()
+	StickerTheme.label_sticker(hint, 15, PopPalette.INK_SOFT)
+	hint.text = "当前持有武器与词条（内容为实际生效值）"
+	hint.position = Vector2(0.0, 88.0)
+	hint.size = Vector2(632.0, 20.0)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_details_card.add_child(hint)
+
+	# 滚动列表（5 武器 × 12 词条上限口径——超出可视高度可滚）
+	var scroll := ScrollContainer.new()
+	scroll.name = "DetailsScroll"
+	scroll.position = Vector2(28.0, 122.0)
+	scroll.size = Vector2(576.0, 712.0)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_details_card.add_child(scroll)
+	_details_list = VBoxContainer.new()
+	_details_list.name = "DetailsList"
+	_details_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_details_list.add_theme_constant_override("separation", 10)
+	scroll.add_child(_details_list)
+
+	_add_details_button("DetailsBackButton", "返回", Vector2(58.0, 872.0), _on_details_back)
+	_add_details_button("DetailsResumeButton", "继续战斗", Vector2(348.0, 872.0), _on_resume_pressed)
+
+
+func _add_details_button(p_name: String, p_text: String, p_pos: Vector2, p_handler: Callable) -> void:
+	var btn := Button.new()
+	btn.name = p_name
+	btn.text = p_text
+	btn.add_theme_font_size_override("font_size", 20)
+	btn.add_theme_font_override("font", StickerTheme.font_bold())
+	btn.position = p_pos
+	btn.size = Vector2(226.0, 64.0)
+	btn.pivot_offset = btn.size * 0.5
+	btn.pressed.connect(p_handler)
+	btn.button_down.connect(func() -> void: StickerTheme.press_punch(btn))
+	_details_card.add_child(btn)
+
+
+func _on_details_back() -> void:
+	# 详情卡 → 暂停卡（PAUSED 态内切换）
+	_details_mode = false
+	_refresh_cards()
+
+
+func _rebuild_details() -> void:
+	# 内容重建（每次显示时刷新；player 由 open_details 注入）
+	for c in _details_list.get_children():
+		(c as Node).queue_free()
+	if _player_ref == null or not is_instance_valid(_player_ref):
+		return
+	# 遗物区块（R13 用户反馈「收割协议没展示在构筑详情」——遗物是构筑的一部分）
+	if not _relics_ref.is_empty():
+		var relic_sec := Panel.new()
+		relic_sec.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 3, false))
+		relic_sec.custom_minimum_size = Vector2(576.0, 34.0 + 22.0 * _relics_ref.size())
+		relic_sec.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		relic_sec.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var rtitle := Label.new()
+		StickerTheme.label_sticker(rtitle, 15, PopPalette.GOLD, 0, Color.WHITE, true)
+		rtitle.text = "◈ 遗物 ×%d" % _relics_ref.size()
+		rtitle.position = Vector2(12.0, 6.0)
+		rtitle.size = Vector2(552.0, 20.0)
+		rtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		relic_sec.add_child(rtitle)
+		for ri: int in range(_relics_ref.size()):
+			var rd: Dictionary = _relics_ref[ri]
+			var rline := Label.new()
+			StickerTheme.label_sticker(rline, 15, PopPalette.INK_SOFT)
+			rline.text = "　◆ %s：%s" % [String(rd.get("name", "?")),
+				String(rd.get("desc", ""))]
+			rline.position = Vector2(12.0, 30.0 + 22.0 * ri)
+			rline.size = Vector2(552.0, 20.0)
+			rline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			relic_sec.add_child(rline)
+		_details_list.add_child(relic_sec)
+	# 玩家侧属性行（R7 遗漏补齐 + R18 全属性展示——用户点名「暴击/爆伤/经验/穿透等
+	# 个人所有属性」）：全局三行 + 武器侧（暴击率/暴伤/穿透/间隔）见各武器区块头行
+	var pstats := Panel.new()
+	pstats.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 3, false))
+	pstats.custom_minimum_size = Vector2(576.0, 110.0)
+	pstats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pstats.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ptitle := Label.new()
+	StickerTheme.label_sticker(ptitle, 15, PopPalette.GOLD, 0, Color.WHITE, true)
+	ptitle.text = "◈ 个人属性"
+	ptitle.position = Vector2(12.0, 6.0)
+	ptitle.size = Vector2(552.0, 20.0)
+	ptitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pstats.add_child(ptitle)
+	var prow := Label.new()
+	StickerTheme.label_sticker(prow, 15, PopPalette.INK, 0, Color.WHITE, true)
+	prow.text = "生命上限 %d　磁吸 %dpx　换一批 ×%d" % [
+		int(float(_player_ref.get("max_hp"))),
+		int(float(_player_ref.get("pickup_radius"))),
+		int(float(_player_ref.get("reroll_charges")))]
+	prow.position = Vector2(12.0, 30.0)
+	prow.size = Vector2(552.0, 20.0)
+	prow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pstats.add_child(prow)
+	# R70 技能急速终值行（用户反馈「技能急速一直点，但是详情没写最终加成多少」）：
+	# 跨武器 add_skillcdr 池合计。R226 有意契约变更：急速无帽（原 -60% 钳拆）——
+	# 「已达上限」明示分支退役，终值照实显示（消费端 refresh_skill_cd 保 0.1 地板）
+	var prow2 := Label.new()
+	StickerTheme.label_sticker(prow2, 15, PopPalette.INK, 0, Color.WHITE, true)
+	var haste_pct := float(_player_ref.call("skill_haste_pct")) \
+		if _player_ref.has_method("skill_haste_pct") else 0.0
+	prow2.text = "技能急速 -%d%%　技能冷却 %.0fs" % [roundi(haste_pct * 100.0),
+		float(_player_ref.get("skill_cd_base"))]
+	prow2.position = Vector2(12.0, 50.0)
+	prow2.size = Vector2(552.0, 20.0)
+	prow2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pstats.add_child(prow2)
+	var prow3 := Label.new()
+	StickerTheme.label_sticker(prow3, 15, PopPalette.INK, 0, Color.WHITE, true)
+	var xp_pct := float(_player_ref.call("xp_gain_pct")) \
+		if _player_ref.has_method("xp_gain_pct") else 0.0
+	var gold_pct := float(_player_ref.call("gold_gain_pct")) \
+		if _player_ref.has_method("gold_gain_pct") else 0.0
+	prow3.text = "经验获取 +%d%%　金币获取 +%d%%" % [roundi(xp_pct * 100.0),
+		roundi(gold_pct * 100.0)]
+	prow3.position = Vector2(12.0, 70.0)
+	prow3.size = Vector2(552.0, 20.0)
+	prow3.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pstats.add_child(prow3)
+	var pnote := Label.new()
+	StickerTheme.label_sticker(pnote, 13, PopPalette.INK_SOFT)
+	pnote.text = "暴击率 / 爆伤 / 穿透（贯穿敌人数）/ 出招间隔 随每把武器独立生效——见下方各武器区块"
+	pnote.position = Vector2(12.0, 90.0)
+	pnote.size = Vector2(552.0, 16.0)
+	pnote.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pstats.add_child(pnote)
+	_details_list.add_child(pstats)
+	# R80 通用词条段：玩家侧池词条全局生效——独立成段，不再散挂武器段
+	var universal: Array = []
+	var slots: Array = _player_ref.get("weapon_slots")
+	var any := false
+	for w in slots:
+		if w == null or not is_instance_valid(w):
+			continue
+		any = true
+		_details_list.add_child(_make_weapon_section(w, universal))
+	if not universal.is_empty():
+		var usec := Panel.new()
+		usec.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 3, false))
+		usec.custom_minimum_size = Vector2(576.0, 34.0 + 46.0 * universal.size())
+		usec.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		usec.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var utitle := Label.new()
+		StickerTheme.label_sticker(utitle, 15, PopPalette.GOLD, 0, Color.WHITE, true)
+		utitle.text = "◈ 通用词条 ×%d（全局生效——不归属任何武器）" % universal.size()
+		utitle.position = Vector2(12.0, 6.0)
+		utitle.size = Vector2(552.0, 20.0)
+		utitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		usec.add_child(utitle)
+		for ui: int in range(universal.size()):
+			var ut: Variant = universal[ui]
+			var utd: Variant = ut.get("data")
+			var ulabel := RichTextLabel.new()
+			ulabel.bbcode_enabled = true
+			ulabel.fit_content = true
+			ulabel.add_theme_font_size_override("normal_font_size", 15)
+			ulabel.add_theme_color_override("default_color", PopPalette.INK_SOFT)
+			ulabel.text = "　◆ [b]%s[/b] ×%d 层　└ %s" % [String(utd.get("display_name")),
+				int(ut.get("layers")), _trait_desc_bbcode(ut)]
+			ulabel.position = Vector2(12.0, 30.0 + 46.0 * ui)
+			ulabel.size = Vector2(552.0, 44.0)
+			ulabel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			usec.add_child(ulabel)
+		_details_list.add_child(usec)
+	if not any:
+		var empty := Label.new()
+		StickerTheme.label_sticker(empty, 18, PopPalette.INK_SOFT)
+		empty.text = "暂无武器（选一张「新武器」卡开始构筑）"
+		empty.size = Vector2(560.0, 40.0)
+		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_details_list.add_child(empty)
+
+
+func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
+	# 单武器区块：图标 + 名称 Lv 头行 + 机制一句行 + 词条行 ×N（章形 + 名 ×层 + 描述实际值）
+	var wdata: Variant = p_w.get("data")
+	# R190b：机制一句话（GameConst.weapon_note 真源——详情卡与 HUD hover 同句逐字一致，
+	# 棱镜/蓄能等特殊机制读数值猜不出；未知 id/缺 data 空句护栏同 hud.gd 取值口径）
+	var note := GameConst.weapon_note(String(wdata.get("id")) if wdata != null else "")
+	var section := VBoxContainer.new()
+	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section.add_theme_constant_override("separation", 4)
+	var head := Panel.new()
+	head.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 3, false))
+	# R190b：非空机制句条件加高 78→100（空句维持 78 不加行——未知 id/自定义武器护栏）
+	head.custom_minimum_size = Vector2(576.0, 100.0 if not note.is_empty() else 78.0)
+	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	section.add_child(head)
+	var icon := TextureRect.new()
+	icon.texture = TextureFactory.weapon_icon(
+		StringName(str(wdata.get("id"))) if wdata != null else &"W_MISSING")
+	icon.position = Vector2(8.0, 18.0)
+	icon.custom_minimum_size = Vector2(40.0, 40.0)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(icon)
+	var wname := Label.new()
+	StickerTheme.label_sticker(wname, 19, PopPalette.INK, 0, Color.WHITE, true)
+	wname.text = "%s  Lv%d" % [String(wdata.get("display_name")) if wdata != null else "?",
+		int(p_w.get("level"))]
+	wname.position = Vector2(58.0, 8.0)
+	wname.size = Vector2(500.0, 26.0)
+	wname.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(wname)
+	# 核心属性行（2026-09-13 用户反馈「暴击率/射速/冷却/间隔等属性也应该显示」）：
+	# 面板快照实际生效值（含词条加成/稀有度缩放/养成修正）——非基础值口径
+	var wstats := Label.new()
+	StickerTheme.label_sticker(wstats, 15, PopPalette.INK_SOFT)
+	wstats.text = _weapon_stat_line(p_w)
+	wstats.position = Vector2(58.0, 40.0)
+	wstats.size = Vector2(508.0, 20.0)
+	wstats.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(wstats)
+	# R190b：机制一句话行（文案逐字取 GameConst.weapon_note 原句——禁止 UI 手抄；R253 13→15 R200 口径）:
+	# 小字软墨 + 自动换行，属性行下方 (58,62) 508×34；加高代价 ≤154px 由详情卡纵滚容纳
+	if not note.is_empty():
+		var wnote := Label.new()
+		StickerTheme.label_sticker(wnote, 15, PopPalette.INK_SOFT)
+		wnote.text = note
+		wnote.position = Vector2(58.0, 62.0)
+		wnote.size = Vector2(508.0, 34.0)
+		wnote.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		wnote.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		head.add_child(wnote)
+
+	# L3/L5 质变词条行（R13 用户反馈「武器 3/5 级有什么作用显示一下，3 级紫 5 级金」）
+	var wlv: int = int(p_w.get("level"))
+	var wtable: Array = wdata.get("upgrade_table") if wdata != null else []
+	for tier: Array in [[3, Color(0.72, 0.5, 1.0)], [5, PopPalette.GOLD]]:
+		var tlv: int = int(tier[0])
+		if wtable == null or wtable.size() < tlv:
+			continue
+		var note_v: Variant = (wtable as Array)[tlv - 1].get("note")
+		var tnote := String(note_v) if note_v != null else ""   # tnote：与外层机制句 note 区名
+		if tnote.is_empty():
+			continue
+		var unlocked := wlv >= tlv
+		var mrow := HBoxContainer.new()
+		mrow.add_theme_constant_override("separation", 8)
+		mrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var mgem := TextureRect.new()
+		mgem.texture = TextureFactory.type_icon(1, 3)
+		mgem.custom_minimum_size = Vector2(26.0, 26.0)
+		mgem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		mgem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		mgem.modulate = tier[1] if unlocked else Color(tier[1].r, tier[1].g, tier[1].b, 0.28)
+		mgem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mrow.add_child(mgem)
+		var mlabel := Label.new()
+		StickerTheme.label_sticker(mlabel, 15, tier[1] if unlocked else PopPalette.INK_SOFT)
+		mlabel.text = "【%d 级质变】%s%s" % [tlv, tnote,
+			"" if unlocked else "（Lv%d 解锁）" % tlv]
+		mlabel.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		mlabel.custom_minimum_size = Vector2(500.0, 0.0)
+		mlabel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mlabel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mrow.add_child(mlabel)
+		section.add_child(mrow)
+
+	var stack: Variant = p_w.get("trait_stack")
+	var traits: Array = (stack.get("traits") as Array) if stack != null \
+		and stack.get("traits") != null else []
+		# R80 玩家侧词条（技能急速/生命/磁吸/经验/点金——全局生效）不在武器段渲染：
+	# 收集进 p_universal 由「通用词条」段统一展示（此前错挂武器段误导归因）
+	var filtered: Array = []
+	for t_v: Variant in traits:
+		var td0: Variant = t_v.get("data")
+		if td0 != null and not (StringName(String(td0.get("pool_id"))) in GameConst.PLAYER_SIDE_POOLS):
+			filtered.append(t_v)
+		elif td0 != null:
+			p_universal.append(t_v)
+	traits = filtered
+	if traits.is_empty():
+		var none := Label.new()
+		StickerTheme.label_sticker(none, 14, PopPalette.INK_SOFT)
+		none.text = "　└ 暂无词条"
+		none.size = Vector2(540.0, 20.0)
+		none.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		section.add_child(none)
+		return section
+	for t: Variant in traits:
+		var td: Variant = t.get("data")
+		if td == null:
+			continue
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var gem := TextureRect.new()
+		gem.texture = TextureFactory.type_icon(1, int(td.get("pool")))
+		gem.custom_minimum_size = Vector2(26.0, 26.0)
+		gem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		gem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(gem)
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.add_theme_constant_override("separation", 0)
+		col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var layers := int(t.get("layers"))
+		var sm_v: Variant = td.get("stack_max")
+		var stack_max := int(sm_v) if sm_v != null else 1
+		var tname := Label.new()
+		var eff_rarity := (t as TraitBase).max_rarity() if t is TraitBase else int(td.get("rarity"))
+		# R242 金名终修（用户四轮反馈 二t/二u/R84/R85「到处金色毫无逻辑」→本轮
+		# 「非质变 buff 金名说了很多次」）：名字金色=**质变语义专属**——差一层满预告
+		# （layers+1==stack_max，与选卡卡面 R84 口径同款）或已质变/超层达成态；
+		# 「抽到过金品级恒金」通道退役（R31 设计口径终结）——品质由下方 ◆徽记自解释
+		#（max_rarity 仅再供徽记）。质变门同 card_generator：MechanicGate 解锁+可叠卡。
+		var ms_gold: bool = MechanicGate.milestone_unlocked() and stack_max >= 2 \
+			and layers >= stack_max - 1
+		var rarity_col: Color = PopPalette.GOLD if ms_gold else PopPalette.INK
+		StickerTheme.label_sticker(tname, 16, rarity_col, 0, Color.WHITE, true)
+		# R11 叠层可视化：可叠词条显示「当前/上限 层」（如 2/3）
+		# R196 超质变叠层：超帽时改「N/M+K 层」（防「6/3 层」显示乱——显示不能乱硬底线）
+		# R31 品级徽记（用户两轮反馈「为什么这个 buff 是金色字」——金色/紫色/蓝色名字 = 该词条抽到过对应品级，加 ◆ 标自解释）
+		var layers_txt := ""
+		if stack_max > 1:
+			if layers > stack_max:
+				layers_txt = "　%d/%d+%d 层" % [layers, stack_max, layers - stack_max]
+			else:
+				layers_txt = "　%d/%d 层" % [layers, stack_max]
+		elif layers > 1:
+			layers_txt = "　×%d" % layers
+		if eff_rarity >= 1:
+			layers_txt += "　◆%s" % ["蓝", "紫", "金"][eff_rarity - 1]
+		tname.text = String(td.get("display_name")) + layers_txt
+		tname.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		col.add_child(tname)
+		var tdesc := RichTextLabel.new()
+		tdesc.bbcode_enabled = true
+		tdesc.fit_content = true
+		tdesc.add_theme_font_size_override("normal_font_size", 15)
+		tdesc.add_theme_color_override("default_color", PopPalette.INK_SOFT)
+		tdesc.text = "　└ " + _trait_desc_bbcode(t)
+		tdesc.custom_minimum_size = Vector2(500.0, 0.0)
+		tdesc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tdesc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		col.add_child(tdesc)
+		row.add_child(col)
+		section.add_child(row)
+	return section
+
+
+func _trait_desc_bbcode(p_tb: TraitBase) -> String:
+	# 叠层当前值可视化（R11 用户反馈「叠层 buff 显示 2/3 + 当前数值换色」）：
+	# ADD 池（可叠数值型）→ 描述首个「+N%」改写为当前生效总值，≥2 层金色高亮；
+	# 1 层保持默认文案。MULT/ELEM 等机制型不改写（合并规则逐卡特化）。
+	var td: TraitData = p_tb.data
+	var desc := String(td.description)
+	if td == null or td.pool != GameConst.PoolClass.ADD:
+		return desc
+	# R199（N05+F08）：弃用 stacked_add_total()（trait_base.gd 全额累加），改按
+	# TraitStack.aggregate_panel 逐层真值口径折算（面板池聚合按词条拆分的同式——池内
+	# 多 id 不串账）。R226 有意契约变更：原「前 stack_max 层全额 + 超帽层 ×0.7」折算
+	# 随超帽衰减一并退役——每层全额 × 质变乘区 value_mult（与聚合/血条单源同式）。
+	# 整数池显示小数（F09）不在本项范围（deferred）。
+	var eff := 0.0
+	for v_k in p_tb.layer_values:
+		eff += v_k * p_tb.value_mult
+	# R242（用户 2026-10-07「赌徒诅咒每次叠加扣的攻击力也要在构筑详情显示」）：
+	# 负值词条双门槛修复——①原 eff<=0 早退把诅咒类负贡献整族排除在改写外；
+	# ②正则只认「+N」形态，诅咒描述「-10%」负号形态永不匹配。负值改写为累计
+	# 负值+红色高亮（金色=增益口径 R230 语义钉，惩罚用 ENEMY 珊瑚红同源）。
+	if eff == 0.0:
+		return desc
+	var re_num := RegEx.create_from_string("[-+]\\d+(\\.\\d+)?%?")
+	var m := re_num.search(desc)
+	if m == null:
+		return desc
+	var raw := m.get_string()
+	var is_pct := raw.ends_with("%")
+	# 描述用百分比口径（+8%）而 decay_sum 是小数（0.148）——% 型需 ×100 显示
+	var shown := eff * 100.0 if is_pct else eff
+	# QA-R242-P01：显示符号**跟随描述原符号**（raw 首字符）——混号词条（描述「出招
+	# 间隔 -10%」而 value 正存=增益）改写须保持文案语义「-20%」（间隔再减）而非按
+	# eff 符号翻成「+20%」（读作负收益）。高亮色按 eff 符号判（存储语义=正为增益）。
+	var sign := String(raw[0])
+	var body := ("%s%.1f" % [sign, absf(shown)]) if (absf(shown - roundf(shown)) > 0.001) \
+		else ("%s%d" % [sign, int(roundf(absf(shown)))])
+	if is_pct:
+		body += "%"
+	if p_tb.layers >= 2:
+		var hl_open := "[color=#ffd54a][b]" if eff >= 0.0 else "[color=#ff5d5d][b]"
+		return desc.substr(0, m.get_start()) + hl_open + body + "[/b][/color]" \
+			+ desc.substr(m.get_end())
+	return desc
+
+
+func _weapon_stat_line(p_w: Node) -> String:
+	# 单武器核心属性行（面板快照实际生效值；防御式取值——桩/缺字段回退 0）
+	# R18：追加穿透列（用户点名「穿透这属性干嘛的要写出来」——贯穿敌人数，见数值）
+	# R196 FIX-1 配套反馈：追加弹丸数列（RC1 修复配套——多重装填/编队弹数可视化，
+	# 挂 AFF_MULTI 后面板即见「弹丸 N」）。has_method("_pellet_count") 守卫同穿透列
+	# 风格；该守卫仅弹道形态（BallisticWeapon）为真——激光/近战无弹丸概念，不列该段
+	# 防「弹丸 0」误导显示（显示不能乱硬底线）。属性行标签沿用本行 inline 口径
+	#（真源纪律：机制句文案走 GameConst.weapon_note，本行数值列标签本就 inline）。
+	var snap: Dictionary = p_w.call("build_panel_snapshot") if p_w.has_method("build_panel_snapshot") \
+		else {}
+	var atk := float(snap.get("base_atk", 0.0))
+	var crit_rate := float(snap.get("crit_rate", 0.0))
+	var crit_mult := float(snap.get("crit_mult", 0.0))
+	var interval := 1.0
+	if p_w.has_method("_fire_interval"):
+		interval = maxf(float(p_w.call("_fire_interval")), 0.01)
+	var pierce := int(p_w.call("_pierce_count")) if p_w.has_method("_pierce_count") else 0
+	if p_w.has_method("_pellet_count"):
+		return "攻击 %.1f　暴击 %.0f%% ×%.1f　间隔 %.2fs（%.1f 发/s）　弹丸 %d　穿透 %d 名" % [atk,
+			crit_rate * 100.0, crit_mult, interval, 1.0 / interval,
+			maxi(int(p_w.call("_pellet_count")), 0), maxi(pierce, 0)]
+	return "攻击 %.1f　暴击 %.0f%% ×%.1f　间隔 %.2fs（%.1f 发/s）　穿透 %d 名" % [atk,
+		crit_rate * 100.0, crit_mult, interval, 1.0 / interval, maxi(pierce, 0)]
+
+
+func _on_restart_pressed() -> void:
+	restart_requested.emit()
+
+
+func _on_menu_pressed() -> void:
+	menu_requested.emit()
+
+
+func _on_settings_pressed() -> void:
+	# 设置页打开（P3）：纯 UI 层——暂停态不变，面板盖在暂停卡上方，关闭即恢复
+	settings_requested.emit()

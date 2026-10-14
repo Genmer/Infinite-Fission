@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"SYN_BURN_DEVOUR"
 display_name = "烈焰吞噬"
-description = "对点燃目标伤害 ×1.35，叠 2 层合并为 ×1.7（A3 §4.3）"
+description = "对点燃目标伤害 ×1.35，叠 2 层合并为 ×1.7"
 pool = 1
 pool_id = &"burn_dmg"
 effect_id = &"EF_STAT"

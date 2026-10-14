@@ -1,0 +1,142 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R252 菜单性能+祝福页签 自测 ══════════
+── M7 页签改名：祝福（原词条）/ 行数 / 锁定态文案 ──
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | M7a 图鉴页签恰 5 枚含「祝福」不含「词条」（怪物/武器/祝福/反应/遗物）
+PASS | M7b 「祝福」页行数 == registry.traits.size()（73）
+PASS | M7c 锁定态文案含「开局祝福」
+── M2 六处 rebuild 同帧行数 == 目标行数（动态取 registry） ──
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | M2a 怪物页 rebuild 后同帧行数 == registry.enemies（29）
+PASS | M2a' 怪物页二次重建不翻倍（P1 离树生效——修前基线 29→58）
+PASS | M2b 武器页 rebuild 后同帧行数 == 13
+PASS | M2b' 武器页二次重建不翻倍
+PASS | M2b 祝福页 rebuild 后同帧行数 == 73
+PASS | M2b' 祝福页二次重建不翻倍
+PASS | M2b 遗物页 rebuild 后同帧行数 == 40
+PASS | M2b' 遗物页二次重建不翻倍
+PASS | M2c 反应页行数 == 枚举全键（+1 冰草留白标注行至多）
+PASS | M2c' 反应页二次重建不翻倍
+PASS | M2d 成就页 rebuild 后行数 == min(全量, 页容量24)（160/24）
+PASS | M2d' 成就页二次重建不翻倍
+PASS | M2e 记录页 rebuild 后行数 == 6+图数+1（12）
+PASS | M2e' 记录页二次重建不翻倍
+PASS | M2f 升级页 rebuild 后行数 == 1 表头+轨数+1 尾注（10）
+PASS | M2f' 升级页二次重建不翻倍
+PASS | M2g 选人页 rebuild 后行数 == CharacterTable.count()（13）
+PASS | M2g' 选人页二次重建不翻倍
+PASS | M2h 选关页二次重建不翻倍（难度行+地图行）
+PASS | M2i 每日页二次重建不翻倍
+── M1 首建上限（headless 预热排空口径；5 次中位数比档，D1 测量降噪） ──
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | M1- 预热队列已排空（P3 建队 + 泵消化全链路）
+PASS | M1a 怪物页首建 ≤50ms（5 次中位数；设计主值）
+PASS | M1b 武器页首建 ≤50000µs（5 次中位数·分档）
+PASS | M1c 武器页二建 ≤15000µs（5 次中位数·分档）
+PASS | M1b 祝福页首建 ≤65000µs（5 次中位数·分档）
+PASS | M1c 祝福页二建 ≤45000µs（5 次中位数·分档）
+PASS | M1b 反应页首建 ≤100000µs（5 次中位数·分档）
+PASS | M1c 反应页二建 ≤40000µs（5 次中位数·分档）
+PASS | M1b 遗物页首建 ≤50000µs（5 次中位数·分档）
+PASS | M1c 遗物页二建 ≤25000µs（5 次中位数·分档）
+PASS | M1b 怪物页首建 ≤50000µs（5 次中位数·分档）
+PASS | M1c 怪物页二建 ≤15000µs（5 次中位数·分档）
+PASS | M1d 选人页 ≤25ms（5 次中位数；修前 257ms 冷生成已由 P3 预热消除，残=行构建）
+PASS | M1e 选关面板 ≤20ms（5 次中位数；r245_diff_star 重建面同源）
+── M3 委托臂成品缓存：同武器 id 第二次直调 _delegate_weapon_icon ≤1ms ──
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | M3a 同 id 第二次直调 ≤1ms（P4-② 成品缓存命中）
+PASS | M3b t2 变体同式第二次直调 ≤1ms
+PASS | M3c 成品缓存返回同实例（非重生成）
+PASS | M3d 未委托 id null 缓存（第二次直调 ≤1ms 防反复探测）
+── M6 同页签重复 _on_codex_tab 必须刷新行内容（rxn_codex :395-402 语义承载） ──
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | M6a 改表→失效缓存→重切页→文本刷新（coef=3.5 可见；no-op 守卫必破此断言）
+PASS | M6b 还原 coef 后倍率复原（含 2.0 不含 3.5）
+PASS | M6c 切走后反应行离树（缓存 detach 不 free）
+PASS | M6c 切回=缓存行实例复用（同 id 直挂，不重建）
+PASS | M6d 失效后重建=新行实例（缓存真失效非 no-op）
+── M6e-h 缓存生命周期：六面板互切复用 / 闲时泵边界 / 失效双态销毁 / null 守卫 ──
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | M6e-a 五面板接力切走：记录行已标删（非缓存行照旧 remove+queue_free）
+PASS | M6e-b 六面板互切后回图鉴：缓存行实例复用（同 id 集合直挂，不重建）
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | M6f-a 起点队满 5 页缓存空（boot 排程；同步测试无帧渗漏）
+PASS | M6f-b 非 MENU 态泵停（root 不可见一读即返，队列不动）
+PASS | M6f-c 单帧预算消化（行级泵：队首出队在建或页毕入缓存——R254 修轮#2）
+PASS | M6f-d 预建页不挂树（纯构建——挂树只发生在 _rebuild_codex）
+PASS | M6f-e 泵排空后五页全备（缓存恰 5 页）
+PASS | M6f-f 玩家切已预建页=缓存实例直挂（泵先建/切页先建两序同果，不双建）
+PASS | M6f-g 切页后泵空转不重建（缓存行实例不变）
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | M6g 失效双态：挂树行脱离面板+全部行（含离树缓存行）已标删
+PASS | M6g' 失效后缓存空+预建队重排 5 页
+PASS | M6h _panel_list null 时失效不崩（守卫分支：清数据+重排队）
+── P2 测量缓存：二次重建零新增测量键（全命中）+ 行为不变形 ──
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | P2a 首建后缓存非空（测量已入缓存）
+PASS | P2b 二次重建零新增键（P2 缓存全命中，不改写同页重建语义）
+PASS | P2c 跨页建行走缓存（遗物页后键集不减——命中不删键）
+── P3 boot 建队：图鉴域 op:7 入队（weapon 项==武器数；boss 门语义不变） ──
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | P3a boot 建队含图鉴域 op:7 项（非空）
+PASS | P3b op:7 weapon 项数 == registry 武器数（13）
+PASS | P3c op:7 skill 项数 == CharacterTable.count()（13）
+PASS | P3d 图鉴域项受 boss 挂机门同序约束（dwell=0 消化后 op:7 项零消耗且队列停在 boss 首项）
+── M4 预算：BUDGET_US==4000 + game_loop 源码锚 + 两泵单帧合计 ≤8000µs ──
+PASS | M4a card_desc_prewarm.BUDGET_US == 4000
+PASS | M4b game_loop MENU 态 tex 预热调用参数 == 4000（源码锚 count==1 且在 _process 内）
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | M4c 三泵单帧合计 ≤12000µs（tex 6 + carddesc 4187 + 图鉴泵名目 4000）
+── M5 写盘收口：面板作用域批落盘 / 设置 closed 联动 / 面板外立即落盘 ──
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+PASS | M5a 面板作用域内 3 次 buy_upgrade 不落盘（磁盘 crystals==旧值）
+PASS | M5b _on_panel_close 后统一落盘（磁盘==880==内存；1000 起点扣 life 三级 120）
+PASS | M5c 设置滑条写口即时应用、落盘被 defer 抑制
+PASS | M5d 设置面板 close 后 closed 信号联动 end 落盘
+PASS | M5e 面板外直调 set_setting 仍立即落盘（深度 0 路径零迁移）
+PASS | M5f 带开包络 free 触发 EXIT_TREE 收口落盘（crystals==555）
+── M0 基线对比：修前/修后探针 JSON（handler 耗时 / 同帧行数 / 委托臂） ──
+PASS | M0- 探针留档齐备（修前 _pre + 修后 _post）
+PASS | M0a 修前二建同帧行数翻倍（29→58 双布局证据）
+PASS | M0b 修后二建同帧行数 == 单轮（怪物 29）
+PASS | M0c 武器页首建 修后 ≤ 修前（304513 → 13284 µs；P3 预热并队 + P4 双缓存）
+PASS | M0d 祝福页(原词条)首建 修后 ≤ 修前（82468 → 51653 µs；P1 双布局 + P2 测量缓存）
+PASS | M0e 反应页首建 修后 ≤ 修前（94523 → 81759 µs）
+PASS | M0f 委托臂直调热调 修后 ≤1ms（修前 25460 µs → 修后 2 µs；P4-② 成品缓存）
+────────────────────────────────────────
+汇总：PASS 81 / FAIL 0（共 81 项）
+WARNING: 2808 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 54 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 3082 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 6 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

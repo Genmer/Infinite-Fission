@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_DOUBLE_TAP"
+display_name = "双重节拍"
+description = "每次命中有 15% 概率伤害翻倍"
+rarity = 3
+listen_events = [&"damage_resolved"]
+effect_id = &"REL_EF_DOUBLE_TAP"
+params = {"chance": 0.15, "mult": 1.0}
+unique = true

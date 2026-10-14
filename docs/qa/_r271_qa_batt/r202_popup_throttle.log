@@ -1,0 +1,43 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R202 伤害数字节流（G2）自测 ══════════
+── R202 层1 存活并入 ──
+PASS | 层1 前置：首跳起字（active=1）
+PASS | 层1：窗过期同目标存活即并入（active 仍 1 / 值累计 6+4）
+PASS | 层1：再跨窗并入仍续命（active 仍 1 / 值累计 15）
+PASS | 层1 边界：popup 到期归还（active=0）
+PASS | 层1 边界：退役后新起从零滚动（新值 5+3=8，非跨代 23）
+── R202 层1 激光节拍收敛 ──
+PASS | 层1 激光口径：256 结算跳 → 新起恰 32（每目标 1 张滚字；probe 基线旧口径 624/816）
+PASS | 层1 激光口径：数值累计不丢（每滚字 8×10=80）+ CRIT 并入升格在册
+── R202 层1 CRIT 升格 ──
+PASS | CRIT 升格：宿主原地升 CRIT（同实例 / active 不涨 / 值累计 / 40px 字号）
+PASS | CRIT 升格单向：CRIT 宿主吃 NORMAL 并入不降级
+PASS | CRIT 升格前置：小值白档起字（tier 0）
+PASS | CRIT 升格 tier 重判：并入累计 80=8×基准 → 金档（tier 3 / 40×1.6=64px）
+── R202 层1 element 刷新 ──
+PASS | element 前置：FIR 首跳橙字
+PASS | element 刷新：异元素并入颜色随新元素（FIR→HYD，不停在第跳）
+PASS | element 改写边界：REACTION 宿主 element（=ReactionType）不被并入改写
+── R202 merge 默认路径（签名硬约束） ──
+PASS | merge 默认路径：单参调用零语义变化（样式/element 不动，文本=名+累计值纯函数）
+── R202 层2 满池采样 ──
+PASS | 层2 未满池：全显 N=1（40 目标 40 条，0 丢弃）
+PASS | 层2 前置：满池 80/80
+PASS | 层2 满池采样：16 发 NORMAL 2 显 14 丢（确定性 mod 1/8）/ active 恒==cap
+PASS | 层2 确定性：同序列重放同结果（再 16 发再 2 显 14 丢）
+PASS | 层2 CRIT 必显：满池绕过采样（active 恒 80 / 不丢 / 在册）
+PASS | 层2 REACTION 必显：满池走既有挤占（active 恒 80 / 不丢 / 在册）
+PASS | 层2 清场归还
+── R202 入口缓存 ──
+PASS | 入口缓存：伤害数字关 → 跳字入口短路（0 活跃）
+PASS | 入口缓存：伤害数字开 → 跳字恢复（写口信号即时刷缓存）
+PASS | 入口缓存：fx_quality 写口即时档位化（低档 30 目标封顶 20）
+── R202 tick 等值跳过写点 ──
+PASS | tick 曲线①：t=0.2 位移/透明度（等值跳过不改曲线值；R230 K1 量化档 0.96→1.0）
+PASS | tick 曲线①：弹跳期 scale 过冲（≠ONE，写点未误跳）
+PASS | tick 曲线②：t=0.6 位移/透明度/scale==ONE（收敛后等值跳过，值不漂；R230 K1 量化档 0.64→0.75）
+────────────────────────────────────────
+汇总：PASS 28 / FAIL 0（共 28 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

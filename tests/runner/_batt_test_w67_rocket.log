@@ -1,0 +1,99 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · W6/W7 双火箭 30% 规格专项自测 ══════════
+── ① 30% 规格比例断言（数据级） ──
+PASS | 前置：W6/W7 .tres 加载
+PASS | 爆径比逐级 ∈[0.25,0.36]（[30,32,34,36,38] / 110）
+PASS | 爆径比均值 ∈[0.27,0.34]（30.9% 锚）
+PASS | 溅射比逐级 ≤0.40（blast_atk_ratio 0.6 直算）
+PASS | 溅射比均值 ∈[0.28,0.33]（30.0% 锚）
+PASS | W6 blast_atk_ratio == 0.6
+PASS | W7 blast_atk_ratio == 1.0（现网口径显式化）
+PASS | W6 proj_speed_init 240→420（手感矛盾修复）
+PASS | W6 volley_count_levels == [1,1,2,2,3]
+PASS | W6 含 TH_SWARM_NOVA
+PASS | W6 不含 TH_SIZE_NOVA（换出）
+PASS | W6 TH_CRIT_SHARD 0.6→0.35
+PASS | TH_SWARM_NOVA 声明：volley_count≥5 → 1.2×blast_r / 30%ATK
+PASS | W7 保留 TH_SIZE_NOVA/FRACTAL_ECHO/BOUNCE_ETERNAL（身份线）
+PASS | W7 TH_CRIT_SHARD 0.6→0.35（全武器共享死节点修复）
+PASS | W7 atk 表冻结 [38,38,46,54,68]
+PASS | W7 blast_r=110 / sub_count=5 / sub 180/600 冻结
+PASS | W7 sub_count_levels 冻结 [5,6,6,8,8]
+PASS | validator 正控：W6 零 error
+PASS | validator 正控：W7 零 error
+── ② 齐射行为 A：第 i 发锁第 i 近 + ±10° 出膛扇 ──
+PASS | L5 对 3 dummy：try_fire 成功且 volley_eff==3
+PASS | L5 对 3 dummy 单节拍 3 弹
+PASS | 3 弹 target_uid 互异
+PASS | 第 i 发锁第 i 近目标（距离升序累计排除）
+PASS | 出膛扇 ±10° 均布（中位 0°，两翼 ±10°）
+── ② 齐射行为 B：余弹 ×0.6^j 直击递减 ──
+PASS | 前置：try_fire 成功（3 弹全轮）
+PASS | 对 1 dummy 单节拍 3 弹（余弹退回最近目标）
+PASS | 余弹直击乘子 = [0.36, 0.6, 1.0]（×0.6^j）
+PASS | 3 弹 target_uid 全部=最近 dummy
+PASS | 伤害序列 = atk×[1.0,0.6,0.36]±1
+── ② 齐射行为 C：HIVE_RACK×2 → 5 枚硬顶 + 池审计 ──
+PASS | 前置：MEC_HIVE_RACK 词条在册
+PASS | HIVE_RACK×2 → volley_eff==5（L5 基线 3+2，clamp[1,5] 内）
+PASS | 单节拍 5 弹（硬顶 5 枚/轮）
+PASS | 池容 4：try_fire 仍成功（4 发出膛 + 1 弃发）
+PASS | 池满弃发计数 +1（homing_volley_dropped 可读）
+PASS | 池空（4/4 占用）：try_fire 返回 false 不崩
+PASS | 池空弃发计数再 +1
+── ② 齐射行为 D：TH_SWARM_NOVA 空爆 ──
+PASS | 空爆：volley≥5 → 每枚 1.2×blast_r 半径冲击波（38→45.6 覆盖 40px 圈）
+PASS | 空爆伤害 = 30%ATK（32×0.3=9.6，settle_aoe 平方无衰减口径）
+PASS | 空爆旗标 AOE_SECONDARY + 排除直击主目标
+PASS | 负例：volley_size=3 < 阈值 5 → 无空爆
+PASS | 负例：武器无 TH_SWARM_NOVA 阈值 → 无空爆
+── ③ 引信 A：FUSE_COAT×2 挂引信幂等 + 引信敌爆炸 ×1.4 ──
+PASS | 前置：MEC_FUSE_COAT 词条在册
+PASS | FUSE_COAT×2 直击命中后 fuse_mark_left>0（敌侧通道，4s）
+PASS | 引信敌受自导爆炸 ×1.4（0.6×0.717×1.4×32≈19.3）
+PASS | 无引信对照 ×1.0（0.6×0.717×32≈13.8）
+PASS | 引信乘区比 == 1.4±0.01
+PASS | 幂等：直击已引信敌 → fuse_mark_left 恒 4.0（不叠加不翻倍）
+PASS | 前置对照：三靶 id 可解析
+── ③ 引信 B：FUSE_DETONATE×2 追加恰一次 2×0.5×atk + 0.5s 护栏 ──
+PASS | 前置：MEC_FUSE_COAT/MEC_FUSE_DETONATE 词条在册
+PASS | 前置：E 已挂引信（fuse_mark_left=4）
+PASS | 引信敌受 W7 溅射 ×1.4（涂层标记随敌身，74.4）
+PASS | FUSE_DETONATE×2 追加恰一次 2×0.5×atk=68（0.5s 护栏首窗）
+PASS | 爆炸消耗引信：fuse_mark_left==0
+PASS | 护栏置位：fuse_detonate_guard_left==0.5（敌侧通道）
+PASS | 0.5s 护栏内无第二次：仅溅射 1 条（×1.4）、无追加余波
+PASS | 护栏过期后余波恢复（恰一次 68）
+── ④ validator 负例（volley/blast_r_levels/blast_atk_ratio/_levels 长度） ──
+PASS | validator 报 error：volley_count_levels[0]=0 <1（域 [1,5]）
+PASS | validator 报 error：volley_count_levels[4]=6 >5（域 [1,5]）
+PASS | validator 报 error：volley_count_levels 长度 4 ≠5（通用 _levels 补口）
+PASS | validator 报 error：blast_r_levels[0]=0（域 (0,128]）
+PASS | validator 报 error：blast_r_levels[4]=200 >128（域 (0,128]）
+PASS | validator 报 error：blast_atk_ratio=0（域 (0,1]）
+PASS | validator 报 error：blast_atk_ratio=1.5（域 (0,1]）
+PASS | validator 正控：负例底座（合法段）零 error
+── ⑤ R183 复制体折减 + 满配双火箭发射预算 ──
+PASS | 前置：W6 本体 volley_eff==3（L5 开火折算）
+PASS | 前置：W7 本体 sub_eff==8（L5 开火折算）
+PASS | R183：W6 副本 volley_eff==1（单发）
+PASS | R183：W7 副本 sub_eff==min(8,3)==3
+PASS | R183：W7 副本子弹头当轮 3 枚（折减生效）
+WARNING: [EventBus] 事件风暴：damage_resolved 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：missile_blast 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 满配双火箭+双副本 tick 10s：在场弹峰值 ≤64
+PASS | 丢弃计数可读（homing_volley_dropped）
+PASS | 池压饱和：homing_volley_dropped 增长（弃发计数可读且真实落账）
+── ⑥ 爆径<50 震屏分档（GameLoop missile_blast 订阅者） ──
+PASS | 前置：GameLoop game_feel/shake/feel_config 就绪
+PASS | blast_r=40（<50）→ 震屏 HIT 档（trauma 0.15）
+PASS | blast_r=110（≥50）→ 震屏 CRIT 档（trauma 0.4）
+────────────────────────────────────────
+汇总：PASS 76 / FAIL 0（共 76 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

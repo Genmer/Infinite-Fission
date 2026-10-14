@@ -1,0 +1,36 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 历史功能抽查 ══════════
+── W9 弧斩消弹 ──
+PASS | 前置：W9 装配
+DBG muzzle=(360, 640) qu=3 qd=3 player=(360, 640)
+DBG nullified[0] pos=(360, 580)
+DBG nullified[1] pos=(402.4264, 597.5736)
+DBG nullified[2] pos=(317.5736, 597.5736)
+DBG alive[3] pos=(360, 700)
+DBG alive[4] pos=(402.4264, 682.4264)
+DBG alive[5] pos=(317.5736, 682.4264)
+PASS | W9：弧内敌弹被消弹（上扇区 3 颗 nullified）
+PASS | W9：下扇区 3 颗保留（防全屏误消）
+── 黑市刷新倍价 ──
+PASS | 刷新价：开店基准 = 15×行情（>0）
+PASS | 刷新价：累进 ≈×1.5（c1≈1.5c0 / c2≈1.5c1）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | 刷新价：关店重置（重开回到基准价 ==c0）
+WARNING: [GameLoop] 非法状态迁移拒绝：2 → 2
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+── 换一批 ──
+PASS | 前置：卡牌流打开
+PASS | 换一批：本局首次免费（次数不扣）
+PASS | 换一批：第二次扣 1 次次数
+PASS | 换一批：无次数不再重掷
+── 暴击谐振 ──
+PASS | 暴击谐振：暴击触发 → 角色技能冷却归零
+── 局内存档往返 ──
+PASS | 存档：save→load 往返一致
+PASS | 存档：clear 后无存档
+────────────────────────────────────────
+汇总：PASS 13 / FAIL 0（共 13 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

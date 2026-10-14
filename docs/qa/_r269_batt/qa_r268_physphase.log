@@ -1,0 +1,43 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+── P2 记账洞三表 ──
+  PASS | P2a 物步减项含 popup：gd_us==样本数×5330（popup 5000µs 入减项、移/火仍排除）
+  PASS | P2b 源锚：game_loop.gd 段和排除表仅 移/火（popup 已出表）
+  PASS | P2b 真帧共存：popup 段实测>0 且 他 键在位 ≥0（popup 入段和后他键不背跳字成本）
+  PASS | P2cpre 行内 fps 口径非退化（fps≤90，帧预算>11ms 断言才有效）
+  PASS | P2c 余值含 popup：余==帧预算−11ms（popup 5ms 入段和）
+  PASS | P2c 对照：popup=0 时余==帧预算−6ms（其余口径零漂移）
+── P1 升格臂绕帽 ──
+  PASS | P1pre 12 张直击小字在册（升格宿主就位）
+  PASS | P1a 升格不即时排版（refresh_label_calls 不即时 +1）
+  PASS | P1a 升格置脏（_label_dirty==true，merge 通道同契约）
+  PASS | P1a merged_value 已含并入值（10+50=60）
+  PASS | P1a style==REACTION 且 tier==0
+  PASS | P1bpre 12 张全部置脏
+  PASS | P1b 单帧排版 ≤6（限批生效）
+  PASS | P1b 12 条升格脏字 ceil(12/6)=2 帧内全部收敛
+  PASS | P1b 收敛后全部 REACTION 样式
+  PASS | P1b 反应臂数值刷新到位（文本含 60）
+  PASS | P1b2 超龄脏字绕帽强制刷新（cap6 下 6+2 超龄全刷=8）
+  PASS | P1c 桌面口径一帧 12 张全量刷新（cap=0 与现状同帧）
+── P3 拖尾半频门 + 长度档位 ──
+  PASS | P3a dt=1/60 一秒恰 ≈30 次真（±1）
+  PASS | P3a dt=1/30 序列恒真（掉帧不减半语义）
+  PASS | P3a 桌面口径恒真（逐帧重绘零变化）
+  PASS | P3b tier1(q0) 拖尾段长 == SWORD_TRAIL_LEN*0.5
+  PASS | P3b tier2/desktop(q1/q2) == SWORD_TRAIL_LEN 原值
+  PASS | P3b fx_quality=0 → _sword_trail_len()==半额（接线正确）
+  PASS | P3b fx_quality=2 → _sword_trail_len()==原值（接线正确）
+── P4 预热深载门 ──
+  PASS | P4 desktop（tier1+满载）== (2000,4000)
+  PASS | P4 mobile+tier1+满载 == (500,1000)
+  PASS | P4 mobile+tier3（满载）== (2000,4000)
+  PASS | P4 mobile+tier2+非满载 == (2000,4000)
+  PASS | P4 mobile+tier2+满载 == (500,1000)（tier≤2 全带收缩）
+  PASS | P4 调用点接线：DescPrewarm.pump(_pw_budget.x) + _process_tex_prewarm(_pw_budget.y, true)
+────────────────────────────────────────
+验收汇总：PASS 31 / FAIL 0
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

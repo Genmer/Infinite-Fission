@@ -14,7 +14,17 @@ func handle(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 	match p_ctx.event:
 		GameConst.TraitEvent.ON_SPAWN:
 			if p_trait.data.pool == GameConst.PoolClass.MECH:
-				p_ctx.projectile.bounces_left += int(p_trait.data.value) * p_trait.layers
+				# R60（用户反馈「侦察协议什么颜色都没区别」同族）：整数型词条品质缩放
+				# value ×1.4/1.9/2.6 → int() 截断回退白值（蓝 2.8 截回 2）；round 对齐
+				# 卡面显示（+2/+3/+4/+5）
+				p_ctx.projectile.bounces_left += int(round(p_trait.data.value)) * p_trait.layers
+				# R9c（用户裁定）：带反弹预算的子弹【射程无限】——打空的子弹必达屏幕边界
+				# 弹回，预算耗尽才在边缘回收（BOUNCE_DEPLETED 兜底）。绝对上限按模式分支
+				#（R220 刀13②：帧率优先 10.0 / 特效优先旧值 20.0——跳弹流 dwell 减半，
+				# 回滚=切回 20.0）；≥5 次仍走 TH_BOUNCE_ETERNAL 永存
+				if p_ctx.projectile.bounces_left > 0:
+					var life_floor := 10.0 if PerfGovernor.frame_priority() else 20.0
+					p_ctx.projectile.lifetime_left = maxf(p_ctx.projectile.lifetime_left, life_floor)
 		GameConst.TraitEvent.ON_BOUNCE:
 			_maybe_eternal(p_trait, p_ctx)
 

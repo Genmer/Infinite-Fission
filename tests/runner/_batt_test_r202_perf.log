@@ -1,0 +1,48 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R202 性能季（G4 帧率显示）自测 ══════════
+── 域K show_fps 键契约（双注册/缺键回退/bool 归一） ──
+PASS | R202 K①：SETTINGS_DEFAULTS 含 show_fps（读侧注册）
+PASS | R202 K②：出厂默认 false（关态起步——读数不默认骚扰）
+PASS | R202 K③：旧档缺键读口回退 false（降级不崩，零迁移）
+PASS | R202 K④：写口 true 写入生效（bool 归一，非静默丢弃）
+PASS | R202 K⑤：写口 int 1 → bool true 归一（match 分支 bool(p_value)）
+PASS | R202 K⑥：持久化（true 过 user:// 磁盘写读回路）
+PASS | R202 前置：Boot 进入 MENU + 致命清单空
+── 域F HUD FPS 读数（急切创建/visible 切换/空带/仅启用刷新） ──
+PASS | R202 F①：FpsLabel 急切创建于 _build_ui 期（boot 即在树）
+PASS | R202 F②：FpsLabel 挂 HUD Root 子树（不入 toast 差集域）
+PASS | R202 F③：默认隐藏（show_fps 出厂 false → boot 末段初值收口）
+PASS | R202 F④：关态 is_processing()==false（_process 仅启用期挂起，零常驻开销）
+PASS | R202 F⑤：R1 界内（rect ⊆ visible_rect+2px，右缘锚任意尺寸贴沿）
+PASS | R202 F⑥：空带落位（与 18 个持久 HUD 簇零相交，重叠=[]）
+PASS | R202 F⑦：右缘锚（anchor_l/r==1——宽视口贴沿，offset −116/−16 恒 100px 宽）
+PASS | R202 F⑧：settings_changed 即时切 visible（true → 显示）
+PASS | R202 F⑨：开态 is_processing()==true（_process 每帧刷新挂起）
+PASS | R202 F⑩：开态 _process 刷新（text 前缀 "FPS"——Engine 平滑读数）
+PASS | R202 F⑪：settings_changed 即时切 visible（false → 隐藏 + set_process(false)）
+PASS | R202 F⑫：非 show_fps 键不误触（panel_pos 写口零影响）
+── 域S 设置面板「显示帧率」行（不扩卡高/行距重排/键翻转） ──
+PASS | R202 S①：行文案「显示帧率」在卡（左标签）
+PASS | R202 S②：开关按钮在卡（ShowFpsToggleButton）
+PASS | R202 S③：卡高不扩（offset_bottom==618 ∧ 卡高 968 钉死）
+PASS | R202 S④：hint y824 / 关闭钮 y872 原位不动（收尾件零位移）
+PASS | R202 S⑤：七开关行按钮互不重叠（行距 74→66 重排零重叠，重叠=[]）
+PASS | R202 S⑥：末行按钮底 816 ≤ hint 顶 824（8px 缝，卡内不溢）
+PASS | R202 S⑦：关闭钮底 940 ≤ 卡底 968（28px 底缘余量保持）
+PASS | R202 S⑧：开关点击 → show_fps 翻转（true）
+PASS | R202 S⑨：翻转后按钮 ✓ 态（✓ 开 + 薄荷绿）
+PASS | R202 S⑩：开关再点 → 复位原值（false）+ ✗ 态（✗ 关 + 弱化灰）
+PASS | R202 S⑪：面板点击链联动 HUD（复位 false → FpsLabel 隐藏）
+── 域F boot 末段初值（存档值 → 新 boot 即生效） ──
+PASS | R202 前置：Boot 进入 MENU + 致命清单空
+PASS | R202 B①：存档 true → 新 boot FpsLabel 即显示（_build_ui 末段初值收口）
+PASS | R202 B②：新 boot 开态 is_processing()==true（boot 初值同样挂起刷新）
+PASS | R202 前置：Boot 进入 MENU + 致命清单空
+────────────────────────────────────────
+汇总：PASS 34 / FAIL 0（共 34 项）
+验收汇总：34/34 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

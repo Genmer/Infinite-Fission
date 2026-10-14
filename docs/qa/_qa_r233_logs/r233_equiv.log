@@ -1,0 +1,57 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R233 T7（等价性总套件：双跑全等/30Hz 冒烟/切换横跳/RNG 序） ══════════
+── A 组 整机双跑对拍（-2 强制关 vs -1 默认态：孪生逐位硬墙 + 整局 R224 带统计） ──
+  PASS | A1 臂A（-2 强制关）谓词 false
+  PASS | A2 臂B（-1 默认态）谓词 false（headless 真值门——现网桌面/headless 执行口）
+  PASS | A3 双跑命中非平凡（事件数>0——空对拍防假绿）
+  PASS | A4 伤害值谱硬等价（distinct 集合逐位，容差 0——面板/乘区结构指纹）
+  PASS | A5 值桶漂移合计 ≤6（max(5,10%)——R224 带上沿公式，本日实跑校准）
+  PASS | A6 命中事件计数 |Δ|≤6（R224 带同族）
+  PASS | A7 活弹峰值 |Δ|≤6 ∧ 末帧活弹数 |Δ|≤2（逐帧序列随结算换位漂移——R224 带内弱化；尾数带=r231 T9 同款）
+  PASS | A8 回收原因五路增量 |Δ|合计 ≤6（EXPIRED/PIERCE/BOUNCE/NULLIFIED/FORCED）
+  PASS | A9 结算轴四计数增量 |Δ|合计 ≤6（顺/冲/强冲/弃）
+  PASS | A10 击杀数全等（小样本轴 0 容差——五轮实证恒等）
+  INFO | A11 整局双臂驱动后 RNG 探针（观察项不断言——随 A6 事件计数带漂移）：off=[0.15694525837898, 0.21993507444859, 565519307] def=[0.15694525837898, 0.21993507444859, 565519307]
+  PASS | A12 孪生硬墙：单弹逐帧位置逐位全等（60 步 dt=1/60 直驱——关态 per-bullet 零漂移精确证明，容差 0）
+  PASS | A13 孪生硬墙：命中(序数,值)序列逐位全等 ∧ swept_prev 逐位（容差 0）
+  PASS | A14 孪生硬墙：RNG 消费序全等（确定性面驱动后全局 RNG 探针 randf×2+randi×1 逐位——两关态分支零差异掷骰，容差 0；整局面随事件计数带漂移降观察项 A11）
+── B 组 关态零执行抽查（源级 + 运行时档位全原值） ──
+  PASS | B1 源级：_process 首行业务=谓词直返（谓词分支在写遍历之前 ∧ headless 直返分支居中——关态零写+headless 零写双分支在位）
+  PASS | B2 源级：swept 膨胀零执行口径（谓词单点声明 ×1 ∧ 膨胀行在 if swept: 门内 ×1——关态查询半径零膨胀）
+  PASS | B3 源级：线段窄相零分派口径（_in_reach_swept 定义+调用恰 2 处 ∧ 调用点唯一且在 if swept: 门内——关态零线段分派）
+  PASS | B4 运行时关态档位全原值（hz60/STALE12/DISPATCH48/WINDOW30/MAGNET24）
+  PASS | B5 运行时关态结算帽回退（tier2→96/tier1→48——30Hz 档不泄漏）
+  PASS | B6 运行时关态 _process 直调零写（哨兵差分——关态直返分支真执行）
+── C 组 30Hz 注入态整机冒烟（-3：真链 dt=1/30 全链） ──
+  PASS | C1 -3 注入谓词 true ∧ 选表 30（headless 驱真值臂）
+  PASS | C2 五参数 30Hz 档（STALE6/DISPATCH96/WINDOW15/MAGNET48）
+  PASS | C3 结算帽 30Hz 档（tier2→192/tier1→96）
+  PASS | C4 整机 90 步驱动跑通（frame_stamp 前进=90 ∧ state 保持 PLAYING）
+  PASS | C5 结算/回收/池化全链健康（结算事件>0 ∧ kills≥1 ∧ 回收计数不倒退 ∧ 池化零懒增长 ri=0）
+  PASS | C6 半频相位每 tick 直驱（三 subtick 相位计数恒 1——谓词开下不进隔帧相位；headless 口径+源级守卫由 r233_tiers C1 锁）
+  PASS | C7 swept 真链生效（30Hz 步长 24px 弦中点敌恰 1 结算——点检测双端漏、线段命中）
+  PASS | C8 恢复遍历执行（帧入口拍回 _ip_curr——插值残留不污染模拟）
+  PASS | C9 快照遍历执行（帧末 prev=上帧 curr 定型 ∧ curr=真位——哨兵被重写）
+  PASS | C10 _process headless 直返零写（DisplayServer 分支真执行——谓词开下仍零写）
+  PASS | C11 直调内部函数写插值位（lerp 中点=prev/curr 包络内）∧ 下一真步恢复拍回（插值位不污染模拟）
+── D 组 切换态横跳（同一局中途 -3↔-2：撕裂/重复结算/回收错因/缓冲脏） ──
+  PASS | D1 切 -2 选择器即时生效（48/12/30/24/60）
+  PASS | D2 切回 -3 选择器即时生效（96/6/15/48/30）
+  PASS | D3 横跳全链驱动跑通（26+40 步无中断 ∧ state 保持 PLAYING ∧ 弹已寿终回收）
+  PASS | D4 无重复结算（三敌各恰 1 次结算——R196 生命周期去重兜底；撕裂主判据=D5/D6 位置轴）
+  PASS | D5 位置连续无撕裂（逐帧 |Δy|≤25px=步长+1——复机回拽级撕裂远超）
+  PASS | D6 prev/curr 缓冲不脏（复机首帧位移恰一步 ∧ 首两步快照再同步 global_position==_ip_curr）
+  PASS | D7 回收错因健康（PIERCE_DEPLETED=0 ∧ EXPIRED≥1——弹寿终正寝非穿透耗尽）
+  PASS | D8 切换前插值写 α 语义（0.9α 写位=curr+半步×0.1=+2.4px——亚步偏差有界，一次性披露口径）
+── E 组 RNG 消费序（idle 同 dt 双态逐位 + 战斗命中集超集口径） ──
+  PASS | E1 idle 同 dt 双态 RNG 消费序逐位一致（关 vs 30Hz 态——基础流程掷骰零漂移）
+  PASS | E2 idle 零结算（无战斗场景 damage_resolved 零消费）
+  PASS | E3 战斗命中集超集（关态点检测 ⊆ swept——真链 30 步×10 弹×6 敌）
+  PASS | E4 超集非平凡（关态命中集 ≥1——直击保底）
+  PASS | E5 结算计数单调不减（on ≥ off——swept 增命中→掷骰连锁可增=设计内，如实注明口径）
+  INFO | 战斗双臂驱动后 RNG 探针（观察项不断言）：off=[0.19782109558582, 3911980883] on=[0.04157122224569, 3548165446]
+  PASS | 套件总项数（EXPECTED=43——R231 假绿教训：总项数也要断言）
+────────────────────────────────────────
+汇总：PASS 44 / FAIL 0（共 44 项）
+验收汇总：44/44 通过

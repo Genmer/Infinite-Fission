@@ -1,0 +1,60 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+════════ QA丙探针④：首遇卡横条 × HUD/BossBar 布局碰撞 ════════
+OBSERVE-DATA | 画布可见区 | (1280, 1280)
+OBSERVE-DATA | 首遇卡矩形 | [P: (331.8134, 14.06312), S: (616.3732, 87.87376)]（设计名目：顶部安全区下方横条）
+── HUD 子树 ∩ 卡矩形 ──
+OBSERVE-DATA | 碰撞 | Root (Control) rect=[P: (0, 0), S: (1280, 1280)] 交叠=[P: (331.8134, 14.06312), S: (616.3733, 87.87376)] 面积=54163
+OBSERVE-DATA | 碰撞 | @Panel@1317 (Panel) rect=[P: (24, 24), S: (340, 30)] 交叠=[P: (331.8134, 24), S: (32.18661, 30)] 面积=966
+OBSERVE-DATA | 碰撞 | HpFill (Panel) rect=[P: (28, 28), S: (332, 22)] 交叠=[P: (331.8134, 28), S: (28.18661, 22)] 面积=620
+OBSERVE-DATA | 碰撞 | HpText (Label) rect=[P: (24, 27), S: (340, 25)] 交叠=[P: (331.8134, 27), S: (32.18661, 25)] 面积=805
+OBSERVE-DATA | 碰撞 | ReviveBadge (Label) rect=[P: (300, 16), S: (64, 23)] 交叠=[P: (331.8134, 16), S: (32.18661, 23)] 面积=740
+OBSERVE-DATA | 碰撞 | R187Readout (Label) rect=[P: (368, 30), S: (224, 25)] 交叠=[P: (368, 30), S: (224, 25)] 面积=5600
+OBSERVE-DATA | 碰撞 | @Panel@1318 (Panel) rect=[P: (54, 63), S: (292, 14)] 交叠=[P: (331.8134, 63), S: (14.18661, 14)] 面积=199
+OBSERVE-DATA | 碰撞 | LevelText (Label) rect=[P: (356, 60), S: (36, 25)] 交叠=[P: (356, 60), S: (36, 25)] 面积=900
+OBSERVE-DATA | 碰撞 | GoldPill (Panel) rect=[P: (464, 92), S: (132, 36)] 交叠=[P: (464, 92), S: (132, 9.936882)] 面积=1312
+OBSERVE-DATA | 碰撞 | @Label@1324 (Label) rect=[P: (464, 92), S: (132, 36)] 交叠=[P: (464, 92), S: (132, 9.936882)] 面积=1312
+OBSERVE-DATA | 碰撞 | ShieldBar (Panel) rect=[P: (306, 92), S: (148, 36)] 交叠=[P: (331.8134, 92), S: (122.1866, 9.936882)] 面积=1214
+OBSERVE-DATA | 碰撞 | ShieldIcon (TextureRect) rect=[P: (310, 96), S: (28, 28)] 交叠=[P: (331.8134, 96), S: (6.186615, 5.936882)] 面积=37
+OBSERVE-DATA | 碰撞 | ShieldFill (Panel) rect=[P: (340, 95), S: (3, 30)] 交叠=[P: (340, 95), S: (3, 6.936882)] 面积=21
+OBSERVE-DATA | 碰撞 | @Label@1328 (Label) rect=[P: (342, 100), S: (28, 19)] 交叠=[P: (342, 100), S: (28, 1.936882)] 面积=54
+OBSERVE-DATA | 碰撞 | @Label@1329 (Label) rect=[P: (414, 100), S: (1, 19)] 交叠=[P: (414, 100), S: (1, 1.936882)] 面积=2
+OBSERVE-DATA | 碰撞 | ReviveFlash (ColorRect) rect=[P: (0, 0), S: (1280, 1280)] 交叠=[P: (331.8134, 14.06312), S: (616.3733, 87.87376)] 面积=54163
+── BossBar 子树 ∩ 卡矩形 ──
+OBSERVE-DATA | 碰撞 | BossBarRoot (Control) rect=[P: (0, 0), S: (1280, 1280)] 交叠=[P: (331.8134, 14.06312), S: (616.3733, 87.87376)] 面积=54163
+OBSERVE-DATA | 竖屏画布可见区 | (720, 1280)
+OBSERVE-DATA | 竖屏首遇卡矩形 | [P: (95.59027, 11.19223), S: (528.8195, 93.61553)]
+── 竖屏 HUD 子树 ∩ 卡矩形 ──
+OBSERVE-DATA | 碰撞 | Root (Control) rect=[P: (0, 0), S: (720, 1280)] 交叠=[P: (95.59027, 11.19223), S: (528.8195, 93.61554)] 面积=49506
+OBSERVE-DATA | 碰撞 | @Panel@1317 (Panel) rect=[P: (24, 24), S: (340, 30)] 交叠=[P: (95.59027, 24), S: (268.4097, 30)] 面积=8052
+OBSERVE-DATA | 碰撞 | HpFill (Panel) rect=[P: (28, 28), S: (332, 22)] 交叠=[P: (95.59027, 28), S: (264.4097, 22)] 面积=5817
+OBSERVE-DATA | 碰撞 | HpText (Label) rect=[P: (24, 27), S: (340, 25)] 交叠=[P: (95.59027, 27), S: (268.4097, 25)] 面积=6710
+OBSERVE-DATA | 碰撞 | ReviveBadge (Label) rect=[P: (300, 16), S: (64, 23)] 交叠=[P: (300, 16), S: (64, 23)] 面积=1472
+OBSERVE-DATA | 碰撞 | R187Readout (Label) rect=[P: (368, 30), S: (224, 25)] 交叠=[P: (368, 30), S: (224, 25)] 面积=5600
+OBSERVE-DATA | 碰撞 | @Panel@1318 (Panel) rect=[P: (54, 63), S: (292, 14)] 交叠=[P: (95.59027, 63), S: (250.4097, 14)] 面积=3506
+OBSERVE-DATA | 碰撞 | LevelText (Label) rect=[P: (356, 60), S: (36, 25)] 交叠=[P: (356, 60), S: (36, 25)] 面积=900
+OBSERVE-DATA | 碰撞 | @Panel@1319 (Panel) rect=[P: (598, 16), S: (106, 106)] 交叠=[P: (598, 16), S: (26.40973, 88.80777)] 面积=2345
+OBSERVE-DATA | 碰撞 | @Label@1320 (Label) rect=[P: (598, 38), S: (106, 23)] 交叠=[P: (598, 38), S: (26.40973, 23)] 面积=607
+OBSERVE-DATA | 碰撞 | WaveText (Label) rect=[P: (598, 58), S: (106, 34)] 交叠=[P: (598, 58), S: (26.40973, 34)] 面积=898
+OBSERVE-DATA | 碰撞 | WaveLeftText (Label) rect=[P: (598, 94), S: (106, 23)] 交叠=[P: (598, 94), S: (26.40973, 10.80777)] 面积=285
+OBSERVE-DATA | 碰撞 | @Panel@1321 (Panel) rect=[P: (24, 92), S: (150, 36)] 交叠=[P: (95.59027, 92), S: (78.40973, 12.80777)] 面积=1004
+OBSERVE-DATA | 碰撞 | KillText (Label) rect=[P: (24, 98), S: (150, 25)] 交叠=[P: (95.59027, 98), S: (78.40973, 6.80777)] 面积=534
+OBSERVE-DATA | 碰撞 | @Panel@1322 (Panel) rect=[P: (184, 92), S: (112, 36)] 交叠=[P: (184, 92), S: (112, 12.80777)] 面积=1434
+OBSERVE-DATA | 碰撞 | TimeText (Label) rect=[P: (184, 98), S: (112, 25)] 交叠=[P: (184, 98), S: (112, 6.80777)] 面积=762
+OBSERVE-DATA | 碰撞 | GoldPill (Panel) rect=[P: (464, 92), S: (132, 36)] 交叠=[P: (464, 92), S: (132, 12.80777)] 面积=1691
+OBSERVE-DATA | 碰撞 | @Label@1324 (Label) rect=[P: (464, 92), S: (132, 36)] 交叠=[P: (464, 92), S: (132, 12.80777)] 面积=1691
+OBSERVE-DATA | 碰撞 | HoverCard (PanelContainer) rect=[P: (0, 0), S: (300, 21)] 交叠=[P: (95.59027, 11.19223), S: (204.4097, 9.807766)] 面积=2005
+OBSERVE-DATA | 碰撞 | @Label@1326 (Label) rect=[P: (0, 0), S: (300, 19)] 交叠=[P: (95.59027, 11.19223), S: (204.4097, 7.807766)] 面积=1596
+OBSERVE-DATA | 碰撞 | ShieldBar (Panel) rect=[P: (306, 92), S: (148, 36)] 交叠=[P: (306, 92), S: (148, 12.80777)] 面积=1896
+OBSERVE-DATA | 碰撞 | ShieldIcon (TextureRect) rect=[P: (310, 96), S: (28, 28)] 交叠=[P: (310, 96), S: (28, 8.80777)] 面积=247
+OBSERVE-DATA | 碰撞 | ShieldFill (Panel) rect=[P: (340, 95), S: (3, 30)] 交叠=[P: (340, 95), S: (3, 9.80777)] 面积=29
+OBSERVE-DATA | 碰撞 | @Label@1328 (Label) rect=[P: (342, 100), S: (28, 19)] 交叠=[P: (342, 100), S: (28, 4.80777)] 面积=135
+OBSERVE-DATA | 碰撞 | @Label@1329 (Label) rect=[P: (414, 100), S: (1, 19)] 交叠=[P: (414, 100), S: (1, 4.80777)] 面积=5
+OBSERVE-DATA | 碰撞 | PauseButton (Button) rect=[P: (514, 20), S: (72, 72)] 交叠=[P: (514, 20), S: (72, 72)] 面积=5184
+OBSERVE-DATA | 碰撞 | PauseIcon (TextureRect) rect=[P: (514, 20), S: (72, 72)] 交叠=[P: (514, 20), S: (72, 72)] 面积=5184
+OBSERVE-DATA | 碰撞 | ReviveFlash (ColorRect) rect=[P: (0, 0), S: (720, 1280)] 交叠=[P: (95.59027, 11.19223), S: (528.8195, 93.61554)] 面积=49506
+════════ 探针④结束（OBSERVE 行为观测数据，不作验收门） ════════
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

@@ -1,0 +1,66 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R233 T3+T4（五参数档位联动 + 四处相位短路） 回归 ══════════
+── ① AC-6 五参数两态对拍（结算帽×2 + 强冲窗 + 派发帽/窗 + 磁吸帽） ──
+  PASS | A1 60Hz 态谓词 false（headless 真值门）
+  PASS | A2 60Hz tier1 帽 48（原档逐位）
+  PASS | A3 60Hz tier2 帽 96（原档逐位）
+  PASS | A4 60Hz SETTLE_STALE 12（原档逐位）
+  PASS | A5 60Hz DISPATCH 48（原档逐位——r221 口径）
+  PASS | A6 60Hz WINDOW 30（原档逐位）
+  PASS | A7 60Hz MAGNET 24（原档逐位——r225 口径）
+  PASS | A8 60Hz 态原六 const 锁定（const 断言保护——值不改写）
+  PASS | A9 30Hz 态谓词 true（-3 注入）
+  PASS | A10 30Hz tier1 帽 96（决策6 档）
+  PASS | A11 30Hz tier2 帽 192（决策6 定案值）
+  PASS | A12 30Hz SETTLE_STALE 6（0.2s 时间语义守恒）
+  PASS | A13 30Hz DISPATCH 96（比例平价 ≈2880/s）
+  PASS | A14 30Hz WINDOW 15（0.5s 时间语义守恒）
+  PASS | A15 30Hz MAGNET 48（≈1440/s 对齐）
+  PASS | A16 30Hz 态原六 const 仍锁定（两态均不改写——套件级锁定条款）
+  PASS | A17 override≥0 否决（30Hz 态注入下仍最高优先——r223 口径不破）
+  PASS | A18 回退档谓词 false（单开关全联动）
+  PASS | A19 回退 tier1 帽 48（回退档全等）
+  PASS | A20 回退 tier2 帽 96（回退档全等）
+  PASS | A21 回退 SETTLE_STALE 12
+  PASS | A22 回退 DISPATCH 48
+  PASS | A23 回退 WINDOW 30
+  PASS | A24 回退 MAGNET 24
+  PASS | A25 复位后 headless 谓词 false（注入无泄漏）
+── ② 30Hz 档位常量值锁定（新 const 逐位） ──
+  PASS | B1 结算档（T1_30HZ=96 ∧ T2_30HZ=192 ∧ STALE_30HZ=6——决策6 供给算术）
+  PASS | B2 派发档（DISPATCH_30HZ=96 ∧ WINDOW_30HZ=15）
+  PASS | B3 磁吸档（MAGNET_30HZ=48）
+── ③ AC-8 四点短路（_ui/_fx/_shard 相位 + orbit 重绘节流） ──
+  PASS | C0 源级断言前置：game_loop/orbit 源可读
+  PASS | C1 三处相位守卫文本恰 3 处（mobile ∧ not sim30_effective）
+  PASS | C2 三处相位成员各恰一次减量且前行带守卫（_ui/_fx/_shard）
+  PASS | C3 orbit 短路表达式恰一处（sim30_effective() or _redraw_ctr % 2 == 0）
+  PASS | C4 orbit 60Hz 态：8 次调用重绘恰 4 次（隔帧阈值逐位不变）且计数器 +8
+  PASS | C5 orbit 30Hz 态：8 次调用重绘 8 次（每 tick 直驱——短路生效）且计数器 +8
+  PASS | C6 60Hz 态 headless 直驱：三相位计数器恒 1（OS 门先于谓词——现状口径零扰动）
+  PASS | C7 30Hz 态 headless 直驱：三相位计数器仍恒 1（两态逐位一致）
+  PASS | C8 label_ctr 披露项未动（%12/%4 各恰一处——决策2 清单外不扩刀）
+  PASS | C9 磁吸帽源级接线（②⑦ cap := 选择器 ×2 + 满载开帽 ×1）
+── ④ 派发帽/过期窗两态行为对拍 ──
+  PASS | D1 60Hz 态 60 条首帧恰派 48（原档帽逐位）
+  PASS | D2 60Hz 态余 12 留队顺延（deferred +12）
+  PASS | D3 60Hz 态保序（队头 1 · 队尾 48）
+  PASS | D4 30Hz 态 60 条全派（60 ≤ 96——比例平价帽）
+  PASS | D5 30Hz 态顺延零增
+WARNING: [EventBus] 事件风暴：damage_resolved 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+  PASS | D6 30Hz 态 100 条恰派 96 延 4（新档帽边界）
+  PASS | D7 30Hz 态窗距 15 留（恰边界——0.5s 语义）
+  PASS | D8 30Hz 态窗距 16 丢（stale_drop +1——有界卸载）
+  PASS | D9 60Hz 态窗距 30 留（原档边界逐位）
+  PASS | D10 60Hz 态窗距 31 丢（原档边界逐位）
+── ⑤ 结算顺延过期强冲两态对拍（12 帧 vs 6 帧） ──
+  PASS | E1 60Hz 态 12 探针帧 stale 零增（12 帧窗原口径）∧ 预算冲 12 ∧ FIFO 17
+  PASS | E2 60Hz 态 F+13 强冲 16（预算冲合计 13 + stale 16 = 29 守恒 · FIFO 清空）
+  PASS | E3 30Hz 态 6 探针帧 stale 零增（恰 6 帧窗边界——0.2s 语义）∧ 预算冲 6 ∧ FIFO 23
+  PASS | E4 30Hz 态 F+7 强冲 22（预算冲合计 7 + stale 22 = 29 守恒 · FIFO 清空——击杀后移体感不翻倍）
+  PASS | 套件总项数（EXPECTED=52——R231 假绿教训：总项数也要断言）
+────────────────────────────────────────
+汇总：PASS 53 / FAIL 0（共 53 项）
+验收汇总：53/53 通过

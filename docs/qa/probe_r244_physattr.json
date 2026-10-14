@@ -1,0 +1,341 @@
+{
+	"arms": {
+		"A0": {
+			"effect_end": {
+
+			},
+			"effect_mid": {
+
+			},
+			"enemies_p50": 115,
+			"fps_mean": 3.325,
+			"hold": 120,
+			"inject": "",
+			"label": "基线深载（=R237 A0 同构复跑，当前代码基线）",
+			"mon_us_per_step": 8433.21626152557,
+			"phys_step_us_per_active_frame": 0,
+			"popups_p50": 79,
+			"projectiles_p50": 406,
+			"resid_alt_p50": 36386,
+			"resid_alt_p95": 64970,
+			"resid_alt_us_per_active_frame": 35384.9,
+			"resid_raw_clamped_frac": 0.993333333333333,
+			"samples": 150,
+			"seg_last_frame_us": {
+				"card_drain": 3,
+				"card_open": 0,
+				"enemy": 3457,
+				"feel": 79,
+				"feel_shard": 39,
+				"fx": 174,
+				"grid_projectile": 17256,
+				"grid_rebuild": 310,
+				"other": 4201,
+				"player": 64,
+				"player_mv": 14,
+				"player_wp": 32,
+				"popup": 4109,
+				"shard": 40,
+				"ui": 200,
+				"wave": 26
+			},
+			"seg_us_per_step": 31819.6831517184,
+			"steps": 1200,
+			"steps_per_active_frame": 7.95333333333333,
+			"wall_s": 45.017
+		},
+		"A0b": {
+			"effect_end": {
+
+			},
+			"effect_mid": {
+
+			},
+			"enemies_p50": 114,
+			"fps_mean": 3.325,
+			"hold": 120,
+			"inject": "",
+			"label": "序效应复跑（B/D 注入复原后再跑 A0——漂移带披露）",
+			"mon_us_per_step": 8709.03269069573,
+			"phys_step_us_per_active_frame": 0,
+			"popups_p50": 79,
+			"projectiles_p50": 406,
+			"resid_alt_p50": 37069,
+			"resid_alt_p95": 63441,
+			"resid_alt_us_per_active_frame": 35637.2666666667,
+			"resid_raw_clamped_frac": 1,
+			"samples": 150,
+			"seg_last_frame_us": {
+				"card_drain": 3,
+				"card_open": 0,
+				"enemy": 6989,
+				"feel": 110,
+				"feel_shard": 232,
+				"fx": 168,
+				"grid_projectile": 35362,
+				"grid_rebuild": 824,
+				"other": 4458,
+				"player": 130,
+				"player_mv": 32,
+				"player_wp": 62,
+				"popup": 4387,
+				"shard": 93,
+				"ui": 655,
+				"wave": 80
+			},
+			"seg_us_per_step": 33545.2279966471,
+			"steps": 1200,
+			"steps_per_active_frame": 7.95333333333333,
+			"wall_s": 45.064
+		},
+		"B": {
+			"effect_end": {
+				"popups": 0
+			},
+			"effect_mid": {
+				"popups": 0
+			},
+			"enemies_p50": 115,
+			"fps_mean": 3.54054054054054,
+			"hold": 120,
+			"inject": "popup",
+			"label": "popup 摘除（damage_resolved↔popup_manager 断连——跳字零 spawn 零 tick）",
+			"mon_us_per_step": 8272.16345347862,
+			"phys_step_us_per_active_frame": 0,
+			"popups_p50": 0,
+			"projectiles_p50": 404,
+			"resid_alt_p50": 39579,
+			"resid_alt_p95": 61052,
+			"resid_alt_us_per_active_frame": 36001.28,
+			"resid_raw_clamped_frac": 0.993333333333333,
+			"samples": 150,
+			"seg_last_frame_us": {
+				"card_drain": 2,
+				"card_open": 0,
+				"enemy": 2775,
+				"feel": 52,
+				"feel_shard": 291,
+				"fx": 97,
+				"grid_projectile": 25902,
+				"grid_rebuild": 391,
+				"other": 59,
+				"player": 1392,
+				"player_mv": 10,
+				"player_wp": 1358,
+				"popup": 5,
+				"shard": 170,
+				"ui": 287,
+				"wave": 19
+			},
+			"seg_us_per_step": 29707.1433361274,
+			"steps": 1200,
+			"steps_per_active_frame": 7.95333333333333,
+			"wall_s": 41.351
+		},
+		"C": {
+			"effect_end": {
+				"active_shards": 0
+			},
+			"effect_mid": {
+				"active_shards": 0
+			},
+			"enemies_p50": 114,
+			"fps_mean": 3.58974358974359,
+			"hold": 120,
+			"inject": "shards",
+			"label": "碎片链摘除（enemy_killed↔drop_xp 断连——XP 池零 spawn 零磁吸；末位终臂不复原）",
+			"mon_us_per_step": 8853.03772003353,
+			"phys_step_us_per_active_frame": 0,
+			"popups_p50": 79,
+			"projectiles_p50": 424,
+			"resid_alt_p50": 39444,
+			"resid_alt_p95": 65049,
+			"resid_alt_us_per_active_frame": 38511.26,
+			"resid_raw_clamped_frac": 0.98,
+			"samples": 150,
+			"seg_last_frame_us": {
+				"card_drain": 2,
+				"card_open": 0,
+				"enemy": 1712,
+				"feel": 49,
+				"feel_shard": 4,
+				"fx": 94,
+				"grid_projectile": 11180,
+				"grid_rebuild": 435,
+				"other": 1078,
+				"player": 69,
+				"player_mv": 14,
+				"player_wp": 34,
+				"popup": 1024,
+				"shard": 7,
+				"ui": 123,
+				"wave": 15
+			},
+			"seg_us_per_step": 31972.7979882649,
+			"steps": 1200,
+			"steps_per_active_frame": 7.95333333333333,
+			"wall_s": 43.292
+		},
+		"D": {
+			"effect_end": {
+				"first_enemy_parent_is_pool": true,
+				"pool_host_null": true
+			},
+			"effect_mid": {
+				"first_enemy_parent_is_pool": true,
+				"pool_host_null": true
+			},
+			"enemies_p50": 113,
+			"fps_mean": 4.2972972972973,
+			"hold": 120,
+			"inject": "bucket",
+			"label": "桶place 摘除（全池 bucket_host 置空——零 reparent churn）",
+			"mon_us_per_step": 7294.69970193741,
+			"phys_step_us_per_active_frame": 0,
+			"popups_p50": 79,
+			"projectiles_p50": 401,
+			"resid_alt_p50": 32181,
+			"resid_alt_p95": 56273,
+			"resid_alt_us_per_active_frame": 30842.3411764706,
+			"resid_raw_clamped_frac": 0.994117647058824,
+			"samples": 170,
+			"seg_last_frame_us": {
+				"card_drain": 4,
+				"card_open": 0,
+				"enemy": 3361,
+				"feel": 117,
+				"feel_shard": 102,
+				"fx": 284,
+				"grid_projectile": 15124,
+				"grid_rebuild": 493,
+				"other": 8486,
+				"player": 91,
+				"player_mv": 22,
+				"player_wp": 41,
+				"popup": 8390,
+				"shard": 219,
+				"ui": 523,
+				"wave": 33
+			},
+			"seg_us_per_step": 26790.6125186289,
+			"steps": 1349,
+			"steps_per_active_frame": 7.89411764705882,
+			"wall_s": 40.087
+		},
+		"derive": {
+			"a0b_drift_alt_pct": -0.71320440828339,
+			"alt_drop_B_pct": -1.74192946708906,
+			"alt_drop_C_pct": -8.83529415089487,
+			"alt_drop_D_pct": 12.8375629817504,
+			"gain_alt_B": -616.379999999997,
+			"gain_alt_C": -3126.36,
+			"gain_alt_D": 4542.55882352941,
+			"mon_drop_B_pct": 1.90974360258854,
+			"mon_drop_C_pct": -4.9781891687433,
+			"mon_drop_D_pct": 13.5003837715197,
+			"wu_drop_B_pct": 0,
+			"wu_drop_C_pct": 0,
+			"wu_drop_D_pct": 0
+		}
+	},
+	"gates": {
+		"CAL0 监视器语义可判（frame-sum / last-step 二选一）": {
+			"detail": "ratio=0.99（歧义窗 1.6~1.8）",
+			"ok": true
+		},
+		"G-A0 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）": {
+			"detail": "敌=115/120 弹=406 跳=79",
+			"disclosed": true,
+			"ok": true
+		},
+		"G-A0 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）": {
+			"detail": "样本=150 步=1200 墙=45.0s（帽 75s/6000 步内收口）",
+			"ok": true
+		},
+		"G-A0b 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）": {
+			"detail": "敌=114/120 弹=406 跳=79",
+			"disclosed": true,
+			"ok": true
+		},
+		"G-A0b 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）": {
+			"detail": "样本=150 步=1200 墙=45.1s（帽 75s/6000 步内收口）",
+			"ok": true
+		},
+		"G-B popup 注入生效（测量窗 跳 p50==0）": {
+			"detail": "跳=0",
+			"ok": true
+		},
+		"G-B 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）": {
+			"detail": "敌=115/120 弹=404 跳=0",
+			"disclosed": true,
+			"ok": true
+		},
+		"G-B 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）": {
+			"detail": "样本=150 步=1200 墙=41.4s（帽 75s/6000 步内收口）",
+			"ok": true
+		},
+		"G-C shards 注入生效（测量窗 碎片活口恒 0）": {
+			"detail": "mid=0 end=0",
+			"ok": true
+		},
+		"G-C 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）": {
+			"detail": "敌=114/120 弹=424 跳=79",
+			"disclosed": true,
+			"ok": true
+		},
+		"G-C 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）": {
+			"detail": "样本=150 步=1200 墙=43.3s（帽 75s/6000 步内收口）",
+			"ok": true
+		},
+		"G-D bucket 注入生效（池 host null + 首敌挂池根）": {
+			"detail": "host_null=true parent_is_pool=true",
+			"ok": true
+		},
+		"G-D 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）": {
+			"detail": "敌=113/120 弹=401 跳=79",
+			"disclosed": true,
+			"ok": true
+		},
+		"G-D 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）": {
+			"detail": "样本=170 步=1349 墙=40.1s（帽 75s/6000 步内收口）",
+			"ok": true
+		},
+		"G-沙箱 user:// 重定向生效（含 .qa_sandbox_r244）": {
+			"detail": "user_dir=E:/Code/Agent/Infinite-Fission/.qa_sandbox_r244/Godot/app_userdata/Infinite Fission",
+			"ok": true
+		}
+	},
+	"meta": {
+		"adapter_api": "3.3.0 NVIDIA 610.62",
+		"build": "W2_gatling L5 + AFF_PIERCE×3/AFF_MULTI×2/MEC_BOUNCE×3/MEC_KILL_BLAST×2/MEC_FRACTAL×2（R224/R237 同款，无棱镜/无敌弹注入）",
+		"cal0": {
+			"burn_us_measured_mean": 2000,
+			"frames": 90,
+			"monitor_div_burn": 0.9895,
+			"monitor_us_mean": 1979,
+			"steps_per_frame_mean": 3,
+			"verdict": "last-step"
+		},
+		"date": "2026-10-08",
+		"drive": "引擎自然驱动物理（60Hz 探针注入）+ 夹具每渲染帧 风筝/补位/臂注入",
+		"formula": "物步µs = max(ΣTIME_PHYSICS_PROCESS − Σ(段和×步数),0)/活跃帧（R237 同式；Acc 段和口径=十六段不含 entry——与 R237 历史可比，entry 留在 resid 内）；resid_alt=未乘步数不钳负对侧口径",
+		"governor": "frozen, mode=frame_priority, tier_override=2, settle_budget=-3",
+		"headless": false,
+		"hold": 120,
+		"hp_scale": 1,
+		"measure": {
+			"max_steps": 6000,
+			"max_wall_s": 75,
+			"min_steps": 1200,
+			"min_wall_s": 40,
+			"warmup_steps": 1200
+		},
+		"note": "桌面绝对值≠真机——只做归因（churn 源确证），不做收益外推；判读规则 <30%=未命中（噪声带 ±15%）/≥30%=塌缩确证",
+		"package": "desktop-window-probe（归因对象=vc53 真机深载 物步µs 22-45ms 纯引擎侧残差——R237 修账后读数）",
+		"physics_hz": 60,
+		"physics_hz_probe": 60,
+		"physics_hz_project": 120,
+		"rendering_project_setting": "forward_plus",
+		"user_dir": "E:/Code/Agent/Infinite-Fission/.qa_sandbox_r244/Godot/app_userdata/Infinite Fission"
+	}
+}

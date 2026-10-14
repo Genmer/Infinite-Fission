@@ -1,0 +1,31 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R233 T1+T2（插µs 键 + SIM_30HZ 开关挂点） 回归 ══════════
+── ① 谓词门（哨兵序 -1/-2/-3） ──
+  PASS | A1 真值门 headless（override=-1 非 mobile）→ 谓词 false（桌面/headless 恒关）
+  PASS | A2 哨兵 -2 强制关 → 谓词 false（即使开关 true）
+  PASS | A3 哨兵 -3 模拟 mobile + 开关 true → 谓词 true（headless 可驱真值臂）
+  PASS | A4 哨兵 -3 + 开关注入 false → 谓词 false（开关单点可回退）
+  PASS | A5 复位后 headless 真值恢复 false（注入无泄漏）
+── ② 物理频率选表 sim_hz_target ──
+  PASS | B1 谓词 false → 选表=60（R204 原值逐位——回退档全等）
+  PASS | B2 谓词 true（-3 注入）→ 选表=30（决策1 方案A 写值）
+  PASS | B3 档位常量在位（SIM_HZ_60=60 ∧ SIM_HZ_30HZ=30——决策6 *_30HZ 后缀方案，T3 选表同款铺路）
+── ③ meta_manager 挂点：headless 零写 + 源级断言 ──
+  PASS | C1 headless 直调 _apply_fps_cap → physics_ticks_per_second 零写（120 保持）
+  PASS | C2 headless 直调 → max_fps 零写（0 保持——r194 键契约同口径）
+  PASS | C3 headless 直调 → max_physics_steps_per_frame 零写（8 保持）
+  PASS | C4 源级断言前置：meta_manager.gd 可读（res:// 源文本——r194 project.godot 同款）
+  PASS | C5 挂点写点恰一处且走选择器（「Engine.physics_ticks_per_second = GameLoop.sim_hz_target()」×1）
+  PASS | C6 无字面量写点残留（「physics_ticks_per_second = 60」「= 30」均 0 处——写值只出选择器，谓词 true 时写 30 由 C5∧B2 复合锁定）
+── ④ 谓词全开注入态手动驱动 + 插µs 键关态基线 ──
+  PASS | D1 谓词全开手动驱动 ×10 → physics_ticks_per_second 零写（120 保持——本逻辑无 Engine 写点）
+  PASS | D2 驱动后模拟链路零异常（frame_stamp 前进=10 且 state 保持）
+  PASS | D3 插µs 键在位且首拉=0（T6 插值层未实施期累计器恒 0=关态基线——AC-9 关=0）
+  PASS | D4 重复拉取增量=0（结µs/帽N 同款闩语义）
+  PASS | D5 1Hz 行含「插µs0」段（关态基线直读）
+  PASS | D6 行尾追加位=结µs 之后（行内序 结µs < 插µs——行尾结构在位不破尾锚）
+  PASS | 套件总项数（EXPECTED=20——R231 假绿教训：总项数也要断言）
+────────────────────────────────────────
+汇总：PASS 21 / FAIL 0（共 21 项）
+验收汇总：21/21 通过

@@ -336,9 +336,12 @@ func _test_event_dispatch_order() -> void:
 	proj.position = Vector2(3, 640)
 	proj.velocity = Vector2(-100, 0)
 	proj.tick(DT)                                     # tick2：ON_BOUNCE（左缘反射）→ ON_TICK
+	# R196 FIX-2 生命周期逐目标去重（有意契约变更）：同敌整弹生命周期只结算一次，
+	# bounce 后不清表——tick3 的第 2 跳须由第 2 名敌人承接（原「同敌回场重击耗尽」语义退役）
+	var enemy2 := _spawn_enemy_at(ed, Vector2(365, 640))
 	proj.position = Vector2(360, 640)
 	proj.velocity = Vector2(100, 0)
-	proj.tick(DT)                                     # tick3：ON_TICK → ON_HIT → ON_EXPIRE（pierce 1→0 回收）
+	proj.tick(DT)                                     # tick3：ON_TICK → ON_HIT(enemy2) → ON_EXPIRE（pierce 1→0 回收）
 	var log_a: Array = ta.get("log") as Array
 	var log_b: Array = tb.get("log") as Array
 	var log_c: Array = tc.get("log") as Array
@@ -367,8 +370,12 @@ func _test_event_dispatch_order() -> void:
 	for e in log_c:
 		seq_c.append(int(String(e).split(":")[1]))
 	_check("三条词条事件序列一致（A=B=C）", seq_a == seq_b and seq_b == seq_c)
-	_check("敌人被命中两次（穿透序）", _approx(enemy.hp, 500.0 - 20.0),
-		"hp %s" % str(enemy.hp))
+	# R196 FIX-2（有意契约变更——原「敌人被命中两次 hp=480」）：首敌恰 1 击，
+	# 第 2 跳承接于第 2 敌（穿透预算花在换目标）
+	_check("穿透序：首敌恰 1 击（R196 FIX-2 同敌生命周期不重击）",
+		_approx(enemy.hp, 500.0 - 10.0), "hp %s" % str(enemy.hp))
+	_check("穿透序：第 2 跳承接于第 2 敌（预算花在换目标）",
+		_approx(enemy2.hp, 500.0 - 10.0), "hp %s" % str(enemy2.hp))
 	_teardown_world()
 
 
@@ -454,16 +461,26 @@ func _test_pierce_and_bounce() -> void:
 	print("── 穿透/反弹 ──")
 	_setup_world()
 	var ed := _make_enemy_data("E_PIERCE", 1000.0)
-	_spawn_enemy_at(ed, Vector2(365, 640))
+	var enemy_a := _spawn_enemy_at(ed, Vector2(365, 640))
 	# 穿透计数递减：pierce=3 → 命中后 2 → 1 → 0（回收）
 	var proj := _spawn_ballistic({"position": Vector2(360, 640), "velocity": Vector2(100, 0),
 		"lifetime": 10.0, "pierce": 3, "hitbox_radius": 6.0})
 	proj.tick(DT)
 	_check("穿透计数递减：pierce 3→2", proj.pierce_left == 2, "got %d" % proj.pierce_left)
 	_check("穿透后弹体存活（继续飞行）", proj.velocity != Vector2.ZERO and proj.visible)
+	# R196 FIX-2（有意契约变更——原「同敌连续三跳耗尽」语义退役）：穿透预算花在
+	# 换目标上，补两名接触带内新敌承接第 2/3 跳
+	var enemy_b := _spawn_enemy_at(ed, Vector2(370, 640))
+	var enemy_c := _spawn_enemy_at(ed, Vector2(375, 640))
 	proj.tick(DT)
-	proj.tick(DT)
-	_check("穿透耗尽：pierce=3 三次命中后回收", proj.pierce_left == 0 and not proj.visible)
+	_check("穿透耗尽：pierce=3 三名不同敌命中后回收（R196 FIX-2）",
+		proj.pierce_left == 0 and not proj.visible,
+		"pierce=%d live=%s" % [proj.pierce_left, str(proj.visible)])
+	_check("穿透序：首敌整弹生命周期恰 1 击（同敌不重击）",
+		_approx(enemy_a.hp, 1000.0 - 10.0), "hp %s" % str(enemy_a.hp))
+	_check("穿透序：第 2/3 敌各恰 1 击",
+		_approx(enemy_b.hp, 1000.0 - 10.0) and _approx(enemy_c.hp, 1000.0 - 10.0),
+		"b=%s c=%s" % [str(enemy_b.hp), str(enemy_c.hp)])
 	# 反弹反射角镜像 < 2°（左缘：法线 (1,0)，理想镜像 = 速度 x 分量取反）
 	var p2 := _spawn_ballistic({"position": Vector2(3, 640), "velocity": Vector2(-80, -60),
 		"lifetime": 10.0, "pierce": 1, "bounces": 2, "hitbox_radius": 6.0})
@@ -496,9 +513,15 @@ func _test_frame_dedup() -> void:
 	_check("同帧同目标去重：血量只扣一次", is_equal_approx(enemy.hp, 100.0 - 10.0),
 		"hp %s" % str(enemy.hp))
 	_check("同帧同目标去重：结算只发生一次", int(_pipeline.stats()["settles"]) == settles0 + 1)
-	proj.tick(DT)                                    # 下一帧聚合清零 → 再命中
-	_check("帧聚合跨帧清零：下一帧可再命中", is_equal_approx(enemy.hp, 100.0 - 20.0),
-		"hp %s" % str(enemy.hp))
+	proj.tick(DT)                                    # 下一帧聚合清零
+	# R196 FIX-2（有意契约变更——原「下一帧可再命中同敌 hp=80」）：帧层清零后，
+	# 同敌重击被生命周期命中表拦截（hp 恒 90），帧聚合只对新目标放行
+	_check("同敌跨帧不重击（R196 FIX-2 生命周期去重优先）",
+		is_equal_approx(enemy.hp, 100.0 - 10.0), "hp %s" % str(enemy.hp))
+	var enemy2 := _spawn_enemy_at(ed, Vector2(375, 640))
+	proj._submit_hit(enemy2)                         # 下一帧新目标：帧层放行
+	_check("帧聚合跨帧清零：下一帧可命中新目标",
+		is_equal_approx(enemy2.hp, 100.0 - 10.0), "hp %s" % str(enemy2.hp))
 	_teardown_world()
 
 
@@ -608,8 +631,17 @@ func _test_enemy() -> void:
 	_check("死亡只执行一次（E-06 短路）", int(_probe.get("enemy_killed_hits")) == kills0 + 1)
 	# 击退
 	var ek := _spawn_enemy_at(ed, Vector2(100, 100), 1)
-	ek.knockback(Vector2(50, 0))
-	_check("击退：位置位移 50px", is_equal_approx(ek.position.x, 150.0))
+	ek.knockback(Vector2(150, 0))
+	ek.tick(0.1)                                  # 冲量=位移×9 ⇒ 首帧积分 ≈ 150×9×0.1×衰减
+	var moved: float = ek.position.x - 100.0
+	_check("击退：滑行位移 ≈ 135px（非即时闪退）", moved > 100.0 and moved < 160.0,
+		"dx=%s" % str(moved))
+	var r7_boss_data := _make_enemy_data("E_R7BOSS", 100.0)
+	var bk := _enemy_pool.acquire() as Enemy
+	bk.spawn(r7_boss_data, 1, GameConst.TAG_BOSS)
+	bk.knockback(Vector2(300, 0))
+	_check("击退：Boss 免疫（质量分级）", bk.knock_vel == Vector2.ZERO)
+	bk.queue_free()
 	# 精英模板乘区
 	var elite_data := _make_enemy_data("E_ELITE", 72.0)
 	elite_data.elite_mult = {"hp": 4.2, "spd": 0.92, "dmg": 1.5, "exp": 8.0}
@@ -701,8 +733,10 @@ func _test_player() -> void:
 	for i in range(6):
 		var w: WeaponBase = ws.new()
 		weapons.append(w)
+	player2.unlocked_slots = 1              # R183：开局默认已 2——显式置 1 保「未解锁拒绝」门断言口径
 	_check("武器槽：槽 1 可装备", player2.equip_weapon(weapons[0]))
 	_check("武器槽：槽 2 未解锁拒绝", not player2.equip_weapon(weapons[1]))
+	player2.call(&"set_difficulty", 2)   # R183 地狱帽 6（普通帽 5 内 3~5 均可，沿用地狱保后续断言）
 	player2.unlock_slot(3)
 	_check("武器槽：解锁至 3 后可装 2 把", player2.equip_weapon(weapons[1]) and player2.equip_weapon(weapons[2]))
 	player2.tick(DT, Vector2.ZERO)

@@ -1,0 +1,71 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R221 vc27 回归修复（预热占空/调速器有效性反馈/派发帽+跳字限批并入） 回归 ══════════
+── ① Fix A：skip_frames_for 纯函数 ──
+  PASS | ①预算内不折臂（5µs/12ms → 0）
+  PASS | ①恰等预算不折臂（12000/12000 → 0）
+  PASS | ①微超折 1 帧（12001/12000 → 1）
+  PASS | ①两倍恰折 1 帧（24000/12000 → 1）
+  PASS | ①两倍微超折 2 帧（24001/12000 → 2）
+  PASS | ①真机量级（47ms/12ms → 3）
+  PASS | ①零预算不折臂（pump(0) 语义）
+── ② Fix A：pump 跳帧还账记账 ──
+  PASS | ②跳帧余额期泵零成本直返（done=0 且队不减）
+  PASS | ②余额递减至 0（第二泵仍直返）
+  PASS | ②余额尽后恢复消化（≥1 项）
+  PASS | ②桌面单项预算内不折臂（skip 回 0）
+  PASS | ②真路径首泵消化 ≥1（Fix A 不破坏正常口径）
+  PASS | ②真路径桌面不折臂（_skip_frames==0）
+  PASS | ②reset 清臂与成本观测口（skip=0/last=0）
+── ③ Fix B：无效降档回升 + 冻结 ──
+  PASS | ③冻结常量契约（EFFECT_CHECK_S=6.0 / EFFECT_MIN_GAIN=0.05）
+  PASS | ③满 2.0s 降档 3→2（既有行为保持）
+  PASS | ③再降 2→1 + 降档快照重臂（vc27 场景复现）
+  PASS | ③校验窗 6.0s 未满不动（4.0s 无变化）
+  PASS | ③无效降档回升 1→2（transitions=3）且冻结置位
+  PASS | ③校验后窗口关闭（_drop_ema=-1）
+  PASS | ③冻结期深降不再降档（tier 保持 2 / transitions 3）
+  PASS | ③模式切换清冻结（新阈值体系重计）
+  PASS | ③清冻结后特效优先满 2.0s 降档 3→2
+  PASS | ③特效优先地板 2（8 拍不再降且校验窗 2.0s 未满）
+── ④ Fix B：有效降档不回升 ──
+  PASS | ④降档 3→2 后快照在册（_drop_ema>0）
+  PASS | ④有效降档：窗关（_drop_ema=-1）不回升不冻结（tier 2 / transitions 1）
+── ⑤ Fix C：派发帽 ──
+  PASS | ⑤派发帽常量契约（DISPATCH_FRAME_CAP=48）
+  PASS | ⑤60 条入队首帧恰派 48（帽生效）
+  PASS | ⑤保序（1..48 逐位）
+  PASS | ⑤余量 12 留队
+  PASS | ⑤顺延计数 dispatch_deferred +12
+  PASS | ⑤第二帧续派 12 条（49..60 保序、队清空、零顺延）
+  PASS | ⑤空队第三派零派发
+── ⑥ Fix C：新起跳字首排版按平台分流 ──
+  PASS | ⑥桌面分支：show_popup 立即排版（脏标记清 + 数值入字）
+  PASS | ⑥桌面分支：排版恰 +1 次
+  PASS | ⑥mobile 分支：show_popup 后脏标记置位且零排版
+  PASS | ⑥mobile 分支：残留文字已清（不闪上一命数值）
+  PASS | ⑥mobile 分支：tick 一次排版到位（数值入字 + 脏标记清）
+  PASS | ⑥mobile 分支：排版恰 +1 次
+  PASS | ⑥merge 重置脏标记（累计值排版仍走 tick）
+  PASS | ⑥merge 累计值 463 入字
+── ⑦ 修轮 D1：顺延跨帧存续/过期丢弃 ──
+  PASS | ⑦end_frame 不再吞顺延余量（12 条留队）
+  PASS | ⑦次帧续派全数到达（60/60 保序）
+  PASS | ⑦过期前缀丢弃（窗口 30 帧外 3 条）+ 新鲜 2 条照派
+  PASS | ⑦过期计数 dispatch_stale_drop +3
+── ⑧ Fix B+G：冻结生命周期 ──
+  PASS | ⑧前置：无效降档冻结在位
+  PASS | ⑧LEVEL_UP 局中窗：冻结保持
+  PASS | ⑧选卡收口回 PLAYING：不重臂（冻结保持 + tier 2）
+  PASS | ⑧局中冻结期不降档（tier 2 / transitions 3）
+── ⑨ 修轮 M5：脏龄保底 ──
+  PASS | ⑨前置：3 张跳字在场
+  PASS | ⑨饥饿形态出现（帽 1/帧下 ≥2 张让渡过）
+  PASS | ⑨脏龄 0.25s 后全员强制排版（无终身旧值/空白）
+────────────────────────────────────────
+汇总：PASS 52 / FAIL 0（共 52 项）
+验收汇总：52/52 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

@@ -1,0 +1,99 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R252 需求② 祝福系统自测 ══════════
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+── B1 池容量：全解锁三档 {26,26,6} + 过滤键断言 ──
+  ok | B1 档位映射：blessing_rarity_tier == [1,2,3]
+  ok | B1 池容量：蓝/紫/金 == 26/26/6
+  ok | B1 requires_trait 过滤键：MEC_RICOCHET_HALL/SYN_BOUNCE_SPEC 声明侧键实存且∉档2池
+  ok | B1 threshold_only 过滤键：7×TH_* 声明侧键实存且∉档3池
+  ok | B1 金池集合：恰为设计六件（ELE_REACTION_VOID/MEC_BEAM_SPECTRA/MEC_CRITICAL_MASS/MEC_CRIT_SHARD/MEC_FRACTAL/SYN_FIRST_STRIKE）
+  ok | B1 池序纪律：池按 id 序（零 rng）
+── B2 解锁门：codex_traits 空 → 池空、不弹面板直达战斗 ──
+  ok | B2 空图鉴：三档池全空
+  ok | B2 直达战斗：不弹面板（is_open==false）且 state==PLAYING
+── B3 记忆写口：解锁写+落盘可读回；未解锁拒写 ──
+  ok | B3 已解锁写入：返 true + 内存读口生效
+  ok | B3 写即落盘：ConfigFile 立即可读回 characters/blessing_trait
+WARNING: [Meta] 祝福词条未解锁（AFF_XP_GAIN）——拒绝写入
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+  ok | B3 未解锁拒写：返 false + 内存与档均不变（仿 set_custom_weapon 断言式）
+── B4 跨档回落：金档记忆×普通局 / 蓝档记忆×困难局 ──
+  ok | B4 金×普：零挂载
+  ok | B4 金×普：横幅含回落提示句
+  ok | B4 蓝×困：零挂载
+  ok | B4 蓝×困：横幅含回落提示句
+── B5 挂载与横幅：蓝档记忆×普通局（sentinel 弹道首发） ──
+  ok | B5 挂载：TraitStack 含 AFF_CRIT_DMG 恰 1 份
+  ok | B5 横幅：含【祝福】行且位于 R250 三档横幅行之后（行序断言）
+  ok | B5 记忆不变：直调 start_run 不改写记忆键
+── B6 门适配兜底：激光专属词条 × 弹道首发 → slot0 + 死卡披露 ──
+  ok | B6 兜底落位：词条挂 slot0 主武器恰 1 份
+  ok | B6 死卡披露：横幅含「暂无效果」
+── B7 重开重挂：start_run → restart_run 恰 1 份 + 横幅再现 ──
+  ok | B7 首局：挂载恰 1 份
+  ok | B7 重开：restart_run 成功 + 词条恰 1 份（无双叠）
+  ok | B7 横幅再现：mechanics_intro 消费含【祝福】行
+── B8 每日隔离：a 菜单路径 / b 直调种子 / c 每日死亡重开 / d 常规对照 ──
+  ok | B8-a 菜单每日路径：无面板 + 零挂载 + 已进局
+  ok | B8-b 直调每日种子：零挂载（_active_daily_seed>=0 守卫）
+  ok | B8-c 每日局自动重开：restart_run 后仍零挂载（种子跨重开留存）
+  ok | B8-d 常规局对照：restart_run 后正常重挂恰 1 份
+── B9 RNG 纪律：同种子带/不带祝福 → 卡池流零位移 ──
+  ok | B9 零 rng 消费：card_generator.rng.state 逐位相同
+  ok | B9 零 rng 消费：spawner.rng.state 逐位相同
+── B10 续局：存档恢复后 codex_traits 不增、层数不重复 ──
+  ok | B10 恢复：continue_run 成功
+  ok | B10 图鉴不虚增：恢复后 codex_traits 计数不变
+  ok | B10 层数不重复：恢复后词条恰 1 份（快照恢复口径）
+── B11 UI 契约：记忆项预选 + 「不选祝福」不改写记忆键 ──
+  ok | B11 预选态：面板打开 + 记忆项处于选中
+  ok | B11 不选祝福：记忆键不被覆盖
+  ok | B11 未选直出发：confirmed 空串不改写记忆键
+── B12 旧档零迁移：无 blessing_trait 键 → 读口空 ──
+  ok | B12 旧档缺键：_load 后读口==""（零迁移）
+  ok | B12 读口同构：blessing_trait()==StringName("")
+── B13 解锁播报：词条首获→「新祝福已解锁」局内 toast；重复获得静默 ──
+  ok | B13 首获播报：mechanics_intro 含「新祝福已解锁」+ 词条名（GameLoop 接线组装）
+  ok | B13 重复获得静默：零新播报（首获分支幂等）
+  ok | B13 图鉴写入：首获即入 codex_traits（解锁口径不回归）
+── B14 清除记忆：永久退出携带（清键+落盘）；无记忆禁用 ──
+  ok | B14 清除钮在册：记忆存在时可用
+  ok | B14 直调清键：读口空
+  ok | B14 全链清除：记忆键空 + ConfigFile 读回空（写即落盘）
+  ok | B14 清除钮禁用：无记忆时 disabled（无可清）
+── B15 悬空记忆：记忆 id 不存在（词条被删）→ 零挂载不崩零横幅 ──
+  ok | B15 悬空记忆：开局正常（state==PLAYING）零挂载
+  ok | B15 悬空记忆：零祝福/回落横幅（视作空记忆静默）
+── B16 模态面板丢失自愈（R254-2：二次出发重开面板） ──
+  ok | B16 前置：面板弹起挂起（困难档池非空，MENU 模态）
+  ok | B16 丢失态：面板不可见但 pending 挂起（复现用户卡点）
+  ok | B16 自愈：二次出发重开面板（仍 MENU 不误启动）
+  ok | B16 收口：dismiss 后链恢复进局
+── B19 换图半采用修复（QA-D4：current_map_id 随二次出发同步） ──
+  ok | B19 前置：frost 普通档已解锁（grass 达线）
+  ok | B19 前置：grass 面板挂起
+  ok | B19 换图半采用修复：实跑地图==二次所选 frost（start_run 真源同步）
+── B17 pending 防抖（面板开着不重开）+ 自愈重开=同池同档（不随二次参数漂移） ──
+  ok | B17 前置：地狱档出发弹面板（tier3 池非空，MENU 模态挂起）
+  ok | B17 幂等重入：面板开着二次出发=内容刷新（选中态重置）+模态保持
+  ok | B17 收口：dismiss 后链恢复进局
+  ok | B18 自愈重开=采用二次参数档（行数==tier1 池；副标题=普通档无地狱残留）
+── B20 出发拒绝可见化（R257：事件入环 + 菜单横幅——「点了没反应」终结） ──
+  ok | B20 前置：demon 困难档未解锁（frost·困难未通关）
+WARNING: [GameLoop] 地图未解锁（world_demon）——拒绝启动
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+  ok | B20 拒绝：state 仍 MENU（不误启动、不弹面板、无 pending 挂起）
+  ok | B20 事件入环：出发拒绝行（map+难度+上一关名——复发定罪键）
+  ok | B20 可见化：菜单顶横幅在显且指向解锁缺口（尚未解锁·寒霜冰原）
+── B21 出发链事件入环（R257：面板弹/确认/start_run/状态迁移——取证四件套） ──
+  ok | B21 面板弹事件入环（池数+档+map 三元组）
+  ok | B21 确认事件入环（含所选词条 id——非空选择真路径）
+  ok | B21 start_run+状态迁移入环（进局两件套，state==PLAYING）
+验收汇总：PASS 64 / FAIL 0（共 64 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 11 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

@@ -1,0 +1,67 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_level_stats.gd" id="2_wls"]
+
+[sub_resource type="Resource" id="WeaponLevelStats_l1"]
+script = ExtResource("2_wls")
+base_atk = 24.0
+rof = 1.8182
+cd = 0.55
+pierce = 1
+pellets = 1
+note = "每 0.55s 掷出一柄飞剑直线刺击（命中第一个敌人即没入——单体），单体 DPS 43.6"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l2"]
+script = ExtResource("2_wls")
+base_atk = 28.0
+rof = 1.8182
+cd = 0.55
+pierce = 1
+pellets = 1
+note = "飞剑伤害 24→28，单体 DPS 50.9"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l3"]
+script = ExtResource("2_wls")
+base_atk = 28.0
+rof = 2.0
+cd = 0.5
+pierce = 1
+pellets = 1
+note = "刺击间隔 0.55s→0.5s，单体 DPS 56.0"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l4"]
+script = ExtResource("2_wls")
+base_atk = 34.0
+rof = 2.0
+cd = 0.5
+pierce = 1
+pellets = 1
+note = "飞剑伤害 28→34，单体 DPS 68.0"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l5"]
+script = ExtResource("2_wls")
+base_atk = 42.0
+rof = 2.381
+cd = 0.42
+pierce = 1
+pellets = 1
+note = "飞剑伤害 34→42、间隔缩至 0.42s，单体 DPS 100.0"
+
+[resource]
+script = ExtResource("1_wd")
+id = &"W11_spirit_sword"
+display_name = "法器·灵剑"
+form = 3
+crit_rate = 0.05
+crit_dmg = 2.0
+hitbox_r = 9.0
+unlock_rarity = 1
+threshold_traits = []
+melee = {
+"weapon_class": "talisman", "mode": "swords", "nullify": true,
+"orbs": 1, "arc_deg": 120.0,
+"pierce": 1, "sword_speed": 860.0, "sword_range": 420.0,
+"transcend": {"name": "万剑诀", "atk_mult": 0.75, "volley": 3.0, "fan_deg": 10.0}
+}
+upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

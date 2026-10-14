@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_GREED_MATRIX"
+display_name = "贪婪矩阵"
+description = "每持有 20 金币，伤害 +5%（至多 +50%；与其他伤害乘区共享收益上限）"
+rarity = 3
+listen_events = []
+effect_id = &"REL_EF_GREED_GOLD"
+params = {"per_gold": 20, "step": 0.05, "cap_steps": 10, "pool": "greed_dmg"}
+unique = true

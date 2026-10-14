@@ -1,0 +1,53 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R246 升华卡 UI 呈现验收 ══════════
+PASS | 前置：MenuScreen/CardSelectUI/HUD/registry 就绪
+── G1：品质表扩档（红档 [4]=传说 / 金档 [3]=辉煌 / clamp 安全） ──
+PASS | G1a RARITY_NAMES 5 档且 [3]=辉煌 [4]=传说
+PASS | G1b RARITY_COLORS 5 档且 [4]==RARITY_SUBLIME（#ff2e63）
+PASS | G1c 升华红与既有警示红互异（ENEMY/ENEMY_DEEP 三重避让）
+PASS | G1d 取色/取名 clamp 安全（越界钳制不崩）
+PASS | G1e 金档色值不动（D1 只换字：#ffc93c 保留）
+── G2：升华卡卡面（类别行「升华 · 传说」/ 红顶带 / 5 圆珠） ──
+PASS | G2a KIND_NAMES 第 7 位=升华（kind 6 对位）
+PASS | G2b 全槽圆珠预建 5 枚（rarity=4 显 5 珠的上限扩一）
+PASS | G2c 类别行单源拼接自动出「升华 · 传说」
+PASS | G2d 金档改名露出（rarity 3 类别行「词条 · 辉煌」）
+PASS | G2e 顶带=升华红（rarity_color(4) 自动放行）
+PASS | G2f 红卡 5 圆珠全显（rarity+1 扩展口径）
+PASS | G2g 0..3 卡显隐口径不回归（紫卡 3 珠 / 金卡 4 珠）
+PASS | G2h 诅咒染名不触发（cursed 恒 false——类别行无「诅咒」段）
+PASS | G2i 描述单源无品质尾行（value_scale=1.0 守卫）
+── G3：highlight_candidate 对 rarity==4 槽位跳过描金 ──
+PASS | G3a 红卡槽跳过描金（顶带仍升华红）
+PASS | G3b 红卡槽仍记录预选（highlighted_slots 观测口语义保持）
+PASS | G3c 非红槽描金照常（紫槽顶带→GOLD）
+PASS | G3d 二次预选红卡幂等（_clear_highlight 重上稀有度色无害）
+PASS | G3e close 后预选清空
+── G4：type_icon kind6 红环菱 / skill_icon 三新角色补齐 ──
+PASS | G4a kind6 圆章生成且缓存命中（同键同实例）
+PASS | G4b kind6 ≠ 灰菱 fallback ≠ RELIC 紫钻（勿重蹈 R185 kind5 前科）
+PASS | G4c kind6 中心像素红系（红环菱形非灰/紫）
+PASS | G4d 升华卡槽圆章走 kind6 分支（贴图同缓存实例）
+PASS | G4e 三新角色技能图标非空且两两互异（医疗十字/漩涡/镰刃）
+PASS | G4f 三图标均脱离 `_:` 通用星默认分支（R198 二aw-5 口径）
+── G5：HUD 技能键升华红环（守卫生效/置位亮环/无技能不动） ──
+PASS | G5a 契约未落地桩：红环隐藏（has_method 守卫 R186 同式）
+PASS | G5b 有契约未升华（skill_sublime=false）：红环隐藏
+PASS | G5c 升华置位（skill_sublime=true）：红环亮显 + 贴图非空
+PASS | G5d 无技能角色：红环不亮且深置灰不动（0.3）
+── G6：选人卡无尽深度门文案 + 成就归类 + P2 角标 ──
+PASS | G6a ACH_TYPE_CATEGORY 显式 endless_depth=进阶
+PASS | G6b 无尽深度门文案（20 层 + 当前进度括注）
+PASS | G6c 终局档同句式（50 层）
+PASS | G6d 链序：hard_clear 优先于 endless_depth
+PASS | G6e 链序：endless_depth 优先于 kills/price
+PASS | G6f 边缘：unlock_endless_depth=0 视为无门键（落入 price 分支）
+PASS | G6g 存量回归：通关门/购买门句式不变
+PASS | G6h endless_depth_20 解锁边沿 →「角色 ·新」角标
+PASS | G6i 终局档同置位 / 无关成就不置位
+PASS | G6j R245 选关面板烟测：构建不崩 + 难度三键在
+PASS | G6k 全路径：真实锁定角色行渲染新门文案（meta 已落表合验）
+────────────────────────────────────────
+汇总：PASS 41 / FAIL 0（共 41 项）
+验收汇总：41/41 通过

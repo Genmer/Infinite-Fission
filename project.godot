@@ -1,19 +1,27 @@
 ; Engine configuration file.
 ; Infinite Fission —— 集成包（架构 §1.4）
-; autoload 注册顺序即就绪顺序：EventBus → GameConfig → DebugStats（GameConfig._ready 依赖 EventBus 先注册）
+; autoload 注册顺序即就绪顺序：EventBus → GameConfig → DebugStats → Meta → PerfGovernor
+;（GameConfig._ready 依赖 EventBus 先注册；Meta 订阅 EventBus——必须晚于其注册；
+;  R220 PerfGovernor 读 Meta 设置口（perf_mode/fps_cap）——必须晚于 Meta 注册）
 config_version=5
 
 [application]
 
 config/name="Infinite Fission"
+; R205：运行时版本真源（诊断日志头/文件名取此处；export_apk_versioned.py bump 同步写）
+config/version="v0.1.80_vc81"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
+; R194：Android 返回手势不退出游戏（引擎级键，不进 Meta.settings/存档）
+config/quit_on_go_back=false
 
 [autoload]
 
 EventBus="*res://autoload/event_bus.gd"
 GameConfig="*res://autoload/game_config.gd"
 DebugStats="*res://autoload/debug_stats.gd"
+Meta="*res://scripts/meta/meta_manager.gd"
+PerfGovernor="*res://autoload/perf_governor.gd"
 
 [display]
 
@@ -21,8 +29,19 @@ window/size/viewport_width=720
 window/size/viewport_height=1280
 window/size/window_width_override=540
 window/size/window_height_override=960
-window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
+; R203 真机渲染分辨率帽：canvas_items→viewport——720 设计分辨率内部渲染、GPU 上采样。
+; 动因=canvas_items 在 1.5K-2K 手机原生分辨率光栅化（填充 4-6 倍放大），怪稍多即 5-10 帧
+; （用户真机实测）。viewport+expand 保持「窗口高宽比延伸画布」语义（r195_adapt 七尺寸矩阵
+; +全量电池验证）；视觉代价=2x 上采样略软（贴纸平面风可容）。整体回退=单行改回 "canvas_items"。
+window/stretch/mode="viewport"
+; R195 适配底座：keep→expand（超宽/超长窗延伸画布替代黑边；运行期窗口高宽比>2.34 由
+; GameLoop 表现层钳制回落 KEEP 居中黑边，阈值 2.34 为 game_loop 内代码常量不设键）。
+; 整体回退=本行单行改回 "keep" 即现状黑边（headless 默认窗 540×960 下 EXPAND≡KEEP）。
+window/stretch/aspect="expand"
+; R194：横屏唯一修口——4.3 导出器只读此项目设置写 activity screenOrientation
+;（枚举 0=landscape/1=portrait，Main::setup 默认 SCREEN_LANDSCAPE；export_presets.cfg
+; 的 screen/orientation 是 3.x 遗留死键，4.3 从不读取，已独立 commit 删除）
+window/handheld/orientation=1
 
 [physics]
 
@@ -31,3 +50,9 @@ common/physics_ticks_per_second=120
 [rendering]
 
 renderer/rendering_method="forward_plus"
+; R204 真机热点第 3 轮：移动端渲染器换血——缺省 mobile 覆写=Vulkan mobile 渲染器，
+; 弱驱动设备上 2D 大量画布项（怪海+特效件）代价灾难（用户真机 vc11 仍 <10fps 实证
+; 填充帽不够）；gl_compatibility（GLES3）是 2D 手游标准路线，2D 顶点批处理强、
+; 驱动兼容面广（GPUParticles2D 4.3 已支持）。桌面 forward_plus 不动；回退=删本行
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

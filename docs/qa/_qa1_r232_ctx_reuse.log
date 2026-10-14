@@ -1,0 +1,47 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R232（刀1b ctx 复用+pending 袋） 回归 ══════════
+── ① 开关契约 ──
+  PASS | ①CTX_REUSE 默认 true（借出即清+袋路径现行）
+  PASS | ①弹侧 scratch 机制在场（_build_damage_ctx 可双调）
+── ② 二次构建全字段重置（22 字段生命周期矩阵） ──
+  PASS | ②同对象复用（c1==c2 scratch）
+  PASS | ②uid/引用重置（source_uid=proj.uid · target=eb · target_uid 同步）
+  PASS | ②帧/流重置（frame_stamp=当前帧 · rng_stream_id=0）
+  PASS | ②面板段重置（base_atk=100 · flat=0 · crit=0/2.0 · add_entries 空）
+  PASS | ②三池重置（mult/local 空——跨命中污染主洞位）
+  PASS | ②条件快照/标志重置（hit_flags=0 · bounce=0 · pierce=1 · gen=0 · first_wave/bool · hp_pct=1.0 · resist 快照 · element/pos/kill_backlink 回填）
+── ③ 顺延袋快照（源池改写不漂移冲刷伤害） ──
+  PASS | ③顺延占位（deferred_merge）且袋在队
+  PASS | ③袋内池=顺延时快照（contrib=1.0 非 9.9）且非别名（dict 实例不同）
+  PASS | ③冲刷伤害按快照值落账（首结 100 + 冲刷 200 = hp0−300——污染值 9.9 会被 cap 钳为 M3.0=300 即红）
+── ④ 袋键完备（AC-6 23 键） ──
+  PASS | ④袋 23 键齐备（17 值字段+last_frame+5 同构可裁字段全量入袋）
+── ⑤ frame_stamp（首顺延）/last_frame（最近合并）双字段 ──
+  PASS | ⑤首顺延帧=3500 语义在位（对 8822 键）
+  PASS | ⑤合并帧刷新（bag.last_frame=3504 · e.frame=3504——过期强冲判定源）
+  PASS | ⑤袋 frame_stamp 保持首顺延帧 3502（幂等键位 bit 级保真）
+  PASS | ⑤冲刷结果幂等键=首顺延帧（3500 键折返 dupe+1——帧号保真直证）
+── ⑥ kill_backlink 经袋冲刷回填 ──
+  PASS | ⑥顺延占位在队
+  PASS | ⑥袋冲刷击杀回填 killed_target（死亡新星消费面——袋化不丢证据链）
+── ⑦ add_entries 复用不串弹（双弹交替构建） ──
+  PASS | ⑦A 弹 add_entries 空（B 弹 20 不串）
+  PASS | ⑦B 弹 add_entries 恰 1 条 contrib=20
+── ⑧ 回退路径（CTX_REUSE=false 存 ctx 原路径） ──
+  PASS | ⑧回退态每次新 ctx（c1 != 上一只）
+  PASS | ⑧回退态 pending 存 ctx 对象（原路径形状）
+  PASS | ⑧回退态冲刷真结算（首结 100+冲刷 100=hp0−200）
+  PASS | ⑧开关还原 true
+── ⑨ ON_HIT 派发后 scratch 无持有（AC-3 回归面） ──
+  PASS | ⑨无栈弹 prepare 返回 tctx 且 ON_HIT 派发零持有（tctx 不持 ctx 生存期外引用）
+  PASS | ⑨prepare+resolve 后再构建全字段干净（无 handle 存 ctx——R5 探测面）
+  PASS | ⑨二次构建干净（三池空/flags=0/base=100）
+  PASS | 套件总项数（EXPECTED=27——R231 假绿教训：总项数也要断言）
+────────────────────────────────────────
+汇总：PASS 28 / FAIL 0（共 28 项）
+验收汇总：28/28 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

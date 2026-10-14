@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"AFF_CRIT_RATE"
 display_name = "瞄准校准"
-description = "暴击率 +8%，可叠 3 层（A3 §4.2）"
+description = "暴击率 +8%，可叠 3 层"
 pool = 0
 pool_id = &"add_crit"
 effect_id = &"EF_STAT"

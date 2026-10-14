@@ -1,0 +1,283 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R187 武器五方向重做验收 ══════════
+── 数据契约：五方向 .tres 锚 / 词条上架 / DataValidator / 图标文案 ──
+PASS | 契约：registry 全 10 武器 DataValidator 零 error
+PASS | laser·锚：base_atk 6/7/7/9/11（注释 A3 tick_atk 兑现）
+PASS | laser·锚：跳频=L 表 rof 8/8/9/9/9
+PASS | laser·锚：死键真删（pulse_duration/tick_rate）
+PASS | laser·锚：sub_ratio_levels=[0.6,0.6,0.6,0.6,0.75]
+PASS | laser·锚：scorch_max_layers_levels=[5,5,5,5,8]（L5 八层）
+PASS | laser·锚：TH_PRISM_CHOIR 在册（sub_beam_count≥3 / EF_CHOIR）
+PASS | laser·锚：TH_CRIT_SHARD 0.6→0.35 且弹道死三声明退役
+PASS | prism·锚：refract 五键真删
+PASS | prism·锚：mirrors_count_levels=[1,1,2,2,3]
+PASS | prism·锚：mirror_ratio_levels=[0.4,0.45,0.5,0.55,0.6]
+PASS | prism·锚：mirror_budget_per_s=600（落 W5 数据不落全局表）+ mirror_laser_cap=2
+PASS | prism·锚：校准锚束 tick_atk 7/9/11/14/15 不动
+PASS | prism·锚：TH_MIRROR_CHOIR 在册 + CRIT_SHARD 0.35
+PASS | prism·读感：weapon_note 含「镜」禁「折射/分光」
+PASS | rockets·30%：逐级 blast_r/110∈[0.25,0.36] 均值∈[0.27,0.34]
+PASS | rockets·30%：(0.6×W6.atk)/W7.atk 逐级 ≤0.40 均值∈[0.28,0.33]
+PASS | rockets·30%：blast_atk_ratio W6=0.6 / W7=1.0
+PASS | rockets·W6：atk 18/22/22/27/32 + volley_count_levels=[1,1,2,2,3] + proj_speed_init 240→420
+PASS | rockets·W7 现网冻结：atk 38/38/46/54/68 + sub [5,6,6,8,8] + blast_r 110
+PASS | rockets·阈值分叉：W6 含 TH_SWARM_NOVA 不含 TH_SIZE_NOVA；W7 保留 TH_SIZE_NOVA
+PASS | pistol·锚：upgrade_table 恰 5 项
+PASS | pistol·锚：面板 DPS 70/80/121/143/198±0.5
+PASS | pistol·锚：pierce 1/1/2/2/2（L4 倒退修复）+ pellets 1/1/2/2/3
+PASS | pistol·锚：lateral_gap [0,0,12,12,12] / converge [0,0,0,0,0.55] / bounce [0,0,1,1,2] / bounce_amp 0.12 cap 1.0
+PASS | pistol·锚：TH_VOLLEY_STATE(pellets≥6/EF_VOLLEY) + TH_BANK_SHOT(bounce≥12/EF_BANK)
+PASS | orbit·锚：charge_max=5 / charge_gain_cd_levels=[0.5,0.45,0.4,0.35,0.3]
+PASS | orbit·锚：detonate_mult=5 / radius=90 / global_icd=0.5 / pulse_cd=3.0 / blade_cap=8
+PASS | orbit·锚：投射物死三声明退役 + ECHO@8 / RING@60 + CRIT_SHARD 0.35
+PASS | orbit·读感：weapon_note 含「蓄能/引爆」禁「护盾」
+PASS | 词条：registry traits id 全局唯一不撞名
+PASS | 词条：R187 新词条 25 个全部在册
+PASS | 词条：required_weapon 门（HIVE/COAT→W6；DETONATE→W7；MIRROR_SPLIT/TEMPO→W5；CRITICAL_MASS/CHAIN→W8）
+PASS | 共享改单：MEC_KNOCK required_forms 含 3（W8 解锁）+ MEC_FRACTAL inheritable=true
+PASS | 共享改单：COUNT_TRAIT_IDS 增补 SPLIT_PRISM/MIRROR_SPLIT/HIVE_RACK
+PASS | validator 负例：volley_count 越域（<1）报 error
+PASS | validator 负例：blast_r_levels 逐级越 128 报 error
+PASS | validator 负例：blast_atk_ratio >1 报 error
+PASS | validator 负例：_levels 长度≠5 报 error（通用补口）
+PASS | validator 负例：ballistic lateral_gap_levels 长度≠5 报 error
+PASS | validator 负例：bounce_levels 逐级越 [0,5] 域报 error
+PASS | validator 反证：EF 未入白名单 → threshold 条目剔除 + 告警
+PASS | 表现：10 武器图标像素两两互异（含 W5 棱镜新图标）
+── laser·验收 1：默认单束（常驻 + 锁定最近敌） ──
+PASS | laser·验收1 前置：W4 装配
+PASS | laser·验收1：try_fire 后 laser 段计数==1（白板期单主束）
+PASS | laser·验收1：lifetime==0（常驻——删 pulse_duration 后缺省 0）
+PASS | laser·验收1：主束锁定最近敌
+PASS | laser·验收1：pkg3 激光段契约保留（try_fire 返回 true 维持全自动）
+── laser·验收 2：叠束与硬帽（×0.6/0.75 + 互斥 + 第 4 张拒） ──
+PASS | laser·验收2：3×MEC_SPLIT_PRISM → 段数==4（1 主 + 3 副）
+PASS | laser·验收2：副束 dmg_mult==主束×0.6（L1-4）±1e-6
+PASS | laser·验收2：副束目标两两互斥且落在 4 夹具内（不与主束目标重合）
+PASS | laser·验收2：第 4 张被 stack_max=3 拒绝
+PASS | laser·验收2：拒绝后段数仍==4（副束 cap 生效）
+PASS | laser·验收2：L5 副束 dmg_mult==主束×0.75±1e-6
+── laser·验收 3：聚焦归属（主束爬坡 / 副束恒 1 / PHASE_SYNC / CDR 换挂） ──
+PASS | laser·验收3：主束同目标 6.7s focus_mult==2.0±0.05
+PASS | laser·验收3：副束 focus_mult 恒 1.0（聚焦主束专属）
+PASS | laser·验收3 前置：副束≥2 时爬坡速率 30%/s
+WARNING: [EventBus] 事件风暴：damage_resolved 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：beam_impact 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | laser·验收3：MEC_PHASE_SYNC 3.35s 即达 ×2
+PASS | laser·验收3 前置：聚焦计时已积累（≈4s）
+PASS | laser·验收3：AFF_CDR×4 换目标保留 50%±2% 聚焦进度
+WARNING: [EventBus] 事件风暴：pool_exhausted 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | laser·验收3：无 AFF_CDR 对照 → 换目标聚焦归零（R91 契约不变）
+── laser·验收 4：灼焦目标侧单池 + 重叠回退 ──
+PASS | laser·验收4 前置：单束 2s 灼焦达 L1 cap（5 层）
+PASS | laser·验收4：两束共照 2s 层数==单束对照（≤8 封顶、单池断言）
+PASS | laser·验收4：无多余目标副束并入主束目标（overlap_fallback=true）
+PASS | laser·验收4：重叠回退伤害 ×0.5（SUB_RATIO_FALLBACK）
+PASS | laser·验收4：重叠回退束不叠灼焦（池 last_beam 恒主束）
+── laser·验收 5：池预算 + L5 单体满配 DPS 324.8±5 ──
+PASS | laser·验收5：laser 池容量 12（不扩）
+PASS | laser·验收5：满配 4 段（1+3）峰值 ≤12 预算
+PASS | laser·验收5 前置：目标灼焦满 8 层（L5 scorch cap）
+PASS | laser·验收5 前置：主束 focus_mult==2.0
+PASS | laser·验收5：L5 单体满配 DPS 324.8±5
+PASS | laser·验收5：主束每秒结算次数 ≤ 束数×30（跳频钳 [0.5,30]）
+── laser·验收 6：R183 复制体只主束 + 灰染 + 归属信号 + W5 束段指纹==1 ──
+PASS | laser·验收6 前置：本体副束派发 laser_subbeam_spawned（BODY）
+PASS | laser·验收6 前置：复制体构造
+PASS | laser·验收6：复制体 sub_beams_override==0（强制只出主束）
+PASS | laser·验收6：复制体 copy_tint==true（灰染 flag）
+PASS | laser·验收6：复制体并发束==1（副束折减）
+PASS | laser·验收6：复制体束 gray_tint==true
+PASS | laser·验收6：归属字段无 COPY 事件（折减后恒不发）
+PASS | laser·验收6 前置：棱镜装配
+PASS | laser·验收6：同场 W5 束段指纹==1（无折射分叉）
+── pistol·验收 1：锚点（面板 DPS 表已由数据契约层锁定——行为级抽查） ──
+PASS | pistol·验收1 前置：W1 装配
+PASS | pistol·验收1：L1 出弹 1 丸（14×5.0 锚——p1_polish 不破）
+PASS | pistol·验收1：L1 面板 base_atk==14（直读表面板）
+── pistol·验收 2：并排几何确定性 + 收束 ──
+PASS | pistol·验收2：L3 双弹 offset={-6,+6}px
+PASS | pistol·验收2：seed(42) 重复 10 次几何一致
+PASS | pistol·验收2：L5 三弹 offset={-12,0,+12}px
+PASS | pistol·验收2：L5 收束点 55%% 射程外弹间距 <10px（三线收束）
+PASS | pistol·验收2：L3 对照弹全程 12px 间距（无收束）
+PASS | pistol·验收2：MEC_PARALLEL_CAL×3 → ±24px 覆盖态
+PASS | pistol·验收2：MEC_PARALLEL_CAL×3 → 收束点 55%%→70%%
+── pistol·验收 3：跳弹预算 / 永存 / 增值乘区 / 黄金弹 ──
+PASS | pistol·验收3：L1 出弹 bounces_left==0
+PASS | pistol·验收3：L2 出弹 bounces_left==0
+PASS | pistol·验收3：L3 出弹 bounces_left==1
+PASS | pistol·验收3：L5 出弹 bounces_left==2
+PASS | pistol·验收3：金 MEC_BOUNCE×1 → L5 反弹预算==7
+PASS | pistol·验收3：5 次 ON_BOUNCE 触发 TH_BOUNCE_ETERNAL（≥999）/ 4 次不触发
+PASS | pistol·验收3：增值乘区 bounce_count×0.12（cap_prod 域内 +100% 封顶）
+PASS | pistol·验收3：反弹累计≥12 黄金弹必暴（crit_chance==1）
+── pistol·验收 4：TH_VOLLEY_STATE 弹幕态 ──
+PASS | pistol·验收4：pellets==4（<6 不触发对照）
+PASS | pistol·验收4：弹幕态未激活
+PASS | pistol·验收4：pellets==6 触发门
+PASS | pistol·验收4：弹幕态激活（_volley_left>0）
+PASS | pistol·验收4：首发激活 trait_milestone 恰 1 次 + volley_state_active +1
+PASS | pistol·验收4：弹幕态开火间隔 ×0.8
+PASS | pistol·验收4：弹幕态并排 +2（8 弹 ±42px 阵）
+PASS | pistol·验收4：激活 4.0s 后进入散热（cd≈3.0）
+PASS | pistol·验收4：散热期 interval 恢复 ×1.0
+PASS | pistol·验收4：散热 3.0s 后就绪
+PASS | pistol·验收4：散热后可再触发（首发播报不重复）
+── pistol·验收 6：区分度（同 lane 副本 / 独立弹幕态 / 回响绕门负例） ──
+PASS | pistol·验收6：副本同 lane 几何（offset 集合 {−6,+6} 同源）
+PASS | pistol·验收6：副本弹幕态计时独立（副本激活、本体未激活）
+PASS | pistol·验收6：W3 无编队键 → _formation_enabled()==false（回响绕门防）
+PASS | pistol·验收6：REL_ECHO 把「平行校准」挂非 W1 → add_gap 不生效（offset 全 0）
+── rockets·验收 2：齐射行为（第 i 近锁定 / ×0.6^j 递减 / HIVE_RACK / 池满） ──
+PASS | rockets·验收2 前置：W6 L5 装配
+PASS | rockets·验收2：L5 volley=3 → 单节拍恰 3 弹
+PASS | rockets·验收2：3 弹 target_uid 互异（第 i 发锁第 i 近）
+PASS | rockets·验收2：目标不足 → 3 弹同锁最近 dummy
+PASS | rockets·验收2：直击伤害序列 = atk×[1.0,0.6,0.36]±1
+PASS | rockets·验收2：HIVE_RACK×2 → volley_eff==5（clamp [1,5]）
+PASS | rockets·验收2：单节拍恰 5 弹（硬顶 5 枚/轮）
+PASS | rockets·验收2：池容 4 → 出膛 4 弃 1（try_fire 仍成功）
+PASS | rockets·验收2：池满弃发计数 +1（homing_volley_dropped 可读）
+PASS | rockets·验收2：池空再射 try_fire 返回 false 不崩
+── rockets·验收 3：引信涂层 / 幂等 / ×1.4 / 定向爆破护栏 ──
+PASS | rockets·验收3 前置：FUSE_COAT / FUSE_DETONATE 在册
+PASS | rockets·验收3：FUSE_COAT×2 直击 → fuse_mark_left==4.0（敌侧通道）
+PASS | rockets·验收3：重复命中幂等（续 4s 不叠加）
+PASS | rockets·验收3：引信敌受自导爆炸 ×1.4（F=10.8×0.667×1.4≈10.08）
+PASS | rockets·验收3：无引信对照 ×1.0（G≈7.2）
+PASS | rockets·验收3：引信乘区比 ==1.4±0.02
+PASS | rockets·验收3 前置：E 已挂引信
+PASS | rockets·验收3：W7 爆炸命中引信敌 → 溅射(×1.4)+余波恰一次 79.6
+PASS | rockets·验收3：爆炸消耗引信（fuse_mark_left==0）
+PASS | rockets·验收3：护栏置位 0.5s（fuse_detonate_guard_left）
+PASS | rockets·验收3：0.5s 护栏内第二次爆炸 → 溅射 41.6(×1.4) 无追加余波
+PASS | rockets·验收3：护栏内不消耗引信（fuse_mark_left 恒 4）
+PASS | rockets·验收3：护栏过期后余波恢复（溅射×1.4+38）
+── rockets·验收 5：R183 折减（volley_eff=1 / sub_eff=min(sub,3)）+ 10s 池压 ──
+PASS | rockets·验收5 前置：本体满编 volley_eff==5 / sub_eff==8
+PASS | rockets·验收5：副本 W6 volley_eff==1（齐射折减单发）
+PASS | rockets·验收5：副本 W7 sub_eff==min(sub,3)==3
+WARNING: [EventBus] 结算风暴：damage_resolved 本帧已派发 600 次（定位：结算条目过多）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+WARNING: [EventBus] 事件风暴：missile_blast 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+PASS | rockets·验收5：满配 10s soak——homing 在场弹峰值 ≤64（软上限）
+PASS | rockets·验收5：soak 无崩溃 + 丢弃计数可读（0 弃发）
+── rockets·验收 6：表现分档（blast_r<50 → HIT 档震屏） ──
+PASS | rockets·验收6 前置：CameraShake 在场
+PASS | rockets·验收6：小爆（blast_r=38<50）震屏档位==HIT 档（0.15）
+PASS | rockets·验收6：大爆（110）保持重档（0.40）
+── prism·验收 1：白板反向（栈=棱镜栈逐层一致 / 与源武器零交集） ──
+PASS | prism·验收1 前置：棱镜装配（≥1 源在场）
+PASS | prism·验收1 前置：镜面成军（L1=1 面）
+PASS | prism·验收1：镜面 trait_stack 与内壳同一实例（身份唯一）
+PASS | prism·验收1：镜面栈 id 集==棱镜栈 id 集（AFF_ROF_UP 逐层）
+PASS | prism·验收1：与源武器栈条目零交集（R183 反义——源 buff 不复制）
+── prism·验收 2：永久反义（11s 在场 / _reset 不清 / 不进 _summon_copies） ──
+PASS | prism·验收2 前置：镜面在场
+PASS | prism·验收2：驱动 11s 镜面仍在场（永久——无 10s 到期）
+PASS | prism·验收2：指向不变
+PASS | prism·验收2：镜面不在 _summon_copies
+PASS | prism·验收2：_reset_skill_temp_state 后 _summon_copies 空
+PASS | prism·验收2：_mirror_images 原样（永久件语义）
+── prism·验收 3：吃棱镜 buff（逐层一致 + 满层质变 ×1.6）+ 强度锚 ──
+PASS | prism·验收3：镜面 aggregate add_atk 同 id 同层（与棱镜面板一致）
+PASS | prism·验收3：镜面面板 = 源面板 × mirror_ratio（14×0.40=5.6）
+PASS | prism·验收3：满 3 层质变 ×1.6 落镜面栈（value_mult）
+PASS | prism·验收3：质变后镜面面板与棱镜面板 add_atk 仍逐层一致
+── prism·验收 4：ELE 单源防泄漏（注册源数==1 且驱动不增长） ──
+PASS | prism·验收4 前置：5 镜在场
+PASS | prism·验收4：反应乘区注册源数==1（仅棱镜 uid）
+PASS | prism·验收4：驱动 2s 注册数不增长（镜面零注册）
+── prism·验收 5：数量帽（L5=3 + SPLIT×2 → 5 钳 / 不占武器槽） ──
+PASS | prism·验收5：L5 基线 3 面
+PASS | prism·验收5：MEC_MIRROR_SPLIT×2 → 5 面（绝对帽 5）
+PASS | prism·验收5：第 3 张 SPLIT 被 stack_max=2 拒绝
+PASS | prism·验收5：register_mirror 帽拒（第 6 面被拒 + mirror_rejected 计数）
+PASS | prism·验收5：镜面 ∉ weapon_slots（WEAPON 卡候选集零污染）
+── prism·验收 6/7：攻速传导 / 奏鸣 / 预算闸 / 指向轴 ──
+PASS | prism·验收6 前置：镜面指向 W1（单源）
+PASS | prism·验收6：镜面 _fire_interval 与内壳同源同值（AFF_ROF_UP 随栈传导缩短）
+PASS | prism·验收6：单镜 rof 帽 30/s（interval 钳 1/30）
+PASS | prism·验收6：MEC_MIRROR_TEMPO×2 → 镜面冷却 ×1.3 推进
+PASS | prism·验收6 前置：budget_per_s==600
+PASS | prism·验收6：超预算该拍静默跳过（mirror_budget_skipped +1、不出弹）
+PASS | prism·验收7：MEC_MIRROR_WEIGHT → 全镜指向面板 DPS 最高武器（W1）
+PASS | prism·验收7：MEC_MIRROR_LOCK → 波首重排指向不变（确定性出口）
+PASS | prism·验收7：player._mirror_locked 挂载态同步
+PASS | prism·验收9：镜面染色银白/冰青（MirrorImage.TINT，禁金色调性）
+PASS | prism·验收9：内壳镜面旗标 is_mirror_image（弹体镜像描边分派读数）
+PASS | prism·验收9：横幅句式「棱镜映照：…」（对照 R183「召唤僚机」）
+── prism·验收 8：R183 互斥（复制池排除 W5_prism / 双集合互不包含） ──
+PASS | prism·验收8：8 次召唤复制池零 W5_prism（临时件永不产出永久件）
+PASS | prism·验收8：_mirror_images 与 _summon_copies 互不包含
+── orbit·验收 2：R186 拆除负向锁死（ELE 恒空 + apply_attach 零调用） ──
+PASS | orbit·验收2 前置：W8 装配
+PASS | orbit·验收2 前置：力场创建
+PASS | orbit·验收2：attach 三件套零残留（attach_gate/attach_mult/_attach_cd）
+PASS | orbit·验收2：_orb_element/_enchant_elements 方法不存在
+PASS | orbit·验收2：挂 ELE 词条 240 帧接触 → 目标 elemental 恒空
+PASS | orbit·验收2：apply_attach 经 W8 路径零调用
+PASS | orbit·验收2：接触伤害照常落血（拆附着不拆输出底）
+── orbit·验收 3：蓄能确定性（逐 tick / 内冷却 / 同帧双球 / 满档恰 1 爆） ──
+PASS | orbit·验收3 前置：力场创建
+PASS | orbit·验收3：首接触 tick 恰 +1 蓄能
+PASS | orbit·验收3：gain_cd 内冷却（+0）
+PASS | orbit·验收3：同帧双球触达同目标蓄能仅 +1
+PASS | orbit·验收3：满 5 档恰触发 1 次引爆（池清零）
+PASS | orbit·验收3：DebugStats w8_detonations 逐一吻合（+1）
+PASS | orbit·验收3：AoE 落伤 =5×atk（60px 内副目标恰 50）
+PASS | orbit·验收3：90px 环外零波及
+── orbit·验收 3b：引爆三道闸（全局 ICD ≥0.5s） ──
+PASS | orbit·验收3b 前置：力场创建
+PASS | orbit·验收3b：两目标同帧满档 → 第 2 次引爆延后 ≥0.5s（全局 ICD）且 <1.5s
+── orbit·验收 4：刀数帽 + 复制体蓄能单例（恰 1 爆/周期） ──
+PASS | orbit·验收4 前置：力场创建
+PASS | orbit·验收4：16 刀单目标命中事件 ≤ effective_blade_cap 等价位（≤4）
+PASS | orbit·验收4：登记 distinct 刀数 ≤ 帽（2）
+PASS | orbit·验收4 前置：副本力场创建（独立实体）
+PASS | orbit·验收4：整个蓄能周期恰 1 次引爆（uid 单例 + 全局闸间隔 ≥0.5s）
+── orbit·验收 5：脉冲与 CDR + 塑场 + 形态/当量卡 ──
+PASS | orbit·验收5 前置：力场创建
+PASS | orbit·验收5 前置：目标已蓄能
+PASS | orbit·验收5：已蓄能目标每 pulse 拍 +1（gravity_pulse 命中 1）
+PASS | orbit·验收5：AFF_CDR×2 → 脉冲间隔 3.0→2.4
+PASS | orbit·验收5：MEC_KNOCK 过 required_forms 门（W8 form=3 可上架）
+PASS | orbit·验收5：add_knock 进力场击退终值（40+60=100）
+PASS | orbit·验收6：命中后切向分量 = 击退×60%（>0 沿扫带）
+PASS | orbit·验收6：环上径向外移 ≤8px/击
+PASS | orbit·验收6：环内目标归环向外推（>0）且 ≤8px/击
+PASS | orbit·新卡：MEC_CRITICAL_MASS×2 → 引爆倍率 5×→7×
+PASS | orbit·新卡：MEC_CHAIN_DETONATE → 引爆转移 floor(5×0.4)=2 档给 160px 内最近敌
+── orbit·验收 7：数值探针（L1 裸装 33.3 / L5 裸装 113.3，±10%） ──
+PASS | orbit·验收7 前置：力场创建
+PASS | orbit·验收7：L1 裸装 DPS 33.3±10%（接触 16.7+引爆 16.7）
+PASS | orbit·验收7：L5 裸装 DPS 113.3±10%（×3.4，锚 L5≥110）
+── 评审修复回归：回响门 / 回廊镜像 / 索敌 350 / 复制阵 / 余波 AoE / 品质梯 ──
+PASS | 评审R7：mount_gate_allows(HIVE_RACK, W6)==true / (W7)==false
+PASS | 评审R7 前置：REL_ECHO 激活
+PASS | 评审R7：回响仅 W7 在场 64 种子 → HIVE_RACK 零落卡（防 Boss 全中 ~700 崩坏链）
+PASS | 评审R7：W6+W7 双枪回响 → HIVE_RACK 落 W6 不落 W7（门内功能保持）
+PASS | 评审R3 前置：W1 L3 回廊标记激活（formation + HALL 挂载）
+PASS | 评审R3：反弹后 lane offset 镜像（_conv_gap 符号翻转、模长保持 ±6）
+PASS | 评审R2 前置：无棱镜 380px 敌不在 250px 索敌域（reach=250+64）
+PASS | 评审R2：副束=1 → 250px 不索 / 副束=2 → 350px 索得 380px 敌（reach=半径+64）
+PASS | 评审R5：W8 复制体 BASE 单环阵（L5 源 120px → 副本 90px 基线）
+PASS | 评审R5：W8 复制体相位偏移 45°（本体 0）
+PASS | 评审R4 前置：引信靶挂标、邻靶零伤
+PASS | 评审R4：余波 AoE 半径 0.5×blast_r → 邻靶恰吃 2×0.5×38=38（无溅射污染）
+PASS | 评审R9：SPLIT_PRISM 蓝(+2) 单挂 → 副束 2（原恒 1）
+PASS | 评审R9：HIVE_RACK 蓝(+2) 单挂 → volley_eff 1+2=3
+────────────────────────────────────────
+R187 用例分账：PASS 232 / FAIL 0（共 232 项）
+══════════════════════════════════════════════════
+验收汇总：232/232 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

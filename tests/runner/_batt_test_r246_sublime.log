@@ -1,0 +1,93 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R246 红色传说升华卡（cards 泳道）验收 ══════════
+PASS | 前置：DataRegistry 裸载就绪（词条/武器/遗物全量）
+PASS | 前置：定种流 0.001% 命中位扫描在案（hit_idx=793243，上限内）
+── T1 品质表第 5 档 ──
+PASS | T1 RARITY_NAMES 五档（[普通,稀有,史诗,辉煌,传说]）
+PASS | T1 RARITY_COLORS 五档 + [4]==RARITY_SUBLIME(#ff2e63)
+PASS | T1 金档只换字：色值 #ffc93c 与顺序 [3] 零动
+PASS | T1 红档三重避让警示红（≠ENEMY/≠ENEMY_DEEP/≠碎裂描边）
+PASS | T1 越界钳制安全（rarity_color(5)/rarity_name(99)/rarity_name(-1)）
+── T2 掷率 0.001% 字面 + 两态 ──
+PASS | T2 SUBLIME_CHANCE == 0.00001（0.001% 字面精确）
+PASS | T2 构造期定种 20261008（R88 _slot_rng 同式）
+PASS | T2 miss 态（本批首掷 ≥1e-5）：不出升华卡
+PASS | T2 hit 态（本批首掷 <1e-5）：恰出 1 张升华卡
+PASS | T2 hit 卡 rarity==4（红档不被钳金）
+PASS | T2 批大小不变（替换非追加，货架恒 deal 张）
+── T3 豁免面 ──
+PASS | T3 满遗物语境掷中：升华卡仍在架且恰 1 张
+PASS | T3 升华卡 rarity 恒 4（保底/重随不顶穿不改写）
+PASS | T3 升华卡永不带诅咒（curse_last 收紧为仅 TRAIT——红/诅咒撞色消除）
+PASS | T3 诅咒回归：TRAIT 末位照常带 curse（收紧仅放走非 TRAIT）
+PASS | T3 源级锚：重随循环豁免 SUBLIME
+PASS | T3 源级锚：保底语句豁免 SUBLIME
+PASS | T3 源级锚：金卡槽替换双保险豁免 SUBLIME
+PASS | T3 源级锚：curse_last 收紧为仅 TRAIT
+PASS | T3 金卡槽替换命中批：槽位卡 1 张 + 升华卡 1 张共存互不吞
+── T4 替换规则 ──
+PASS | T4 空注册表全 fallback：掷中不上架（保底卡神圣不可替换）
+PASS | T4 不补偿：批大小仍 3（无追加无移除）
+PASS | T4 掷中即耗：后续批不出（无补偿重掷）
+PASS | T4 源级锚：替换扫描跳过 FALLBACK/SLOT_BONUS
+PASS | T4 源级锚：注入落点在 _apply_rarity_values 之后（防 clampi 钳金）
+── T5 apply_choice ──
+PASS | T5 enable_sublime 调用计数 ==1（鸭子守卫直调）
+PASS | T5 player 侧升华位置位
+PASS | T5 mechanics_intro 播报「红色传说 · 技能已升华！（本局有效）」
+PASS | T5 DebugStats 计数 sublime_card_chosen +1
+PASS | T5 二次 apply 幂等（player 侧布尔保持 true）
+PASS | T5 无 enable_sublime 守卫：零崩溃通过（不调不炸）
+── T6 fission 两态 ──
+PASS | T6 表有键：fission 掷中上架（sublime_desc 即替代升华判据）
+PASS | T6 表有键：描述含表文案（动态读表拼接）
+PASS | T6 表有键：卡名带表升华名（本命同调）
+PASS | T6 表无键态：const 表嵌套冻结不可注入（源级锚兜底）
+PASS | T6 变体：新角色 medic 掷中不上架（has_skill 真但表无 sublime_desc——破洞卡杜绝）
+PASS | T6 变体：新角色 vortex 掷中不上架（has_skill 真但表无 sublime_desc——破洞卡杜绝）
+PASS | T6 变体：新角色 reaper 掷中不上架（has_skill 真但表无 sublime_desc——破洞卡杜绝）
+PASS | T6 源级锚：判据已收紧为单判据（has_skill 放行已撤——r247 终修）
+── T7 卡面数据面 ──
+PASS | T7 卡 dict：kind==SUBLIME(6) / id==SUBLIME_SKILL / rarity==4
+PASS | T7 卡 dict：data==null（不走词条链，E-08 天然不破）+ milestone==false（无金名质变预告）
+PASS | T7 卡 dict：value_scale==1.0（无品质加成尾行——compose_desc_text 守卫口径）
+PASS | T7 描述含「0.001%」+「红色传说」（概率卡面显示主露出）
+PASS | T7 卡名「技能升华：…」前缀（读表升华名拼接）
+PASS | T7 档位供数：rarity_name(4)==传说 + rarity_color(4)==RARITY_SUBLIME
+PASS | T7 预热键=实拼键：roll 卡描述∈预热变体集（value_scale 同 1.0）
+── T8 挂机 998 ──
+PASS | T8 score(升华卡)==998.0
+PASS | T8 998 > 金词条卡理论上限（3×2.6+质变2=9.8）
+PASS | T8 软排除清单不含升华卡（998 不受罚分侵蚀）
+PASS | T8 pick 普通模式：升华卡槽位必选（金/升华/诅咒 → idx1）
+PASS | T8 pick 成对模式：含升华卡的行必选（行 1 → 槽 6）
+PASS | T8 pick 成对模式：诅咒行让位（行 0 含诅咒 → 行 1 升华 → 槽 6）
+PASS | T8 诅咒评分仍在负域（−999 语义不回归）
+── T9 预热零 rng ──
+PASS | T9 零 rng 契约：三流 state 前后不变（rng/_slot_rng/_sublime_rng）
+PASS | T9 升华变体在架（表有键角色各 1 + 通用兜底 1 = 11）
+PASS | T9 通用兜底变体逐字节在架（_build_sublime_card 单源）
+── T10 RNG 纪律 ──
+PASS | T10 对照前置：A 批无升华 / B 批恰 1 张
+PASS | T10 100 批后主 rng.state 相等（升华掷/替换零扰动——pkg4 分布锁前置保证）
+PASS | T10 100 批后 _slot_rng.state 相等（金卡槽流零扰动）
+PASS | T10 _sublime_rng 流独立分叉（A/B 消耗位不同）
+── S 组 game_loop 接线 ──
+PASS | S 前置：GameLoop Boot 完成（MENU）
+PASS | S1 serialize_run 含 sublime 单键（{on, fission_layers}）
+PASS | S1 默认态：on==false / fission_layers==0（skills 未升华零迁移）
+PASS | S2 升华态随档：on==true / fission_layers==123（duck 读口）
+PASS | S3 回填 on=true → enable_sublime 已调（skill_sublime==true 幂等）
+PASS | S3 fission 层数专用口回填 77（clamp 0..500）
+PASS | S4 每日局升华流定种（seed==24680）
+PASS | S4 常规局升华流 randomize（≠24680 ≠构造种）
+PASS | S5 源级锚：reseed_sublime 三处（每日/常规/继续）
+PASS | S5 源级锚：serialize sublime 落键 + restore enable_sublime 回填
+────────────────────────────────────────
+汇总：PASS 72 / FAIL 0（共 72 项）
+验收汇总：72/72 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 8 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

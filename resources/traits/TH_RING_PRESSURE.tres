@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"TH_RING_PRESSURE"
+display_name = "环压"
+description = "蓄能命中累计 ≥60：本局引爆半径 +20%"
+pool = 3
+pool_id = &""
+effect_id = &"EF_RING_PRESSURE"
+value = 1.0
+value2 = 0.0
+params = {"threshold_only": true, "metric": "charged_hits", "threshold": 60.0}
+event_hooks = []
+stack_max = 1
+decay_delta = 0.0
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 3
+tags = 0
+condition = {}

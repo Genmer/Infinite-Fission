@@ -1,0 +1,171 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 集成包全链自测 ══════════
+PASS | autoload 就绪（EventBus/GameConfig/DebugStats）
+PASS | GameConfig 非致命（balance 加载）
+── main.tscn 组装 ──
+PASS | main.tscn：根节点 GameLoop 且 Boot 进入 MENU
+PASS | Boot：致命清单为空
+PASS | Boot 预算（AC-01.4 逻辑侧）：<3s
+PASS | 切真管线：get_pipeline() 工厂默认真件（九步）
+PASS | 组装：池×7 / 遗物处理器 / 菜单屏 / 相机就绪（R94 +homing）
+PASS | 组装：MenuScreen 仅 MENU 态可见
+PASS | 冻结契约：Engine.time_scale 未被改写（§8.7）
+PASS | AC-14.2：七池 Boot 期全量预热（live=0 / free=capacity）
+── 全链冒烟（AC-16.1） ──
+PASS | MENU→PLAYING：菜单信号 start_run + 波次 1 + 菜单隐藏
+PASS | 开战：敌人入场（≤8/帧节流）
+PASS | 击杀：enemy_killed 广播 + HUD 计数
+PASS | 掉落：经验碎片入场上（面值 = exp_value × 点金手 × 早期经验倍率）
+PASS | 拾取：磁吸半径内自动飞向玩家并吸收（xp 入账）
+PASS | 升级：gain_xp → LEVEL_UP 选卡流打开
+PASS | AC-16.2：LEVEL_UP 战斗完全冻结（敌人静止/生成暂停）
+PASS | 选卡：恢复 PLAYING（AC-16.1 选卡段）
+PASS | 词条生效：所选卡类别效果落武器（kind=1）
+PASS | Boss 波：Boss 登场 + 血条显示（AC-16.3）
+PASS | F-19：Boss1 击杀 → 槽位 4 解锁（真实派发序，修复回归）
+PASS | 死亡仲裁：PLAYING→GAME_OVER（E-16 最高优先）
+PASS | 结算屏：统计可见（击杀/波次/总伤害）
+PASS | 重开：GAME_OVER→PLAYING + 数值重置（波次 1/满血/碎片清场/遗物清零）
+── 真管线九步落血 ──
+PASS | 九步落血：V=(1−0.5) → 50 入血（hp 1000→950）
+PASS | AC-12.7：幂等——二次结算返回缓存且血量仅扣一次
+PASS | AC-12.1：真管线公式锚点 336
+PASS | AC-12.2：同乘区 ID 去重取最大 → 150
+PASS | 修复A：settle_aoe 真件落血恰好一次（1000000→999900，非 ×2 双扣）
+PASS | 修复B：投射物直击真件落血恰好一次（1000000→999900，非 ×2 双扣）
+PASS | 修复B：桩口径投射物直击落血恰好一次（调用方落血行为不变 1000000→999900）
+── R_rxn 反应独立告警线 ──
+PASS | B.6：BalanceTables.r_rxn_ratio 落字段（50，独立于 R_alarm=500）
+PASS | B.6：超线反应钳制 D=S×r_rxn（6000→5000）
+PASS | B.6：超线反应审计 alarm + rxn_alarms 独立计数（与 R_alarm 分账）
+PASS | B.6：R_rxn 双闸——二次超线仅记审计+计数（广播闸保持已触发）
+PASS | B.6：亚线反应原值通过（200）且审计无告警
+PASS | B.6-R192：反应表含 coef 键条目 ≥4（现役 2 + 新增伤害反应——矩阵非空）
+PASS | B.6-R192：全矩阵 coef 键逐条注入 χ=60 → 均钳至 S_snap×50（5000）+ alarm
+PASS | B.6-R192：矩阵超线计数逐笔累加（+9）且广播闸一局一次（首条后保持）
+PASS | B.6-R192：最大构筑 coef=7.02 不钳不告警（702 原值通过）
+── xp 链路 ──
+PASS | xp 池挂载：容量 160 + 全量预热（AC-14.2）
+PASS | 掉落：碎片面值 = exp_value(7) × 倍率
+PASS | 磁吸：半径外静止（Q-13 120px 边界）
+PASS | 磁吸：半径内向玩家飞行
+PASS | 掉落：零值丢弃（数值纪律）
+PASS | 满池：合并入已有碎片（+5 数值守恒）
+PASS | 重开清场：碎片全归还（live=0）
+── 遗物处理器 ──
+PASS | 遗物注册表：18 件加载（R72 增 6 + R186 增 1）
+PASS | REL_MIDAS：激活 + 经验 ×1.2
+PASS | 遗物唯一：重复激活拒绝
+PASS | REL_HARVEST：激活
+PASS | REL_HARVEST：击杀 +0.4% max_hp（50→50.4）
+PASS | REL_OVERCLOCK：激活
+PASS | REL_OVERCLOCK：精英首杀 → 保底紫+（rarity_floor=2）
+PASS | REL_OVERCLOCK：每波一次（第二次不再保底）
+PASS | REL_WORDS_TIDE：激活
+PASS | REL_WORDS_TIDE：wave_started → 重随申请 + 波内精英位重置
+PASS | REL_GAMBLER：激活（卡牌流提前入场 → 已持有即生效）
+PASS | REL_GAMBLER：发牌数 4
+PASS | REL_GAMBLER：货架 4 张 + 末位诅咒标记
+PASS | REL_GAMBLER：诅咒卡应用 → GAMBLER_CURSE 词条挂载
+PASS | REL_BOSS_TROPHY：激活
+PASS | REL_BOSS_TROPHY：精英/Boss ×1.25、普通 ×1.0
+PASS | REL_BOSS_TROPHY：ctx 注入 elite_dmg 乘区池
+PASS | REL_MOMENTUM：激活
+PASS | REL_MOMENTUM：0 反弹无加成 / 5 层 +40% / 12 层钳 10 层 +80%
+PASS | REL_MOMENTUM：ctx 注入 bounce_dmg 乘区池
+PASS | 遗物乘区幂等：同 ctx 重复注入不重复入池
+PASS | REL_CRIT_CHAIN：激活
+PASS | REL_CRIT_CHAIN：暴击重置主武器冷却
+PASS | REL_ECHO：激活
+PASS | REL_ECHO：选卡后复制词条到随机武器
+PASS | REL_BLACK_MARKET：激活（卡牌流提前入场 → 已持有即生效）
+PASS | REL_BLACK_MARKET：w8 清空 → 排程消费并开店（LEVEL_UP + 可见）
+PASS | REL_BLACK_MARKET：w13 再次排程开店
+PASS | REL_BLACK_MARKET：w9 不排程（保持 PLAYING）
+PASS | REL_PHOENIX：激活（卡牌流提前入场 → 已持有即生效）
+PASS | REL_PHOENIX：致死保留 1 HP（不死鸟触发）
+PASS | REL_PHOENIX：次数耗尽 → 死亡放行（E-16）
+PASS | 重开：遗物清零（每场唯一口径）
+── R186 每击谐振（CD 遗物） ──
+PASS | R186：注册可查 + effect_id/unique/params 三键
+PASS | R186：未持有 push 静默早退（守卫零副作用）
+PASS | R186①：激活 + 预算存款拉满 0.60s
+PASS | R186②：60 击直减 → CD 119.4 / 预算归零 / 计费遥测 60
+PASS | R186③：预算耗尽 → 整击丢弃（CD/遥测不动）
+PASS | R186④：tick(1.0) 回充 +0.20s（20 击/s 预算速率）
+PASS | R186④：tick(10.0) 回充触帽 → 停在 0.60s（存款上限）
+PASS | R186⑤：技能就绪 → 不计费不耗预算（存款留给下轮）
+PASS | R186⑥：暴击谐振激活
+PASS | R186⑥：整置就绪 → 计费早退、存款保留
+PASS | R186⑩：时之沙激活 → skill_cd_relic_mult = 0.8
+PASS | R186⑩：同帧 120 击越帽 → 计费恰 60（封顶语义）+ CD 119.4
+PASS | R186⑩：时之沙乘区 0.8 保持（本遗物不写乘区，正交）
+PASS | R186⑪：真链接线（tick→try_fire→on_attack_fired）真实开火计费 >0
+PASS | R186⑦：reset_run 三态清零 + owned 清空
+── RANGED 敌弹池 ──
+PASS | RANGED 开火：敌弹入场（team=1）
+PASS | B.3 敌弹池化：0 运行期实例化（走池不走 instantiate）
+PASS | 敌弹格：消弹查询快照含敌弹
+PASS | 敌弹回收：池内清洁往返（live 恢复至射击前基线）
+── 波首命中位 ──
+PASS | B.4：波开行首杀位复位（wave_first_kill_done=false）
+PASS | B.4：武器波首命中位查询 = true（SYN_FIRST_STRIKE 条件源）
+PASS | B.4：首次击杀后波首命中位关闭
+PASS | B.4：无宿主武器通道 → ctx 波首位 false 安全
+── 敌间分离力 ──
+PASS | E-10：重叠敌分离（10Hz 软推，距离 0→15.9999876022339）
+PASS | E-10：软钳（单次 ≤4px，不弹开）
+── duck 收紧第二批 ──
+PASS | 收紧① ProjectilePool.acquire() → ProjectileBase
+PASS | 收紧② EnemyPool.acquire() → Enemy
+PASS | 收紧③ XPPool.acquire() → XpShard
+PASS | 收紧④ player.weapon_slots → Array[WeaponBase]（真件直调）
+PASS | 收紧⑤ equip_weapon 签名 WeaponBase（null 拒绝）
+PASS | 收紧⑥ DamageContext.target → Enemy（真件赋值合法）
+PASS | 维持：PopupPool.acquire() → Node2D 占位（本批未授权收紧）
+── AC 核心子集 ──
+PASS | AC-01.1：720×1280 + viewport/expand（R203 渲染分辨率帽；R195 曾 keep→expand）
+PASS | R194：window/handheld/orientation=1（竖屏，AC-01.1 同款 ProjectSettings 直读）
+PASS | AC-14.4：池满请求拒绝（null + misses 计数，无崩溃）
+PASS | AC-16.3：单帧生成节流 ≤8
+PASS | AC-16.4：卡池耗尽 → fallback 属性卡 ×3（界面永不空）
+PASS | AC-11.1：点燃 DOT 落血（真管线独立结算）
+PASS | AC-11.2：冰冻易伤因子 ×1.25 + 寒滞减速生效
+PASS | AC-15.1：顿帧激活 time_scale=0.05 + Engine.time_scale 恒 1（§8.7）
+PASS | AC-15.5：粒子发射器走池（同屏 ≤64）
+PASS | AC-14.3：全程池污染 0 / 非法归还 0（E-05）
+PASS | AC-14.1：全链冒烟 0 运行期实例化（六池，池预热全覆盖）
+── 重开清场（审查 Fix 1） ──
+PASS | 清场前：在场敌 > 0（清场对象就位）
+PASS | 清场前：投射物/光束池 live > 0
+PASS | 重开前：GAME_OVER（E-16）
+PASS | 重开清场：restart 后在场敌 0 / 投射物 live 0 / 光束 live 0 / 波次 1 队列重建
+PASS | 重开保护：重生无敌帧激活（invuln_left > 0，1.5s 主控裁定）
+── Boss 击杀顿帧（Fix 2）+ 伴随怪存活闸（Fix 3） ──
+PASS | Fix3 前置：w10 Boss 登场
+PASS | Fix3：Boss 存活 → 伴随怪流水照常（场上伴怪 > 0）
+PASS | Fix2：Boss 击杀经 EventBus 真实派发 → 120ms 顿帧申请（BOSS_DEATH 档）
+PASS | Fix3：Boss 死亡 → 伴随怪流水停止（3.33s 零新增）
+PASS | Fix3：清场完成 → wave_cleared(10) 真实派发
+── 暴击弹片（Fix 4）+ 校验器剔除 ──
+PASS | Fix4：双镜像清单同步（TraitEffect.known_effect_ids / TECH_EFFECT_IDS ∋ EF_CRIT_SHARD）
+PASS | Fix4：注册武器 TH_CRIT_SHARD 存活（注册资源 0 rejected 口径不回归）
+PASS | R187：TH_CRIT_SHARD 阈值 0.6 → 0.35（注册武器声明翻转）
+PASS | R187 补口：MEC_CRIT_SHARD 生产载体（EF_CRIT_SHARD + ON_HIT 派发 + MECH 池）
+PASS | R187 补口：蓄能档位通道（add 3/5 → 3，帽记录）
+PASS | R187 补口：蓄能引爆清零（clear → 0）
+PASS | Fix4：暴击率 0.3 < 0.35 阈下 → 弹片不结算
+PASS | Fix4：暴击率堆过阈值 → 邻近单体弹片结算（0.5×暴伤 = 100）
+PASS | Fix4：主目标不重复结算 / 半径外不波及
+PASS | Fix4：悬空 effect_id threshold 被剔除 + 告警（宿主保留）
+── AFF_HP_UP 死池接线 ──
+PASS | AFF_HP_UP 接线：+2 层（基线 0）→ max_hp = 60+25×2 = 110 且 hp 等量回补
+────────────────────────────────────────
+汇总：PASS 144 / FAIL 0（共 144 项）
+WARNING: 1 RID of type "CanvasItem" was leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2483)
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 8 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

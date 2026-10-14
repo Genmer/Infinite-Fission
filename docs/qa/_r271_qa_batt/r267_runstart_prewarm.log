@@ -1,0 +1,37 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+── a0) 冷态前置 / 桌面门零扰动 ──
+PASS | a0 冷图集（built=0 / 未 ready / layout 未做 / 未烤 12）
+PASS | a0 menu_screen 同步就位（零 await boot——bake_b 先例）
+PASS | a0 桌面缺省门：模态开零暖（built 仍 0——桌面 Label 路径零扰动）
+── a) 模态暖通道（祝福模态开帧 → 确认 → start_run） ──
+PASS | a 模态暖全量（built 0→12 / ready / layout 完成 / 暖耗时 26309µs 落账）
+PASS | a start_run 常态档 ≤8000µs（min-of-3=1590µs；对照改前冷直发 32300µs / vc71 真机 41612µs）
+PASS | a ensure 恒短路（bitmap_bake_us 零增量=0——全量兜底档未触发）
+PASS | a 暖口幂等（ready 后零新增暖耗时 / 未烤 0）
+── c) 队列波序重排 ──
+PASS | c 前置：队列非空（128 项）
+PASS | c1 op:6 队首连续块（首块 12 = 全量 12——①a 口径）
+PASS | c2 带波键 op:0 项非降序（8 项带键——波序优先）
+PASS | c5a op:0 多重集恒等（45 项——重排零增删）
+PASS | c5b 非 op:0 槽位内容恒等（83 项逐位相等——共享域/op:6/op:7 序不动）
+PASS | c3 boss 波键 ≥2（门槛放行窗存在）
+PASS | c4 wave1 kind 聚 op:0 段前部（首 0 / 末 0 / 段长 45——重排后居前）
+── d) 快开局敌变体（PLAYING 泵） ──
+PASS | d 前置：wave1 kind 清单非空（["grunt"]）
+PASS | d PLAYING 泵消化（6 项出队 / frame_us 计数落账 Δ24177）
+PASS | d wave1 kind 全命中 TextureFactory._cache（miss=无——首见零首焙）
+── e) boss 错峰 / 不停摆 ──
+PASS | e 门槛前跳过不 break（廉价项先出队 2 项、boss 双面留队=true——不停摆）
+PASS | e 门槛放行恰 1 原子项/帧（合成对剩 1/2；帧 122144µs ≤245000µs；超支计数 Δ=1）
+PASS | e 原子帧 ≤300000µs 硬帽（实测 122144µs）
+PASS | e 占空还账生效（_tex_prewarm_skip=30 ≥1——R222 Fix P）
+PASS | e 还账帧零出队（队长 123 恒等）
+── f) 泵帧峰值（60 帧） ──
+    60 帧泵耗时：峰值 69595µs / 常规帧 54 / 超支帧 6
+PASS | f 全程 ≤300000µs 硬帽（峰值 69595µs）
+PASS | f 超支帧各 ≤245000µs 原子上界（峰值 69595µs——boss 双面实测上界口径）
+PASS | f 常规帧（≤7000µs 档）占多数（54/60 ≥45——占空还账后零成本帧 +
+		预算内帧为主，原子项摊到 ~1/N 帧）
+R267 刀P1 runstart 预热汇总：PASS 25 / FAIL 0（共 25 项）
+验收汇总：PASS 25 / FAIL 0

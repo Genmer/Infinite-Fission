@@ -1,0 +1,68 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R212 池预热回归 ══════════
+── ① boot 预热满容 ──
+  PASS | 七池键齐全（projectile/homing/enemy/popup/particle/laser/xp）
+  PASS | [projectile] free==capacity（prewarm 填满→懒增长 free+live<cap 恒假）
+  PASS | [projectile] boot 后 live==0（静止满容，非借出态填满）
+  PASS | [projectile] runtime_instantiates==0（预热实例化不计运行期）
+  PASS | [projectile] 容量真源对账 ==820（balance_tables.tres 原值）
+  PASS | [homing] free==capacity（prewarm 填满→懒增长 free+live<cap 恒假）
+  PASS | [homing] boot 后 live==0（静止满容，非借出态填满）
+  PASS | [homing] runtime_instantiates==0（预热实例化不计运行期）
+  PASS | [homing] 容量真源对账 ==24（balance_tables.tres 原值）
+  PASS | [enemy] free==capacity（prewarm 填满→懒增长 free+live<cap 恒假）
+  PASS | [enemy] boot 后 live==0（静止满容，非借出态填满）
+  PASS | [enemy] runtime_instantiates==0（预热实例化不计运行期）
+  PASS | [enemy] 容量真源对账 ==128（balance_tables.tres 原值）
+  PASS | [popup] free==capacity（prewarm 填满→懒增长 free+live<cap 恒假）
+  PASS | [popup] boot 后 live==0（静止满容，非借出态填满）
+  PASS | [popup] runtime_instantiates==0（预热实例化不计运行期）
+  PASS | [popup] 容量真源对账 ==80（balance_tables.tres 原值）
+  PASS | [particle] free==capacity（prewarm 填满→懒增长 free+live<cap 恒假）
+  PASS | [particle] boot 后 live==0（静止满容，非借出态填满）
+  PASS | [particle] runtime_instantiates==0（预热实例化不计运行期）
+  PASS | [particle] 容量真源对账 ==64（balance_tables.tres 原值）
+  PASS | [laser] free==capacity（prewarm 填满→懒增长 free+live<cap 恒假）
+  PASS | [laser] boot 后 live==0（静止满容，非借出态填满）
+  PASS | [laser] runtime_instantiates==0（预热实例化不计运行期）
+  PASS | [laser] 容量真源对账 ==12（balance_tables.tres 原值）
+  PASS | [xp] free==capacity（prewarm 填满→懒增长 free+live<cap 恒假）
+  PASS | [xp] boot 后 live==0（静止满容，非借出态填满）
+  PASS | [xp] runtime_instantiates==0（预热实例化不计运行期）
+  PASS | [xp] 容量真源对账 ==160（balance_tables.tres 原值）
+  PASS | 敌池容量 128 ≥ MAX_ONSCREEN 120（满载段不触池顶）
+  参考 | boot 全预热耗时 775.778 ms（机器相关，仅记录不断言）
+── ② 连取超容 ──
+  PASS | 敌池连取 130 发：128 命中 + 2 null（满池降级不实例化不阻塞）
+  PASS | 敌池 runtime_inst 仍 ==0（超容走 null 降级而非懒增长）
+  PASS | 敌池超容 2 发全部计 miss（misses +2，丢弃可观测）
+  PASS | 弹池前置静止（start_run 未借出件）
+  PASS | 弹池连取 850 发：820 命中 + 30 null（容量内全命中）
+  PASS | 弹池前 820 发 miss 增量 ==0（容量内零丢弃——真机 live 峰 181≪820 口径）
+  PASS | 弹池超容 30 发全部计 miss（misses +30，弹量上探不静默丢弃）
+  PASS | 弹池 runtime_inst 仍 ==0
+  PASS | 全池 runtime_inst 合计 ==0（vc19 真机 1Hz 行 ri 应恒 0 的同构断言）
+  PASS | 命中件均为池树内成员（parent==池节点，无池外 instantiate 补偿）
+── ③ 释放恢复 ──
+  PASS | 敌 128 件全归还：free 回 128 / live 0 / 拒还 0
+  PASS | 弹 820 件全归还：free 回 820 / live 0 / 活跃表清空
+  PASS | 归还后两池 runtime_inst 仍 ==0（循环复用零实例化）
+ERROR: [ObjectPool:enemy] 拒绝归还（重复归还或外来节点）：@Node2D@970
+   at: push_error (core/variant/variant_utility.cpp:1092)
+  PASS | 重复归还被拒（rejected_releases +1——池成员标记防御原样）
+── ④ 池语义不变 ──
+  PASS | 欠预热池容量内懒增长可达（4/4 命中，runtime_inst==4——语义未被改死）
+  PASS | 第 5 发 null 降级 + misses==1（满池丢弃计数语义原样）
+  PASS | 归还后复用不实例化（runtime_inst 仍 4——空闲栈弹出语义原样）
+  PASS | 探针池收尾干净（free==4 / live==0）
+────────────────────────────────────────
+汇总：PASS 48 / FAIL 0（共 48 项）
+验收汇总：48/48 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 95 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

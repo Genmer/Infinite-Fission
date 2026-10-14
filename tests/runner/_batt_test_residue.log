@@ -1,0 +1,20 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · Boss 残留专项自测 ══════════
+── Boss/精英死亡全场磁吸 ──
+PASS | 前置：场上存在未磁吸碎片
+PASS | R18：Boss 死亡 → 全场碎片立即磁吸（含刚爆出的大珠）
+PASS | R18：磁吸碎片推进后吸收（池归还）
+PASS | R18：精英死亡 → 全场磁吸同口径
+── 状态切换磁吸 ──
+PASS | 前置：测试碎片未磁吸
+PASS | R18：进 LEVEL_UP → 碎片转磁吸姿态（冻结也为收集演出）
+PASS | R18：进 PAUSED → 碎片转磁吸姿态
+PASS | R18：恢复后测试碎片均被吸收归还（曾在活跃表外）
+── 彩纸真实时间自清 ──
+PASS | R18：彩纸宿主 PROCESS_MODE_ALWAYS（暂停期仍自清）
+PASS | Boss 死亡彩纸爆发（90 枚）
+────────────────────────────────────────
+汇总：PASS 10 / FAIL 0（共 10 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

@@ -1,0 +1,63 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R202 G3 敌群热路径优化自测 ══════════
+PASS | R202 前置：Boot 进入 MENU
+── ① fx_quality 热路径缓存（档位表 const + 信号刷新） ──
+PASS | R202 ①a：FLAME_BUDGET == [0,2,4]（高档 = BURN_FLAME_COUNT 现值）
+PASS | R202 ①b：FROST_SHARD_BUDGET == [0,2,3]（高档 = FROST_SHARD_COUNT 现值）
+PASS | R202 ①c：SHOCK_ARC_BUDGET == [0,1,2]（高档 = 原双弧）
+PASS | R202 ①d：SUPER_MIST_BUDGET == [0,2,3] + FROST_RING_MIN_Q == 1（环中/高档开）
+PASS | R202 ①e：set_setting(1) → 缓存即时刷新（订阅侧直写 static）
+PASS | R202 ①f：set_setting(0) → 缓存即时刷新（低档路径）
+PASS | R202 ①g：set_setting(2) 复位高档（出口口径）
+── ④ 状态表现件档预算（q=2 全量 / q=1 减量 / q=0 关） ──
+PASS | R202 ④a：q=2 感电首帧写透——双电弧就位（SHOCK_ARC_BUDGET[2]）
+PASS | R202 ④b：q=2 点燃首帧写透——火苗 ×4（FLAME_BUDGET[2]）+ 余烬光晕在
+PASS | R202 ④c：q=2 冻结首帧写透——冰渣 ×3 放大档 + 冰环在（shards/ring 全量）
+PASS | R202 ④d：q=2 超导首帧写透——雾点 ×3（SUPER_MIST_BUDGET[2]）
+PASS | R202 ④e：q=1 减量建件——火苗 2 / 电弧 1 / 冰渣 2 / 雾点 2（中档口径）
+PASS | R202 ④f：q=1 冰环在（FROST_RING_MIN_Q=1 中/高档开）
+PASS | R202 ④g：q=0 零建件——火苗/电弧/冰渣/雾点全不建（低档只剩染色读感）
+PASS | R202 ④h：q=0 余烬光晕保留（低档点燃可读性底线——flame_budget 只管火苗）
+PASS | R202 ④i：运行期降档 q=2→0——超额火苗/冰渣全隐（预算超集隐藏口径）
+── ⑤ 状态表现层写点 30Hz 节拍 ──
+PASS | R202 ⑤a：写帧后节拍重置（_sfx_write_left ≈ 1/30）
+PASS | R202 ⑤b：稳态半拍跳写（1/60 处未重置——写点减半的观测口）
+PASS | R202 ⑤c：节拍到点再写（_sfx_write_left 重置回 1/30）
+PASS | R202 ⑤d：状态签名变化当帧写透（熄灭即隐藏——不受节拍延迟）
+── ② 接触伤害物理信号缓存（area_entered 旗 + tick 读旗结算） ──
+PASS | R202 ②a：贴身物理重叠 arm 后单 tick 命中（圆重叠 ≤ hitbox_r+hitbox_radius=30）
+PASS | R202 ②b：reach+2px 外物理重叠解除（area_exited 清旗——零误伤）
+PASS | R202 ②c：无敌帧内贴身不伤（玩家侧 contact_tick 节流语义保留）
+── ③ 受击闪白窗外摘材质（常态恢复 2D 批处理） ──
+PASS | R202 ③a：常态 _sprite.material == null（闪白窗外无逐敌 shader）
+PASS | R202 ③b：起闪挂回材质（take_result → material == _material）
+PASS | R202 ③c：起闪 flash_amount == 1.0
+PASS | R202 ③d：闪白窗外摘除（tick 过 0.06s → material == null）
+PASS | R202 ③e：池复用后常态 material == null（_reset_state 摘除收口）
+── ⑥ Boss 附属玩家弱引用缓存（三附属共用单缓存） ──
+PASS | R202 ⑥a：BossMine._get_player 命中玩家组（GL 玩家）
+PASS | R202 ⑥b：二次调用同引用（WeakRef 缓存命中零组查询）
+PASS | R202 ⑥c：HazardPool._get_player 共用单缓存（同引用返回）
+── ⑦ 元素系统复用缓冲遍历（恰一次语义） ──
+PASS | R202 ⑦a：reaction_cd 恰递减一次（1.0 → 0.5——遍历无双访）
+PASS | R202 ⑦b：到期键 erase（0.5 → 过期回落空表——缓冲复用第二轮语义不变）
+PASS | R202 ⑦c：三宿主全量遍历（倒序索引无漏访——两轮 λ 衰减恰两次）
+── ⑧ 状态容器 reaction_cd（is_empty 守卫 + 缓冲复用） ──
+PASS | R202 ⑧a：空 reaction_cd tick 零异常（is_empty 守卫路径）
+PASS | R202 ⑧b：到期键 erase（0.5 < 0.6 → 回落空表）
+PASS | R202 ⑧c：双键并进 0.5（缓冲复用不串键/不漏键）
+── ⑨ beam_impact 迸裂全局节流（IMPACT_CD） ──
+PASS | R202 ⑨a：节流窗内吞触发（3 连发只起 1 槽——IMPACT_CD 0.07s）
+PASS | R202 ⑨b：CD 过期放行（0.08s 后新触发再起槽）
+────────────────────────────────────────
+汇总：PASS 40 / FAIL 0（共 40 项）
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 91 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

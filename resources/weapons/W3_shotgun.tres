@@ -10,7 +10,7 @@ rof = 1.6
 cd = 0.0
 pierce = 1
 pellets = 7
-note = "A3 §3.3 L1：每丸 9 × 7 丸；贴脸面板 DPS 100.8"
+note = "贴脸散射：每颗弹丸 9 伤 × 7 颗，贴脸面板 DPS 100.8"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l2"]
 script = ExtResource("2_wls")
@@ -19,7 +19,7 @@ rof = 1.6
 cd = 0.0
 pierce = 1
 pellets = 8
-note = "A3 §3.3 L2：每丸 9 × 8 丸；贴脸面板 DPS 115.2"
+note = "一次齐射 7→8 颗弹丸，贴脸面板 DPS 115.2"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
@@ -28,7 +28,7 @@ rof = 1.6
 cd = 0.0
 pierce = 1
 pellets = 8
-note = "A3 §3.3 L3：每丸 11 × 8 丸；贴脸面板 DPS 140.8"
+note = "每颗弹丸 9→11 伤（弹丸数不变），贴脸面板 DPS 140.8"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l4"]
 script = ExtResource("2_wls")
@@ -37,7 +37,7 @@ rof = 1.6
 cd = 0.0
 pierce = 1
 pellets = 9
-note = "A3 §3.3 L4：每丸 11 × 9 丸；贴脸面板 DPS 158.4"
+note = "一次齐射 8→9 颗弹丸，贴脸面板 DPS 158.4"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l5"]
 script = ExtResource("2_wls")
@@ -46,7 +46,7 @@ rof = 1.6
 cd = 0.0
 pierce = 1
 pellets = 9
-note = "A3 §3.3 L5：每丸 14 × 9 丸；锥角 26°→20°；贴脸面板 DPS 201.6"
+note = "每颗弹丸 11→14 伤并带击退，散射锥 26°收窄到 20°更密集，贴脸面板 DPS 201.6"
 
 [resource]
 script = ExtResource("1_wd")
@@ -67,12 +67,12 @@ threshold_traits = [{
 "threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
 "effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
 }, {
-"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.35,
 "effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
 }]
 ballistic = {
 "proj_speed": 560.0, "range": 420.0, "spread_deg": 26.0,
-"pierce": 1, "pellets": 7, "spin_up_time": 0.0, "rof_hot": 0.0,
+"pierce": 1, "pellets": 7, "spin_up_time": 0.0, "rof_hot": 0.0, "knockback": 50.0,
 "spread_deg_levels": [26.0, 26.0, 26.0, 26.0, 20.0]
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

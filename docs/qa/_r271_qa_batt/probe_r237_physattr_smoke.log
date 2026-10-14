@@ -1,0 +1,37 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+PHYSATTR 环境头：rendering(project/旗标扫)=forward_plus adapter_api= headless=true user_dir=C:/Users/Administrator/AppData/Roaming/Godot/app_userdata/Infinite Fission phys_hz=120
+══ R237 物理相归因：A0/A1/A2 物理面 A/B + A3 敌数梯度（headless 降级 档 · smoke）══
+── CAL0 监视器语义标定（无 GameLoop 净环境：步忙等 2000µs × 帧压 50ms）──
+CAL0：步/帧=3.00 monitor=1969µs 步耗时=2000µs monitor/步耗时=0.98 → 语义=last-step
+  PASS | CAL0 监视器语义可判（frame-sum / last-step 二选一）（ratio=0.98（歧义窗 1.6~1.8））
+boot.词条：PIERCE×3/3 MULTI×2/2 BOUNCE×3/3 NOVA×2/2 FRACTAL×2/2
+boot：grove w16 构成 42 敌种池（E1_grunt×26 E2_runner×7 E3_bastion×3 E10_woodbird×6）压血×1.00；物理引擎自然驱动 60Hz；构筑=W2 L5 五词条（无棱镜）+ 风筝
+── A0 基线深载（敌 HitArea 监测开 + 玩家 Area2D 监测开） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=15477.0（p95=35598.0，钳负帧占70%）｜mon=6438.3µs/步 段和=18458.0µs/步｜步/帧=4.90 样本=40 步=203 墙=4.5s
+负载：敌 p50=115 弹 p50=418 跳 p50=79 fps=21
+  PASS | G-A0 采样成立（活跃帧>0 且 步≥200 且 墙≥3s×0.9）（样本=40 步=203 墙=4.5s（帽 75s/6000 步内收口））
+  PASS | G-A0 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=115/120 弹=418 跳=79）
+── A1 敌 HitArea 双监测关（monitoring/monitorable=false——形状仍入空间） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=15614.8（p95=32730.0，钳负帧占96%）｜mon=4554.5µs/步 段和=16666.2µs/步｜步/帧=7.14 样本=28 步=206 墙=4.3s
+负载：敌 p50=118 弹 p50=364 跳 p50=80 fps=26
+  PASS | G-A1 采样成立（活跃帧>0 且 步≥200 且 墙≥3s×0.9）（样本=28 步=206 墙=4.3s（帽 75s/6000 步内收口））
+  PASS | G-A1 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=118/120 弹=364 跳=80）
+── A2 A1 + 玩家双监测关（潜在配对终局=0） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=8253.0（p95=31969.0，钳负帧占81%）｜mon=5714.8µs/步 段和=17591.4µs/步｜步/帧=4.17 样本=48 步=207 墙=4.7s
+负载：敌 p50=114 弹 p50=406 跳 p50=79 fps=38
+  PASS | G-A2 采样成立（活跃帧>0 且 步≥200 且 墙≥3s×0.9）（样本=48 步=207 墙=4.7s（帽 75s/6000 步内收口））
+  PASS | G-A2 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=114/120 弹=406 跳=79）
+boot.词条：PIERCE×3/3 MULTI×2/2 BOUNCE×3/3 NOVA×2/2 FRACTAL×2/2
+boot：grove w16 构成 84 敌种池（E10_woodbird×12 E2_runner×14 E1_grunt×52 E3_bastion×6）压血×1.00；物理引擎自然驱动 60Hz；构筑=W2 L5 五词条（无棱镜）+ 风筝
+── A2K 清退刀态（CONTACT_RADIAL=true：敌 HitArea 不构建+玩家 layer0/双监测关——物理空间真清空） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=21265.3（p95=33290.0，钳负帧占42%）｜mon=11713.4µs/步 段和=15417.5µs/步｜步/帧=3.02 样本=65 步=203 墙=3.9s
+负载：敌 p50=115 弹 p50=365 跳 p50=79 fps=55
+  PASS | G-A2K 采样成立（活跃帧>0 且 步≥200 且 墙≥3s×0.9）（样本=65 步=203 墙=3.9s（帽 75s/6000 步内收口））
+  PASS | G-A2K 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=115/120 弹=365 跳=79）
+SMOKE 汇总：CAL0+boot+A0/A1/A2+A2K重挂 管线走通（数字不入档——正式跑见头注命令）
+PROBE 汇总：硬门全过（四臂数字已留档 docs/qa/probe_r237_physattr.json）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

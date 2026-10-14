@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/enemy_data.gd" id="1_ed"]
+
+[resource]
+script = ExtResource("1_ed")
+id = &"E27_warden_orb"
+display_name = "秘纹守卫"
+behavior = 0
+hp_base = 160.0
+spd_base = 48.0
+dmg_base = 15.0
+exp_base = 16.0
+tp_cost = 2.4
+resist = [0.0, 0.0, 0.0, 0.0]
+immune_mask = 0
+tags = 0
+hitbox_r = 15.0
+ranged = {}
+special = {"reflect_cd": 2.8}
+elite_mult = {"hp": 3.2, "spd": 0.9, "dmg": 1.4, "exp": 7.0}
+boss = {}
+gold_drop = {"chance": 0.1, "min": 12, "max": 20}

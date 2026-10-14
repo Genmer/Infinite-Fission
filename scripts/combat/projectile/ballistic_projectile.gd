@@ -5,8 +5,8 @@ class_name BallisticProjectile
 extends ProjectileBase
 
 var acceleration: float = 0.0                 # 加特林变体可 >0；手枪/霰弹 = 0（匀速直线）
-var range_left: float = 0.0                   # 射程快照（>0 启用超射程判定；≤0 仅寿命过期）
-var _traveled: float = 0.0                    # 已飞行里程（射程判定）
+# R231 刀B：range_left/_traveled 上收 ProjectileBase（声明位上移，语义/初值/清零口不变
+# ——快路径 _tick_fast_player 需在基类内联超射程回收，分析 AC-6；本类读写不动）
 
 
 func _read_form_params(p_params: Dictionary) -> void:
@@ -31,7 +31,10 @@ func _move(p_game_delta: float) -> void:
 			velocity = dir * spd
 	global_position += velocity * p_game_delta
 	_traveled += velocity.length() * p_game_delta
-	if range_left > 0.0 and _traveled >= range_left:
+	# R15：带反弹预算 = 射程无限（用户裁定「打空必达边界」）——跳过射程回收，
+	# 生命周期由边界反弹次数接管（预算耗尽 → 边缘 BOUNCE_DEPLETED 回收）
+	# R78：回旋刃同样豁免——range 语义 = 甩满距离（翻转点），寿命由返航/3.2s 兜底
+	if range_left > 0.0 and _traveled >= range_left and bounces_left <= 0 and not _boomerang:
 		_recycle(GameConst.RecycleReason.EXPIRED)   # 超射程（range 快照）→ EXPIRED
 		return
 	_check_edge_bounce()

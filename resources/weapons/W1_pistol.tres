@@ -5,48 +5,48 @@
 
 [sub_resource type="Resource" id="WeaponLevelStats_l1"]
 script = ExtResource("2_wls")
-base_atk = 12.0
-rof = 5.0
-cd = 0.0
-pierce = 1
-pellets = 1
-note = "A3 §3.1 L1：面板 DPS 60"
-
-[sub_resource type="Resource" id="WeaponLevelStats_l2"]
-script = ExtResource("2_wls")
 base_atk = 14.0
 rof = 5.0
 cd = 0.0
 pierce = 1
 pellets = 1
-note = "A3 §3.1 L2：面板 DPS 70"
+note = "单发速射：每发 14 伤 × 5 发/s，面板 DPS 70"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l2"]
+script = ExtResource("2_wls")
+base_atk = 16.0
+rof = 5.0
+cd = 0.0
+pierce = 1
+pellets = 1
+note = "每发 14→16 伤，面板 DPS 80"
 
 [sub_resource type="Resource" id="WeaponLevelStats_l3"]
 script = ExtResource("2_wls")
-base_atk = 17.0
-rof = 5.5
-cd = 0.0
-pierce = 1
-pellets = 1
-note = "A3 §3.1 L3：面板 DPS 93.5"
-
-[sub_resource type="Resource" id="WeaponLevelStats_l4"]
-script = ExtResource("2_wls")
-base_atk = 20.0
-rof = 5.5
-cd = 0.0
-pierce = 1
-pellets = 1
-note = "A3 §3.1 L4：面板 DPS 110"
-
-[sub_resource type="Resource" id="WeaponLevelStats_l5"]
-script = ExtResource("2_wls")
-base_atk = 24.0
+base_atk = 11.0
 rof = 5.5
 cd = 0.0
 pierce = 2
-pellets = 1
-note = "A3 §3.1 L5：面板 DPS 132；pierce 1→2"
+pellets = 2
+note = "双管并排：一次射出 2 排子弹（每排 11 伤 × 5.5 发/s），面板 DPS 121；子弹可弹射 1 次"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l4"]
+script = ExtResource("2_wls")
+base_atk = 13.0
+rof = 5.5
+cd = 0.0
+pierce = 2
+pellets = 2
+note = "每发 11→13 伤，面板 DPS 143"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l5"]
+script = ExtResource("2_wls")
+base_atk = 12.0
+rof = 5.5
+cd = 0.0
+pierce = 2
+pellets = 3
+note = "三线收束：一次射出 3 排子弹（每排 12 伤），面板 DPS 198；三线向准星收拢更集中，子弹可弹射 2 次"
 
 [resource]
 script = ExtResource("1_wd")
@@ -67,11 +67,21 @@ threshold_traits = [{
 "threshold_id": &"TH_BOUNCE_ETERNAL", "metric": "bounce_count", "threshold": 5.0,
 "effect_id": &"EF_BOUNCE", "params": {"lifetime": 999.0}
 }, {
-"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.6,
+"threshold_id": &"TH_CRIT_SHARD", "metric": "crit_rate", "threshold": 0.35,
 "effect_id": &"EF_CRIT_SHARD", "params": {"ratio": 0.5}
+}, {
+"threshold_id": &"TH_VOLLEY_STATE", "metric": "pellets", "threshold": 6.0,
+"effect_id": &"EF_VOLLEY", "params": {"duration_s": 4.0, "cooldown_s": 3.0, "extra_pellets": 2.0, "interval_mult": 0.8}
+}, {
+"threshold_id": &"TH_BANK_SHOT", "metric": "bounce_count", "threshold": 12.0,
+"effect_id": &"EF_BANK", "params": {"shard_ratio": 0.5}
 }]
 ballistic = {
 "proj_speed": 620.0, "range": 680.0, "spread_deg": 2.0,
-"pierce": 1, "pellets": 1, "spin_up_time": 0.0, "rof_hot": 0.0
+"pierce": 1, "pellets": 1, "spin_up_time": 0.0, "rof_hot": 0.0,
+"lateral_gap_levels": [0.0, 0.0, 12.0, 12.0, 12.0],
+"converge_pct_levels": [0.0, 0.0, 0.0, 0.0, 0.55],
+"bounce_levels": [0.0, 0.0, 1.0, 1.0, 2.0],
+"bounce_amp": 0.12, "bounce_amp_cap": 1.0
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

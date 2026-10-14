@@ -1,0 +1,103 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R220 弹段链（模N/拆键/armed闸/类型化/复用件/快路径/批化） 回归 ══════════
+── ① 十六段契约 ──
+  PASS | ①段序冻结：十五段→十六段（card_open/card_drain 插 ui 后 other 前，序逐位锁死）
+  PASS | ①标签：开/消分立映射在位（碎/卡同检）
+  PASS | ①插位：ui < card_open < card_drain < other
+── ② 卡键拆分 ──
+  PASS | ②开窗归「开」：card_open 入账且 card_drain 零写入（拆键分立）
+  PASS | ②PLAYING 帧归「消」：card_drain 恒记账且 card_open 零写入
+── ③ 模N 新口径 ──
+  PASS | ③跨窗标记：物理差分10÷墙钟3000ms → 模3*（供判读剔除）
+  PASS | ③正常窗：差分10÷1000ms → 模10（无跨窗星标）
+  PASS | ③首采哨兵：-1 基线 → 模0 无星（不出脏值）
+  PASS | ③窗基线源锚：_diag_push 在 _diag_last_ms 刷新之前（窗=真实墙钟差）
+── ④ 结N/自导N ──
+  PASS | ④新键：settles/homing_projectiles 在 diag_counts
+  PASS | ④结N 差分：3 次真件 resolve → settles==3（首拉立基线返 0 后的增量）
+  PASS | ④刀4 typed 落血：真敌 hp 恰降 3（base=1 无乘区 resist=0）
+  PASS | ④自导N：acquire+spawn → 在场 +1
+  PASS | ④自导N：release → 归零
+── ⑤ armed 闸/bank-shot 保真 ──
+  PASS | ⑤前置：W1 声明 TH_BANK_SHOT/TH_CRIT_SHARD（.tres 阈值表）
+  PASS | ⑤armed 并入 bank：W1 弹 crit=0.1 仍 armed（面板 crit<阈值的黄金弹保触发）
+  PASS | ⑤bank-shot 保真：达线命中 → _apply_bank_shot 置 crit=1.0 过 0.35 闸 → 直发段触发 +1
+  PASS | ⑤armed 闸拦截：无声明武器（data=null）+ crit 0.1 → armed=false
+  PASS | ⑤闸语义：armed=false 命中不触发直发段（省扫描不误触发）
+  PASS | ⑤crit 阈值通道：面板 0.5 ≥ 0.35 → armed（TH_CRIT_SHARD 原通道不回归）
+  PASS | ⑤crit 通道触发：无 bounce 达阈值 → 直发段 +1
+  PASS | ⑤闸不越权：armed 但 crit 0.1 未达 0.35 → 不触发（闸=放行非强制）
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@820
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@820
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@820
+   at: push_error (core/variant/variant_utility.cpp:1092)
+ERROR: [ObjectPool:projectile] 拒绝归还（重复归还或外来节点）：@Node2D@820
+   at: push_error (core/variant/variant_utility.cpp:1092)
+── ⑥ 类型化双轨 ──
+  PASS | ⑥Enemy 分支：not dead 且 uid 匹配 → 有效
+  PASS | ⑥Enemy 分支：uid 不匹配（池回收复用新身份）→ 无效
+  PASS | ⑥桩回落：非 Enemy 走 Variant gets（dead=false/uid 匹配 → 有效）
+  PASS | ⑥桩回落：dead=true → 无效
+  PASS | ⑥源锚：_submit_hit 死亡短路/反弹盾 else 桩路径在位
+  PASS | ⑥源锚：_is_target_valid else Variant gets 在位
+── ⑦ 扁平/幂等/audit ──
+  PASS | ⑦扁平展开：5 键 spawn 期展开为弹上字段（_panel_* 逐字段等价）
+  PASS | ⑦_build_damage_ctx 读扁平：ctx 5 字段与快照逐位一致
+  PASS | ⑦命中链口径：中途改写字典不影响 ctx（spawn 期扁平快照——幂等语义）
+  PASS | ⑦幂等：同 (source,target,frame) 二次 resolve → 缓存同实例 + dropped_dupe+1
+  PASS | ⑦audit 不复用：两命中 audit 实例不同（audit 随 DamageResult 逃逸）
+  PASS | ⑦audit 无污染：rA.ratio 保持 1.1（后续命中不复用改写）+ rB.ratio=2.2
+  PASS | ⑦ModifierStack 复用：_reused_stack 已建（深度<=0 借出单件复用）
+  PASS | ⑦复用源锚：REUSE_MODIFIER_STACK 开关 + DamageAudit 每命中 new
+── ⑧ swap-remove ──
+  PASS | ⑧登记：acquire×4 → active 4 条（顺序=取出序）
+  PASS | ⑧换位结构：release(a2) → [a1,a4,a3]（尾元素 O(1) 换位非线性扫）
+  PASS | ⑧索引一致：_active_index 与 _active_list 下标全量对齐
+  PASS | ⑧再取：acquire 追加尾槽 a5（4 条）
+  PASS | ⑧force 回收最老：a1 出表（_live_order 首键）余 a3/a4/a5 在
+  PASS | ⑧索引一致（force 路径后）
+  PASS | ⑧清场：全部归还 → active 空
+  PASS | ⑧恰 tick 一次：p2 寿命尽自回收 → 剩 [p1,p3]（换位不丢不重）
+  PASS | ⑧位移恰一次：p1/p3 各 +v×DT（60×1/60=1px，非 2px）
+── ⑨ 敌弹快路径 ──
+  PASS | ⑨源锚：ENEMY_BULLET_FAST_PATH 分流开关 + ⚠PR 检查单（新 team=1 spawn 点必须最小参数）
+  PASS | ⑨判据：team1 最小参数域 → _fast_path=true；强制 false 走慢路径
+  PASS | ⑨位移逐位等价：20 帧（60Hz）后快慢路径位置一致（v×dt 恰一次/帧）
+  PASS | ⑨出界同帧回收：快/慢同帧双双出表（EXPIRED 语义一致）
+  PASS | ⑨快路径撞玩家：本帧回收 + take_contact_damage(面板 base_atk=5)
+  PASS | ⑨慢路径撞玩家：同帧回收 + 同伤害（读字典通道——反射/夹具改写可达）
+── ⑩ 批化派发/30Hz 门 ──
+  PASS | ⑩源锚：DAMAGE_RESOLVED_BATCHED 开关 + R221 D1 批化态 end_frame 不清队（顺延归 dispatch 过期守卫）
+  PASS | ⑩源锚：派发点在 _tick_ui 之前（⑧段前统一派发）
+  PASS | ⑩批化：resolve 后未即时派发（spy 零到达）
+  PASS | ⑩派发：dispatch_resolved_frame → spy 恰 1 条且 source 对位
+  PASS | ⑩end_frame 帧末不派发（R221 D1：批化态不清队——7002 留队顺延，清队契约归 dispatch 过期守卫/r221_fixreg ⑦）
+  PASS | ⑩跳字同帧起跳·前半：批内未派发 → popup 不起（dispatch 前零跳字）
+  PASS | ⑩批内保序：派发序 = 入队序 [7003(N), 7004(C)]
+  PASS | ⑩跳字同帧起跳·后半：dispatch 后同帧起字（act0+1——同 uid 并字只一条）
+  PASS | ⑩升格保序：NORMAL 宿主并入 CRIT 升格（style=CRIT）+ merged=vN+vC
+  PASS | ⑩HUD 首帧消费相位：开门帧直消费（R206 先减后判先例）+pending 空
+  PASS | ⑩HUD 关门帧：暂存不消费（total 不变）
+  PASS | ⑩HUD 开门帧：一并消费 B+C（+6 保序累计）
+  PASS | ⑩HUD 累计不丢：关门帧暂存 D（total 不变 pending 1）
+  PASS | ⑩HUD override=0：每帧直消费原路径（+1；暂存 D 由开门帧补消费不在此断）
+  PASS | ⑩relic 首帧消费相位：开门帧直消费（pending 空 subtick 置 2）
+  PASS | ⑩relic 关门帧：暂存 1 条（subtick 递减）
+── ⑪ 接线（档帽回退/尾段） ──
+  PASS | ⑪零扰动：desktop 默认 tier=3 → 高档帽 80（r218 ④ 口径不变）
+  PASS | ⑪档帽回退：帧率优先 + tier1 → 帽仍 80（调速器档帽越权面已清除）
+  PASS | ⑪档帽回退：帧率优先 + tier2 → 帽仍 80
+  PASS | ⑪档帽回退：特效优先 tier1 → 帽仍 80（全模式零影响）
+  PASS | ⑪档帽回退：帧率优先 tier1 下 中/低档 40/20（r218 数组口径还原）
+  PASS | ⑪尾段格式： 结2 自0 调3（契约 §3.4 追加在 ri 之后）
+  PASS | ⑪变N：transitions>0 → 追加 ` 变3`（真采样驱动累计档变数）
+────────────────────────────────────────
+汇总：PASS 74 / FAIL 0（共 74 项）
+验收汇总：74/74 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

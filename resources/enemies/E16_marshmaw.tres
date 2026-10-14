@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="EnemyData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/enemy_data.gd" id="1_ed"]
+
+[resource]
+script = ExtResource("1_ed")
+id = &"E16_marshmaw"
+display_name = "沼泽巨口"
+behavior = 0
+hp_base = 300.0
+spd_base = 38.0
+dmg_base = 20.0
+exp_base = 15.0
+tp_cost = 2.8
+resist = [0.0, 0.2, 0.0, 0.0]
+immune_mask = 0
+tags = 0
+hitbox_r = 20.0
+ranged = {}
+elite_mult = {"hp": 3.6, "spd": 0.9, "dmg": 1.4, "exp": 8.0}
+boss = {}
+gold_drop = {"chance": 0.08, "min": 10, "max": 16}

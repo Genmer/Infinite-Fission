@@ -3,41 +3,361 @@
 # 主入口 on_damage_resolved（damage_resolved 订阅）→ 合并判断 → 池取出 → 样式分级。
 # 护栏（E-09/E-17）：同目标 0.12s 合并窗 + 同屏 ≤80（超限合并到既有跳字 / 丢弃 + 计数）。
 # tick(raw)：跳字动画推进 + 到期归还（运行期 0 实例化——池循环承担，AC-14.1）。
+# 量级分级（P2）：入口按「单次伤害 / 单发基准伤害」判 4 档（白/蓝/紫/金）——
+# 基准真源 = 主武器面板 base_atk × crit_mult（baseline_provider 由 GameLoop 注入；
+# 缺失/为 0 → 全白降级）。紫档微音 / 金档重音 + 轻震动（trauma 复用既有 hit 档）。
+# R186 反应字体：合并注册表分桶键 _mkey(uid, bucket)（直击 0 / 反应 1 / 其余 2 /
+# 文字 3 / 引爆 4（CHARGE_BURST，R187）——与 _style_bucket 逐值对齐：NORMAL/CRIT→0、
+# REACTION→1、其余（DOT/HEAL/XP/IMMUNE）→2、text_mode 文字→3、CHARGE_BURST→4）——
+# REACTION 数值与文字永不同桶（§4.d：bucket3 无 merge 入口，文字桶结构性
+# 不可被数值并入）——
+# ① 同桶窗内照旧合并；② REACTION 结果遇同 uid 直击小字在窗 → upgrade_to_reaction
+# 原地升格重弹（active 不涨）；③ 直击遇同 uid 反应大字在窗 → 不吞大字、新起小字下移
+# +20px；④ 超导（RXN_ICE_LTG）无 DamageResult 通道 → 订阅 reaction_triggered 起
+# 「超导」纯文字标签（注册 bucket3 文字桶，pos+(0,-30) 与同目标数值大字错位防叠；
+# 碎裂/过载在此禁处理——管线 settle 已同帧派生跳字，再起会翻倍）；
+# ⑤ 密度护栏：同帧反应起字上限 [1,2,3]（按 fx_quality；计数按 rxn 分组且对
+# bucket1/bucket3 共同生效）+ 满池回收最老非反应槽 + 反应结算值 ≤0.5 短路（防 54px 大「0」）。
+# R202 伤害数字节流（两层两态口径，消费端落地——不动管线广播契约；用户预授权
+# 「高开销视觉可砍、如 10 中 1 显」）：
+# 层1·同目标存活即并入（恒生效，主节流）：合并注册表条目在对应 popup 仍活时不随窗
+# 过期摘除（tick 兜底清失效条目；popup 退役由 _retire 清键）——修 0.12s 高档合并窗
+# < 激光 1/8s=0.125s 结算节拍的结构性失效（探针实测 51% 新起），激光每目标收敛为
+# 1 张滚字且数值累计信息不丢。配套 CRIT 升格（主控裁定）：merge 路径 incoming
+# style==CRIT 且宿主 NORMAL 时照 upgrade_to_reaction 先例升样式+重判 tier+触发档音
+# （档音仿新起路径 tier>=3 先例，重复由 SfxBank 70ms 节流承担）——层1 落地后激光
+# 照射期内同目标 CRIT 全并进白字滚字，暴击表现不得被吞；同源一并修：merge 同步刷新
+# element（异元素连击颜色不得停在第跳——仅直击宿主改写，REACTION 宿主 element=
+# ReactionType 中性 ID 是名称/双色真源，并入不改写保旧语义）。
+# 层2·满池全局单例 1/8 采样（仅 bucket0 直击 NORMAL 新起）：两态——active < cap 全显
+# N=1（低密度零行为变化，保全既有断言含 perf 保底循环 40<80）；active ≥ cap（满池）→
+# NORMAL 新起走确定性 mod 计数器（禁随机）1/8 放行，计数器为全局单例——对全体「新起
+# 尝试」取模使「10 中 1 显」占空比全局成立（非 per-uid：每目标独立 1/8 在密度高时
+# 几乎全显、节流失效）；放行挤最老非反应槽腾位（active 恒==cap）；被采样丢弃计入
+# _dropped_count。必显通道绕过采样：CRIT（bucket0 内按 kind——层1 升格已保其表现）、
+# REACTION 大字（bucket1，走既有 _retire_oldest_non_reaction 挤占）、超导/减益文字
+# 标签（bucket3）、W8 引爆（bucket4，自有回收路径）。
+# 入口缓存：damage_numbers_on / fx_quality 改 settings_changed 订阅缓存（boot 初值
+# setup 读取）——每跳一次 Meta.settings 字典查表是结算热路径的纯开销。
 class_name PopupManager
 extends Node
 
 var popup_pool: PopupPool = null              # 注入（Boot 期 GameLoop 组装）
-var merge_window: float = 0.12                # 同目标短窗合并（E-17）
+var merge_window: float = 0.12                # 同目标短窗合并（E-17；档位化后为「高」档基准）
 var active_popups: int = 0                    # 当前活跃跳字数（遥测/测试观测）
-const MAX_ACTIVE: int = 80                    # 同屏上限（超限合并/丢弃，E-09）
+var baseline_provider: Callable = Callable()  # 单发基准伤害供给（GameLoop 注入；空 = 分级关闭）
+var tier_shake_hook: Callable = Callable()    # 金档轻震动钩子（GameLoop 注入 add_trauma 档位）
+const MAX_ACTIVE: int = 80                    # 「高」档同屏上限（中/低档按 fx_quality 缩减）
+const POOL_SAMPLE_MOD: int = 8                # R202 层2：满池 NORMAL 新起采样分母（1/8 放行，确定性 mod）
 
-# 活跃跳字注册表：target_uid -> {popup: DamagePopup, window_left: float}（合并窗判据）
+# R19 特效质量档位（Meta.settings fx_quality：2 高 / 1 中 / 0 低）：
+# 同屏跳字上限 80/40/20 + 合并窗 0.12/0.2/0.3s——buff 叠多层 DPS 爆炸时跳字是
+# 第一帧耗大头（Label 池逐帧动画），降档 = 上限减半 + 窗口加宽（更积极合并）
+# R203 真机分辨率专项：mobile 门内高档帽降半（80→40）——描边贴纸 Label 在 1.5K-2K
+# 屏上是移动 GPU 填充热点；CRIT/REACTION 必显通道与层1 滚字合并不受帽影响（真机
+# 观感保底）。桌面/headless 口径不变（fx_quality/r202_popup_throttle 断言桌面跑）
+static func max_active_for(p_quality: int) -> int:
+	var q := clampi(p_quality, 0, 2)
+	var cap := 0
+	if q >= 2 and OS.has_feature("mobile"):
+		# R218 刀C（二j #4）：满载段帽 40→24——vc25 UI 尖峰 53-200ms 与 跳N≈40 满帽
+		# 强相关；满载期层1 滚字合并仍在（同目标并字不减信息量），只压同屏条数。
+		# 帽变化只作用于新起跳字（在场超帽自然衰减，不强杀）。非满载 40 不变。
+		cap = 24 if Enemy.fullload_dim() else 40
+	else:
+		cap = [20, 40, MAX_ACTIVE][q]
+	# R220 修轮回退：此处曾加「帧率优先且 tier≤2 → cap=mini(cap,12/16)」调速器档帽——
+	# 超出 R220 全部 14 刀与拆解契约 §1-B8/§2.1 应用面（无刀位/无用户裁定/无回滚台账/
+	# 无独立开关），且真机=调速器降档后跳字密度再收紧的新可感行为。已整块移除：
+	# 跳字帽回到 fx_quality + mobile 满载门单一口径（r218 ④ 锁 80/40/20 逐位不变）。
+	# R269：保帧模式跳字帽 12（用户授权重立——与 R220 撤销的调速器暗耦合不同：显式
+	# perf_boost 模式键+可关；boost 开=单向阀 mini(cap,12)，关=上述单一口径逐位不变）。
+	if PerfGovernor.boost_mode():
+		cap = mini(cap, 12)
+	return cap
+
+
+static func merge_window_for(p_quality: int) -> float:
+	return [0.3, 0.2, 0.12][clampi(p_quality, 0, 2)]
+
+
+func _quality() -> int:
+	# R202：读缓存（settings_changed 订阅刷新，boot 初值 setup 读取）——热路径每跳一次
+	# Meta.settings 字典查表省去
+	return _quality_cache
+
+# 量级分档阈值（P2 数值真源：相对单发基准伤害的倍率——白 <1.5× / 蓝 ≥1.5× / 紫 ≥3× / 金 ≥6×）
+const TIER_BLUE_X := 1.5
+const TIER_PURPLE_X := 3.0
+const TIER_GOLD_X := 6.0
+
+# R186 反应起字同帧上限（低/中/高画质，对齐 max_active_for 数组风格）：
+# 密集弹幕下 54px 双色大字是第一可读性/耗帧大头——同帧超限就近并入本帧已起同反应大字
+const REACTION_FRAME_CAP: Array[int] = [1, 2, 3]
+
+# R3（R186）：超导文字标签与同目标数值大字错位防叠——起字位 = pos + 此偏移
+const TEXT_LABEL_OFFSET: Vector2 = Vector2(0.0, -30.0)
+
+# R192 纯文字标签门集合（原单 id 超导扩族）：无 DamageResult 通道的减益/工具反应
+# ——集合成员只起 bucket3 文字标签、无 bucket1 数值大字，无双起叠字面。
+# 扩散族×5【不在集】：主目标走管线结算（χ0.8×S_snap）→ damage_resolved 的 bucket1
+# 数值大字经 damage_popup 文案纯函数渲染「扩散·X」（fmt≠dmg 时 = 名+rxn_stat，扩散
+# 无统计段即纯名）——再入本集即同帧同文 54px 双起叠字（R192 审查①移除）。
+# 集合外反应（碎裂/过载/蒸发/绽放/扩散×5）由管线 settle 的 damage_resolved 通道起字，
+# 此处禁二次起字（翻倍刷屏防线不变）。
+const TEXT_LABEL_RXNS: Dictionary = {
+	GameConst.ReactionType.RXN_ICE_LTG: true,   # 超导
+	GameConst.ReactionType.RXN_ICE_HYD: true,   # 冻结
+	GameConst.ReactionType.RXN_LTG_HYD: true,   # 感电
+	GameConst.ReactionType.RXN_FIR_DEN: true,   # 燃烧
+	GameConst.ReactionType.RXN_LTG_DEN: true,   # 激化
+	GameConst.ReactionType.RXN_FIR_GEO: true,   # 结晶·火
+	GameConst.ReactionType.RXN_ICE_GEO: true,   # 结晶·冰
+	GameConst.ReactionType.RXN_LTG_GEO: true,   # 结晶·雷
+	GameConst.ReactionType.RXN_HYD_GEO: true,   # 结晶·水
+	GameConst.ReactionType.RXN_DEN_GEO: true,   # 结晶·草
+	GameConst.ReactionType.RXN_ANE_GEO: true,   # 结晶·风
+}
+
+# 活跃跳字注册表：_mkey(target_uid, bucket) -> {popup: DamagePopup, window_left: float}
+# （R186 分桶键：直击 0 / 反应 1 / 其余 2 / 文字 3——同 uid 多样式并存互不吞）
 var _merge_registry: Dictionary = {}
+var _merge_sweep_buf: Array = []              # R262b L3：合并注册表键遍历缓冲（免每帧 keys() 分配）
 var _active_list: Array[DamagePopup] = []
 var _dropped_count: int = 0                   # 满池且无可合并时的丢弃计数
+var _rxn_frame_stamp: int = -1                # R186 反应帧计数器（惰性重置判据）
+var _rxn_frame_counts: Dictionary = {}        # R186 本帧已起反应数（§5 契约：rxn→计数，按 rxn 分组）
+var _rxn_frame_pops: Array[DamagePopup] = []  # R186 本帧已起反应大字（超限并入宿主池，bucket1/3 共用）
+var _w8_frame_agg: Dictionary = {}             # R187 本帧按目标聚合结算值（target_uid → 值；w8_detonated 消费）
+var _w8_agg_frame: int = -1                    # R187 聚合帧号（GameConfig.frame_stamp 惰性重置）
+var _pool_sample_counter: int = 0              # R202 层2：满池采样全局单例计数器（对全体 bucket0
+                                               # NORMAL 新起尝试取模——「10 中 1 显」占空比全局成立；
+                                               # 非 per-uid：每目标独立采样在高密度下几乎全显、节流失效）
+var _numbers_on_cache: bool = true             # R202 入口缓存：damage_numbers_on（settings_changed 刷新）
+var _quality_cache: int = 2                    # R202 入口缓存：fx_quality（settings_changed 刷新）
+# R271 S5：台架短路注入口（设计 §3.2 短路臂——trail_halffreq_override 同款先例：static
+# 面 + 默认零短路；三入口统一拒收=跳字链短路，产品默认逐位现状；计数仅供台架断言）
+static var shortcircuit_spawn: bool = false
+static var spawn_reject_count: int = 0
+# ── R212 刀5：脏跳字排版每帧限批（mobile 门） ──────────────────────────
+# vc18 真机取证：UI 段尖峰 77-247ms 主头 = merge 只置脏（R189）→ tick 驱动帧对全部
+# 脏弹字批量 _refresh_label（reset_size 同步排版，Android 字体回退链贵）；R206 mobile
+# 半频又把脏弹字聚成双倍批次——尖峰不减只减频。mobile 门：每 tick 帧排版 ≤6 张
+# （新起字在前的驱动序——burst 首帧刷新最新 6 张，余下帧续，ceil(N/6) 帧收敛；
+# 合并数值入 merged_value 不丢，仅显示文本滞后 ≤N/6 帧）。桌面不限批原样。
+# label_refresh_cap_override 测试覆写口：-1=平台自动 / 0=不限（桌面口径）/ >0=限额。
+const LABEL_REFRESH_CAP_MOBILE: int = 6
+const LABEL_STALE_FORCE_S: float = 0.25        # R221 修轮 M5：脏龄超此值绕帽强制排版（秒）
+var label_refresh_cap_override: int = -1       # 测试覆写口（套件用毕复位 -1）
+# ⚠直写盲区（R202 已知潜伏陷阱，实现注记）：缓存只认 set_setting 写口（发信号）——
+# 直改 Meta._settings 不发信号会留旧值（verify_feedback_cases.gd:2424 / r195_adapt_cases.gd:857
+# 快照还原均直写）。现有用例还原值恰好 == 末次 emit 值故不红；改档请一律走 set_setting。
 
 
 func setup(p_pool: PopupPool) -> void:
 	# 注入池 + 事件订阅（仅 Node 派生类，E-12 ✓）
 	popup_pool = p_pool
+	_numbers_on_cache = bool(Meta.settings("damage_numbers_on"))   # R202 入口缓存初值
+	_quality_cache = clampi(int(Meta.settings("fx_quality")), 0, 2)
+	Meta.settings_changed.connect(_on_setting_changed)             # R202：写口即时刷缓存
 	EventBus.damage_resolved.connect(on_damage_resolved)
+	EventBus.reaction_triggered.connect(on_reaction_triggered)   # R186 超导标签
+	EventBus.w8_detonated.connect(on_w8_detonated)               # R187 W8 蓄能满档引爆大字
+
+
+func _on_setting_changed(p_key: String) -> void:
+	# R202 入口缓存订阅侧：只认 set_setting 写口（发信号）；直改 Meta._settings 不发信号
+	# 会留旧缓存（见字段注释 ⚠直写盲区注记）
+	match p_key:
+		"damage_numbers_on":
+			_numbers_on_cache = bool(Meta.settings("damage_numbers_on"))
+		"fx_quality":
+			_quality_cache = clampi(int(Meta.settings("fx_quality")), 0, 2)
+
+
+func on_w8_detonated(p_pos: Vector2, p_target_uid: int) -> void:
+	# R187 W8 引爆大字通道（EventBus.w8_detonated → CHARGE_BURST 样式直起跳字）：
+	# 值 = 该敌本帧结算聚合（引爆 AoE + 蓄能接触跳同帧合计）；走独立桶 4（不与同 uid
+	# 直击白字合并——「引爆大数字被吞」修复）；伤害数字开关同口径生效；
+	# w8_detonations 计数归 W8 武器侧单一写点（防双计）。
+	if shortcircuit_spawn:                   # R271 S5：台架短路（默认 false=零短路零成本）
+		spawn_reject_count += 1
+		return
+	if popup_pool == null or not _numbers_on_cache:               # R202 入口缓存
+		return
+	if GameConfig.frame_stamp != _w8_agg_frame:
+		_w8_agg_frame = GameConfig.frame_stamp
+		_w8_frame_agg.clear()
+	var value := float(_w8_frame_agg.get(p_target_uid, 0.0))
+	_w8_frame_agg.erase(p_target_uid)            # 消费一次（防同帧重复起字复用旧值）
+	if value <= 0.0:
+		return
+	if _active_list.size() >= max_active_for(_quality()):
+		if not _retire_oldest_non_reaction():
+			_dropped_count += 1
+			return
+	var node := popup_pool.acquire()
+	if node == null:
+		_dropped_count += 1
+		return
+	var tier := _tier_for(GameConst.PopupStyle.CHARGE_BURST, value)
+	var popup := node as DamagePopup
+	popup.show_popup(p_pos, value, GameConst.PopupStyle.CHARGE_BURST, p_target_uid, tier,
+		GameConst.Element.KIN)
+	_active_list.append(popup)
+	var key := _mkey(p_target_uid, 4)
+	_merge_registry[key] = {"popup": popup, "window_left": merge_window_for(_quality())}
+	active_popups = _active_list.size()
+	if tier >= 3 and SfxBank.I != null:
+		SfxBank.I.play(&"tier_epic")
+		if tier_shake_hook.is_valid():
+			tier_shake_hook.call()
+	elif tier >= 2 and SfxBank.I != null:
+		SfxBank.I.play(&"tier_high")
 
 
 func on_damage_resolved(p_result: DamageResult) -> void:
-	# 主入口：合并判断 → 池取出 → 样式分级
+	# 主入口：分桶合并判断 → 升格/护栏 → 池取出 → 样式分级。
+	# 设置页伤害数字开关（P3）：入口短路——跳字/档音/档震全关（伤害结算管线不受影响）
 	if popup_pool == null:
 		return
+	if not _numbers_on_cache:                                    # R202 入口缓存
+		return
+	# R187 W8 引爆大字数据源：逐帧按目标聚合结算值（w8_detonated 消费后清除——
+	# CHARGE_BURST 大字 = 该敌本帧全部结算之和，含引爆 AoE 溅射）
+	if GameConfig.frame_stamp != _w8_agg_frame:
+		_w8_agg_frame = GameConfig.frame_stamp
+		_w8_frame_agg.clear()
+	_w8_frame_agg[p_result.target_uid] = float(_w8_frame_agg.get(p_result.target_uid, 0.0)) \
+		+ maxf(float(p_result.final_value), 0.0)
 	var uid := p_result.target_uid
-	var entry: Dictionary = _merge_registry.get(uid, {})
+	var style := p_result.popup_style
+	# R4c（R186）：反应结算值 ≤0.5 短路不起新字——碎裂基数为剩余 DOT 可为 0
+	# （≤0.5 口径：DOT ceil 下 0.5 会显示为 1，round 下 0.4 已显「0」，均防 54px 大「0」）
+	if style == GameConst.PopupStyle.REACTION and p_result.final_value <= 0.5:
+		return
+	if shortcircuit_spawn:                   # R271 S5：台架短路（默认 false=零短路零成本）
+		spawn_reject_count += 1
+		return
+	var bucket := _style_bucket(style)
+	var key := _mkey(uid, bucket)
+	var entry: Dictionary = _merge_registry.get(key, {})
 	if not entry.is_empty():
-		# 合并窗内：数值累加（E-17；窗口刷新由 merge 内部承担）
+		# 同桶合并窗内：数值累加（E-17；窗口刷新由 merge 内部承担）
 		var popup: DamagePopup = entry["popup"]
 		if is_instance_valid(popup) and popup.is_active:
-			popup.merge(p_result.final_value)
+			# R202 层1 CRIT 升格（主控裁定）：incoming style==CRIT 并入 NORMAL 宿主时照
+			# upgrade_to_reaction 先例升样式 + 重判 tier + 触发档音——层1 存活并入落地后
+			# 激光照射期内同目标 CRIT 全并进白字滚字，暴击表现（字号/档音/档震）不得被吞。
+			# tier 重判按并入后累计值（基准 provider 在 manager 侧）；档音/档震仿新起路径
+			# tier>=3/>=2 先例，重复触发由 SfxBank 70ms 节流承担。
+			var host_was_normal := popup.style == GameConst.PopupStyle.NORMAL
+			popup.merge(p_result.final_value, style, p_result.element)
+			if host_was_normal and popup.style == GameConst.PopupStyle.CRIT:
+				popup.tier = clampi(_tier_for(GameConst.PopupStyle.CRIT, popup.merged_value),
+					0, DamagePopup.TIER_SCALES.size() - 1)
+				if popup.tier >= 3:
+					if SfxBank.I != null:
+						SfxBank.I.play(&"tier_epic")
+					if tier_shake_hook.is_valid():
+						tier_shake_hook.call()
+				elif popup.tier >= 2 and SfxBank.I != null:
+					SfxBank.I.play(&"tier_high")
 			return
-		_merge_registry.erase(uid)
-	# 新跳字：同屏上限（E-09）→ 满时丢弃 + 计数（合并降级目标不存在则直接丢）
-	if _active_list.size() >= MAX_ACTIVE:
+		_merge_registry.erase(key)
+	if bucket == 1:
+		# R2b（R186）升格：同 uid 直击小字在窗 → 数值并入原地换反应样式重弹
+		# （注册表 bucket0 删除 → bucket1 指向同 popup；_active_list/active_popups 不涨）
+		if _upgrade_direct_to_reaction(uid, key, p_result):
+			return
+		# R4a（R186）同帧反应起字上限：超限就近并入本帧已起同反应大字（位置不动）
+		if not _reaction_frame_allow(p_result.element, p_result.pos, p_result.final_value):
+			return
+	# R2c（R186）：直击结果遇同 uid 反应大字在窗 → 不并入大字，新起小字下移 +20px 防叠
+	var offset := Vector2.ZERO
+	if bucket == 0 and _reaction_host_alive(uid):
+		offset = Vector2(0.0, 20.0)
+	# 新跳字：同屏上限（E-09 + R19 档位化）→ 满时丢弃 + 计数；REACTION 满池可先回收
+	# 最老非反应槽兜底（R4b——大字优先级更高；全是反应槽则丢弃）
+	if _active_list.size() >= max_active_for(_quality()):
+		# R202 层2 满池全局单例 1/8 采样（仅 bucket0 直击 NORMAL 新起）：两态口径——
+		# 未满池（走到此处前已放行）全显 N=1 零行为变化；满池后 NORMAL 新起走确定性
+		# mod 计数器（禁随机），全局单计数使「10 中 1 显」占空比全局成立；放行落下去
+		# 挤最老非反应槽腾位（active 恒==cap）；被采样丢弃计入 _dropped_count。
+		# 必显通道绕过采样：CRIT（bucket0 内按 kind——层1 升格已保其表现）/ REACTION
+		# （bucket1）/ 文字标签（bucket3 独立入口）/ 引爆（bucket4 独立入口）——与采样
+		# 放行同待遇走挤占；其余桶（DOT/HEAL/XP/IMMUNE）沿旧口径直接丢弃 + 计数。
+		var must_show := bucket == 1 or style == GameConst.PopupStyle.CRIT
+		if not must_show:
+			if bucket == 0 and style == GameConst.PopupStyle.NORMAL:
+				_pool_sample_counter += 1
+				if _pool_sample_counter % POOL_SAMPLE_MOD != 0:
+					_dropped_count += 1
+					return
+			else:
+				_dropped_count += 1
+				return
+		if not _retire_oldest_non_reaction():
+			_dropped_count += 1
+			return
+	var node := popup_pool.acquire()
+	if node == null:
+		_dropped_count += 1
+		return
+	var tier := _tier_for(style, p_result.final_value)
+	var popup := node as DamagePopup
+	popup.show_popup(p_result.pos + offset, p_result.final_value, style, uid, tier,
+		p_result.element)
+	_active_list.append(popup)
+	_merge_registry[key] = {"popup": popup, "window_left": merge_window_for(_quality())}
+	active_popups = _active_list.size()
+	if bucket == 1:
+		_rxn_frame_pops.append(popup)
+		_rxn_frame_counts[p_result.element] = int(_rxn_frame_counts.get(p_result.element, 0)) + 1
+	# 量级档音效/震动联动（紫微音 / 金重音+轻震动；节流由 SfxBank 70ms 承担；
+	# 合并窗内不重复触发——仅新起跳字时判档）
+	if tier >= 3:
+		if SfxBank.I != null:
+			SfxBank.I.play(&"tier_epic")
+		if tier_shake_hook.is_valid():
+			tier_shake_hook.call()
+	elif tier >= 2 and SfxBank.I != null:
+		SfxBank.I.play(&"tier_high")
+
+
+func on_reaction_triggered(p_rxn: int, p_pos: Vector2, p_uid: int) -> void:
+	# R186 超导文字标签（R3）→ R192 族化：TEXT_LABEL_RXNS 集合内反应走纯文字标签
+	#（超导/冻结/感电/燃烧/激化/结晶×6 无 DamageResult；扩散×5 主目标数值大字之外
+	# 补具名标签）→ 经池起一张 value=0、style=REACTION、element=p_rxn 的跳字，
+	# DamagePopup.REACTION 文字分支显示反应名（超导另带 rxn_stat 统计段「-30%」）。
+	# 碎裂/过载/蒸发/绽放禁在此处理：管线每次 settle 已广播 reaction_triggered——
+	# 二次起字会翻倍刷屏。
+	if shortcircuit_spawn:                   # R271 S5：台架短路（默认 false=零短路零成本）
+		spawn_reject_count += 1
+		return
+	if popup_pool == null:
+		return
+	if not _numbers_on_cache:                                    # R202 入口缓存
+		return
+	if not TEXT_LABEL_RXNS.has(p_rxn):
+		return
+	# R4a（§4.7）：文字标签同吃帧上限（按 rxn 分组计数）——同反应同帧齐爆防刷屏
+	if not _reaction_frame_allow(p_rxn, p_pos, 0.0):
+		return
+	# R2d/R3-D：文字 REACTION 注册 bucket3（数值与文字永不同桶）——同 uid 数值大字
+	# 在 bucket1 窗内互不吞，本标签与数值大字并存。
+	# R192 审查②：窗内去重只对**同反应**生效（bucket3 键无 rxn 分量）——异反应标签
+	# （超导→冻结等，reaction_cd 2s ≫ 合并窗）照常起字换键，后到反应名不再被静默吞；
+	# 旧标签展示至自然到期，其 _retire 键清除按 entry["popup"]==自身 判定不误删新条目。
+	var key := _mkey(p_uid, 3)
+	var entry: Dictionary = _merge_registry.get(key, {})
+	if not entry.is_empty():
+		var popup: DamagePopup = entry["popup"]
+		if is_instance_valid(popup) and popup.is_active and popup.element == p_rxn:
+			return                                 # 同 uid 同反应标签已在窗：不重复起标签
+		_merge_registry.erase(key)
+	# R4b：满池先回收最老非反应槽；全是反应槽则丢弃 + 计数
+	if _active_list.size() >= max_active_for(_quality()) and not _retire_oldest_non_reaction():
 		_dropped_count += 1
 		return
 	var node := popup_pool.acquire()
@@ -45,14 +365,148 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 		_dropped_count += 1
 		return
 	var popup := node as DamagePopup
-	popup.show_popup(p_result.pos, p_result.final_value, p_result.popup_style, uid)
+	# R192：统计段读表一次性格式化经 rxn_stat 传入（超导「-30%」；数值禁写进 const
+	# 文案表）——先赋值再起字（show_popup 内 _refresh_label 渲染时读；_reset_state 池
+	# 复用清空由表现批承担）
+	popup.rxn_stat = _rxn_stat_text(p_rxn)
+	# R3：pos+(0,-30) 与同目标数值大字错位防叠
+	popup.show_popup(p_pos + TEXT_LABEL_OFFSET, 0.0, GameConst.PopupStyle.REACTION, p_uid, 0, p_rxn)
+	popup.text_mode = true                        # §5 契约：文字桶标记（_popup_bucket 清退判据）
 	_active_list.append(popup)
-	_merge_registry[uid] = {"popup": popup, "window_left": merge_window}
+	_merge_registry[key] = {"popup": popup, "window_left": merge_window_for(_quality())}
 	active_popups = _active_list.size()
+	_rxn_frame_pops.append(popup)
+	_rxn_frame_counts[p_rxn] = int(_rxn_frame_counts.get(p_rxn, 0)) + 1
+
+
+static func _style_bucket(p_style: int) -> int:
+	# R186 注册表分桶：NORMAL/CRIT→0 / REACTION→1 / 其余（DOT/HEAL/XP/IMMUNE）→2
+	# R187：CHARGE_BURST→4 独立桶——W8 引爆大数字不再与同 uid 直击白字同桶合并
+	#（「引爆大数字被吞进白字」修复本体；_mkey uid×8+bucket 容纳 0~7）
+	if p_style == GameConst.PopupStyle.NORMAL or p_style == GameConst.PopupStyle.CRIT:
+		return 0
+	if p_style == GameConst.PopupStyle.REACTION:
+		return 1
+	if p_style == GameConst.PopupStyle.CHARGE_BURST:
+		return 4
+	return 2
+
+
+static func _popup_bucket(p_popup: DamagePopup) -> int:
+	# §5 契约：注册表桶位真源——REACTION 文字（text_mode）→3，其余按样式分桶
+	# （_retire 清键与此同源，bucket3 文字条目不漏清、不误清 bucket1）
+	if p_popup.text_mode:
+		return 3
+	return _style_bucket(p_popup.style)
+
+
+static func _mkey(p_uid: int, p_bucket: int) -> int:
+	# R186 分桶注册表键（uid < 2^20 × 8 → 无整型溢出；同 uid 三桶互不碰撞）
+	return p_uid * 8 + p_bucket
+
+
+func _upgrade_direct_to_reaction(p_uid: int, p_rxn_key: int, p_result: DamageResult) -> bool:
+	# R186 R2b：REACTION 结果并入同 uid 直击小字（bucket0 在窗）——upgrade_to_reaction
+	# 数值累加 + 原地换反应样式重弹；注册表 bucket0 删除 → bucket1 指向同 popup。
+	# 到此路径时 bucket1 键必为空（同桶合并已先行消费），覆写无碰撞。
+	var direct_key := _mkey(p_uid, 0)
+	var entry: Dictionary = _merge_registry.get(direct_key, {})
+	if entry.is_empty():
+		return false
+	var host: DamagePopup = entry["popup"]
+	if not is_instance_valid(host) or not host.is_active:
+		_merge_registry.erase(direct_key)
+		return false
+	host.upgrade_to_reaction(p_result.final_value, p_result.element)
+	_merge_registry.erase(direct_key)
+	_merge_registry[p_rxn_key] = {"popup": host, "window_left": merge_window_for(_quality())}
+	return true
+
+
+func _reaction_frame_allow(p_rxn: int, p_pos: Vector2, p_value: float) -> bool:
+	# R186 R4a：同帧反应起字上限（低/中/高 = 1/2/3）——GameConfig.frame_stamp 惰性重置
+	# 计数（knocktext 节流先例）；计数按 rxn 分组（§5 契约 _rxn_frame_counts，跨反应
+	# 互不挤占；同 rxn 的数值大字 bucket1 与文字标签 bucket3 共用同一份预算）；
+	# 超限并入本帧已起同反应大字（数值累加位置不动），无宿主则丢弃 + 计数。
+	var frame := GameConfig.frame_stamp
+	if frame != _rxn_frame_stamp:
+		_rxn_frame_stamp = frame
+		_rxn_frame_counts.clear()
+		_rxn_frame_pops.clear()
+	if int(_rxn_frame_counts.get(p_rxn, 0)) < REACTION_FRAME_CAP[clampi(_quality(), 0, 2)]:
+		return true
+	var host := _nearest_frame_reaction(p_rxn, p_pos)
+	if host != null and not (p_value > 0.0 and host.text_mode):
+		# §4.d：bucket3 文字桶无 merge 入口——带值并入禁入文字标签（文字标签只吃
+		# 0.0 重置计时保文案；数值宿主照旧累加）
+		host.merge(p_value)
+		return false
+	_dropped_count += 1
+	return false
+
+
+func _nearest_frame_reaction(p_rxn: int, p_pos: Vector2) -> DamagePopup:
+	# R186：本帧已起的同反应大字里就近取超限并入宿主（无则 null）
+	var best: DamagePopup = null
+	var best_d := INF
+	for popup: DamagePopup in _rxn_frame_pops:
+		if not is_instance_valid(popup) or not popup.is_active:
+			continue
+		if popup.style != GameConst.PopupStyle.REACTION or popup.element != p_rxn:
+			continue
+		var d := popup.position.distance_squared_to(p_pos)
+		if d < best_d:
+			best_d = d
+			best = popup
+	return best
+
+
+func _reaction_host_alive(p_uid: int) -> bool:
+	# R186 R2c 判据：同 uid 反应大字（bucket1）或文字标签（bucket3）是否在窗且活跃
+	# （R192 补 bucket3 缺口——文字标签在窗时直击小字同样下移防叠；失效条目顺手清除）
+	for bucket in [1, 3]:
+		var key := _mkey(p_uid, bucket)
+		var entry: Dictionary = _merge_registry.get(key, {})
+		if entry.is_empty():
+			continue
+		var popup: DamagePopup = entry["popup"]
+		if is_instance_valid(popup) and popup.is_active:
+			return true
+		_merge_registry.erase(key)
+	return false
+
+
+func _rxn_stat_text(p_rxn: int) -> String:
+	# R192 收口2：实现上提 DamagePopup.reaction_stat_text 静态单源（图鉴预览同源组合）——
+	# 本壳保留调用点兼容（:247 起字唯一调用），文案逻辑勿在此处新增。
+	return DamagePopup.reaction_stat_text(p_rxn)
+
+
+func _retire_oldest_non_reaction() -> bool:
+	# R186 R4b：从最老（_active_list[0]）起回收第一张非 REACTION 槽（强制归还池）；
+	# 全是反应槽 → false（调用方丢弃 + 计数）
+	for i in range(_active_list.size()):
+		var popup: DamagePopup = _active_list[i]
+		if popup.style != GameConst.PopupStyle.REACTION:
+			_retire(popup, i)
+			return true
+	return false
+
+
+func _label_refresh_cap() -> int:
+	# R212 刀5 限批真源：mobile 6 张/tick；桌面 0（不限）。测试覆写优先
+	if label_refresh_cap_override >= 0:
+		return label_refresh_cap_override
+	return LABEL_REFRESH_CAP_MOBILE if OS.has_feature("mobile") else 0
 
 
 func tick(p_raw_delta: float) -> void:
 	# 跳字动画（raw 通道，顿帧期间照常）+ 合并窗推进 + 到期归还
+	# R212 刀5：脏跳字排版限批（mobile）——本 tick 帧排版数超帽后，剩余脏弹字
+	# tick(delta,false) 只推进动画（脏标记保留），排版让渡后续帧；不限批时（桌面/
+	# 覆写 0）逐位走原路径
+	var cap := _label_refresh_cap()
+	var refreshed := 0
 	var idx := _active_list.size() - 1
 	while idx >= 0:
 		var popup := _active_list[idx]
@@ -60,22 +514,64 @@ func tick(p_raw_delta: float) -> void:
 			_active_list.remove_at(idx)
 			idx -= 1
 			continue
-		popup.tick(p_raw_delta)
+		if popup._label_dirty and cap > 0 and refreshed >= cap \
+				and popup._dirty_age < LABEL_STALE_FORCE_S:
+			# R221 修轮 M5：脏龄保底——脏持续 <0.25s 仍严格走帽；超龄强制排版（下一
+			# else 臂绕帽刷新），杜绝极端深载积压「终身空白/终身旧值」跳字。脏龄与寿命
+			# 分离：merge 重置寿命但不清龄，持续合并风暴中的饥饿项同样获救
+			popup.tick(p_raw_delta, false)       # 本帧让渡：动画照常、排版留待后续帧
+		else:
+			if popup._label_dirty:
+				refreshed += 1
+			popup.tick(p_raw_delta)
 		if popup.life_left() <= 0.0:
 			_retire(popup, idx)
 		idx -= 1
-	# 合并窗倒计时（到期移除判据条目——跳字本体仍在展示期）
-	for uid in _merge_registry.keys():
+	# 合并窗倒计时——R202 层1「同目标存活即并入」（恒生效，主节流）：窗到期不再强制
+	# 新起，对应 popup 仍活时保留注册表条目改并入续命（merge() 本就重置漂浮计时）——
+	# 修 0.12s 高档合并窗 < 激光 1/8s=0.125s 结算节拍的结构性失效（探针实测 51% 新起），
+	# 激光每目标收敛为 1 张滚字且数值累计信息不丢；活条目窗值就地续值（保持有界）。
+	# R262b L3：keys() 快照改成员缓冲遍历（伤害风暴期每帧 N 元素数组税）
+	_merge_sweep_buf.clear()
+	for uid_v: Variant in _merge_registry:
+		_merge_sweep_buf.append(uid_v)
+	for uid: Variant in _merge_sweep_buf:
 		var entry: Dictionary = _merge_registry[uid]
 		entry["window_left"] = float(entry["window_left"]) - p_raw_delta
 		if float(entry["window_left"]) <= 0.0:
-			_merge_registry.erase(uid)
+			var host: DamagePopup = entry["popup"]
+			if is_instance_valid(host) and host.is_active:
+				entry["window_left"] = merge_window_for(_quality())
+			else:
+				_merge_registry.erase(uid)
 	active_popups = _active_list.size()
 
 
 func dropped_count() -> int:
 	# 遥测：满池/超限丢弃累计
 	return _dropped_count
+
+
+func _tier_for(p_style: int, p_value: float) -> int:
+	# 量级档判定（P2）：仅直击样式 NORMAL/CRIT 参与；基准 = baseline_provider()（主武器
+	# 面板 base_atk × crit_mult）。基准缺失/≤0 → 全白（分级安全关闭）；合并窗内不重判。
+	# R187：CHARGE_BURST 参与量级档（引爆大额结算吃金档音效/震动——表现与功能同版本交付）
+	if p_style != GameConst.PopupStyle.NORMAL and p_style != GameConst.PopupStyle.CRIT \
+			and p_style != GameConst.PopupStyle.CHARGE_BURST:
+		return 0
+	if baseline_provider.is_null():
+		return 0
+	var base: float = float(baseline_provider.call())
+	if base <= 0.0:
+		return 0
+	var ratio := p_value / base
+	if ratio >= TIER_GOLD_X:
+		return 3
+	if ratio >= TIER_PURPLE_X:
+		return 2
+	if ratio >= TIER_BLUE_X:
+		return 1
+	return 0
 
 
 func clear_all() -> void:
@@ -93,10 +589,12 @@ func clear_all() -> void:
 
 
 func _retire(p_popup: DamagePopup, p_idx: int) -> void:
-	# 归还（池 release 前置钩子调 _reset_state）；注册表同步清除
-	var uid := p_popup.target_uid
-	var entry: Dictionary = _merge_registry.get(uid, {})
+	# 归还（池 release 前置钩子调 _reset_state）；注册表按分桶键同步清除（R186：
+	# 单 uid 键清不干净——升格后 popup.style 已是 REACTION 条目迁 bucket1，超导
+	# 文字条目在 bucket3——桶位统一由 _popup_bucket 判定）
+	var key := _mkey(p_popup.target_uid, _popup_bucket(p_popup))
+	var entry: Dictionary = _merge_registry.get(key, {})
 	if not entry.is_empty() and entry["popup"] == p_popup:
-		_merge_registry.erase(uid)
+		_merge_registry.erase(key)
 	_active_list.remove_at(p_idx)
 	popup_pool.release(p_popup)

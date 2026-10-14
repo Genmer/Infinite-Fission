@@ -1,0 +1,36 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══ R228 对象谱清点：翡翠树海 w16 × 敌120 驻场 × 深构筑（r224 同构夹具）══
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+boot.词条：PIERCE×3/3 MULTI×2/2 BOUNCE×3/3 NOVA×2/2 FRACTAL×2/2（挂载回执）
+boot.深载哨兵：fullload=1 位图=1 补烤=1 结算帽=-3 tier=2 帧率优先（vc33 深载稳态档）
+boot：grove w16 构成 42 敌种池（E2_runner×7 E1_grunt×26 E3_bastion×3 E10_woodbird×6）压血×0.30；位图就绪=1
+boot.稳态预热 300 帧毕——清点窗 900 帧 × 每 180 帧一快照
+══ 对象谱构成表（5 次快照取中位；own visible 口径，另列有效可见）══
+[敌本体] 可见own=120 隐藏own=8 合计=128 有效可见=120 | enemy.gd×128 | 例 enemy.gd→EnemyPool/Enemy
+[敌子件] 可见own=295 隐藏own=441 合计=736 有效可见=271 | Sprite2D×348 Area2D×128 telegraph_circle×128 CollisionShape2D×128 | 例 Sprite2D→EnemyPool/Enemy/Visual Area2D→EnemyPool/Enemy/HitArea telegraph_circle→EnemyPool/Enemy/FuseRing
+[弹] 可见own=1289 隐藏own=399 合计=1688 有效可见=890 | Sprite2D×844 ballistic_projectile.gd×820 homing_projectile.gd×24 | 例 Sprite2D→ProjectilePool/BallisticProjectile/Visual ballistic_projectile.gd→ProjectilePool/BallisticProjectile homing_projectile.gd→HomingPool/HomingProjectile
+[碎片] 可见own=161 隐藏own=159 合计=320 有效可见=2 | pickup.gd×160 Sprite2D×160 | 例 pickup.gd→XPPool/XpShard Sprite2D→XPPool/XpShard/Visual
+[跳字] 可见own=236 隐藏own=164 合计=400 有效可见=236 | Sprite2D×240 damage_popup.gd×80 Label×80 | 例 Sprite2D→PopupPool/DamagePopup/@Sprite2D@1597 damage_popup.gd→PopupPool/DamagePopup Label→PopupPool/DamagePopup/Value
+[网] 可见own=24 隐藏own=12 合计=36 有效可见=0 | Line2D×24 laser_beam.gd×12 | 例 Line2D→LaserPool/LaserBeam/BeamLine laser_beam.gd→LaserPool/LaserBeam
+[磁] 可见own=0 隐藏own=0 合计=0 有效可见=0 | （空） | 例 —
+[UI] 可见own=271 隐藏own=90 合计=361 有效可见=57 | Label×121 TextureRect×84 Button×61 Panel×37 Control×13 Sprite2D×13 | 例 Label→HUD/AchToast TextureRect→HUD/Root/XpStar Button→HUD/Root/SkillButton
+[玩家] 可见own=9 隐藏own=5 合计=14 有效可见=9 | Sprite2D×9 ballistic_weapon.gd×2 player.gd×1 CollisionShape2D×1 weapon_orbit_avatars.gd×1 | 例 Sprite2D→Player/FlameL ballistic_weapon.gd→Player/@Node2D@1283 player.gd→Player
+[粒子发射器] 可见own=44 隐藏own=20 合计=64 有效可见=44 | GPUParticles2D×64 | 例 GPUParticles2D→ParticlePool/BurstEmitter
+[贴图桶] 可见own=29 隐藏own=0 合计=29 有效可见=29 | Node2D×29 | 例 Node2D→ProjectilePool/TexBuckets/TexBucket0
+[死亡演出件] 可见own=11 隐藏own=13 合计=24 有效可见=11 | death_pop×24 | 例 death_pop→EnemyPool/TexBuckets/TexBucket0/@Node2D@1521
+[其他] 可见own=266 隐藏own=131 合计=397 有效可见=52 | Sprite2D×237 Node2D×54 Line2D×48 Label×22 MultiMeshInstance2D×9 ColorRect×5 | 例 Sprite2D→CloudBackdrop/Cloud_0_0 Node2D→ElementalFxLayer/ChainBolt0 Line2D→ElementalFxLayer/ChainBolt0/Glow
+合计：canvas item=4193（own可见=2755 / own隐藏=1442 / 有效可见=1721）；全树节点=4260
+池对账：敌=120 弹=445(容820 闲375 运行期实例化0) 自导=0 跳字=79 碎片=1 粒子=44 光束=0 | headless o=0（渲染面不可复现——r224 同款披露）
+  PASS | G0 清点可行：总 canvas item ≥ 1500（中位 4193）
+  PASS | G1 深载稳态：敌驻场中位 ∈ [115,125] 且敌本体可见=驻场（池读 120 / 谱读 120）
+  INFO | I1 总量带对照：中位 4193（真机 o 2100-2700——口径不同：树清点含隐藏件为上界口径，o=渲染提交对象；有效可见 1721 为 o 的近邻口径）
+  INFO | I2 弹池对账：弹家族=1688（池容 820+自导 24 根，子件 Sprite2D ×1/根）
+  INFO | I3 不可见项合计：own隐藏 1442 + own可见但树内不可见 1034 = 2476（占 59%——o2500 中 ~2000 个非实体项的构成来源：池内闲置+敌隐藏子件+UI 关层残 own 旗）
+PROBE 汇总：硬门全过——对象谱构成表见上（3 次独立运行取稳定值，跑法见文件头注）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

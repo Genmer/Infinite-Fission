@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TraitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/trait_data.gd" id="1_td"]
+
+[resource]
+script = ExtResource("1_td")
+id = &"AFF_RANGE"
+display_name = "广域印刻"
+description = "环绕轨道半径与挥砍范围 +18%（近战武器场域铺得更开），可叠 3 层"
+pool = 0
+pool_id = &"add_range"
+effect_id = &"EF_STAT"
+value = 0.18
+value2 = 0.0
+params = {"required_forms": [3]}
+event_hooks = [0]
+stack_max = 3
+decay_delta = 0.85
+cap_pool_p = 0.0
+cap_local = 0.0
+inheritable = false
+proc_chance = 1.0
+cooldown = 0.0
+rarity = 1
+tags = 0
+condition = {}

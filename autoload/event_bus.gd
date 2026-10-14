@@ -18,21 +18,61 @@ signal damage_resolved(result: DamageResult)               # 每次结算（跳�
 signal damage_alarm(result: DamageResult)                  # ×500 告警线触发（一局一次/构筑）
 signal enemy_killed(enemy: Node2D)                         # 死亡广播（含 tags/exp/位置）
 signal boss_spawned(enemy: Node2D)                         # Boss 登场（HUD 血条/GameFeel）
+signal boss_phase_changed(phase: int, enraged: bool)       # 夜间R19：Boss 阶段切换/狂暴（音效广播）
 signal player_hit(damage: float, source_uid: int)          # 简化路径受击（Q-16）
 signal player_died()                                       # 死亡优先级最高（E-16 仲裁输入）
 signal level_up(new_level: int)                            # 升级请求（GameLoop 仲裁）
+signal level_up_batch(levels: int)                         # R189 连升批广播（巨批逐级 emit 收敛）
 signal xp_gained(amount: float)
 signal wave_started(wave: int)
 signal wave_cleared(wave: int)
 signal slot_unlocked(slot: int)                            # 武器槽解锁（HUD 提示）
 signal reaction_triggered(rxn: int, pos: Vector2, target_uid: int)
+signal state_triggered(code: int, pos: Vector2)            # 夜间R16：满槽状态触发（点燃/寒滞/冻结/感电音效广播）
+signal elite_summon_requested(elite_uid: int, enemy_id: StringName, pos: Vector2, hp_ratio: float)   # 夜间R40 唤潮者召唤请求（cap 判定在 GameLoop 订阅侧）
+signal chain_lightning(from_pos: Vector2, to_pos: Vector2)  # 感电连锁主闪电（表现层专用广播，方向 C）
+signal elemental_dot_fired(pos: Vector2)                    # 点燃 DOT 跳伤结算（表现层火星专用广播）
+signal shield_blocked(pos: Vector2)                         # 格挡力场挡下接触伤害（护盾脉冲涟漪，A3 §4.4）
+signal graze(pos: Vector2)                                  # 掠过微光（表现层专用广播——二cp#1：0.6s 无敌帧静默吞没接触/敌弹伤害的轻反馈，c4①）
+signal bullet_nullified(pos: Vector2)                       # 弧斩消弹（W9 NULLIFIED 涟漪，表现层专用）
 signal pool_exhausted(pool_id: StringName)                 # 池满降级计数（DebugStats）
+signal beam_impact(pos: Vector2, dir: Vector2)             # 光束命中点迸裂（脉冲激光每跳结算，表现层专用）
+signal reroll_granted(count: int)                          # 刷新次数获得（HUD toast；选卡刷新机制）
+signal trait_milestone(trait_id: StringName, name: String, mult: float)   # 词条满层质变（HUD 金色 toast）
+signal burn_devour_proc(pos: Vector2)                       # 烈焰吞噬乘区生效（表现层专用：橙色内聚吞噬特效）
+signal knockback_hit(pos: Vector2)                           # 强击退生效（表现层专用：击退小字，R7）
+signal poison_cloud_cast(pos: Vector2, radius: float, dur: float)   # 毒云领域施放（表现层专用：绿环展开，R10；R246 追加 dur 位——升华 7s 窗，emit 包装缺省 6.0，两参调用兼容）
+signal poison_cloud_tick(pos: Vector2, radius: float)        # 毒云每跳（表现层专用：毒圈持续/绿雾，R10）
+signal poison_cloud_end()                                    # 毒云领域结束（表现层专用：立即入渐隐，R199 H01）
+signal burn_spread_ignited(pos: Vector2)                     # 燎原传火点燃（表现层专用：原点橙环；R199 F17 前曾冒用 reaction_triggered 污染图鉴/成就计数）
+signal kill_blast(pos: Vector2, radius: float)               # 死亡新星击杀爆炸（表现层专用：橙红爆炸环，R13）
+signal missile_blast(pos: Vector2, radius: float)             # R80 导弹命中/空爆（强化版四层爆 + 震屏 + 低音）
+signal bullet_bounced(pos: Vector2)                           # 弹幕边界反弹（表现层专用：清脆 tick 音效，R95）
+signal skill_cast(pos: Vector2, character_id: String)        # 角色技能施放（表现层专用：金环爆发，R19）
+signal mechanics_intro(text: String)                        # 大关新机制解锁横幅（HUD 开局长 toast）
+signal revive_burst(pos: Vector2, charges_left: int)         # 复活成功爆发（白闪/横幅/音效表现源，E2 r2；player 唯一发点，charges_left=扣减后余量）
 signal chain_fused(depth: int, trait_id: StringName)       # 链式/分叉深度熔断遥测
 signal card_chosen(card_id: StringName, target_kind: int)  # 选卡应用完成（遗物回响等）
+# R187 三新信号（共享组落点；归属字段口径见 GameConst.SUBBEAM_OWNER_*）：
+signal laser_subbeam_spawned(owner_kind: int)               # 副激光生成（owner_kind：0=本体/1=复制体——R183 束数折减断言通道）
+signal mirror_formed(text: String)                          # 棱镜镜面生成/重掷（HUD toast；文案「棱镜映照：镜面承接了 X」）
+signal w8_detonated(pos: Vector2, target_uid: int)          # W8 蓄能满档引爆事件（target_uid——CHARGE_BURST 大字按同帧该敌结算聚合起字）
+signal crystal_shield_request(dr: float, duration: float)   # R192 结晶族反应：玩家晶盾减伤请求（Player grant 唯一消费——减伤闸在 take_contact_damage 唯一漏斗；纯会话态零存档）
+signal sword_mark(pos: Vector2, angle: float)                # 二cu 灵剑命中剑痕（表现层专用：目标身上斜置剑痕，projectile_base 飞剑命中唯一发点，ElementalFxLayer 池化消费）
+signal mine_dodged(pos: Vector2)                             # 二db 躲过敌方爆炸（地雷/自爆虫/闪现爆/法术圈未伤人——player 橙盾 grant 唯一消费；吸收涟漪/成就计数走 shield_blocked 通道不在此）
+# R251 需求③ 首遇卡片（纯增量新信号，零既有订阅者迁移）：新机制/新武器/新敌人第一次
+# 出现在玩家面前 → 统一弹介绍卡（FirstEncounterCardUI 消费；p_kind ∈
+# &"enemy" | &"weapon" | &"reaction"，p_id = 敌 id / 武器 id / ReactionType id 字符串）
+signal first_encounter_card(p_title: String, p_body: String, p_kind: StringName, p_id: StringName)
 
 var _dispatch_count: Dictionary = {}        # StringName(事件) -> int(本帧计数)
 const STORM_WARN_THRESHOLD := 128           # 同事件同帧派发上限（§六.4）
 const STORM_WARN_DAMAGE_RESOLVED := 600     # damage_resolved 专项告警线（§六.4：结算条目过多定位）
+
+# R188 档0：E-12 订阅纪律断言开关（默认关——end_frame 每帧全信号×连接扫描是均帧级常量税，
+# ≈21% 均帧；风暴计数 _track_dispatch 与 assert_subscription_baseline 不受本开关影响）。
+# pkg0 等开发期测试自行打开（tests/runner/test_pkg0.gd），release/压测路径零开销。
+var dev_assertions: bool = false
 
 # 遥测观测口（DebugStats/测试读取；正常游戏代码不写）
 var storm_warnings: int = 0                 # 风暴告警累计次数
@@ -89,6 +129,11 @@ func emit_boss_spawned(enemy: Node2D) -> void:
 	boss_spawned.emit(enemy)
 
 
+func emit_boss_phase_changed(p_phase: int, p_enraged: bool) -> void:
+	_track_dispatch(&"boss_phase_changed")
+	boss_phase_changed.emit(p_phase, p_enraged)
+
+
 func emit_player_hit(damage: float, source_uid: int) -> void:
 	_track_dispatch(&"player_hit")
 	player_hit.emit(damage, source_uid)
@@ -102,6 +147,14 @@ func emit_player_died() -> void:
 func emit_level_up(new_level: int) -> void:
 	_track_dispatch(&"level_up")
 	level_up.emit(new_level)
+
+
+func emit_level_up_batch(levels: int) -> void:
+	# R189 连升合并广播：巨批连升（gain_xp 巨额经验）单信号入账——逐级 emit 的
+	# 每级信号税（4+ 订阅者 × 4.8 万级 ≈ 单帧 200ms+）是爆发帧超预算主头；
+	# 消费方（GameLoop._on_level_up_batch）与逐级仲裁逐位同口径
+	_track_dispatch(&"level_up_batch")
+	level_up_batch.emit(levels)
 
 
 func emit_xp_gained(amount: float) -> void:
@@ -129,6 +182,49 @@ func emit_reaction_triggered(rxn: int, pos: Vector2, target_uid: int) -> void:
 	reaction_triggered.emit(rxn, pos, target_uid)
 
 
+func emit_state_triggered(p_code: int, p_pos: Vector2) -> void:
+	state_triggered.emit(p_code, p_pos)
+
+
+func emit_elite_summon_requested(p_uid: int, p_id: StringName, p_pos: Vector2, p_ratio: float) -> void:
+	elite_summon_requested.emit(p_uid, p_id, p_pos, p_ratio)
+
+
+func emit_chain_lightning(from_pos: Vector2, to_pos: Vector2) -> void:
+	_track_dispatch(&"chain_lightning")
+	chain_lightning.emit(from_pos, to_pos)
+
+
+func emit_elemental_dot_fired(pos: Vector2) -> void:
+	_track_dispatch(&"elemental_dot_fired")
+	elemental_dot_fired.emit(pos)
+
+
+func emit_shield_blocked(pos: Vector2) -> void:
+	_track_dispatch(&"shield_blocked")
+	shield_blocked.emit(pos)
+
+
+func emit_mine_dodged(pos: Vector2) -> void:
+	_track_dispatch(&"mine_dodged")
+	mine_dodged.emit(pos)
+
+
+func emit_first_encounter_card(p_title: String, p_body: String, p_kind: StringName, p_id: StringName) -> void:
+	_track_dispatch(&"first_encounter_card")
+	first_encounter_card.emit(p_title, p_body, p_kind, p_id)
+
+
+func emit_graze(pos: Vector2) -> void:
+	_track_dispatch(&"graze")
+	graze.emit(pos)
+
+
+func emit_bullet_nullified(pos: Vector2) -> void:
+	_track_dispatch(&"bullet_nullified")
+	bullet_nullified.emit(pos)
+
+
 func emit_pool_exhausted(pool_id: StringName) -> void:
 	_track_dispatch(&"pool_exhausted")
 	pool_exhausted.emit(pool_id)
@@ -144,22 +240,138 @@ func emit_card_chosen(card_id: StringName, target_kind: int) -> void:
 	card_chosen.emit(card_id, target_kind)
 
 
+func emit_beam_impact(pos: Vector2, dir: Vector2) -> void:
+	_track_dispatch(&"beam_impact")
+	beam_impact.emit(pos, dir)
+
+
+func emit_sword_mark(pos: Vector2, angle: float) -> void:
+	_track_dispatch(&"sword_mark")
+	sword_mark.emit(pos, angle)
+
+
+func emit_reroll_granted(count: int) -> void:
+	_track_dispatch(&"reroll_granted")
+	reroll_granted.emit(count)
+
+
+func emit_trait_milestone(trait_id: StringName, p_name: String, p_mult: float) -> void:
+	_track_dispatch(&"trait_milestone")
+	trait_milestone.emit(trait_id, p_name, p_mult)
+
+
+func emit_burn_devour_proc(pos: Vector2) -> void:
+	_track_dispatch(&"burn_devour_proc")
+	burn_devour_proc.emit(pos)
+
+
+func emit_knockback_hit(pos: Vector2) -> void:
+	_track_dispatch(&"knockback_hit")
+	knockback_hit.emit(pos)
+
+
+func emit_poison_cloud_cast(pos: Vector2, radius: float, dur: float = 6.0) -> void:
+	# R246：dur 缺省 6.0（普通版口径）——两参既有调用零改动；vera 升华施放传 7.0
+	_track_dispatch(&"poison_cloud_cast")
+	poison_cloud_cast.emit(pos, radius, dur)
+
+
+func emit_poison_cloud_tick(pos: Vector2, radius: float) -> void:
+	_track_dispatch(&"poison_cloud_tick")
+	poison_cloud_tick.emit(pos, radius)
+
+
+func emit_poison_cloud_end() -> void:
+	_track_dispatch(&"poison_cloud_end")
+	poison_cloud_end.emit()
+
+
+func emit_burn_spread_ignited(pos: Vector2) -> void:
+	_track_dispatch(&"burn_spread_ignited")
+	burn_spread_ignited.emit(pos)
+
+
+func emit_skill_cast(pos: Vector2, character_id: String) -> void:
+	skill_cast.emit(pos, character_id)
+
+
+func emit_kill_blast(pos: Vector2, radius: float) -> void:
+	_track_dispatch(&"kill_blast")
+	kill_blast.emit(pos, radius)
+
+
+func emit_missile_blast(pos: Vector2, radius: float) -> void:
+	_track_dispatch(&"missile_blast")
+	missile_blast.emit(pos, radius)
+
+
+func emit_bullet_bounced(pos: Vector2) -> void:
+	_track_dispatch(&"bullet_bounced")
+	bullet_bounced.emit(pos)
+
+
+func emit_mechanics_intro(text: String) -> void:
+	_track_dispatch(&"mechanics_intro")
+	mechanics_intro.emit(text)
+
+
+func emit_revive_burst(pos: Vector2, charges_left: int) -> void:
+	_track_dispatch(&"revive_burst")
+	revive_burst.emit(pos, charges_left)
+
+
+# ── R187 三新信号派发包装（统一过 _track_dispatch 口径） ──────────
+func emit_laser_subbeam_spawned(owner_kind: int) -> void:
+	_track_dispatch(&"laser_subbeam_spawned")
+	laser_subbeam_spawned.emit(owner_kind)
+
+
+func emit_mirror_formed(text: String) -> void:
+	_track_dispatch(&"mirror_formed")
+	mirror_formed.emit(text)
+
+
+func emit_w8_detonated(pos: Vector2, target_uid: int) -> void:
+	_track_dispatch(&"w8_detonated")
+	w8_detonated.emit(pos, target_uid)
+
+
+func emit_crystal_shield_request(p_dr: float, p_duration: float) -> void:
+	_track_dispatch(&"crystal_shield_request")
+	crystal_shield_request.emit(p_dr, p_duration)
+
+
 # ── 计数 / 风暴防护 / 订阅纪律 ─────────────────────────────────────
+var _storm_warn_last_ms: int = -100000       # R205：告警日志节流游标（5s 全局一条；计数不受影响）
+
 func _track_dispatch(event: StringName) -> void:
 	# 帧计数 + 超阈值告警一次（每帧每事件仅一次）
 	var count := int(_dispatch_count.get(event, 0)) + 1
 	_dispatch_count[event] = count
 	if count == STORM_WARN_THRESHOLD:
 		storm_warnings += 1
-		push_warning("[EventBus] 事件风暴：%s 本帧已派发 %d 次（阈值 %d）" % [event, count, STORM_WARN_THRESHOLD])
+		_warn_storm_throttled("[EventBus] 事件风暴：%s 本帧已派发 %d 次（阈值 %d）" % [event, count, STORM_WARN_THRESHOLD])
 	if event == &"damage_resolved" and count == STORM_WARN_DAMAGE_RESOLVED:
 		storm_warnings += 1
-		push_warning("[EventBus] 结算风暴：damage_resolved 本帧已派发 %d 次（定位：结算条目过多）" % count)
+		_warn_storm_throttled("[EventBus] 结算风暴：damage_resolved 本帧已派发 %d 次（定位：结算条目过多）" % count)
+
+
+func _warn_storm_throttled(p_msg: String) -> void:
+	# R205：持续战斗期每帧每事件 1 条 = 真机 60 条/秒 logcat 刷屏（vc12 卡点嫌疑之一）；
+	# 日志层 5s 全局一条封顶。storm_warnings 计数口径不变（pkg0 断言 + 诊断日志差分
+	# 读的都是计数器，与告警是否打印无关）。
+	var now := Time.get_ticks_msec()
+	if now - _storm_warn_last_ms < 5000:
+		return
+	_storm_warn_last_ms = now
+	push_warning(p_msg)
 
 
 func end_frame() -> void:
-	# GameLoop 帧末调用：清零计数 + 订阅纪律开发期断言（E-12）
-	_check_node_subscribers()
+	# GameLoop 帧末调用：清零计数（风暴计数保留）+ 订阅纪律开发期断言（E-12，挂 dev 开关——
+	# R188 档0：全信号×连接扫描每帧分配与遍历为常量税，默认关；pkg0 等测试内显式开启）。
+	if dev_assertions:
+		_check_node_subscribers()
 	_dispatch_count.clear()
 
 
@@ -188,10 +400,14 @@ func _total_connections() -> int:
 
 func _check_node_subscribers() -> void:
 	# 仅 Node 派生类可订阅（E-12：RefCounted 连接持强引用 → 泄漏）；开发期拦截计数。
+	# R248 例外口径：Script 本体订阅者（静态 lambda 绑定 GDScript 资源——player.gd
+	# _static_init 击杀账本先例）豁免——脚本随全局类缓存长生、不构成 RefCounted 强引用
+	# 泄漏；pkg0 E-12 恰 +1 计数锚（RefCounted 实例）不受影响（headless 实证：
+	# 该 lambda get_object()=<GDScript>、is_node=false，原扫描每帧误计 1 次）。
 	for sig in get_signal_list():
 		var sname := String(sig["name"])
 		for conn in get_signal_connection_list(sname):
 			var obj: Object = conn["callable"].get_object()
-			if obj != null and not (obj is Node):
+			if obj != null and not (obj is Node) and not (obj is Script):
 				non_node_subscriber_errors += 1
 				push_error("[EventBus] 非 Node 订阅者被拦截（E-12）：%s ← %s" % [sname, str(conn["callable"])])

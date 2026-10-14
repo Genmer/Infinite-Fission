@@ -1,0 +1,50 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R199 G4（武器数据与面板文案）自测 ══════════
+── A. N02 W3 霰弹枪 L3 pellets 回修（R199） ──
+PASS | A0 注册表有 W3_shotgun
+PASS | A1 L1 pellets==7（R199：L3 由 9 回修 8）
+PASS | A2 L1 base_atk==9.0（其余字段不受波及）
+PASS | A3 L1 贴脸面板 DPS 100.8（±0.1）
+PASS | A1 L2 pellets==8（R199：L3 由 9 回修 8）
+PASS | A2 L2 base_atk==9.0（其余字段不受波及）
+PASS | A3 L2 贴脸面板 DPS 115.2（±0.1）
+PASS | A1 L3 pellets==8（R199：L3 由 9 回修 8）
+PASS | A2 L3 base_atk==11.0（其余字段不受波及）
+PASS | A3 L3 贴脸面板 DPS 140.8（±0.1）
+PASS | A1 L4 pellets==9（R199：L3 由 9 回修 8）
+PASS | A2 L4 base_atk==11.0（其余字段不受波及）
+PASS | A3 L4 贴脸面板 DPS 158.4（±0.1）
+PASS | A1 L5 pellets==9（R199：L3 由 9 回修 8）
+PASS | A2 L5 base_atk==14.0（其余字段不受波及）
+PASS | A3 L5 贴脸面板 DPS 201.6（±0.1）
+PASS | A4 L3 其余数值字段与修前一致（rof/cd/pierce）
+PASS | A5 L3→L4 恢复真实增益（140.8 → 158.4）
+── B. N05+F08 暂停面板超帽折算（R199） ──
+PASS | B0 真值源 aggregate_panel = 0.975（前 3 层全额 + 超帽 5 层 ×0.7）
+PASS | B1 超帽态面板显示 +97.5%（实际生效值，R199 前虚标 +120%）
+PASS | B2 未超帽 2/3 层仍显示全额 +30%（回归护栏）
+PASS | B3 1 层保持原描述不改写（既有语义）
+── C. N06 武器 note 文案卫生（R199） ──
+PASS | C1 十武器 ×5 级 note 全量零开发行话/内部 id（R199）
+PASS | C2 【3 级质变】行实捕（渲染链走通）
+PASS | C3 【5 级质变】行实捕
+PASS | C4 质变行零内部术语（R199 文案卫生）
+PASS | C5 HUD L1→L2 提示 = W1 L2 note（零行话）
+PASS | C6 HUD 满级（L5）提示空串（帽语义）
+── D. P08 拖动教学（R199） ──
+PASS | D1 真源非空且含「拖动」操作说明
+PASS | D2 lore 菜单行保持 3 行（menu_screen 几何契约，第 4 行撞继续钮）
+PASS | D3 lore 菜单行第 3 行 = 真源原句（单源不手抄）
+PASS | D4 原风味行保留（第 1/2 行不受波及）
+PASS | D5 首次进 PLAYING 排程倒计时 = MOVE_HINT_DELAY
+PASS | D6 PLAYING 走秒（2.2→1.2）
+PASS | D7 非 PLAYING（暂停/升级/结算）倒计时冻结
+PASS | D8 到点弹一次性提示（toast 文本 = 真源 TUTORIAL_MOVE_BATTLE）
+PASS | D9 已提示后不重排不重弹（一次性）
+────────────────────────────────────────
+汇总：PASS 37 / FAIL 0（共 37 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

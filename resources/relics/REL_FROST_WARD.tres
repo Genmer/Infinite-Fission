@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_FROST_WARD"
+display_name = "霜寒守卫"
+description = "受击时释放寒波，冻结周围敌人 1.2 秒（内冷 8 秒；首领免疫定身仅受减速）"
+rarity = 3
+listen_events = ["player_hit"]
+effect_id = &"REL_EF_FROST_WARD"
+params = {"radius": 180.0, "freeze": 1.2, "icd": 8.0}
+unique = true

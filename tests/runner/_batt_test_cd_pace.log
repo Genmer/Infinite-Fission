@@ -1,0 +1,33 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 迟到减CD 专项自测 ══════════
+── 射速词条：挂卡即缩当前倒计时（弹道形态 rof 口径）──
+PASS | 默认武器在 0 号槽
+PASS | 开火后进入冷却且登记节拍基准
+PASS | AFF_ROF_UP 挂载成功
+PASS | 倒计时立刻缩短
+PASS | 按新旧节拍比例缩放
+PASS | 不超过新节拍
+── CDR 词条：W4 换目标聚焦保留（R187 换挂口径）──
+PASS | W4 装配成功
+PASS | W4 主束生成（常驻）
+PASS | 照射 2s 聚焦 ×1.30 成立
+PASS | AFF_CDR ×4 挂载成功
+PASS | R187：AFF_CDR×4 换目标保留 50% 聚焦（×1.30 ≠ 归零口径 ×1.15）
+── 增益到期：节拍变长不回罚 ──
+PASS | 增益期短节拍成立
+PASS | 剩余冷却原样保留（不回罚）
+PASS | 节拍基准已登记新值
+── 技能急速：已在倒计时的技能CD比例缩短 ──
+PASS | 技能基线 > 0
+PASS | AFF_SKILL_HASTE 挂载成功
+PASS | 基线缩至 ×0.88
+PASS | 倒计时按比例立刻缩短
+── 过载咆哮：开启瞬间武器倒计时立刻减半 ──
+PASS | 技能就绪且开启成功
+PASS | rof_mult 已 ×2
+PASS | 武器倒计时立刻减半
+────────────────────────────────────────
+汇总：PASS 21 / FAIL 0（共 21 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
