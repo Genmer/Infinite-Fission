@@ -355,14 +355,18 @@ func _test_c_auto_pick() -> void:
 	var scenarios := 0
 	var ok_curse := true
 	var detail := ""
-	for s in range(CURSE_SCAN_SEEDS):
+	# 夹具口径（QA-heal r1 实证 seed=3 末位上架 W2_gatling 武器卡）：R246 后非 TRAIT 卡
+	# 永不带诅咒——随机 seed 末位未必构成诅咒局面，属夹具失真非被测行为。场景池放宽
+	# 3×，只对真正构成诅咒局面的 seed 断言不变量，仍凑满 200 个诅咒场景（scenarios
+	# 口径与断言集不变，硬不变量强度不降）。
+	for s in range(CURSE_SCAN_SEEDS * 3):
+		if scenarios >= CURSE_SCAN_SEEDS:
+			break
 		gen.rng.seed = s
 		gen._slot_rng.seed = s
 		var cands := gen.generate_candidates(ctx)
 		if cands.size() < 4 or not bool(cands[3].get("cursed", false)):
-			ok_curse = false
-			detail = "seed=%d 非诅咒局面（夹具失真）" % s
-			break
+			continue                    # 未构成诅咒局面：跳过该 seed，不计入场景数
 		scenarios += 1
 		var i_single := AutoIdleStrategy.pick(cands, false)
 		if i_single < 0 or i_single >= cands.size() \

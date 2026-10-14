@@ -1,0 +1,859 @@
+{
+	"blade_order": [
+		{
+			"blade": "无候选刀(进backlog)",
+			"fam": 1,
+			"fam_name": "F1敌桶本体",
+			"marginal_dc": 142,
+			"share_pct": 54
+		},
+		{
+			"blade": "K4HUD配色量化",
+			"fam": 9,
+			"fam_name": "F9HUD/BossBar",
+			"marginal_dc": 49,
+			"share_pct": 18.6
+		},
+		{
+			"blade": "K1跳字根alpha量化",
+			"fam": 8,
+			"fam_name": "F8跳字",
+			"marginal_dc": 34,
+			"share_pct": 12.9
+		}
+	],
+	"fg0": {
+		"arm": "window-full",
+		"rendering": "forward_plus"
+	},
+	"fg2": {
+		"pair_fails": [
+			"run×prev1 F8 12.9/16.7(散布25%)",
+			"lastrun×prev1 F6 1.9/2.5(散布25%)",
+			"lastrun×prev1 F7 7.0/9.6(散布31%)"
+		],
+		"profiles": [
+			{
+				"baseline_dc": 263,
+				"share_by_fam": {
+					"1": 53.9923954372624,
+					"2": 1.14068441064639,
+					"3": -1.14068441064639,
+					"4": 0.380228136882129,
+					"5": 0.760456273764259,
+					"6": 2.28136882129278,
+					"7": 7.98479087452472,
+					"8": 12.9277566539924,
+					"9": 18.6311787072243,
+					"10": 1.14068441064639,
+					"11": 1.52091254752852,
+					"12": 0.380228136882129
+				},
+				"tag": "run",
+				"top5": [
+					1,
+					9,
+					8,
+					7,
+					6
+				],
+				"top5_sum_pct": 95.8
+			},
+			{
+				"baseline_dc": 258,
+				"share_by_fam": {
+					"1": 54.2635658914729,
+					"2": -0.38759689922481,
+					"3": -0.77519379844961,
+					"4": 1.55038759689922,
+					"5": 1.16279069767442,
+					"6": 1.93798449612403,
+					"7": 6.97674418604651,
+					"8": 13.5658914728682,
+					"9": 18.6046511627907,
+					"10": 1.16279069767442,
+					"11": 1.55038759689922,
+					"12": 0.387596899224806
+				},
+				"tag": "lastrun",
+				"top5": [
+					1,
+					9,
+					8,
+					7,
+					6
+				],
+				"top5_sum_pct": 95.3
+			},
+			{
+				"baseline_dc": 240,
+				"share_by_fam": {
+					"1": 50,
+					"2": -0.83333333333333,
+					"3": -2.5,
+					"4": 0,
+					"5": 0,
+					"6": 2.5,
+					"7": 9.58333333333333,
+					"8": 16.6666666666667,
+					"9": 21.25,
+					"10": 1.25,
+					"11": 1.66666666666667,
+					"12": 0.416666666666667
+				},
+				"tag": "prev1",
+				"top5": [
+					1,
+					9,
+					8,
+					7,
+					6
+				],
+				"top5_sum_pct": 100
+			}
+		],
+		"sources": 3
+	},
+	"fg4": {
+		"sa_baseline_dc": 263,
+		"threshold": 500,
+		"verdict": "fork：缺口不在渲染器在内容差（敌方弹/棱镜/真实构筑）——夹具升级一浪后重扫，刀序顺延"
+	},
+	"gates": {
+		"FG2 复现门：top5 族占比两两相对差 ≤±25%（3 进程）": {
+			"detail": "超差族：run×prev1 F8 12.9/16.7(散布25%) lastrun×prev1 F6 1.9/2.5(散布25%) lastrun×prev1 F7 7.0/9.6(散布31%)",
+			"ok": false
+		},
+		"FG3[SAA] 望远镜闭环 ≤±5": {
+			"detail": "closure=0",
+			"ok": true
+		},
+		"FG3[SA] 望远镜闭环 ≤±5": {
+			"detail": "closure=0",
+			"ok": true
+		},
+		"FG3[SB] 望远镜闭环 ≤±5": {
+			"detail": "closure=0",
+			"ok": true
+		},
+		"FG5 锚档方向：F4 弹池 锚档边际(8) vs SA(1) 噪声带 ±5": {
+			"detail": "差=+7（披露类：弹桶 dc 面≈1-4 合批近零，方向无信号——阀门作用于空闲栈容量非活弹 dc 面，见 _fg5_check 头注偏差记录）",
+			"disclosed": true,
+			"ok": false
+		},
+		"FG5 锚档方向：F6 粒子 锚档边际(24) ≥ SA 真机档(6)": {
+			"detail": "差=+18（阀门关=不减薄；SAA 粒子活口 64 vs SA 11 同向佐证）",
+			"ok": true
+		},
+		"G-沙箱 user:// 重定向生效（含 .qa_sandbox_r230）": {
+			"detail": "user_dir=E:/Code/Agent/Infinite-Fission/.qa_sandbox_r230/Godot/app_userdata/Infinite Fission",
+			"ok": true
+		},
+		"SB 校准门：弹N p50∈[190,325] 且 敌N p50∈[28,33]": {
+			"detail": "弹=259 敌=30（超带=构筑旋钮再调，调参史随报告披露）",
+			"ok": true
+		}
+	},
+	"meta": {
+		"build": "W2_gatling L5 + PIERCE×3/MULTI×2/BOUNCE×3/NOVA×2/FRACTAL×2（SB 追加 MULTI×1）",
+		"date": "2026-10-04",
+		"decision_quantities": "族占比与刀后相对降幅（白名单）；绝对 dc 仅夹具内部一致性，不与真机互比",
+		"governor": "frozen, mode=frame_priority, tier_override=2（SAA=3）",
+		"map": "world_grove w16（敌血 ×0.3 定标复本）",
+		"package": "pc-window-gl-compatibility-fixture（校准对象=真机 vc34 深载带 dc700-990）",
+		"protocol": "基线 60 帧/族 弃3+settle10+采样30 取中位/P1 F1→F12/P2 单独可见/P3 逆序（仅SA）/逐帧族掩码重放（RS 层，节点 visible 零触碰）",
+		"rendering": "forward_plus",
+		"seed": 20261004,
+		"sentinels": "fullload=1 bitmap=1 runstart_bake=1 settle=-3 burst_thin=-3 pool_valve=-3（SAA：fullload=0/tier3/-2/-2）；fx_quality=1/damage_numbers_on=1/fx_opacity=1.0 内存注入；chromatic 逐帧 RS 隐藏；persist_defer 挂起；APPDATA 沙箱",
+		"user_dir_sandbox": "E:/Code/Agent/Infinite-Fission/.qa_sandbox_r230/Godot/app_userdata/Infinite Fission"
+	},
+	"scenarios": {
+		"SA": {
+			"P1": [
+				{
+					"after_dc": 121,
+					"fam": 1,
+					"marginal_dc": 142
+				},
+				{
+					"after_dc": 118,
+					"fam": 2,
+					"marginal_dc": 3
+				},
+				{
+					"after_dc": 121,
+					"fam": 3,
+					"marginal_dc": -3
+				},
+				{
+					"after_dc": 120,
+					"fam": 4,
+					"marginal_dc": 1
+				},
+				{
+					"after_dc": 118,
+					"fam": 5,
+					"marginal_dc": 2
+				},
+				{
+					"after_dc": 112,
+					"fam": 6,
+					"marginal_dc": 6
+				},
+				{
+					"after_dc": 91,
+					"fam": 7,
+					"marginal_dc": 21
+				},
+				{
+					"after_dc": 57,
+					"fam": 8,
+					"marginal_dc": 34
+				},
+				{
+					"after_dc": 8,
+					"fam": 9,
+					"marginal_dc": 49
+				},
+				{
+					"after_dc": 5,
+					"fam": 10,
+					"marginal_dc": 3
+				},
+				{
+					"after_dc": 1,
+					"fam": 11,
+					"marginal_dc": 4
+				},
+				{
+					"after_dc": 0,
+					"fam": 12,
+					"marginal_dc": 1
+				}
+			],
+			"P2": [
+				{
+					"fam": 1,
+					"indep_dc": 67,
+					"live": 484
+				},
+				{
+					"fam": 2,
+					"indep_dc": 0,
+					"live": 12
+				},
+				{
+					"fam": 3,
+					"indep_dc": 0,
+					"live": 7
+				},
+				{
+					"fam": 4,
+					"indep_dc": 1,
+					"live": 788
+				},
+				{
+					"fam": 5,
+					"indep_dc": 1,
+					"live": 14
+				},
+				{
+					"fam": 6,
+					"indep_dc": 9,
+					"live": 11
+				},
+				{
+					"fam": 7,
+					"indep_dc": 0,
+					"live": 22
+				},
+				{
+					"fam": 8,
+					"indep_dc": 35,
+					"live": 115
+				},
+				{
+					"fam": 9,
+					"indep_dc": 48,
+					"live": 0
+				},
+				{
+					"fam": 10,
+					"indep_dc": 0,
+					"live": 0
+				},
+				{
+					"fam": 11,
+					"indep_dc": 0,
+					"live": 0
+				},
+				{
+					"fam": 12,
+					"indep_dc": 1,
+					"live": 4
+				}
+			],
+			"P3": [
+				{
+					"after_dc": 207,
+					"fam": 12,
+					"marginal_dc": 56
+				},
+				{
+					"after_dc": 220,
+					"fam": 11,
+					"marginal_dc": -13
+				},
+				{
+					"after_dc": 203,
+					"fam": 10,
+					"marginal_dc": 17
+				},
+				{
+					"after_dc": 166,
+					"fam": 9,
+					"marginal_dc": 37
+				},
+				{
+					"after_dc": 148,
+					"fam": 8,
+					"marginal_dc": 18
+				},
+				{
+					"after_dc": 118,
+					"fam": 7,
+					"marginal_dc": 30
+				},
+				{
+					"after_dc": 120,
+					"fam": 6,
+					"marginal_dc": -2
+				},
+				{
+					"after_dc": 115,
+					"fam": 5,
+					"marginal_dc": 5
+				},
+				{
+					"after_dc": 108,
+					"fam": 4,
+					"marginal_dc": 7
+				},
+				{
+					"after_dc": 76,
+					"fam": 3,
+					"marginal_dc": 32
+				},
+				{
+					"after_dc": 64,
+					"fam": 2,
+					"marginal_dc": 12
+				},
+				{
+					"after_dc": 0,
+					"fam": 1,
+					"marginal_dc": 64
+				}
+			],
+			"anchor": false,
+			"baseline_dc": 263,
+			"baseline_dcs": [
+				256,
+				265,
+				292,
+				317,
+				341,
+				340,
+				316,
+				269,
+				217,
+				227,
+				232,
+				263,
+				270,
+				257,
+				273,
+				245,
+				266,
+				276,
+				288,
+				296,
+				291,
+				322,
+				335,
+				333,
+				301,
+				264,
+				259,
+				260,
+				276,
+				313,
+				327,
+				319,
+				239,
+				237,
+				232,
+				232,
+				249,
+				235,
+				268,
+				279,
+				262,
+				261,
+				263,
+				245,
+				244,
+				252,
+				247,
+				246,
+				220,
+				213,
+				209,
+				205,
+				201,
+				209,
+				225,
+				241,
+				255,
+				263,
+				273,
+				270
+			],
+			"counts": {
+				"1": 484,
+				"2": 11,
+				"3": 7,
+				"4": 716,
+				"5": 13,
+				"6": 11,
+				"7": 25,
+				"8": 111,
+				"9": 54,
+				"10": 14,
+				"11": 8,
+				"12": 5
+			},
+			"hold": 120,
+			"live": {
+				"enemy_live": 120,
+				"popup_live": 40,
+				"proj_live": 381
+			},
+			"residual_dc": 0,
+			"stage_p50_ms": {
+				"card_drain": 0,
+				"enemy": 0.86,
+				"feel": 0.02,
+				"feel_shard": 0,
+				"fx": 0.07,
+				"grid_projectile": 15.59,
+				"grid_rebuild": 0.37,
+				"other": 0.27,
+				"player": 0.07,
+				"player_mv": 0.01,
+				"player_wp": 0.03,
+				"popup": 0.18,
+				"shard": 0.02,
+				"ui": 1.35,
+				"wave": 0.01
+			}
+		},
+		"SAA": {
+			"P1": [
+				{
+					"after_dc": 140,
+					"fam": 1,
+					"marginal_dc": 214
+				},
+				{
+					"after_dc": 149,
+					"fam": 2,
+					"marginal_dc": -9
+				},
+				{
+					"after_dc": 146,
+					"fam": 3,
+					"marginal_dc": 3
+				},
+				{
+					"after_dc": 138,
+					"fam": 4,
+					"marginal_dc": 8
+				},
+				{
+					"after_dc": 136,
+					"fam": 5,
+					"marginal_dc": 2
+				},
+				{
+					"after_dc": 112,
+					"fam": 6,
+					"marginal_dc": 24
+				},
+				{
+					"after_dc": 94,
+					"fam": 7,
+					"marginal_dc": 18
+				},
+				{
+					"after_dc": 56,
+					"fam": 8,
+					"marginal_dc": 38
+				},
+				{
+					"after_dc": 8,
+					"fam": 9,
+					"marginal_dc": 48
+				},
+				{
+					"after_dc": 5,
+					"fam": 10,
+					"marginal_dc": 3
+				},
+				{
+					"after_dc": 1,
+					"fam": 11,
+					"marginal_dc": 4
+				},
+				{
+					"after_dc": 0,
+					"fam": 12,
+					"marginal_dc": 1
+				}
+			],
+			"P2": [
+				{
+					"fam": 1,
+					"indep_dc": 55,
+					"live": 484
+				},
+				{
+					"fam": 2,
+					"indep_dc": 0,
+					"live": 70
+				},
+				{
+					"fam": 3,
+					"indep_dc": 0,
+					"live": 6
+				},
+				{
+					"fam": 4,
+					"indep_dc": 1,
+					"live": 806
+				},
+				{
+					"fam": 5,
+					"indep_dc": 4,
+					"live": 109
+				},
+				{
+					"fam": 6,
+					"indep_dc": 26,
+					"live": 64
+				},
+				{
+					"fam": 7,
+					"indep_dc": 0,
+					"live": 23
+				},
+				{
+					"fam": 8,
+					"indep_dc": 36,
+					"live": 113
+				},
+				{
+					"fam": 9,
+					"indep_dc": 48,
+					"live": 0
+				},
+				{
+					"fam": 10,
+					"indep_dc": 0,
+					"live": 0
+				},
+				{
+					"fam": 11,
+					"indep_dc": 0,
+					"live": 0
+				},
+				{
+					"fam": 12,
+					"indep_dc": 1,
+					"live": 4
+				}
+			],
+			"P3": [],
+			"anchor": true,
+			"baseline_dc": 354,
+			"baseline_dcs": [
+				349,
+				331,
+				320,
+				363,
+				356,
+				376,
+				372,
+				373,
+				338,
+				328,
+				318,
+				308,
+				304,
+				293,
+				310,
+				304,
+				313,
+				356,
+				368,
+				359,
+				364,
+				318,
+				308,
+				295,
+				298,
+				280,
+				296,
+				295,
+				313,
+				318,
+				325,
+				334,
+				378,
+				370,
+				381,
+				409,
+				405,
+				406,
+				399,
+				387,
+				422,
+				416,
+				424,
+				432,
+				381,
+				383,
+				393,
+				390,
+				354,
+				332,
+				327,
+				342,
+				373,
+				363,
+				359,
+				355,
+				333,
+				333,
+				322,
+				344
+			],
+			"counts": {
+				"1": 484,
+				"2": 61,
+				"3": 7,
+				"4": 872,
+				"5": 329,
+				"6": 61,
+				"7": 25,
+				"8": 107,
+				"9": 55,
+				"10": 14,
+				"11": 9,
+				"12": 5
+			},
+			"hold": 120,
+			"live": {
+				"enemy_live": 120,
+				"popup_live": 40,
+				"proj_live": 406
+			},
+			"residual_dc": 0,
+			"stage_p50_ms": {
+				"card_drain": 0,
+				"enemy": 0.94,
+				"feel": 0.04,
+				"feel_shard": 0.08,
+				"fx": 0.07,
+				"grid_projectile": 16.11,
+				"grid_rebuild": 0.36,
+				"other": 0.25,
+				"player": 0.06,
+				"player_mv": 0.01,
+				"player_wp": 0.03,
+				"popup": 0.17,
+				"shard": 0.52,
+				"ui": 1.62,
+				"wave": 0.01
+			}
+		},
+		"SB": {
+			"P1": [
+				{
+					"after_dc": 112,
+					"fam": 1,
+					"marginal_dc": 39
+				},
+				{
+					"after_dc": 111,
+					"fam": 2,
+					"marginal_dc": 1
+				},
+				{
+					"after_dc": 113,
+					"fam": 3,
+					"marginal_dc": -2
+				},
+				{
+					"after_dc": 102,
+					"fam": 4,
+					"marginal_dc": 11
+				},
+				{
+					"after_dc": 97,
+					"fam": 5,
+					"marginal_dc": 5
+				},
+				{
+					"after_dc": 94,
+					"fam": 6,
+					"marginal_dc": 3
+				},
+				{
+					"after_dc": 86,
+					"fam": 7,
+					"marginal_dc": 8
+				},
+				{
+					"after_dc": 56,
+					"fam": 8,
+					"marginal_dc": 30
+				},
+				{
+					"after_dc": 8,
+					"fam": 9,
+					"marginal_dc": 48
+				},
+				{
+					"after_dc": 5,
+					"fam": 10,
+					"marginal_dc": 3
+				},
+				{
+					"after_dc": 1,
+					"fam": 11,
+					"marginal_dc": 4
+				},
+				{
+					"after_dc": 0,
+					"fam": 12,
+					"marginal_dc": 1
+				}
+			],
+			"P2": [],
+			"P3": [],
+			"anchor": false,
+			"baseline_dc": 151,
+			"baseline_dcs": [
+				144,
+				149,
+				137,
+				143,
+				139,
+				165,
+				168,
+				167,
+				172,
+				158,
+				168,
+				145,
+				144,
+				147,
+				149,
+				154,
+				154,
+				157,
+				147,
+				157,
+				174,
+				167,
+				184,
+				177,
+				181,
+				179,
+				165,
+				163,
+				148,
+				158,
+				151,
+				139,
+				141,
+				134,
+				134,
+				123,
+				138,
+				143,
+				145,
+				150,
+				157,
+				164,
+				156,
+				151,
+				152,
+				148,
+				140,
+				130,
+				134,
+				135,
+				136,
+				134,
+				138,
+				148,
+				149,
+				151,
+				166,
+				155,
+				164,
+				157
+			],
+			"counts": {
+				"1": 125,
+				"2": 4,
+				"3": 3,
+				"4": 518,
+				"5": 15,
+				"6": 1,
+				"7": 24,
+				"8": 103,
+				"9": 54,
+				"10": 14,
+				"11": 8,
+				"12": 5
+			},
+			"hold": 30,
+			"live": {
+				"enemy_live": 30,
+				"popup_live": 33,
+				"proj_live": 259
+			},
+			"residual_dc": 0,
+			"stage_p50_ms": {
+				"card_drain": 0,
+				"enemy": 0.3,
+				"feel": 0.02,
+				"feel_shard": 0,
+				"fx": 0.08,
+				"grid_projectile": 3.57,
+				"grid_rebuild": 0.19,
+				"other": 0.24,
+				"player": 0.06,
+				"player_mv": 0.01,
+				"player_wp": 0.03,
+				"popup": 0.15,
+				"shard": 0.02,
+				"ui": 0.28,
+				"wave": 0.01
+			}
+		}
+	}
+}

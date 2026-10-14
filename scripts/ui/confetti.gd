@@ -147,6 +147,14 @@ func _process(p_delta: float) -> void:
 
 
 func _draw() -> void:
+	# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+	# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+	DebugStats.bucket_begin(&"draw")
+	_draw_r271()
+	DebugStats.bucket_end(&"draw")
+
+
+func _draw_r271() -> void:
 	# E4 单 draw pass：矩形彩纸逐枚直绘（旋转 + 末段淡出与旧 Sprite 版视觉等价）
 	for piece: Dictionary in _pieces:
 		var left := float(piece["left"])

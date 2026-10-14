@@ -12,6 +12,13 @@ extends Node
 signal exhausted(pool_id: StringName)         # 转发 EventBus.pool_exhausted
 
 var pool_id: StringName = &""                 # 池标识（遥测键）
+var bucket_host: Node = null                  # R214 E' 树序分桶 host（TexBucketHost；null=关）：
+                                              # release 开头统一 unplace 归位池根；place 由实体
+                                              # 激活期自报（贴图定后）——见 TexBucketHost 头注
+var lazy_bucket_release: bool = false         # R271 V-C1（弹池惰性归位，boost 门内默认）：
+                                              # true 时 release 按 PerfGovernor.boost_mode()
+                                              # 分派 unplace_lazy（留桶不 reparent）/unplace；
+                                              # false=现状逐位（未接线的池零扰动）
 var _scene: PackedScene                       # 池化场景模板
 var _free_list: Array[Node] = []              # 空闲栈
 var _capacity: int = 0                        # 硬容量（= 硬上限）
@@ -73,12 +80,41 @@ func release(node: Node) -> void:
 		rejected_release_count += 1
 		push_error("[ObjectPool:%s] 拒绝归还（重复归还或外来节点）：%s" % [pool_id, str(node.name)])
 		return
+	if bucket_host != null and node is Node2D:
+		# R271 V-C1：boost 开 ∧ 本池接线 → 惰性归位（弹留桶，省 release reparent——verdict
+		# S1 塌缩 49%+加摘 17k/s 坐实池周转链后的对症刀）；boost 关/未接线 = unplace 现状逐位
+		if lazy_bucket_release and PerfGovernor.boost_mode():
+			(bucket_host as TexBucketHost).unplace_lazy(node)
+		else:
+			bucket_host.unplace(node)              # R214 E'：分桶实体先归位池根（_reset_state 前）
 	_before_repool(node)
 	_prepare_for_pool(node)
 	_assert_clean(node)
 	node.set_meta(_META_IN_POOL, true)
 	_live_count -= 1
 	_free_list.append(node)
+
+
+func trim_free_to(p_target: int) -> int:
+	# R229 弹池静载阀门裁闲：运行期把空闲栈裁到 p_target，返回裁掉件数（GameLoop 三重门
+	# 触发后一次性调用；不碰 acquire/release/prewarm 语义）。
+	# · 先降容量：_capacity = maxi(p_target, _live_count)——裁后 free+live ≤ 新容量恒成立，
+	#   acquire 懒增长条件 `_free_list.size() + _live_count < _capacity`（:61-65）不可达，
+	#   裁闲不会重开运行期 instantiate（ri）口子；live 超标的钳制兜底=容量至少让件。
+	# · 再裁闲：超额项从 _free_list 尾部弹出后 queue_free()（先出栈后释放——空闲栈永不
+	#   持有已释放节点；弹出即不可再被 acquire 复用，queue_free 帧末摘树）。
+	# · 无桶悬挂：空闲件已在池根下（release 开头 bucket_host.unplace 已归位）；
+	#   空闲件 meta 保持 true——已裁件若被误 release 会被成员校验按「重复归还/外来」
+	#   拒绝（rejected_release_count 防御原样，不回灌已释放节点）。
+	_capacity = maxi(p_target, _live_count)
+	var keep: int = maxi(_capacity - _live_count, 0)
+	var trimmed := 0
+	while _free_list.size() > keep:
+		var node: Node = _free_list.pop_back()
+		if node != null:
+			node.queue_free()
+		trimmed += 1
+	return trimmed
 
 
 func stats() -> Dictionary:

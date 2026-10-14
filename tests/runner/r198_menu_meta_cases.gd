@@ -147,24 +147,24 @@ func _teardown_menu() -> void:
 		_menu = null
 
 
-# ══ A 二aw-4：养成 revive desc 2s→3s（真值 REVIVE_INVULN_S=3.0） ══
+# ══ A 二aw-4：养成 revive desc（真值 REVIVE_INVULN_S，二cs 3.0→5.0） ══
 func _test_a_revive_desc() -> void:
-	print("── A 二aw-4：养成面板复活文案对齐 REVIVE_INVULN_S=3.0 ──")
+	print("── A 二aw-4：养成面板复活文案对齐 REVIVE_INVULN_S=5.0（二cs） ──")
 	var found := false
 	var desc := ""
 	for u in Meta.UPGRADES:
 		if String(u.id) == "revive":
 			found = true
 			desc = String(u.desc)
-	_check("A1 revive 项在册且 desc 含「3s 无敌」",
-		found and desc.contains("3s 无敌"), "desc=%s" % desc)
-	_check("A2 revive desc 无「2s」残留（全表唯一文案源）",
-		found and not desc.contains("2s"), "desc=%s" % desc)
+	_check("A1 revive 项在册且 desc 含「5s 无敌」",
+		found and desc.contains("5s 无敌"), "desc=%s" % desc)
+	_check("A2 revive desc 无「3s」残留（二cs 升 5s 后旧值零残留）",
+		found and not desc.contains("3s"), "desc=%s" % desc)
 	# A3 真值锚走源级（不静态引 Player 类——组2 文件并行期解析态不受制于人）：
 	# REVIVE_INVULN_S := 3.0（player.gd 复活无敌常量，文案从实现取值）
 	var psrc := FileAccess.get_file_as_string("res://scripts/entities/player/player.gd")
-	_check("A3 真值锚：player.gd 含「REVIVE_INVULN_S := 3.0」（文案从实现取值）",
-		psrc.contains("REVIVE_INVULN_S := 3.0"))
+	_check("A3 真值锚：player.gd 含「REVIVE_INVULN_S := 5.0」（文案从实现取值）",
+		psrc.contains("REVIVE_INVULN_S := 5.0"))
 
 
 # ══ B 二aw-5：skill_icon 10 角色两两互异 + fission/echo 非默认星 ══

@@ -37,11 +37,15 @@ var _fail: int = 0
 var _failures: Array[String] = []
 var _gl: GameLoop = null                         # 共享 GameLoop（main.tscn 实例化）
 var _saved_char: StringName = &""                # 角色快照（采样套件钉 sentinel 防技能位移污染）
+var _saved_codex: Dictionary = {}                # QA-261-4：图鉴快照（局内 rng 解锁词条由产品码
+                                                 # 直写 codex_traits——teardown 不还原则泄入共享测试档
+                                                 # 污染后续套件池夹具）
 
 
 func run(p_tree: SceneTree) -> void:
 	tree = p_tree
 	seed(42)
+	_saved_codex = Meta.codex_traits.duplicate()   # QA-261-4：teardown 快照还原（局内解锁不泄档）
 	_ensure_autoloads()
 	_boot_game_loop()
 	_test_settings_key_contract()                 # R194 双键契约（fx_opacity/fps_cap）
@@ -117,6 +121,9 @@ func _teardown_game_loop() -> void:
 	if _saved_char != &"":
 		Meta.character_id = _saved_char            # 角色快照还原
 		_saved_char = &""
+	Meta.codex_traits = _saved_codex.duplicate()   # QA-261-4：图鉴快照还原（新增键一并清）
+	Meta._save()
+	_saved_codex = {}
 	if _gl != null:
 		_gl.free()
 		_gl = null

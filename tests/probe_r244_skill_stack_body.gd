@@ -1,6 +1,7 @@
 # tests/probe_r244_skill_stack_body.gd（R244 探针用例体）
-# 判读口径：①②④ 断言写的是「bug 在场」期望值（copies 2→4→6）——若未来修复为
-# 「先回收再生成」或「效果期内拒绝再放」，这些硬门会翻红提醒更新口径；③⑤ 是
+# 判读口径：R246 已修（_skill_summon_orbs 入口先 _summon_restore 再重掷）——
+# ①②④ 断言为「已修」期望值（效果期内再施放恒回收重掷=2，时长刷新语义）；修复前
+# 原口径（append 不清旧 2→4→6 无帽叠）见 FEEDBACK_TRACKER R244 诊断；③⑤ 是
 # 回收链与幂等对照组（任何实现下都必须成立）。
 extends RefCounted
 
@@ -89,32 +90,41 @@ func _check(p_cond: bool, p_msg: String, p_detail: String = "") -> void:
 
 
 func _test_noah_recast_stacks_copies() -> void:
-	print("── ① 诺亚效果期内再施放：副本/护航舰叠加实锤 ──")
+	print("── ① 诺亚效果期内再施放：先回收再重掷（R246 已修——恒 2 不叠） ──")
 	var p: Object = _gl.player
 	_check(int(p.call(&"skill_ready")) != 0, "开局技能就绪")
 	_check(bool(p.call(&"activate_skill")), "第 1 次施放成功")
 	_check(_copies() == 2, "施放 1 次后副本=2", "copies=%d" % _copies())
 	_check(_drones() == 2, "施放 1 次后护航舰=2", "drones=%d" % _drones())
 	_check(bool(_cast_bypass_cd()), "效果期内（冷却归零）再施放成功")
-	_check(_copies() == 4, "施放 2 次后副本=4（append 不清旧=bug 在场；=2 说明已修）",
+	_check(_copies() == 2, "施放 2 次后副本=2（入口先回收旧副本再重掷；>2 即叠层回归）",
 		"copies=%d" % _copies())
 	_check(bool(_cast_bypass_cd()), "第 3 次施放成功")
-	_check(_copies() == 6, "施放 3 次后副本=6（无帽线性叠）", "copies=%d" % _copies())
-	_check(_drones() == 6, "施放 3 次后护航舰=6（同 append 不清旧）", "drones=%d" % _drones())
+	_check(_copies() == 2, "施放 3 次后副本=2（无帽线性叠已根除）", "copies=%d" % _copies())
+	_check(_drones() == 2, "施放 3 次后护航舰=2（同先回收再重掷）", "drones=%d" % _drones())
 
 
 func _test_recast_refreshes_shared_lifetime() -> void:
-	print("── ② 共享 _summon_left 被再施放刷新：首批副本被续命 ──")
+	print("── ② 再施放=回收旧批+寿命刷新回满（不再续命旧副本） ──")
 	var p: Object = _gl.player
 	p.call(&"_summon_restore")             # 清场重测
 	_cast_bypass_cd()
 	_tick_seconds(8.0)                     # 8s < SUMMON_DURATION 10s：副本应仍在
 	_check(_copies() == 2, "8s 后副本仍在（10s 期内）", "copies=%d" % _copies())
-	_cast_bypass_cd()                      # 效果期内再放（共享寿命被刷新）
+	var first_batch: Array = (p.get("_summon_copies") as Array).duplicate()
+	_cast_bypass_cd()                      # 效果期内再放（旧批回收 + 寿命重置）
 	var left: float = float(p.get("_summon_left"))
-	_check(left > 9.0, "再施放把 _summon_left 刷新回满 10s", "left=%.2f" % left)
-	_tick_seconds(2.5)                     # 距首放 10.5s（首批本应到期）
-	_check(_copies() == 4, "首放后 10.5s 副本=4（首批被续命未回收=持续叠存）", "copies=%d" % _copies())
+	_check(left > 9.0, "再施放把 _summon_left 刷新回满 10s（刷新时长语义保持）", "left=%.2f" % left)
+	_check(_copies() == 2, "再施放后在场副本恒=2（旧批已回收非续命）", "copies=%d" % _copies())
+	var first_alive := 0
+	for c in first_batch:
+		if c != null and is_instance_valid(c) and not (c as Node).is_queued_for_deletion():
+			first_alive += 1
+	_check(first_alive == 0, "首批副本实例已全部回收（queue_free 落账，无叠存残留）",
+		"alive=%d" % first_alive)
+	_tick_seconds(2.5)                     # 距首放 10.5s（旧口径下首批被续命会=4）
+	_check(_copies() == 2, "首放后 10.5s 副本=2（第二批 2.5s 在册；=4 即续命叠存回归）",
+		"copies=%d" % _copies())
 
 
 func _test_expiry_still_reclaims_without_recast() -> void:
@@ -124,18 +134,19 @@ func _test_expiry_still_reclaims_without_recast() -> void:
 
 
 func _test_drones_accumulate_then_self_expire() -> void:
-	print("── ④ 护航舰：append 不清旧但各自 10s 独立自灭 ──")
+	print("── ④ 护航舰：连放不清旧口径已根除 + 到期回收链仍工作 ──")
 	var p: Object = _gl.player
 	p.call(&"_summon_restore")
 	for i in 5:
 		_cast_bypass_cd()
-	_check(_drones() == 10, "连放 5 次护航舰瞬时=10（+2/次不清旧）", "drones=%d" % _drones())
+	_check(_drones() == 2, "连放 5 次护航舰瞬时=2（先回收再重掷；>2 即叠层回归）",
+		"drones=%d" % _drones())
 	_tick_seconds(10.5)
 	var alive := 0
 	for d in (p.get("_summon_drones") as Array):
-		if d != null and is_instance_valid(d):
+		if d != null and is_instance_valid(d) and not (d as Node).is_queued_for_deletion():
 			alive += 1
-	_check(alive == 0, "10.5s 后护航舰自灭清零（独立 _life_left）", "alive=%d" % alive)
+	_check(alive == 0, "10.5s 后护航舰到期回收清零（统一 _summon_restore 收口）", "alive=%d" % alive)
 
 
 func _test_veles_recast_idempotent_contrast() -> void:

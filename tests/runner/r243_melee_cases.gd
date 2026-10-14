@@ -1,14 +1,15 @@
 # tests/runner/r243_melee_cases.gd
 # R243 近战重组（w2-melee）用例体（由 test_r243_melee.gd 入口加载；cases 禁 test_ 前缀
 # 防电池 glob 误收）。覆盖（w2-melee 验收 ①~⑩）：
-#   A 组 W13 表/模式读回：数值表 L1/L5（64/190/140°/10 目、105/260/180°）+ mode 改义
-#        （_is_slash_mode = slash|cleave，缺省回落 nullify 旧口径）+ 裸斩半径 190。
+#   A 组 W13 表/模式读回：数值表 L1/L5（64/130/140°/10 目、105/190/180°）+ mode 改义
+#        （_is_slash_mode = slash|cleave，缺省回落 nullify 旧口径）+ 裸斩半径 130。
 #   B 组 cleave 定向开弧：R33 无目标不开火；try_fire → _open_slash(aim, muzzle)；
 #        不建 OrbitField；巨刃 ×1.2 / 广域 ×1.18 乘式（helper 上移版消费）；
 #        spawn 键三件（greatsword / block 0.30 / knockback 100）+ W9 口径零位移 +
 #        _orbit_params cleave 不注入追击键。
 #   C 组 常驻警戒弧：_guard_facing 缓存；两极（chance=1.0 正面全消 + 侧后 90° 外不受 /
 #        chance=0.0 零消弹）；帽 4/检查；节拍 0.1s；斩击窗停巡判据。
+#        （R245 §3.3 挡弹域改 BLOCK_RADIUS_TABLE[level]——弹位按名义域 60 内重摆）
 #   D 组 幻影斩挂点（inert）：零词条零行为；2 层 +2 道（facing +90°×i、错帧 0.12s）；
 #        额外 +2 封顶；全额伤害（atk_mult 1.0）。
 #   E 组 W8 刀位挡弹：block_chance 0.30；enemy_bullet_grid 注入；chance=1.0 帽 4/tick
@@ -23,7 +24,7 @@
 # 确定性：固定坐标/静止敌/crit=0 副本数据/帧戳手动推进（E-03 闸门口径，仿 w8_charge）。
 extends RefCounted
 
-const EXPECTED_TOTAL := 47
+const EXPECTED_TOTAL := 53   # 二cx#2 +3 / 二cy +3（B10d 穿透下架 + B10e/B9c 剑体缩放）
 const DT := 1.0 / 120.0
 const MAIN_SCENE := "res://scenes/main.tscn"
 const OW_SRC_PATH := "res://scripts/combat/weapon/melee/orbit_weapon.gd"
@@ -245,14 +246,14 @@ func _group_a_data_mode() -> void:
 		and absf(float(m.get("knockback", -1.0)) - 100.0) < 0.0001,
 		"mode=%s block=%s" % [str(m.get("mode")), str(m.get("block_chance"))])
 	wd = _gl.registry.get_weapon(&"W13_great_sword")
-	_check("A2 L1 数值表（atk 64 / 半径 190 / 弧 140° / 10 目标）",
+	_check("A2 L1 数值表（atk 64 / 半径 130 / 弧 140° / 10 目标）",
 		absf(float(wd.upgrade_table[0].base_atk) - 64.0) < 0.0001
-		and absf(float(m.get("slash_radius_levels", [])[0]) - 190.0) < 0.0001
+		and absf(float(m.get("slash_radius_levels", [])[0]) - 130.0) < 0.0001
 		and absf(float(m.get("arc_deg_levels", [])[0]) - 140.0) < 0.0001
 		and int(m.get("max_targets", 0)) == 10)
-	_check("A3 L5 数值表（atk 105 / 半径 260 / 弧 180°）",
+	_check("A3 L5 数值表（atk 105 / 半径 190 / 弧 180°）",
 		absf(float(wd.upgrade_table[4].base_atk) - 105.0) < 0.0001
-		and absf(float(m.get("slash_radius_levels", [])[4]) - 260.0) < 0.0001
+		and absf(float(m.get("slash_radius_levels", [])[4]) - 190.0) < 0.0001
 		and absf(float(m.get("arc_deg_levels", [])[4]) - 180.0) < 0.0001)
 	# mode 改义四向 + 缺省回落（_is_slash_mode = mode ∈ {slash, cleave}）
 	var w13p := OrbitWeapon.new()
@@ -277,8 +278,8 @@ func _group_a_data_mode() -> void:
 	stub_orbit.free()
 	stub_nullify.free()
 	var w13 := _fresh_w13()
-	_check("A5 L1 裸 effective_slash_radius == 190（无乘区）",
-		w13 != null and absf(w13.effective_slash_radius() - 190.0) < 0.001,
+	_check("A5 L1 裸 effective_slash_radius == 130（无乘区）",
+		w13 != null and absf(w13.effective_slash_radius() - 130.0) < 0.001,
 		"r=%s" % str(w13.effective_slash_radius() if w13 != null else -1.0))
 
 
@@ -301,9 +302,9 @@ func _group_b_cleave() -> void:
 	if w13 == null:
 		return
 	var c := _gl.player.global_position
-	var e := _spawn_e(c + Vector2(300.0, 0.0))
+	var e := _spawn_e(c + Vector2(120.0, 0.0))     # 二cx#2 交战门后：敌须进 130×1.15≈149.5 圈内才开弧（R245 新表）
 	var fired := w13.try_fire()
-	_check("B2 有敌定向开弧（true + 不建 OrbitField + 窗开）",
+	_check("B2 有敌定向开弧（敌入交战圈 → true + 不建 OrbitField + 窗开）",
 		fired and w13.orbit_field == null and w13.arc_slash != null
 		and w13.arc_slash.window_left > 0.0,
 		"fired=%s field=%s" % [str(fired), str(w13.orbit_field)])
@@ -311,30 +312,31 @@ func _group_b_cleave() -> void:
 		w13.arc_slash != null and absf(wrapf(w13.arc_slash.facing, -PI, PI)) < 0.01
 		and w13.arc_slash.strike_center.distance_to(c) < 0.01,
 		"facing=%s" % str(w13.arc_slash.facing if w13.arc_slash != null else 99.0))
-	_check("B4 窗口径读回（半径 190 / 弧 140° / 上限 10）",
-		w13.arc_slash != null and absf(w13.arc_slash.slash_radius - 190.0) < 0.001
+	_check("B4 窗口径读回（半径 130 / 弧 140° / 上限 10）",
+		w13.arc_slash != null and absf(w13.arc_slash.slash_radius - 130.0) < 0.001
 		and absf(w13.arc_slash.arc_deg - 140.0) < 0.001 and w13.arc_slash.max_targets == 10)
 	_check("B7 spawn 键三件（blade_style greatsword / block_chance -1 哨兵·R243 迁移/发现修复：快照 0.30 短路弹反成长改 live 口 / knockback 快照 100）",
 		w13.arc_slash != null and w13.arc_slash.blade_style == &"greatsword"
 		and absf(w13.arc_slash.block_chance - (-1.0)) < 0.0001
 		and absf(w13.arc_slash.knockback - 100.0) < 0.0001,
-		"style=%s chance=%s kb=%s" % [str(w13.arc_slash.blade_style),
-			str(w13.arc_slash.block_chance), str(w13.arc_slash.knockback)])
+		"style=%s chance=%s kb=%s" % [str(w13.arc_slash.blade_style if w13.arc_slash != null else &"nil"),
+			str(w13.arc_slash.block_chance if w13.arc_slash != null else -1.0),
+			str(w13.arc_slash.knockback if w13.arc_slash != null else -1.0)])
 	var params: Dictionary = w13._orbit_params()
 	_check("B9 _orbit_params 守卫（W13 无 leash/chase/engage 追击键；W9 有 leash_radius）",
 		not params.has("leash_radius") and not params.has("chase_speed")
 		and not params.has("engage_r"))
-	# 巨刃乘区（helper 上移版消费：R = 190×(1+0.2×1)）——独立新 W13（词条不可卸）
+	# 巨刃乘区（helper 上移版消费：R = 130×(1+0.2×1)）——独立新 W13（词条不可卸）
 	var w13g := _fresh_w13()
 	var ok_giant := _attach_by_id(w13g, &"MEC_GIANT_BLADE")
-	_check("B5 巨刃乘区 190×1.2=228（MEC_GIANT_BLADE 1 层，基类 helper 版）",
-		ok_giant and absf(w13g.effective_slash_radius() - 228.0) < 0.01,
+	_check("B5 巨刃乘区 130×1.2=156（MEC_GIANT_BLADE 1 层，基类 helper 版）",
+		ok_giant and absf(w13g.effective_slash_radius() - 156.0) < 0.01,
 		"ok=%s r=%s" % [str(ok_giant), str(w13g.effective_slash_radius())])
-	# 广域乘区（AFF_RANGE add_range 池：R = 190×1.18）
+	# 广域乘区（AFF_RANGE add_range 池：R = 130×1.18）
 	var w13r := _fresh_w13()
 	var ok_range := _attach_by_id(w13r, &"AFF_RANGE")
-	_check("B6 范围乘区 190×1.18=224.2（AFF_RANGE add_range 池）",
-		ok_range and absf(w13r.effective_slash_radius() - 224.2) < 0.05,
+	_check("B6 范围乘区 130×1.18=153.4（AFF_RANGE add_range 池）",
+		ok_range and absf(w13r.effective_slash_radius() - 153.4) < 0.05,
 		"ok=%s r=%s" % [str(ok_range), str(w13r.effective_slash_radius())])
 	# W9 口径零位移：saber / -1 哨兵（旧口径 nullify→1.0）/ 击退基值 0
 	var w9 := _fresh_w9()
@@ -347,6 +349,55 @@ func _group_b_cleave() -> void:
 			str(w9.arc_slash.block_chance), str(w9.arc_slash.knockback)])
 	var params9: Dictionary = w9._orbit_params()
 	_check("B9b W9 slash 追击键保持（leash_radius 注入）", params9.has("leash_radius"))
+	_check("B9c 二cy#1 W9 L1 剑体缩放==1.0（表值半径 150=BLADE_TABLE_R——设计基准零位移）",
+		w9.arc_slash != null and absf(w9.arc_slash.blade_visual_scale() - 1.0) < 0.001,
+		"s=%s" % str(w9.arc_slash.blade_visual_scale() if w9.arc_slash != null else -1.0))
+	# ── 二cx#2 交战门（有敌人靠近才攻击）：远敌不挥 / 外圈探肩即挥 / 冷却保持就绪 ──
+	var w13g2 := _fresh_w13()
+	var e_far := _spawn_e(c + Vector2(300.0, 0.0))    # 300 > 130×1.15=149.5 → 圈外不挥（R245 新表）
+	var far_fired := w13g2.try_fire()
+	_check("B10 二cx#2 圈外敌不挥（300px>149.5 交战圈 → false + 零窗）",
+		not far_fired and (w13g2.arc_slash == null or w13g2.arc_slash.window_left <= 0.0),
+		"fired=%s" % str(far_fired))
+	_check("B10b 二cx#2 圈外期冷却保持就绪（cooldown_left==0——敌进圈即斩零补等）",
+		w13g2.cooldown_left <= 0.0, "cd=%s" % str(w13g2.cooldown_left))
+	e_far.global_position = c + Vector2(140.0, 0.0)   # 140 ⊂ (130, 149.5) 外圈——探肩即视为靠近
+	_gl.enemy_grid.rebuild(_gl.spawner.active)        # 网格快照刷新（_spawn_e 同式）
+	var near_fired := w13g2.try_fire()
+	_check("B10c 二cx#2 外圈探肩即挥（140px∈(130,149.5) → true + facing 朝敌）",
+		near_fired and w13g2.arc_slash != null
+		and absf(wrapf(w13g2.arc_slash.facing, -PI, PI)) < 0.01,
+		"fired=%s facing=%s" % [str(near_fired),
+			str(w13g2.arc_slash.facing if w13g2.arc_slash != null else 99.0)])
+	# 二cy#2 穿透弹头卡对 W10 精确下架：回旋刃命中从不因穿透耗尽回收
+	#（projectile_base `pierce_left > 0 or _boomerang` 恒活——穿透=死数字），
+	# 用户「回旋刀的穿透弹头有啥用，攻击距离固定本来就能穿透」。
+	var pierce_td: TraitData = _gl.registry.get_trait(&"AFF_PIERCE")
+	var w10: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W10_boomerang"))
+	var w2g: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W2_gatling"))
+	var pierce_ok := pierce_td != null and w10 != null and w2g != null \
+		and (pierce_td.params.get("excluded_weapons", []) as Array).has("W10_boomerang") \
+		and not CardGenerator.mount_gate_allows(pierce_td, w10) \
+		and CardGenerator.mount_gate_allows(pierce_td, w2g)
+	_check("B10d 二cy#2 穿透弹头卡对 W10 下架（excluded 键 + 门拒 W10 + 对照放行 W2 弹道）",
+		pierce_ok, "ok=%s" % str(pierce_ok))
+	if w10 != null:
+		for i in range(_gl.player.weapon_slots.size()):
+			if _gl.player.weapon_slots[i] == w10:
+				_gl.player.weapon_slots[i] = null
+		w10.free()
+	if w2g != null:
+		for i in range(_gl.player.weapon_slots.size()):
+			if _gl.player.weapon_slots[i] == w2g:
+				_gl.player.weapon_slots[i] = null
+		w2g.free()
+	# 二cy#1 剑体视觉随判定半径缩放（w13g2 窗在开——B10c 开窗 slash_radius=130 快照；
+	# B2 的 w13 已被本组 _fresh_w13 清场拆除，勿引用）
+	_check("B10e 二cy#1 W13 剑体缩放=130/150≈0.867（刀尖贴虚线圈——视觉/判定同源）",
+		w13g2 != null and w13g2.arc_slash != null
+		and absf(w13g2.arc_slash.blade_visual_scale() - 130.0 / 150.0) < 0.001,
+		"s=%s" % str(w13g2.arc_slash.blade_visual_scale()
+			if w13g2 != null and w13g2.arc_slash != null else -1.0))
 	_clear_enemies()
 
 
@@ -359,7 +410,7 @@ func _group_c_guard_arc() -> void:
 		return
 	w13.data.melee["block_chance"] = 1.0           # 两极桩（bullet_block_chance 直读 melee 段）
 	var c := _gl.player.global_position
-	var e := _spawn_e(c + Vector2(300.0, 0.0))     # 敌 +X 定 facing
+	var e := _spawn_e(c + Vector2(120.0, 0.0))     # 敌 +X 定 facing（二cx#2：敌须进 149.5 交战圈——R245 新表）
 	_step(w13, 1)                                  # 首拍：try_fire 开窗 + facing 缓存
 	_check("C1 _guard_facing 缓存自 aim_direction（敌 +X → ≈0）",
 		absf(wrapf(w13._guard_facing, -PI, PI)) < 0.01,
@@ -370,10 +421,11 @@ func _group_c_guard_arc() -> void:
 	_check("C6b 窗外停巡解除（_slash_window_active false）",
 		not w13._slash_window_active())
 	# chance=1.0 两极：正面 3 弹全消 + 侧后弹不受
+	# （R245 §3.3 挡弹域 L1=60——弹位按名义域内重摆：55/53.7/53.7 ≤ 60）
 	w13._guard_left = 0.0                          # 测试内同步节拍（下一 tick 即检查）
-	var b_f1 := _spawn_bullet(c + Vector2(80.0, 0.0))
-	var b_f2 := _spawn_bullet(c + Vector2(70.0, 40.0))
-	var b_f3 := _spawn_bullet(c + Vector2(70.0, -40.0))
+	var b_f1 := _spawn_bullet(c + Vector2(55.0, 0.0))
+	var b_f2 := _spawn_bullet(c + Vector2(48.0, 22.0))
+	var b_f3 := _spawn_bullet(c + Vector2(48.0, -22.0))
 	var b_rear := _spawn_bullet(c + Vector2(-80.0, 0.0))
 	var bullets: Array = [b_f1, b_f2, b_f3, b_rear]
 	_rebuild_bullets(bullets)
@@ -393,17 +445,18 @@ func _group_c_guard_arc() -> void:
 			DebugStats.get_counter(&"bullet_parry") - parry0, ripples.size()])
 	_release_bullets(bullets)
 	# 帽 4/检查 + 节拍 0.1s：首查恰 4（剩余节拍 0.0917 起表）→ 8 tick 未到零消弹 → 跨 0.1s 再消 4
+	# （R245 挡弹域 L1=60：burst 弹位 40+1.5i——最远 58.6 ≤ 60 名义域内）
 	w13._guard_left = 0.0
 	var burst: Array = []
 	for i in range(10):
-		burst.append(_spawn_bullet(c + Vector2(60.0 + 4.0 * float(i), 12.0 * float(i % 3))))
+		burst.append(_spawn_bullet(c + Vector2(40.0 + 1.5 * float(i), 12.0 * float(i % 3))))
 	_rebuild_bullets(burst)
 	_step(w13, 1)
 	var cap_first := 10 - _alive_count(burst)
 	_release_bullets(burst)
 	var burst2: Array = []
 	for i in range(10):
-		burst2.append(_spawn_bullet(c + Vector2(60.0 + 4.0 * float(i), 12.0 * float(i % 3))))
+		burst2.append(_spawn_bullet(c + Vector2(40.0 + 1.5 * float(i), 12.0 * float(i % 3))))
 	_rebuild_bullets(burst2)
 	_step(w13, 8)                                  # 节拍余量 0.0917−0.0667 > 0 → 未到检查拍
 	var idle_alive := _alive_count(burst2)
@@ -420,7 +473,7 @@ func _group_c_guard_arc() -> void:
 	# chance=0.0 两极：零消弹
 	var w13z := _fresh_w13()
 	w13z.data.melee["block_chance"] = 0.0
-	var ez := _spawn_e(c + Vector2(300.0, 0.0))
+	var ez := _spawn_e(c + Vector2(120.0, 0.0))    # 二cx#2：交战圈内（R245 新表 149.5 圈）
 	_step(w13z, 46)                                # 开窗 + 窗耗尽（敌在场防 R33 抖动）
 	var bz: Array = []
 	for i in range(3):
@@ -445,7 +498,7 @@ func _group_d_phantom() -> void:
 		_check("D 组前置：W13 装配", false)
 		return
 	var c := _gl.player.global_position
-	var e := _spawn_e(c + Vector2(300.0, 0.0))
+	var e := _spawn_e(c + Vector2(120.0, 0.0))    # 二cx#2：交战圈内（R245 新表 149.5 圈）
 	_step(w13, 1)                                   # tick 路径首拍：开火 + 冷却装表（防重复排队）
 	_check("D1 零词条 inert（队列恒空——词条门未扩 W13 前零行为）",
 		w13.arc_slash != null and w13.arc_slash.window_left > 0.0
@@ -456,7 +509,7 @@ func _group_d_phantom() -> void:
 	_attach_local_trait(w13b, &"MEC_ORBIT_LINK", 1.45)
 	_attach_local_trait(w13b, &"MEC_ORBIT_LINK", 1.45)
 	var count2: int = w13b._orbit_link_count()
-	var eb := _spawn_e(c + Vector2(300.0, 0.0))
+	var eb := _spawn_e(c + Vector2(120.0, 0.0))   # 二cx#2：交战圈内（R245 新表 149.5 圈）
 	_step(w13b, 1)                                  # 首拍开火（tick 装冷却）→ 队列 2
 	_check("D2 ORBIT_LINK 2 层 → 基类 _orbit_link_count()==2 → 队列 2 道",
 		count2 == 2 and w13b._phantom_queue.size() == 2,
@@ -480,7 +533,7 @@ func _group_d_phantom() -> void:
 	for i in range(5):
 		_attach_local_trait(w13c, &"MEC_ORBIT_LINK", 1.45)
 	var count5: int = w13c._orbit_link_count()
-	var ec := _spawn_e(c + Vector2(300.0, 0.0))
+	var ec := _spawn_e(c + Vector2(120.0, 0.0))   # 二cx#2：交战圈内（R245 新表 149.5 圈）
 	_step(w13c, 1)                                  # 首拍开火（tick 装冷却）→ 队列封顶 2
 	var queue5 := w13c._phantom_queue.size()
 	_step(w13c, 30)                                # 0.25s：两道幻影斩先后开弧、队列清空

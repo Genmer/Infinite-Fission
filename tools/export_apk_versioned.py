@@ -33,6 +33,7 @@ AAPT2 = AX / "android-sdk" / "build-tools" / "34.0.0" / "aapt2.exe"
 APKSIGNER_JAR = AX / "android-sdk" / "build-tools" / "34.0.0" / "lib" / "apksigner.jar"
 JAVA = Path(r"E:/Code/Env/jdk17/bin/java.exe")
 PRESETS = REPO / "export_presets.cfg"
+PROJECT_GODOT = REPO / "project.godot"
 OUT_DIR = AX / "out"
 LOG = OUT_DIR / "export_versioned.log"
 TMP_GLOB = "tmpexport-unaligned.*.apk"
@@ -67,6 +68,16 @@ def bump_version(text: str):
     text = re.sub(r"^version/code=\d+", f"version/code={code + 1}", text, count=1, flags=re.M)
     text = re.sub(r'^version/name="[^"]+"', f'version/name="{new_name}"', text, count=1, flags=re.M)
     return text, code + 1, new_name
+
+
+def write_project_version(text: str, name: str, code: int) -> str:
+    # R205：把 v{name}_vc{code} 烤进 project.godot config/version（游戏内诊断日志
+    # 头/文件名的运行时真源，与 APK 文件名同口径；无该行则插在 [application] 后）。
+    # 注意 config_version=5 是工程格式版本，正则锚 config/version= 不会误伤。
+    ver = f"v{name}_vc{code}"
+    if re.search(r'^config/version="[^"]*"', text, re.M):
+        return re.sub(r'^config/version="[^"]*"', f'config/version="{ver}"', text, count=1, flags=re.M)
+    return re.sub(r"^\[application\]", f'[application]\n\nconfig/version="{ver}"', text, count=1, flags=re.M)
 
 
 def run(cmd, **kw):
@@ -190,6 +201,7 @@ def main() -> int:
     # 其余任何失败路径（:155 工具链缺失 SystemExit / 导出 4 次均败 / Ctrl+C /
     # 门禁红）在 finally 按 orig_text 逐字节回滚，版本号不烧号（重试不二跳）。
     orig_text = PRESETS.read_text(encoding="utf-8")
+    orig_proj = PROJECT_GODOT.read_text(encoding="utf-8")
     text = orig_text
     committed = False
     try:
@@ -197,6 +209,7 @@ def main() -> int:
             text, code, name = bump_version(text)
             # 导出期临时态：失败由 finally 回滚快照（R198 工具-bump）
             PRESETS.write_text(text, encoding="utf-8")
+            PROJECT_GODOT.write_text(write_project_version(orig_proj, name, code), encoding="utf-8")
             print(f"版本已迭代（导出期临时态，门禁全绿前可回滚）：versionCode={code} versionName={name}")
         else:
             code, name = read_version(text)
@@ -215,6 +228,7 @@ def main() -> int:
     finally:
         if "--bump" in sys.argv and not committed:
             PRESETS.write_text(orig_text, encoding="utf-8")
+            PROJECT_GODOT.write_text(orig_proj, encoding="utf-8")
             print("版本号已回滚，下次 --bump 重取同号")
 
 

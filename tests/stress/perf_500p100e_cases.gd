@@ -78,7 +78,11 @@ func _boot() -> void:
 
 
 func _start_run() -> void:
-	_gl.menu_screen.start_requested.emit()
+	# R256 序0：直调绕 R252 祝福面板（emit 经 lambda _on_menu_start 被面板挂起，state 停 MENU
+	# =压力门自 R252 起静默空转 16 天；qa_r255_perf_battle 直调先例）
+	_gl._blessing_pending = false
+	_gl.current_map_id = MapTable.FIRST_MAP_ID
+	_gl._finish_menu_start(MapTable.FIRST_MAP_ID)
 	_gl.stage_probe_enabled = true               # 架构 §5.5 分阶段采样（超阈帧按阶段定位）
 
 
@@ -170,6 +174,13 @@ func _auto_play() -> void:
 
 # ── 测量 ──────────────────────────────────────────────────────────
 func _measure() -> void:
+	# R256 修轮（评审 M2）：负载在场守卫——「敌 0/停 MENU 仍全绿」的假 PASS 形态
+	# （R252 祝福面板挂起致本系 16 天静默空转事故）结构性堵死
+	if _gl.state != GameConst.GameStatus.PLAYING \
+			or _gl.spawner.active_count() < TARGET_ENEMIES * 4 / 5:
+		print("[perf] 负载在场守卫 FAIL：state=%d 敌 %d（需 PLAYING 且 ≥%d）" % [
+			_gl.state, _gl.spawner.active_count(), TARGET_ENEMIES * 4 / 5])
+		_fails += 1
 	# 预热段
 	for i in range(WARMUP_FRAMES):
 		_auto_play()

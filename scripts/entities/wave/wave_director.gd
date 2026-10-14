@@ -344,10 +344,32 @@ func _apply_difficulty_weave(p_out: Array[Dictionary], p_wave: int) -> void:
 	if _boss_wave:
 		extra = maxi(extra / 2, 1)             # Boss 波伴随减半（Boss 本体已是主威胁）
 	for k in range(extra):
-		p_out.append({"data_id": pool[randi() % pool.size()], "wave": p_wave, "tags": 0})
+		p_out.append({"data_id": _weave_pick(pool), "wave": p_wave, "tags": 0})
 	# 地狱高波：最后一只伴随怪精英化（新形态 + 精英词缀 = 组合压力）
-	if difficulty >= GameConst.Difficulty.HELL and p_wave >= 8 and not _boss_wave 			and not p_out.is_empty():
+	if difficulty >= GameConst.Difficulty.HELL and p_wave >= 8 and not _boss_wave and not p_out.is_empty():
 		p_out[p_out.size() - 1]["tags"] = int(GameConst.TAG_ELITE)
+
+
+const _WEAVE_WEIGHT_E28 := 2                        # R251 咒术师织入权重（其余池成员 3）
+const _WEAVE_WEIGHT_REST := 3
+
+
+func _weave_pick(p_pool: Array[StringName]) -> StringName:
+	# R251 需求② 织入加权随机（原均匀 `pool[randi() % size]` 退役）：E28_hexcaster
+	# 权重 2、其余成员权重 3——「法师还是巫师兵」降频主刀之一。池成员与顺序零改动
+	#（R72 ≥ 阈值锁：extra/池总量/普通局 return 均不动，只降 E28 被抽中份额）。
+	# 池中无 E28 时退化为均匀（权重全等——普通局不触本路径，防御口径）。
+	var total := 0
+	for id in p_pool:
+		total += _WEAVE_WEIGHT_E28 if id == &"E28_hexcaster" else _WEAVE_WEIGHT_REST
+	if total <= 0:
+		return p_pool[randi() % p_pool.size()]
+	var roll := randi() % total
+	for id in p_pool:
+		roll -= _WEAVE_WEIGHT_E28 if id == &"E28_hexcaster" else _WEAVE_WEIGHT_REST
+		if roll < 0:
+			return id
+	return p_pool[p_pool.size() - 1]
 
 
 func _tp_for_wave(p_wave: int) -> float:

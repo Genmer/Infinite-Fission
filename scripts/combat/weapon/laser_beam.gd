@@ -191,29 +191,19 @@ func spawn(p_params: Dictionary) -> void:
 	# R195 穿透预算 N（镜像弹体 pierce_left 注入口 projectile_base.gd:118 缺省/钳制同式）；
 	# 缺省 1 与旧单目标口径同构；主束由武器传 _pierce_count()，副束/折射束恒 1
 	pierce = maxi(int(p_params.get("pierce", 1)), 0)
-	# 束色解析（优先级：R183 灰染 > SPECTRA 元素染色 > W5 折射光谱 > 主束玩家蓝）
+	# 束色解析（优先级：R183 灰染 > SPECTRA 元素染色 > W5 折射光谱 > 主束元素 > 玩家蓝）
 	is_refraction = bool(p_params.get("is_refraction", false))
 	sub_beam = bool(p_params.get("sub_beam", false))
 	overlap_fallback = bool(p_params.get("overlap_fallback", false))
 	gray_tint = bool(p_params.get("gray_tint", false))
 	element = int(p_params.get("element", GameConst.Element.KIN))
-	var depth_i := int(p_params.get("depth", 0))
-	var tint := Color(PopPalette.PLAYER.r, PopPalette.PLAYER.g, PopPalette.PLAYER.b, 0.85)
-	if gray_tint:
-		tint = Color(PopPalette.RARITY_NORMAL.r, PopPalette.RARITY_NORMAL.g,
-			PopPalette.RARITY_NORMAL.b, 0.6)
-	elif sub_beam and element != GameConst.Element.KIN:
-		tint = element_tint(element)           # 第三谱系束色：副束按元素谱系染色
-	elif is_refraction:
+	if is_refraction:
+		# R91 折射束更细（×0.7）——只随 spawn 初始化做一次（R211 从 tint 解析链拆出：
+		# refresh_element_tint 重解析束色不再缩宽，束宽恒 0.7 倍不叠乘）
 		beam_width *= 0.7
-		# R91 折射光谱（W5 分光读感）：depth1 = 光谱橙 / depth2 = 光谱紫——主束保持玩家蓝，
-		# 分光束逐级换色且更细（「棱镜把光拆开」的视觉语言）
-		tint = Color(PopPalette.ENEMY.r, PopPalette.ENEMY.g, PopPalette.ENEMY.b, 0.85).lerp(
-			Color(PopPalette.XP.r, PopPalette.XP.g, PopPalette.XP.b, 0.85), 0.55) 			if depth_i <= 1 else Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g, PopPalette.SHOCK.b, 0.85)
-	if _line != null:
-		_line.default_color = tint
-	if _core != null:
-		_core.default_color = tint.lerp(Color.WHITE, 0.9)
+	# R211：tint 解析链抽为 _resolve_tint()（spawn 初始化与 refresh_element_tint 重染
+	# 同源同优先级——常驻主束挂 ELEM 卡后有重染通道，束色不再停在生成时快照）
+	_apply_tint(_resolve_tint())
 	scorch_max_layers = clampi(int(p_params.get("scorch_max_layers", 5)), 1, 8)
 	scorch_per_layer = float(p_params.get("scorch_per_layer", 0.08))
 	refract_beams = int(p_params.get("refract_beams", 0))
@@ -246,6 +236,51 @@ func spawn(p_params: Dictionary) -> void:
 	if _core != null:
 		_core.width = beam_width * 0.42
 	_dispatch_event(GameConst.TraitEvent.ON_SPAWN)
+
+
+func refresh_element_tint() -> void:
+	# R211 常驻主束重染口（用户反馈「激光挂了元素卡束色不变」断点修复）：W4 主束
+	# lifetime=0 常驻不重建，束色原只在 spawn() 解析一次——挂 ELEM 卡后无重染通道。
+	# 武器侧改写 element 后（_on_tick_post 主束逐拍回写 / attach_trait 副束快照刷新）
+	# 调本口，按 _resolve_tint() 同优先级链重解析束色；脏检查同色零写点。取色单源
+	# element_tint（PopPalette.ELEMENT_COLORS 表），勿自造色值。
+	if _line == null:
+		return
+	var tint := _resolve_tint()
+	if _line.default_color.is_equal_approx(tint):
+		return                              # 同色零写点（KIN 主束逐拍幂等；聚焦白热芯不冲）
+	_apply_tint(tint)
+
+
+func _resolve_tint() -> Color:
+	# 束色解析（纯函数——spawn 初始化与 refresh_element_tint 复用同链）：
+	# 优先级 R183 灰染 > SPECTRA 副束元素 > W5 折射光谱 > R208 主束附魔 > 玩家蓝
+	if gray_tint:
+		return Color(PopPalette.RARITY_NORMAL.r, PopPalette.RARITY_NORMAL.g,
+			PopPalette.RARITY_NORMAL.b, 0.6)
+	if sub_beam and element != GameConst.Element.KIN:
+		return element_tint(element)           # 第三谱系束色：副束按元素谱系染色
+	if is_refraction:
+		# R91 折射光谱（W5 分光读感）：depth1 = 光谱橙 / depth2 = 光谱紫——主束保持
+		# 玩家蓝，分光束逐级换色且更细（束宽 ×0.7 只随 spawn 初始化做一次）
+		if depth <= 1:
+			return Color(PopPalette.ENEMY.r, PopPalette.ENEMY.g, PopPalette.ENEMY.b, 0.85).lerp(
+				Color(PopPalette.XP.r, PopPalette.XP.g, PopPalette.XP.b, 0.85), 0.55)
+		return Color(PopPalette.SHOCK.r, PopPalette.SHOCK.g, PopPalette.SHOCK.b, 0.85)
+	if element != GameConst.Element.KIN:
+		# R208（用户反馈「激光选了元素没变对应色」）：主束附魔染色——apply 染色链原只
+		# 覆盖副束（sub_beam 分支）/折射光谱，主束恒玩家蓝；本分支补主束（火红/冰蓝…
+		# 单发带全部元素效果不变，视觉取 dominant_element 稳定主色不闪变）
+		return element_tint(element)
+	return Color(PopPalette.PLAYER.r, PopPalette.PLAYER.g, PopPalette.PLAYER.b, 0.85)
+
+
+func _apply_tint(p_tint: Color) -> void:
+	# 束色落点（外层束体 + 内层白芯；core = tint.lerp(WHITE,0.9) 同口径）
+	if _line != null:
+		_line.default_color = p_tint
+	if _core != null:
+		_core.default_color = p_tint.lerp(Color.WHITE, 0.9)
 
 
 func tick(p_game_delta: float) -> void:
@@ -536,8 +571,13 @@ func _settle_one_tick(p_hit: Node2D, p_ordinal: int = 1) -> void:
 	if trait_stack != null:
 		trait_stack.dispatch(GameConst.TraitEvent.ON_HIT, tctx)
 	var result: DamageResult = damage_pipeline.call(&"resolve", ctx)
-	settle_count += 1
-	if not tctx.attach_request.is_empty() and not overlap_fallback \
+	# R223 修轮（评审#4 附带）：顺延占位不计 settle_count（武器自计数防深载虚高）
+	var result_deferred := result != null and result.deferred_merge
+	if not result_deferred:
+		settle_count += 1
+	# R223 修轮（评审#2）：顺延占位跳过附着提交——占位 final=0 的 hit_damage 会让
+	# 感电连锁 0 伤空放（R199 D16 复发）；跳过=该跳 gauge 暂停（深载 tier≤2 限定）
+	if not result_deferred and not tctx.attach_request.is_empty() and not overlap_fallback \
 			and weapon != null and weapon.elemental != null:
 		# ELE 词条附着请求（引擎结算后提交——对齐投射物 _apply_elemental 时序：
 		# projectile_base.gd 在 _on_settled 即 resolve 之后提交）。★ 快照基数 = 单跳 ×

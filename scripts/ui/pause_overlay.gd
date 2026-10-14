@@ -228,7 +228,7 @@ func _build_details_ui() -> void:
 	_details_card.add_child(title)
 
 	var hint := Label.new()
-	StickerTheme.label_sticker(hint, 14, PopPalette.INK_SOFT)
+	StickerTheme.label_sticker(hint, 15, PopPalette.INK_SOFT)
 	hint.text = "当前持有武器与词条（内容为实际生效值）"
 	hint.position = Vector2(0.0, 88.0)
 	hint.size = Vector2(632.0, 20.0)
@@ -295,7 +295,7 @@ func _rebuild_details() -> void:
 		for ri: int in range(_relics_ref.size()):
 			var rd: Dictionary = _relics_ref[ri]
 			var rline := Label.new()
-			StickerTheme.label_sticker(rline, 13, PopPalette.INK_SOFT)
+			StickerTheme.label_sticker(rline, 15, PopPalette.INK_SOFT)
 			rline.text = "　◆ %s：%s" % [String(rd.get("name", "?")),
 				String(rd.get("desc", ""))]
 			rline.position = Vector2(12.0, 30.0 + 22.0 * ri)
@@ -318,32 +318,30 @@ func _rebuild_details() -> void:
 	ptitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pstats.add_child(ptitle)
 	var prow := Label.new()
-	StickerTheme.label_sticker(prow, 13, PopPalette.INK, 0, Color.WHITE, true)
+	StickerTheme.label_sticker(prow, 15, PopPalette.INK, 0, Color.WHITE, true)
 	prow.text = "生命上限 %d　磁吸 %dpx　换一批 ×%d" % [
 		int(float(_player_ref.get("max_hp"))),
 		int(float(_player_ref.get("pickup_radius"))),
 		int(float(_player_ref.get("reroll_charges")))]
 	prow.position = Vector2(12.0, 30.0)
-	prow.size = Vector2(552.0, 18.0)
+	prow.size = Vector2(552.0, 20.0)
 	prow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pstats.add_child(prow)
 	# R70 技能急速终值行（用户反馈「技能急速一直点，但是详情没写最终加成多少」）：
-	# 跨武器 add_skillcdr 池合计（与 refresh_skill_cd 消费同 clamp，上限 -60%），
-	# 达上限时明示——连点数张后可核对实际生效
+	# 跨武器 add_skillcdr 池合计。R226 有意契约变更：急速无帽（原 -60% 钳拆）——
+	# 「已达上限」明示分支退役，终值照实显示（消费端 refresh_skill_cd 保 0.1 地板）
 	var prow2 := Label.new()
-	StickerTheme.label_sticker(prow2, 13, PopPalette.INK, 0, Color.WHITE, true)
+	StickerTheme.label_sticker(prow2, 15, PopPalette.INK, 0, Color.WHITE, true)
 	var haste_pct := float(_player_ref.call("skill_haste_pct")) \
 		if _player_ref.has_method("skill_haste_pct") else 0.0
-	var haste_capped := haste_pct >= 0.6 - 0.0001
-	prow2.text = "技能急速 -%d%%%s　技能冷却 %.0fs" % [roundi(haste_pct * 100.0),
-		"（已达 -60% 上限）" if haste_capped else "",
+	prow2.text = "技能急速 -%d%%　技能冷却 %.0fs" % [roundi(haste_pct * 100.0),
 		float(_player_ref.get("skill_cd_base"))]
 	prow2.position = Vector2(12.0, 50.0)
-	prow2.size = Vector2(552.0, 18.0)
+	prow2.size = Vector2(552.0, 20.0)
 	prow2.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pstats.add_child(prow2)
 	var prow3 := Label.new()
-	StickerTheme.label_sticker(prow3, 13, PopPalette.INK, 0, Color.WHITE, true)
+	StickerTheme.label_sticker(prow3, 15, PopPalette.INK, 0, Color.WHITE, true)
 	var xp_pct := float(_player_ref.call("xp_gain_pct")) \
 		if _player_ref.has_method("xp_gain_pct") else 0.0
 	var gold_pct := float(_player_ref.call("gold_gain_pct")) \
@@ -351,11 +349,11 @@ func _rebuild_details() -> void:
 	prow3.text = "经验获取 +%d%%　金币获取 +%d%%" % [roundi(xp_pct * 100.0),
 		roundi(gold_pct * 100.0)]
 	prow3.position = Vector2(12.0, 70.0)
-	prow3.size = Vector2(552.0, 18.0)
+	prow3.size = Vector2(552.0, 20.0)
 	prow3.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pstats.add_child(prow3)
 	var pnote := Label.new()
-	StickerTheme.label_sticker(pnote, 12, PopPalette.INK_SOFT)
+	StickerTheme.label_sticker(pnote, 13, PopPalette.INK_SOFT)
 	pnote.text = "暴击率 / 爆伤 / 穿透（贯穿敌人数）/ 出招间隔 随每把武器独立生效——见下方各武器区块"
 	pnote.position = Vector2(12.0, 90.0)
 	pnote.size = Vector2(552.0, 16.0)
@@ -390,7 +388,7 @@ func _rebuild_details() -> void:
 			var ulabel := RichTextLabel.new()
 			ulabel.bbcode_enabled = true
 			ulabel.fit_content = true
-			ulabel.add_theme_font_size_override("normal_font_size", 13)
+			ulabel.add_theme_font_size_override("normal_font_size", 15)
 			ulabel.add_theme_color_override("default_color", PopPalette.INK_SOFT)
 			ulabel.text = "　◆ [b]%s[/b] ×%d 层　└ %s" % [String(utd.get("display_name")),
 				int(ut.get("layers")), _trait_desc_bbcode(ut)]
@@ -444,17 +442,17 @@ func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
 	# 核心属性行（2026-09-13 用户反馈「暴击率/射速/冷却/间隔等属性也应该显示」）：
 	# 面板快照实际生效值（含词条加成/稀有度缩放/养成修正）——非基础值口径
 	var wstats := Label.new()
-	StickerTheme.label_sticker(wstats, 13, PopPalette.INK_SOFT)
+	StickerTheme.label_sticker(wstats, 15, PopPalette.INK_SOFT)
 	wstats.text = _weapon_stat_line(p_w)
 	wstats.position = Vector2(58.0, 40.0)
 	wstats.size = Vector2(508.0, 20.0)
 	wstats.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(wstats)
-	# R190b：机制一句话行（文案逐字取 GameConst.weapon_note 原句——禁止 UI 手抄）：
+	# R190b：机制一句话行（文案逐字取 GameConst.weapon_note 原句——禁止 UI 手抄；R253 13→15 R200 口径）:
 	# 小字软墨 + 自动换行，属性行下方 (58,62) 508×34；加高代价 ≤154px 由详情卡纵滚容纳
 	if not note.is_empty():
 		var wnote := Label.new()
-		StickerTheme.label_sticker(wnote, 12, PopPalette.INK_SOFT)
+		StickerTheme.label_sticker(wnote, 15, PopPalette.INK_SOFT)
 		wnote.text = note
 		wnote.position = Vector2(58.0, 62.0)
 		wnote.size = Vector2(508.0, 34.0)
@@ -486,7 +484,7 @@ func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
 		mgem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		mrow.add_child(mgem)
 		var mlabel := Label.new()
-		StickerTheme.label_sticker(mlabel, 13, tier[1] if unlocked else PopPalette.INK_SOFT)
+		StickerTheme.label_sticker(mlabel, 15, tier[1] if unlocked else PopPalette.INK_SOFT)
 		mlabel.text = "【%d 级质变】%s%s" % [tlv, tnote,
 			"" if unlocked else "（Lv%d 解锁）" % tlv]
 		mlabel.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -540,8 +538,14 @@ func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
 		var stack_max := int(sm_v) if sm_v != null else 1
 		var tname := Label.new()
 		var eff_rarity := (t as TraitBase).max_rarity() if t is TraitBase else int(td.get("rarity"))
-		var rarity_col: Color = [PopPalette.INK, Color("4a9eff"), PopPalette.SHOCK,
-			PopPalette.GOLD][clampi(eff_rarity, 0, 3)]
+		# R242 金名终修（用户四轮反馈 二t/二u/R84/R85「到处金色毫无逻辑」→本轮
+		# 「非质变 buff 金名说了很多次」）：名字金色=**质变语义专属**——差一层满预告
+		# （layers+1==stack_max，与选卡卡面 R84 口径同款）或已质变/超层达成态；
+		# 「抽到过金品级恒金」通道退役（R31 设计口径终结）——品质由下方 ◆徽记自解释
+		#（max_rarity 仅再供徽记）。质变门同 card_generator：MechanicGate 解锁+可叠卡。
+		var ms_gold: bool = MechanicGate.milestone_unlocked() and stack_max >= 2 \
+			and layers >= stack_max - 1
+		var rarity_col: Color = PopPalette.GOLD if ms_gold else PopPalette.INK
 		StickerTheme.label_sticker(tname, 16, rarity_col, 0, Color.WHITE, true)
 		# R11 叠层可视化：可叠词条显示「当前/上限 层」（如 2/3）
 		# R196 超质变叠层：超帽时改「N/M+K 层」（防「6/3 层」显示乱——显示不能乱硬底线）
@@ -562,7 +566,7 @@ func _make_weapon_section(p_w: Node, p_universal: Array = []) -> Control:
 		var tdesc := RichTextLabel.new()
 		tdesc.bbcode_enabled = true
 		tdesc.fit_content = true
-		tdesc.add_theme_font_size_override("normal_font_size", 13)
+		tdesc.add_theme_font_size_override("normal_font_size", 15)
 		tdesc.add_theme_color_override("default_color", PopPalette.INK_SOFT)
 		tdesc.text = "　└ " + _trait_desc_bbcode(t)
 		tdesc.custom_minimum_size = Vector2(500.0, 0.0)
@@ -582,22 +586,21 @@ func _trait_desc_bbcode(p_tb: TraitBase) -> String:
 	var desc := String(td.description)
 	if td == null or td.pool != GameConst.PoolClass.ADD:
 		return desc
-	# R199（N05+F08）：弃用 stacked_add_total()（trait_base.gd 全额累加，超帽层未折算
-	# ——超帽叠层后面板虚标，与卡面 OVERCAP_NOTE「超出质变等级的层数收益降低 30%」相反，
-	# 体检探针 B1 实证 8/3 层显示 +120% 实际 +97.5%）。改按 TraitStack.aggregate_panel
-	# 逐层路真值口径折算：前 stack_max 层全额 + 超帽层 ×OVERCAP_VALUE_MULT，再乘质变
-	# 乘区 value_mult（乘数常量引 TraitStack 单源；本函数只拿到单词条实例，同一词条
-	# 单独折算 = 面板池聚合按词条拆分的同式——池内多 id 不串账）。整数池显示小数
-	# （F09）不在本项范围（deferred）。
+	# R199（N05+F08）：弃用 stacked_add_total()（trait_base.gd 全额累加），改按
+	# TraitStack.aggregate_panel 逐层真值口径折算（面板池聚合按词条拆分的同式——池内
+	# 多 id 不串账）。R226 有意契约变更：原「前 stack_max 层全额 + 超帽层 ×0.7」折算
+	# 随超帽衰减一并退役——每层全额 × 质变乘区 value_mult（与聚合/血条单源同式）。
+	# 整数池显示小数（F09）不在本项范围（deferred）。
 	var eff := 0.0
-	for k in p_tb.layer_values.size():
-		var v_k := p_tb.layer_values[k]
-		if k >= td.stack_max:
-			v_k *= TraitStack.OVERCAP_VALUE_MULT
+	for v_k in p_tb.layer_values:
 		eff += v_k * p_tb.value_mult
-	if eff <= 0.0:
+	# R242（用户 2026-10-07「赌徒诅咒每次叠加扣的攻击力也要在构筑详情显示」）：
+	# 负值词条双门槛修复——①原 eff<=0 早退把诅咒类负贡献整族排除在改写外；
+	# ②正则只认「+N」形态，诅咒描述「-10%」负号形态永不匹配。负值改写为累计
+	# 负值+红色高亮（金色=增益口径 R230 语义钉，惩罚用 ENEMY 珊瑚红同源）。
+	if eff == 0.0:
 		return desc
-	var re_num := RegEx.create_from_string("\\+\\d+(\\.\\d+)?%?")
+	var re_num := RegEx.create_from_string("[-+]\\d+(\\.\\d+)?%?")
 	var m := re_num.search(desc)
 	if m == null:
 		return desc
@@ -605,11 +608,18 @@ func _trait_desc_bbcode(p_tb: TraitBase) -> String:
 	var is_pct := raw.ends_with("%")
 	# 描述用百分比口径（+8%）而 decay_sum 是小数（0.148）——% 型需 ×100 显示
 	var shown := eff * 100.0 if is_pct else eff
-	var body := ("+%.1f" % shown) if (absf(shown - roundf(shown)) > 0.001) 		else ("+%d" % int(roundf(shown)))
+	# QA-R242-P01：显示符号**跟随描述原符号**（raw 首字符）——混号词条（描述「出招
+	# 间隔 -10%」而 value 正存=增益）改写须保持文案语义「-20%」（间隔再减）而非按
+	# eff 符号翻成「+20%」（读作负收益）。高亮色按 eff 符号判（存储语义=正为增益）。
+	var sign := String(raw[0])
+	var body := ("%s%.1f" % [sign, absf(shown)]) if (absf(shown - roundf(shown)) > 0.001) \
+		else ("%s%d" % [sign, int(roundf(absf(shown)))])
 	if is_pct:
 		body += "%"
 	if p_tb.layers >= 2:
-		return desc.substr(0, m.get_start()) + "[color=#ffd54a][b]" + body + "[/b][/color]" 			+ desc.substr(m.get_end())
+		var hl_open := "[color=#ffd54a][b]" if eff >= 0.0 else "[color=#ff5d5d][b]"
+		return desc.substr(0, m.get_start()) + hl_open + body + "[/b][/color]" \
+			+ desc.substr(m.get_end())
 	return desc
 
 

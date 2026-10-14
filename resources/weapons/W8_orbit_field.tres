@@ -51,7 +51,7 @@ note = "能量球 3→4 颗，环绕半径扩到 120，基础 DPS 113.3"
 [resource]
 script = ExtResource("1_wd")
 id = &"W8_orbit_field"
-display_name = "环绕力场"
+display_name = "近战·天狼刀"
 form = 3
 crit_rate = 0.05
 crit_dmg = 2.0
@@ -78,6 +78,9 @@ melee = {
 "charge_max": 5, "charge_gain_cd": 0.5,
 "charge_gain_cd_levels": [0.5, 0.45, 0.4, 0.35, 0.3],
 "detonate_mult": 5.0, "detonate_radius": 90.0,
-"pulse_cd": 3.0, "effective_blade_cap": 8, "detonate_global_icd": 0.5
+"pulse_cd": 3.0, "effective_blade_cap": 8, "detonate_global_icd": 0.5,
+"weapon_class": "melee", "mode": "orbit", "block_chance": 0.30,
+"transcend": {"name": "苍狼啸月", "atk_mult": 1.0, "orbs_bonus": 2.0,
+"detonate_mult_add": 1.5, "radius_mult": 1.1}
 }
 upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

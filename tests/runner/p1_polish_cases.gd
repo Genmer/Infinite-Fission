@@ -59,18 +59,25 @@ func _check(p_name: String, p_cond: bool, p_detail: String = "") -> void:
 
 
 func _start_map(p_map: StringName) -> void:
-	# 解锁链口径（verify_feedback 先例）：通关首关 → 目标图可启动
+	# 解锁链口径（verify_feedback 先例）：通关首关 → 目标图可启动。
+	# R253：改直走 _finish_menu_start——测试档祝福记忆非空时 _on_menu_start 卡
+	# R252 祝福面板模态（MENU 态等确认，start_run 不走），本套件测战斗态绕面板；
+	# 难度显式普通（_on_menu_start :1809 的 clampi 步骤直调不经过）
 	Meta.maps_cleared = {}
 	Meta.mark_map_cleared(&"world_grass")
+	_gl._blessing_pending = false
+	_gl._difficulty = 0
 	_gl.state = GameConst.GameStatus.MENU
 	_gl.current_map_id = MapTable.FIRST_MAP_ID
-	_gl._on_menu_start(p_map)
+	_gl._finish_menu_start(p_map)
 
 
 # ── 战前补给（R5.12-P1） ──────────────────────────────────────────
 func _test_pre_boss_shop() -> void:
 	print("── 战前补给商店 ──")
 	_start_map(&"world_grass")
+	print("[diag-R253] post-start st=%d card_open=%s lvl=%d" % [_gl.state,
+		str(_gl.card_select_ui.is_open), int(_gl.player.get("level"))])   # TEMP-R253
 	var final_wave := int(MapTable.get_map(&"world_grass").get("final_wave", 0))
 	_check("前置：草原 final_wave 在册（>1）", final_wave > 1)
 	# 非 Boss 前一波：不开店

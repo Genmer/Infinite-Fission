@@ -6,7 +6,8 @@
 # · 清除时机：玩家死亡结算（局终）/ 重新开始（放弃旧档）。Meta 永久进度（图鉴/成就/
 #   结晶/地图通关）不受本档影响——两条存档链互不干扰。
 # · 结构（ConfigFile 单段 run）：map_id / daily / wave / kills / elapsed / character /
-#   level / xp / hp / max_hp / gold / rerolls / free_reroll / unlocked_slots /
+#   level / xp / hp / max_hp / gold / rerolls / skill_cd（R212：技能冷却剩余随档）/
+#   free_reroll / unlocked_slots /
 #   weapons[{id, level, traits[{id, layers}]}] / relics[{id}]（R198 二aw-1：遗物 id 集随档，
 #   旧档无键 = 空表兼容）——全部为可序列化基本类型/容器。
 class_name RunSave

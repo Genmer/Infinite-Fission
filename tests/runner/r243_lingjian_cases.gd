@@ -244,9 +244,10 @@ func _case1_setup_and_numbers() -> void:
 		return
 	var s := swords[0]
 	var v := s.velocity
-	_check("①spawn 速度 860px/s（sword_speed 表值）+ 方向朝最近敌",
+	# 二cu 合一：W11 出膛口=悬浮化身（_avatar_muzzle 同弹道武器口径）——方向基准随之
+	_check("①spawn 速度 860px/s（sword_speed 表值）+ 方向朝最近敌（自化身出膛口，二cu）",
 		absf(v.length() - 860.0) < 1e-3
-		and v.normalized().dot((e.global_position - _w.global_position).normalized()) > 0.999,
+		and v.normalized().dot((e.global_position - _w.muzzle_position()).normalized()) > 0.999,
 		"spd=%s" % str(v.length()))
 	_check("①pierce_left==1（表 pierce=1——单体语义参数面）", int(s.pierce_left) == 1,
 		"pierce=%d" % int(s.pierce_left))
@@ -491,8 +492,11 @@ func _case5b_multi_target() -> void:
 		_clear_enemies()
 		_strip_traits()
 		return
-	var c := _w.global_position
+	var c := _w.muzzle_position()                 # 二cu 合一：分配方向基准=化身出膛口
+	# 期望序按化身出膛口动态重排（二cu：出膛口随化身环位，与武器本体位的距离序可异位）
 	var sorted_t: Array[Vector2] = [ea.global_position, eb.global_position, ec.global_position]
+	sorted_t.sort_custom(func(a: Vector2, b: Vector2) -> bool:
+		return c.distance_squared_to(a) < c.distance_squared_to(b))
 	var in_order := true
 	var distinct := true
 	for i in range(3):
@@ -560,10 +564,10 @@ func _case6_transcend_guard_and_fractal() -> void:
 		var ang := absf(rad_to_deg(mv.angle_to(ch.velocity)))
 		if absf(ang - 28.0) > 1.5:
 			angle_ok = false
-		if absf(float(ch.panel_snapshot.get("base_atk", 0.0)) - 24.0 * 0.4) > 0.05:
-			inherit_ok = false
+		if absf(float(ch.panel_snapshot.get("base_atk", 0.0)) - 24.0 * 0.7) > 0.05:
+			inherit_ok = false                    # 二ct：分裂恒继承 70%
 	_check("⑧子代 flight_sword==true（迷你飞剑——w1 request_split 分支承载）", form_ok)
-	_check("⑧子代速度旋转 ±28°（tol 1.5°）+ 面板 ATK×0.4（9.6）", angle_ok and inherit_ok,
+	_check("⑧子代速度旋转 ±28°（tol 1.5°）+ 面板 ATK×0.7（16.8，二ct）", angle_ok and inherit_ok,
 		"angle=%s inherit=%s" % [str(angle_ok), str(inherit_ok)])
 	_release_my_swords()
 	_strip_traits()

@@ -8,7 +8,7 @@
 # 纪律：-s 入口编译期先于 autoload 注册——零工程类名直引；用例体运行时 load。
 extends SceneTree
 
-const CASES_PATH := "res://tests/runner/test_r243_fengren_cases.gd"
+const CASES_PATH := "res://tests/runner/r243_fengren_cases.gd"
 
 
 func _initialize() -> void:

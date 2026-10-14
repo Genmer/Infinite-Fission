@@ -238,10 +238,13 @@ func _test_4_legacy_semantics_intact() -> void:
 			and e.hp < hp0 - 10.0, "hp=%.1f" % e.hp)
 	_gl.pipeline.call(&"end_frame")
 	# -3 模拟真机门：tier 映射 + 帽内真结算
+	# R256 翻案：tier3 → 帽 0 是 R225 原口径——二cv#8 帧率决策已把 tier3 并入 tier2
+	# 同帽 96（damage_pipeline.gd:463 注块「深载恰是削峰器最需要在场时」）；本套件
+	# 根级手动档，并档批未同步此断言=静默过期（storm 断言① 同型第三现场）
 	DamagePipeline.settle_budget_override = -3
 	PerfGovernor.mode_override = 0
 	PerfGovernor.tier_override = 3
-	_check("④-3 tier3 → 帽 0", DamagePipeline._settle_cap_now() == 0, "")
+	_check("④-3 tier3 → 帽 96（二cv#8 并档）", DamagePipeline._settle_cap_now() == 96, "")
 	PerfGovernor.tier_override = 2
 	_check("④-3 tier2 → 帽 96", DamagePipeline._settle_cap_now() == 96, "")
 	_gl.pipeline.call(&"begin_frame", 1402)

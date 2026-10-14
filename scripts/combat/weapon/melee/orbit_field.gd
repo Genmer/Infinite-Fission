@@ -24,13 +24,35 @@
 #   单色（R87 共鸣源，纯视觉、无附着语义）。
 # · 生命周期：单武器常驻单例（OrbitWeapon 持有；tick 由武器驱动，随宿主平移）。
 # · W9 追击模式零波及（蓄能/脉冲/引爆仅环绕模式可达；命中仍走 ArcSlash 弧形判定）。
-# · 表现（R32）：默认 = 环绕飞刀 + 形态卡（sword 剑 / axe 斧 / bolt 闪电，R19）覆盖绘制。
+# · 表现（R32→R243 §2.4）：默认 = 狼头弯刀（近战·天狼刀——刀身弯月弧刃 + 狼首护手
+#   剪影，PLAYER 蓝主填充 + 白獠牙高光；knife_scale 视觉缩放通道原样生效）+ 形态卡
+#  （sword 剑 / axe 斧 / bolt 闪电，R19）覆盖绘制。
+# · R243 §3.3 W8 挡弹：逐刀逐帧判定 pass（_judge_orb）附带敌弹圆查询
+#  （enemy_bullet_grid，OrbitWeapon._ensure_orbit_field 注入），逐弹掷
+#   weapon.bullet_block_chance()（W8 基线 0.30），帽 4/tick；挡下走 nullify() 统一
+#   收束 + bullet_nullified 涟漪 + bullet_parry 计数。
+# · R243 §4.5-4 子引爆拆分：_detonate_aoe = 纯结算体 _detonate_settle + 末端
+#   ON_EXPIRE 派发与 melee_split_request 消费——子引爆只走纯结算体（无孙代，
+#   禁止子引爆同走 _detonate_aoe 的树状递归路径）；请求空 = 行为零变化。
 class_name OrbitField
 extends Node2D
 
 const HIT_FLASH_COUNT := 8                    # 命中冲击小环并发池（轮换）
 const HIT_FLASH_LIFE := 0.22                  # 命中小环时长 s
 const PATH_DASHES := 26                       # 轨道虚线段数（奇数段绘制 = 虚线观感）
+
+# ── R268 V1 匕首感修复常量（用户反馈 A「近战·旋风刀跟匕首一样」——设计 §3.1 处方
+#    tunable 值；判定/蓄能/挡弹走 orb_radius 零动，本块全部纯视觉） ──────────────
+const BLADE_LEN_FLOOR := 50.0                 # V1-A1：刀参数地板 34→50（W8 orb_r 16-20
+                                              # 全等级命中旧地板 34=恒 35.7px 零成长根因①）
+const BLADE_LEN_GROWTH := 1.8                 # V1-A1：地板外每级线性成长 px（(orb_r-16)×1.8）
+const BLADE_W_FLOOR := 5.2                    # V1-A2：刀宽地板 3.4→5.2（长宽比 3.3:1→≈2.8:1）
+const TRAIL_SPAN_DEG := 42.0                  # V1-B：逐刀拖尾弧跨（原 42° 口径保持）
+const TRAIL_ALPHA := 0.30                     # V1-B：拖尾 α 0.18→0.30（R262b α 四分档取档；
+                                              # 薄荷 α0.18 on 白底 #eef3ff ≈不可见根因③）
+const TRAIL_WIDTH_N := 2.2                    # V1-B：拖尾宽 orb_r×1.5→×2.2
+const GHOST_LAG_DEG := 12.0                   # V1-C：残影公转切向滞后角（处方带 10-14° 中值）
+const GHOST_BODY_ALPHA := 0.22                # V1-C：残影 body 多边形 α（处方 ≈0.22）
 
 # ── 蓄能引爆（W8 核心改版数据键，真源 resources/weapons/W8_orbit_field.tres melee 段）──
 const CHARGE_KEY := &"charge_stacks"          # 敌侧通用标记通道键（共享组 enemy.gd 契约）
@@ -47,6 +69,8 @@ const RING_THRESHOLD_DEFAULT := 60.0          # TH_RING_PRESSURE 缺省锚（与
 const RING_MULT_DEFAULT := 1.2
 const CHAIN_TRAIT_ID := &"MEC_CHAIN_DETONATE"  # 链式引爆卡（R187 §2.5.6 传导轴）
 const CHAIN_TRANSFER_RADIUS := 160.0          # 传导半径 px（160px 内最近敌）
+const BULLET_BLOCK_CAP_PER_TICK := 4          # R243 §3.3：刀位挡弹帽（4 消弹/tick）
+const BULLET_BLOCK_MARGIN := 6.0              # 刀位挡弹查询外扩（orb_r×knife_scale+6）
 
 static var _detonate_global_stamp: int = 0    # 闸①：全局引爆解禁帧戳（本体+复制体共享）
 static var _detonate_target_stamp: Dictionary = {}   # 闸②：uid -> 解禁帧戳
@@ -78,6 +102,8 @@ var _gain_cd: Dictionary = {}                  # 蓄能闸：target_uid -> 剩�
 var _blade_hits: Dictionary = {}               # 刀数帽：target_uid -> {orb_idx: true}（每公转周重置）
 
 var weapon: WeaponBase = null                  # 结算宿主（OrbitWeapon 注入）
+var enemy_bullet_grid: SpaceGrid = null        # R243 §3.3 敌弹网格（刀位挡弹查询——
+                                               # OrbitWeapon._ensure_orbit_field 注入新字段）
 var _detonate_uid: int = 0                     # 引爆结算独立 source_uid（管线幂等键分流——
                                                # 同帧接触伤/引爆不互撞，ElementalSystem DOT/连锁
                                                # 独立 uid 同款先例）
@@ -100,6 +126,7 @@ var _redraw_ctr: int = 0                       # 重绘节流计数（120Hz tick
 var _label_ctr: int = 0                        # 蓄能读数节流计数（60Hz 重绘 → 15Hz 网格查询）
 var _label_cache: Array[Dictionary] = []       # 蓄能档位读数缓存 [{lp, text, col}]（查询帧重建）
 var _label_atk_text: String = ""               # 底缘数值标注缓存（build_panel_snapshot 每 12 重绘刷一次）
+var _block_left: int = 0                       # R243 §3.3 刀位挡弹帽余额（4/tick，判定帧首重置）
 
 
 func _init() -> void:
@@ -127,6 +154,10 @@ func spawn(p_params: Dictionary) -> void:
 	leash_radius = maxf(float(p_params.get("leash_radius", 0.0)), 0.0)
 	chase_speed = maxf(float(p_params.get("chase_speed", 420.0)), 60.0)
 	engage_r = maxf(float(p_params.get("engage_r", 46.0)), 8.0)
+	# R262b L10 契约注：knife_scale 在 .tres 声明为布尔 true（探测位），真值走
+	# MEC_GIANT_BLADE.value（weapon_base._giant_blade_value→orbit_weapon 注入计算后
+	# float）——本处 float(bool)=1.0 静默无缩放，故 params 原样直达即错；任何旁路把
+	# .tres params 直接塞进本表前必须先转注入形态（见 attach_mult 未落 .tres 教训）
 	knife_scale = maxf(float(p_params.get("knife_scale", 1.0)), 0.4)
 	style = String(p_params.get("style", "orb"))
 	# R183 W8 复制体相位偏移（BASE 单环阵 + 45°——复制体与本体错位公转；本体恒 0）
@@ -228,6 +259,7 @@ func tick(p_game_delta: float, p_center: Vector2) -> void:
 		return
 	# W8 环绕模式（口径不变）：刀位 = 轨道槽 + 逐球周期接触蓄能判定
 	_sync_knife_arrays()
+	_block_left = BULLET_BLOCK_CAP_PER_TICK     # R243 §3.3：挡弹帽每判定帧重置（4/tick）
 	for i in range(orbs):
 		_knife_pos[i] = _orbit_slot(i)
 		_knife_face[i] = _knife_pos[i].angle() + PI * 0.5
@@ -245,8 +277,13 @@ func tick(p_game_delta: float, p_center: Vector2) -> void:
 func _request_redraw() -> void:
 	# R188 档0：重绘节流（120Hz tick → 60Hz 重绘；公转/自旋视觉平滑度不变级，
 	# headless 渲染无关——真机渲染面收益；蓄能读数走 _label_cache 独立节拍）
+	# R233 T4 决策2-④：模拟 30Hz 下本节流会把 _draw() 自绘（公转环/球体）打到 15Hz
+	# ——插值层只覆写实体 global_position 救不了 _draw() 自绘内容，谓词成立时短路
+	# 每 tick 重绘（=30Hz，与现状 mobile 60Hz tick÷2 实效等价；回退 60Hz 档原样恢复）。
+	# 注：_label_ctr 读数节流（%12/%4，纯表现低危）不在本刀四处清单内（设计决策2 定案
+	# 未列入——重绘频率回升后其刷新率随之上行，披露不改动）。
 	_redraw_ctr += 1
-	if _redraw_ctr % 2 == 0:
+	if GameLoop.sim30_effective() or _redraw_ctr % 2 == 0:
 		queue_redraw()
 
 
@@ -268,6 +305,33 @@ func _judge_orb(p_orb_index: int, p_orb_pos: Vector2, p_center: Vector2) -> void
 			# 点亮的唯一写点，此前全仓零调用（特效系统整链死码：球体膨胀脉冲+命中点
 			# 冲击小环从不显示）。命中点 = 环绕球心（全局坐标，函数内 to_local 落位）。
 			_fire_hit_fx(p_orb_index, p_orb_pos)
+	# R243 §3.3：刀位挡弹（附带本判定 pass——概率掷骰，帽 4/tick 全场共享）
+	_block_bullets_near(p_orb_pos)
+
+
+func _block_bullets_near(p_orb_pos: Vector2) -> void:
+	# W8 天狼刀刀位挡弹（R243 §3.3）：query_circle(刀位, orb_r×knife_scale+6) → 逐弹
+	# 掷 weapon.bullet_block_chance()（W8 基线 0.30，MEC_BULLET_PARRY add_block 池成长）
+	# → 命中掷骰即 nullify()（统一收束 OnExpire(NULLIFIED)）+ 青涟漪 + bullet_parry 计数。
+	# 帽 4/tick：跨刀共享余额（_block_left，tick 判定帧首重置）——防弹幕洪峰逐刀翻倍。
+	if enemy_bullet_grid == null or weapon == null or not is_instance_valid(weapon):
+		return
+	if _block_left <= 0:
+		return
+	var chance := weapon.bullet_block_chance()
+	if chance <= 0.0:
+		return
+	var bullets := enemy_bullet_grid.query_circle(p_orb_pos,
+		orb_radius * knife_scale + BULLET_BLOCK_MARGIN)
+	for bullet in bullets:
+		if _block_left <= 0:
+			break
+		if bullet is ProjectileBase and (bullet as ProjectileBase).team == 1:
+			if chance >= 1.0 or randf() < chance:
+				(bullet as ProjectileBase).nullify()
+				_block_left -= 1
+				DebugStats.count(&"bullet_parry")
+				EventBus.emit_bullet_nullified((bullet as ProjectileBase).global_position)
 
 
 func gravity_pulse() -> int:
@@ -469,7 +533,16 @@ func _holder_trait_layers(p_id: StringName) -> int:
 
 
 func _detonate_aoe(p_pos: Vector2, p_radius: float, p_dmg: float) -> void:
-	# 引爆 AoE（独立结算环，不走 weapon.settle_aoe 的两处口径差）：
+	# 母引爆入口（R243 §4.5-4 终审①拆分）= 纯结算体 _detonate_settle + 末端
+	# ON_EXPIRE 派发与 melee_split_request 消费。禁止实现路径：子引爆同走本入口
+	# （树状递归）——子引爆只走 _detonate_settle，结构上无孙代（套件反断言把守）。
+	_detonate_settle(p_pos, p_radius, p_dmg)
+	_consume_melee_split(p_pos, p_radius, p_dmg)
+
+
+func _detonate_settle(p_pos: Vector2, p_radius: float, p_dmg: float) -> void:
+	# 引爆纯结算体（R243 §4.5-4：原 _detonate_aoe 结算逻辑原样搬入，_detonate_uid 复用；
+	# 母引爆与子引爆共用本口——子引爆不再派发 ON_EXPIRE，故无孙代）：
 	# ① source_uid = _detonate_uid——管线幂等键 (source,target,frame) 与同帧接触伤分流，
 	#    引爆心目标自身的引爆伤害不被幂等缓存吞掉（ElementalSystem DOT/连锁先例）；
 	# ② 网格候选后补窄相精判（dist ≤ 半径 + 目标 hitbox）——rebuild 入桶取保守
@@ -500,6 +573,34 @@ func _detonate_aoe(p_pos: Vector2, p_radius: float, p_dmg: float) -> void:
 				and target.has_method(&"take_result"):
 			target.call(&"take_result", result)
 	DebugStats.count(&"w8_detonation_aoe_targets", candidates.size())
+
+
+func _consume_melee_split(p_pos: Vector2, p_radius: float, p_dmg: float) -> void:
+	# 母引爆末端：ON_EXPIRE 派发（tctx.melee=self，六事件宿主近战形态首接）→ 消费
+	# melee_split_request（R243 §4.5 通道 B 输出槽；EF_FRACTAL melee 臂由后续波次接线，
+	# 现网无生产者 = 请求空 = 行为零变化）。子引爆 = 引爆心 ±spread 均布方向 ×0.5R 处
+	# count 个 _detonate_settle(pos_i, R×0.55, dmg×inherit_ratio)——纯结算体直落，
+	# 不派发 ON_EXPIRE（无孙代；_detonate_uid 复用，同帧重叠目标由管线幂等闸去重）。
+	if weapon == null or not is_instance_valid(weapon) or weapon.trait_stack == null:
+		return
+	var tctx := TraitContext.new()
+	tctx.event = GameConst.TraitEvent.ON_EXPIRE
+	tctx.weapon = weapon
+	tctx.melee = self
+	weapon.trait_stack.dispatch(GameConst.TraitEvent.ON_EXPIRE, tctx)
+	var req: Dictionary = tctx.melee_split_request
+	if req.is_empty():
+		return
+	var count := clampi(int(req.get("count", 0)), 0, 8)
+	var spread := deg_to_rad(float(req.get("spread_deg", 0.0)))
+	var ratio := clampf(float(req.get("inherit_ratio", 0.0)), 0.0, 1.0)
+	for i in range(count):
+		# 角度均布（request_split 同式：[-spread, +spread] 线性均布；count==1 → 0°）
+		var ang := 0.0
+		if count > 1:
+			ang = spread * (float(i) / float(count - 1) - 0.5) * 2.0
+		var pos_i := p_pos + Vector2.from_angle(ang) * (p_radius * 0.5)
+		_detonate_settle(pos_i, p_radius * 0.55, p_dmg * ratio)
 
 
 static func charge_of(p_target: Node2D) -> int:
@@ -699,9 +800,10 @@ func _update_orb_sprites(p_game_delta: float) -> void:
 		_orb_cores[i].scale = Vector2.ONE * (orb_radius / 32.0) * (1.0 + 0.38 * punch)
 		_orb_glows[i].scale = Vector2.ONE * (orb_radius * 1.9 / 32.0) * (1.0 + 0.5 * punch) * knife_scale
 		# R32：辉光按元素染色（_orb_tint）——附魔刀的底光跟随元素色
+		# R262b M6：α 四分档量化（共享 soft_dot 键同档合批——R216 定律收口）
 		var tint := _orb_tint(i)
 		_orb_glows[i].modulate = Color(tint.r, tint.g, tint.b,
-			0.4 + 0.3 * punch + 0.07 * sin(angle * 3.0 + float(i) * 2.1))
+			ElementalFxLayer._qa(0.4 + 0.3 * punch + 0.07 * sin(angle * 3.0 + float(i) * 2.1)))
 		_orb_punch[i] = maxf(punch - p_game_delta * 5.0, 0.0)
 	for flash: Dictionary in _hit_flashes:
 		var left := float(flash["left"])
@@ -715,7 +817,7 @@ func _update_orb_sprites(p_game_delta: float) -> void:
 			continue
 		var t := 1.0 - left / HIT_FLASH_LIFE
 		sp.scale = Vector2.ONE * lerpf(orb_radius / 19.0, orb_radius * 2.2 / 19.0, t)
-		sp.modulate.a = 0.85 * (1.0 - t)
+		sp.modulate.a = ElementalFxLayer._qa(0.85 * (1.0 - t))   # R262b M6：α 四分档
 
 
 func _fire_hit_fx(p_orb_index: int, p_orb_pos: Vector2) -> void:
@@ -812,70 +914,292 @@ func _draw_styled_orbs() -> void:
 					draw_line(tip_j, tip_j + spark_dir * orb_radius * 0.26,
 						Color(1.0, 1.0, 1.0, col.a), 1.8, true)
 			_:
-				pass                                  # orb 默认：飞刀程序化绘制（_draw_flying_knives）
+				# R243 §2.4 orb 默认 = 狼头弯刀（近战·天狼刀，替换 R32 环绕飞刀）：
+				# 刀身沿运动方向（公转切向），刀根狼首护手剪影，蓝主填充 + 白獠牙高光。
+				var wpos := _knife_pos[i] if i < _knife_pos.size() else _orbit_slot(i)
+				var wface := _knife_face[i] if i < _knife_face.size() \
+					else wpos.angle() + PI * 0.5
+				# R268 V1-C：公转切向滞后 12° 廉价轮廓残影（速度风读感——60Hz 刀尖跳变
+				# ≈13.8px/帧 + 零残影旧拖尾隐形 =「转得快却像瞬移」根因④；只画 body
+				# 多边形 α0.22 + 藏青轮廓，跳过狼首/柄/獠牙 = 半 draw 量；降档门
+				# fx_quality==0 砍残影；追击模式无公转相位不画——W9 判定零波及）
+				if leash_radius <= 0.0 and ghost_gate(_fx_quality()):
+					var gphase := angle + TAU * float(i) / float(orbs) \
+						- deg_to_rad(GHOST_LAG_DEG)
+					var gpos := Vector2.from_angle(gphase) * orbit_radius
+					var gface := gpos.angle() + PI * 0.5
+					var gbody := wolf_blade_poly(gpos, Vector2.from_angle(gface),
+						wolf_blade_len(orb_radius, 0.0, knife_scale),
+						wolf_blade_w(orb_radius, knife_scale))
+					var gcol := _wolf_body_color()
+					draw_polygon(gbody, PackedColorArray(
+						[Color(gcol.r, gcol.g, gcol.b, GHOST_BODY_ALPHA)]))
+					draw_polyline(gbody, Color(PopPalette.OUTLINE.r,
+						PopPalette.OUTLINE.g, PopPalette.OUTLINE.b, 0.5), 1.4, true)
+				_draw_wolf_knife(i, wpos, Vector2.from_angle(wface))
 
 
-func _draw_flying_knives() -> void:
-	# R32 默认形态重做（用户反馈「环绕力场球太怪了，换成飞刀」）：
-	# 浮游体 = 环绕飞刀——刀尖沿运动方向（公转切向）回旋飞行；钢白刀身 +
-	# 元素附魔刀脊辉光（_orb_tint 染色）+ 深色刀柄；命中 → 刀刃白闪脉冲。
-	# R64 刀形可读化：刀长原 = orb_radius×1.05（≈17px），比光晕球还小，读感仍
-	# 「绿点不是刀」——刀体加长度下限（判定半径 orb_radius 不动，视觉>判定是
-	# 动作游戏惯例）+ 全轮廓亮描边 + 刃口亮线，刀形一眼可辨。
-	for i in range(orbs):
-		var pos := _knife_pos[i] if i < _knife_pos.size() else _orbit_slot(i)
-		var face := _knife_face[i] if i < _knife_face.size() else pos.angle() + PI * 0.5
-		var motion := Vector2.from_angle(face)          # R65：追击=行进方向 / 环绕=切向
-		var side := Vector2(-motion.y, motion.x)
-		var punch := float(_orb_punch[i]) if i < _orb_punch.size() else 0.0
-		var blade := maxf(orb_radius * 1.05, 34.0) * (1.05 + 0.22 * punch) * knife_scale   # 刀体全长（R65 巨刃缩放）
-		var w := maxf(orb_radius * 0.17, 3.4) * knife_scale                              # 半刀宽
-		var tip := pos + motion * blade * 0.55
-		var shoulder := pos + motion * blade * 0.08
-		var base := pos - motion * blade * 0.45
-		var steel := Color(0.93, 0.96, 1.0, 0.96)
-		var body := PackedVector2Array([
-			tip, shoulder + side * w, base + side * w,
-			base - side * w, shoulder - side * w,
-		])
-		draw_colored_polygon(body, steel)
-		# 全轮廓亮描边（深底上压出刀形剪影——R61 弧斩同款手法）
-		draw_polyline(body, Color(1.0, 1.0, 1.0, 0.85), 1.8, true)
-		# 刀脊元素辉光（附魔色；未附魔 = 薄荷绿）+ 刀尾护线
-		var tint := _orb_tint(i)
-		draw_line(shoulder + side * w * 0.9, tip, Color(tint.r, tint.g, tint.b, 0.9), 2.4, true)
-		draw_line(base + side * w * 0.9, base - side * w * 0.9,
-			Color(tint.r, tint.g, tint.b, 0.55), 2.0, true)
-		# 刀柄（刀体后方短柄）
-		draw_line(base, pos - motion * blade * 0.72, PopPalette.OUTLINE, 3.4, true)
-		# 命中白闪（双刃边线，脉冲驱动）
-		if punch > 0.01:
-			var flash := Color(1.0, 1.0, 1.0, punch)
-			var fl := 1.6 + 1.4 * punch
-			draw_line(tip, base + side * w * 1.3, flash, fl, true)
-			draw_line(tip, base - side * w * 1.3, flash, fl, true)
+# ── R268 V1 匕首感修复：狼刀几何静态单源（qa_r268_transparent 代数断言读回口 +
+#    V1-C 残影同几何复用；顶点系数逐位保持 R243 原表——V1 只动长度/宽度标量） ──
+
+static func wolf_blade_base(p_orb_radius: float) -> float:
+	# V1-A1 处方式基础长（punch/knife_scale 乘链前——设计断言带 [50,60] 的读回口）：
+	# maxf(orb_r×1.05, 50) + (orb_r−16)×1.8——地板 34→50 成长穿透 + 地板外线性成长；
+	# W8 L1 基础 50px → L5 基础 57.2px（连柄全长 < orbit_radius 90-120 环内不叠本体）。
+	return maxf(p_orb_radius * 1.05, BLADE_LEN_FLOOR) \
+		+ (p_orb_radius - 16.0) * BLADE_LEN_GROWTH
+
+
+static func wolf_blade_len(p_orb_radius: float, p_punch: float, p_knife_scale: float) -> float:
+	# V1-A1 全参数：基础长 × (1.05+0.22·punch) × scale——punch/knife_scale 巨刃乘链
+	# 原样保持（MEC_GIANT_BLADE 通道零动；punch=0 基线 ×1.05 与旧式同基）。
+	return wolf_blade_base(p_orb_radius) * (1.05 + 0.22 * p_punch) * p_knife_scale
+
+
+static func wolf_blade_w(p_orb_radius: float, p_knife_scale: float) -> float:
+	# V1-A2：宽地板 3.4→5.2（刀宽 9.8→15px 级、长宽比 ≈2.8:1，处方 ≤3.4:1）。
+	return maxf(p_orb_radius * 0.17, BLADE_W_FLOOR) * p_knife_scale
+
+
+static func wolf_blade_poly(p_pos: Vector2, p_motion: Vector2, p_blade: float,
+		p_w: float) -> PackedVector2Array:
+	# 弯月弧刃刀身 7 顶点（刀背外弧鼓出 +side，刃口 -side 内收，刀尖前掠）——
+	# 序：0 尖 / 1 背中 / 2 背根 / 3 根前 / 4 根后 / 5 刃根 / 6 刃中。
+	var side := Vector2(-p_motion.y, p_motion.x)   # 刃口法向（-side = 挥动前进侧 = 刃口）
+	return PackedVector2Array([
+		p_pos + p_motion * p_blade * 0.60 + side * p_blade * 0.12,
+		p_pos + p_motion * p_blade * 0.34 + side * p_blade * 0.16,
+		p_pos + p_motion * p_blade * 0.06 + side * p_blade * 0.15,
+		p_pos - p_motion * p_blade * 0.30 + side * p_blade * 0.04,
+		p_pos - p_motion * p_blade * 0.30 - side * p_blade * 0.02,
+		p_pos + p_motion * p_blade * 0.06 - side * (p_w * 1.6),
+		p_pos + p_motion * p_blade * 0.36 - side * (p_w * 1.2),
+	])
+
+
+static func ghost_gate(p_quality: int) -> bool:
+	# V1-C 残影降档门（纯函数测试口）：fx_quality==0 砍残影（arc_slash.gd:512 档0
+	# 残影砍半先例同族）；档 1/2 残影存在；mobile mini(q,1) 经 _fx_quality 落档 1 保留。
+	return p_quality >= 1
+
+
+func _draw_wolf_knife(p_index: int, p_pos: Vector2, p_motion: Vector2) -> void:
+	# R243 §2.4 天狼刀（W8 默认 orb 形态重绘，替换 R32 环绕飞刀——用户点名「狼头弯刀」）：
+	# 弯月弧刃刀身（PopPalette.PLAYER 蓝主填充）+ 刃口白高光 + 狼首护手剪影（双耳 +
+	# 白獠牙高光）。判定半径（orb_radius）不动，视觉缩放通道 knife_scale 原样生效
+	# （MEC_GIANT_BLADE——glow 底光与刀体同步缩放）；命中膨胀/白闪脉冲沿袭 R32 口径。
+	# 元素染色（_orb_tint → blend_element_color）走刀脊辉光线与 glow 底光（R26 通道保持）。
+	# R243 §7.2 苍狼啸月（质变）：狼头刀银白化——PopPalette 白银梯度（PLAYER→WHITE
+	# 0.72）+ 月牙高光短弧（金白）；_wolf_body_color 单源取色，重绘流（每 tick
+	# _request_redraw）质变置位下一帧自动切换，零额外接线。
+	var motion := p_motion
+	var side := Vector2(-motion.y, motion.x)      # 刃口法向（-side = 挥动前进侧 = 刃口）
+	var punch := float(_orb_punch[p_index]) if p_index < _orb_punch.size() else 0.0
+	# R268 V1-A1/A2：刀参数改静态单源（wolf_blade_len/wolf_blade_w——地板 34→50 成长
+	# 穿透 + 宽 3.4→5.2；punch/knife_scale 乘链保持）
+	var blade := wolf_blade_len(orb_radius, punch, knife_scale)
+	var w := wolf_blade_w(orb_radius, knife_scale)
+	# ── 弯月弧刃刀身（顶点表静态单源 wolf_blade_poly——本体与 V1-C 残影同几何）──
+	var body := wolf_blade_poly(p_pos, motion, blade, w)
+	var tip: Vector2 = body[0]
+	var spine_mid: Vector2 = body[1]
+	var spine_root: Vector2 = body[2]
+	var root_fwd: Vector2 = body[3]
+	var root_back: Vector2 = body[4]
+	var edge_root: Vector2 = body[5]
+	var edge_mid: Vector2 = body[6]
+	var blue := _wolf_body_color()
+	# R267 视觉刀 §2.4：W8 刀身三层化（壳/核/缘）+ 降档——元素染色路径（水晶配方，
+	# crystal_cols static 缓存直出零新建 §2.6-g；壳层顶点逐刀动态经 expand_poly 内联
+	# 外扩——§2.2「现顶点绕质心外扩」）；KIN/空池蓝身薄荷线豁免路径逐位不动（§2.2）。
+	var tint := _orb_tint(p_index)
+	if _crystal_active():
+		var q := _fx_quality()
+		if q >= 2:
+			var shell_cols := CrystalBladeFactory.crystal_cols(&"wolf", tint,
+				_holder_transcended(), q, CrystalBladeFactory.LAYER_SHELL)
+			if not shell_cols.is_empty():
+				draw_polygon(CrystalBladeFactory.expand_poly(body,
+					CrystalBladeFactory.SHELL_EXPAND), shell_cols)
+		draw_polygon(body, CrystalBladeFactory.crystal_cols(&"wolf", tint,
+			_holder_transcended(), q, CrystalBladeFactory.LAYER_BODY))
+		# 修轮①评审：全轮廓描边（原路径本有浅轮廓线，水晶分支拆 darkened 剪影后
+		# 淡元素刀身在亮底近隐形——补 OUTLINE 轮廓，与烘焙态/挥斩体口径对齐）
+		draw_polyline(body, CrystalBladeFactory.crystal_outline_color(), 1.6, true)
+		# R268 V1-D：白on白修正——白刃缘改元素色提亮 0.55（fill.lightened 处方：
+		# palette.gd BG=#eef3ff 对纯白亮度差 ≈5% 全隐形=匕首感根因③白位；ALPHA_EDGE
+		# α 与 crystal_cols 层3 共享表零触——b-2/b-5 钉值零波及；上一条语句=全轮廓
+		# 描边线（crystal_outline_color）为 §3.2 硬边①明文冻结线未触——R268 评审修
+		# nit①：按语句内容指称不按行号（本批 hunk 插行后设计文档旧锚 :954 已漂移）；
+		# plain 臂白高光/白獠牙本批不动）
+		var edge_col := tint.lightened(0.55)
+		edge_col.a = CrystalBladeFactory.ALPHA_EDGE
+		draw_polyline(PackedVector2Array([tip, edge_mid, edge_root]), edge_col, 2.2, true)
+	else:
+		draw_colored_polygon(body, Color(blue.r, blue.g, blue.b, 0.95))
+		# 刀体轮廓描边（深底压剪影——R61 弧斩同款手法）
+		draw_polyline(body, Color(0.86, 0.93, 1.0, 0.85), 1.6, true)
+		# 刃口白高光（-Y/-side 侧：tip → 刃中 → 刃根）
+		draw_polyline(PackedVector2Array([tip, edge_mid, edge_root]),
+			Color(1.0, 1.0, 1.0, 0.92), 2.2, true)
+	# R243 §7.2 苍狼啸月月牙高光：刃身中段金白短弧（横跨刃面的弯月读感）
+	if _holder_transcended():
+		var mid := p_pos + motion * blade * 0.30 - side * blade * 0.02
+		var ma := motion.angle()
+		draw_arc(mid, blade * 0.30, ma - 1.15, ma + 1.15, 10,
+			Color(1.0, 0.97, 0.84, 0.8), 2.0, true)
+	# 刀脊元素辉光线（_orb_tint 混色源；未附魔 = 薄荷绿——R192 单源口径保持；
+	# tint 取值已上移至刀身分支前——水晶/原路径共用同源取色）
+	draw_polyline(PackedVector2Array([root_fwd, spine_root, spine_mid, tip]),
+		Color(tint.r, tint.g, tint.b, 0.9), 2.0, true)
+	# ── 狼首护手剪影（刀根护手位：吻部朝刃向，双耳后掠，白獠牙高光）──
+	var head := p_pos - motion * blade * 0.40
+	var dark := blue.lerp(PopPalette.OUTLINE, 0.38)
+	var snout := head + motion * blade * 0.17
+	var jaw_l := head - motion * blade * 0.05 + side * blade * 0.095
+	var jaw_r := head - motion * blade * 0.05 - side * blade * 0.095
+	var neck := head - motion * blade * 0.15
+	draw_colored_polygon(PackedVector2Array([snout, jaw_l, neck, jaw_r]),
+		Color(dark.r, dark.g, dark.b, 0.96))
+	# 双耳（后掠小三角——狼首剪影辨识位）
+	for ear_side: float in [1.0, -1.0]:
+		var ear_base := head - motion * blade * 0.03 + side * blade * 0.08 * ear_side
+		var ear_tip := head - motion * blade * 0.13 + side * blade * 0.17 * ear_side
+		var ear_back := head - motion * blade * 0.11 + side * blade * 0.05 * ear_side
+		draw_colored_polygon(PackedVector2Array([ear_base, ear_tip, ear_back]),
+			Color(dark.r, dark.g, dark.b, 0.96))
+	# 白獠牙高光（吻部下侧两枚前指小三角）
+	for fang_side: float in [1.0, -1.0]:
+		var fang_base := snout - motion * blade * 0.055 + side * blade * 0.045 * fang_side
+		var fang_tip := fang_base + motion * blade * 0.075 + side * blade * 0.012 * fang_side
+		var fang_hind := fang_base - motion * blade * 0.035
+		draw_colored_polygon(PackedVector2Array([fang_base, fang_tip, fang_hind]),
+			Color(1.0, 1.0, 1.0, 0.95))
+	# 刀柄（狼首后方短柄 + 缠头）
+	draw_line(head, p_pos - motion * blade * 0.66, PopPalette.OUTLINE,
+		3.4 * knife_scale, true)
+	# 命中白闪（双刃边线，脉冲驱动——R32 反馈通道保持）
+	if punch > 0.01:
+		var flash := Color(1.0, 1.0, 1.0, punch)
+		var fl := 1.6 + 1.4 * punch
+		draw_line(tip, root_back + side * w * 1.3, flash, fl, true)
+		draw_line(tip, root_back - side * w * 1.3, flash, fl, true)
+
+
+func _wolf_body_color() -> Color:
+	# R243 §7.2 苍狼啸月刀身取色单源（测试读回口）：默认 = PopPalette.PLAYER 蓝；
+	# 质变 = 白银梯度（PLAYER→WHITE 0.72——L=-1.0 归一 White 距离读感）。狼首/描线
+	# 色自本色派生（_draw_wolf_knife 内 blue.lerp/OUTLINE 链不变）。
+	# R267 视觉刀：本口为 KIN/身份路径专用（水晶路径不消费——§2.2 豁免路径取色单源）。
+	if _holder_transcended():
+		return PopPalette.PLAYER.lerp(Color.WHITE, 0.72)
+	return PopPalette.PLAYER
+
+
+func _crystal_active() -> bool:
+	# R267 视觉刀：W8 水晶路径激活判（dominant 非 KIN——与 _orb_tint 取色源同条件
+	# §2.3；KIN/空池蓝身薄荷线 = 豁免路径零改动 §2.2 评审⑦）。
+	return weapon != null and is_instance_valid(weapon) \
+		and weapon.dominant_element() != GameConst.Element.KIN
+
+
+func _fx_quality() -> int:
+	# R267 视觉刀：特效质量档（arc_slash._fx_quality 同式镜像——钳 [0,2] + mobile
+	# 降 1 档；Meta 单一真源）。水晶路径降档矩阵（§2.5-4）的档位读口。
+	var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
+	if OS.has_feature("mobile"):
+		q = mini(q, 1)
+	return q
+
+
+func _holder_transcended() -> bool:
+	# 宿主质变态位（w4 WeaponBase.transcended——typed 字段直读；结算宿主注入前=false）
+	return weapon != null and is_instance_valid(weapon) and weapon.transcended
+
+
+# ── R243 §7.2 W8 苍狼啸月图标（texture_factory <id>_t2 委托位——static func） ────
+# 共享工厂 weapon_icon_t2 缓存键机制（w1 已备）；委托注册（_delegate_weapon_icon
+# paths 增 "W8_orbit_field" → 本脚本）属共享文件改动，已在任务产出说明登记。
+# 默认 = 蓝狼头弯刀；质变 = 银白化（白银梯度）+ 月牙高光。贴图生成本脚本内自持
+#（不动共享 TextureFactory；栅格内核只读复用其 static 光栅化口；本脚本 static 缓存）。
+
+static var _icon_cache: Dictionary = {}    # 图标本地缓存（键 base/t2——勿写共享 _cache）
+
+const ICON_SILVER_MIX := 0.72              # 白银梯度混合档（与 _wolf_body_color 同值单源语义）
+
+
+static func weapon_icon_tex(p_transcended: bool) -> ImageTexture:
+	# R243 W8 图标（56px 画布朝上 -Y）：弯月刀身 + 狼首护手剪影 + 獠牙高光；
+	# 质变 = 银白刀身 + 金白月牙高光。
+	var key := "t2" if p_transcended else "base"
+	if _icon_cache.has(key):
+		return _icon_cache[key]
+	var tex: ImageTexture = TextureFactory._render(56, 56,
+		TextureFactory._shade(_icon_layers(p_transcended)))
+	_icon_cache[key] = tex
+	return tex
+
+
+static func _icon_layers(p_transcended: bool) -> Array:
+	# 图层集（TextureFactory._shade 契约同 ground_axe_weapon._icon_layers）。
+	var blue := PopPalette.PLAYER
+	var body := blue
+	if p_transcended:
+		body = blue.lerp(Color.WHITE, ICON_SILVER_MIX)      # 苍狼啸月银白化
+	var dark := body.lerp(PopPalette.OUTLINE, 0.38)
+	var crescent := Color(1.0, 0.97, 0.84) if p_transcended else Color(1, 1, 1, 0)
+	# 弯月弧刃刀身（外弧刀背 + 内收刃口，尖朝上 -Y）
+	var blade := PackedVector2Array([
+		Vector2(0.0, -22.0), Vector2(6.5, -16.0), Vector2(9.0, -7.0),
+		Vector2(7.5, 2.0), Vector2(3.0, 6.0), Vector2(-1.5, 2.5),
+		Vector2(-3.0, -7.0), Vector2(-2.0, -15.0),
+	])
+	var layers: Array = [
+		# R267 视觉刀：水晶外壳层（身份蓝未钳——图标非元素染色路径；c′ 防混搭特征层）
+		{"sd": TextureFactory._poly_sd(CrystalBladeFactory.expand_poly(blade,
+			CrystalBladeFactory.ICON_SHELL_EXPAND)),
+			"fill": CrystalBladeFactory.icon_shell_color(body), "ow": 0.0},
+		{"sd": TextureFactory._poly_sd(blade), "fill": body, "ow": 2.4},
+		# 刃口白高光（-X 侧内收线）
+		{"sd": TextureFactory._poly_sd(PackedVector2Array([
+			Vector2(6.0, -14.0), Vector2(7.2, -6.0), Vector2(4.5, 2.5),
+			Vector2(2.6, 1.5), Vector2(4.6, -6.5), Vector2(3.6, -13.0),
+		])), "fill": Color(1.0, 1.0, 1.0, 0.9), "ow": 0.0},
+		# 狼首护手剪影（吻部朝上 + 双耳）
+		{"sd": TextureFactory._poly_sd(PackedVector2Array([
+			Vector2(0.0, 8.0), Vector2(4.5, 10.5), Vector2(3.0, 15.0), Vector2(-3.0, 15.0),
+			Vector2(-4.5, 10.5),
+		])), "fill": dark, "ow": 2.2},
+		{"sd": TextureFactory._poly_sd(PackedVector2Array([
+			Vector2(-4.5, 11.0), Vector2(-7.0, 7.5), Vector2(-3.5, 8.5),
+		])), "fill": dark, "ow": 1.6},
+		{"sd": TextureFactory._poly_sd(PackedVector2Array([
+			Vector2(4.5, 11.0), Vector2(7.0, 7.5), Vector2(3.5, 8.5),
+		])), "fill": dark, "ow": 1.6},
+		# 刀柄
+		{"sd": TextureFactory._box_at(Vector2(0.0, 20.0), Vector2(1.7, 4.4), 1.0),
+			"fill": dark, "ow": 2.0},
+	]
+	if p_transcended:
+		# 月牙高光（金白短弧贴刃面——弧月读感；SDF 细弧月牙多边形近似）
+		layers.append({"sd": TextureFactory._poly_sd(PackedVector2Array([
+			Vector2(-5.5, -12.0), Vector2(-7.5, -5.0), Vector2(-6.0, 1.0),
+			Vector2(-4.4, 0.0), Vector2(-5.6, -5.0), Vector2(-3.8, -11.0),
+		])), "fill": crescent, "ow": 0.0})
+	CrystalBladeFactory.note_icon_built(&"W8_orbit_field")   # R267 c′ 机制标记
+	return layers
 
 
 func _orb_tint(_p_index: int) -> Color:
 	# R26 元素附魔染色（无 ELE 卡 = 默认薄荷绿）。R186 拆除声明：按球定元素（_orb_element
-	# 稳定映射）随附着三件套一并删除——染色降为 weapon.dominant_element() 单色
-	#（R87 共鸣源，纯视觉读数、零附着语义），多 ELE 卡 = 主色稳定显示。
-	# R192：取色单源 PopPalette.ELEMENT_COLORS（收敛旧 FIR 0.55 漂移副本；KIN 兜底不变）
-	var elem := GameConst.Element.KIN
-	if weapon != null and is_instance_valid(weapon):
-		elem = weapon.dominant_element()
-	match elem:
-		GameConst.Element.FIR:
-			return PopPalette.ELEMENT_COLORS[GameConst.Element.FIR]
-		GameConst.Element.ICE:
-			return PopPalette.ELEMENT_COLORS[GameConst.Element.ICE]
-		GameConst.Element.LTG:
-			return PopPalette.ELEMENT_COLORS[GameConst.Element.LTG]
-		GameConst.Element.HYD, GameConst.Element.ANE, GameConst.Element.GEO, \
-		GameConst.Element.DEN:
-			return PopPalette.ELEMENT_COLORS[elem]
-		_:
-			return PopPalette.SUCCESS
+	# 稳定映射）随附着三件套一并删除——染色为纯视觉读数、零附着语义。
+	# R243 §6.5：取色源换 weapon.blend_element_color()（元素池非 KIN 色 RGB 均值——
+	# 多元素混色读感）；KIN 兜底 PopPalette.SUCCESS 保留。pre-w3 单元素武器
+	# blend = 该元素色本身 → 与旧 dominant_element() 逐位同色（零位移）。
+	if weapon != null and is_instance_valid(weapon) \
+			and weapon.dominant_element() != GameConst.Element.KIN:
+		return weapon.blend_element_color()
+	return PopPalette.SUCCESS
 
 
 func _reset_state() -> void:
@@ -888,6 +1212,14 @@ func _reset_state() -> void:
 
 
 func _draw() -> void:
+	# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+	# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+	DebugStats.bucket_begin(&"draw")
+	_draw_r271()
+	DebugStats.bucket_end(&"draw")
+
+
+func _draw_r271() -> void:
 	# 力场本体渲染：淡薄荷填充 + 虚线轨道环 + 公转扫掠残辉（占位圆已废——用户反馈）
 	# + 底部数值标注（用户反馈二轮「下面还要有具体的值」：环绕数 / 单击伤害 / 蓄能档）
 	# R65 追击模式：环示 = 活动范围（leash_radius，更淡——「刀能跑多远」）；
@@ -911,17 +1243,29 @@ func _draw() -> void:
 		var a0 := float(i) * seg_arc
 		draw_arc(Vector2.ZERO, ring_r, a0, a0 + seg_arc, 5,
 			Color(mint.r, mint.g, mint.b, 0.38), 2.4, true)
-	# 扫掠残辉：公转相位后方 42° 渐隐厚弧（运动方向读感；追击模式无公转带——不画）
+	# 扫掠残辉：R268 V1-B——固定薄荷单段改逐刀 42° 元素色渐隐弧（白底薄荷 α0.18
+	# ≈不可见=「瞬移」根因③；α 0.30=R262b 四分档取档、宽 orb_r×2.2、色走 _orb_tint；
+	# 刀数 ≤6 时逐刀弧互不叠带（间距 ≥60° > 弧跨 42°），更密刀位回落单段减淡防糊——
+	# draw_arc 增量 ≤5（最小档）；追击模式无公转带——不画。
+	# R268 评审修①④(a)：档位门——fx_quality==0 回落单段（1 draw_arc=改前同量，
+	# 最弱机/渲ms 满帽机不加逐刀未降档增量），档 1/2 逐刀弧；门复用 ghost_gate
+	# 同族语义（与 V1-C 残影门同判据，arc_slash.gd:512 档0 砍半先例同源））
 	if leash_radius <= 0.0:
-		var trail_a := angle - deg_to_rad(42.0)
-		draw_arc(Vector2.ZERO, orbit_radius, trail_a, angle, 12,
-			Color(mint.r, mint.g, mint.b, 0.18), orb_radius * 1.5, true)
+		var trail_span := deg_to_rad(TRAIL_SPAN_DEG)
+		var tcol := _orb_tint(0)
+		if orbs >= 1 and orbs <= 6 and ghost_gate(_fx_quality()):
+			for bi in range(orbs):
+				var b_phase := angle + TAU * float(bi) / float(orbs)
+				draw_arc(Vector2.ZERO, orbit_radius, b_phase - trail_span, b_phase, 12,
+					Color(tcol.r, tcol.g, tcol.b, TRAIL_ALPHA),
+					orb_radius * TRAIL_WIDTH_N, true)
+		else:
+			draw_arc(Vector2.ZERO, orbit_radius, angle - trail_span, angle, 12,
+				Color(tcol.r, tcol.g, tcol.b, TRAIL_ALPHA * 0.6),
+				orb_radius * TRAIL_WIDTH_N, true)
 	# R19 形态绘制（sword 剑 / axe 斧 / bolt 闪电——程序化多边形，贴图零实例化）
-	# R32：默认 = 环绕飞刀（程序化绘制，不再是能量球）
-	if style != "orb":
-		_draw_styled_orbs()
-	else:
-		_draw_flying_knives()
+	# R243 §2.4：默认 orb = 狼头弯刀（_draw_styled_orbs 缺省分支，替换 R32 环绕飞刀）
+	_draw_styled_orbs()
 	# 数值标注（力场下缘：环绕 ×N · 单击伤害 · 满档引爆当量；半透明贴纸风小字）。
 	# R188 档0：build_panel_snapshot 每 12 次重绘刷一次（原每次重绘全量重建面板快照）
 	_label_ctr += 1
@@ -929,10 +1273,13 @@ func _draw() -> void:
 		var atk := 0.0
 		if weapon != null and is_instance_valid(weapon):
 			atk = float(weapon.build_panel_snapshot().get("base_atk", 0.0))
-		var fmt := "环绕 ×%d · %.0f/击 · 引爆 %d×@%d"
+		# 二dc QA BUG-2（R243 遗留）：追击分支 2 占位吃 4 实参 →「not all arguments
+		# converted」逐帧报错 + 标注永不显示——分支各自格式化
 		if leash_radius > 0.0:
-			fmt = "追击 ×%d · %.0f/斩"
-		_label_atk_text = fmt % [orbs, atk, int(round(detonate_mult)), int(round(detonate_radius))]
+			_label_atk_text = "追击 ×%d · %.0f/斩" % [orbs, atk]
+		else:
+			_label_atk_text = "环绕 ×%d · %.0f/击 · 引爆 %d×@%d" % [orbs, atk,
+				int(round(detonate_mult)), int(round(detonate_radius))]
 	var font := ThemeDB.fallback_font
 	draw_string(font, Vector2(-60.0, orbit_radius + 22.0), _label_atk_text,
 		HORIZONTAL_ALIGNMENT_CENTER, 160.0, 13, Color(mint.r, mint.g, mint.b, 0.85))

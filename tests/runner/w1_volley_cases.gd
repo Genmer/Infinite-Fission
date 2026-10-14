@@ -425,7 +425,7 @@ func _bank_shot_checks(p_w: BallisticWeapon) -> void:
 	_check("③ bounce<12 不触发黄金弹",
 		absf(ctx6.crit_chance - 0.05) < 0.0001
 		and DebugStats.get_counter(&"bank_shard_triggered") == shard_counter_before + 1)
-	# 跳弹增值乘区：bounce_count=6 → +0.72（6×0.12，帽内）；叠加后整体仍受 cap_prod 8.0 截断
+	# 跳弹增值乘区：bounce_count=6 → +0.72（6×0.12，帽内）；叠加后整体仍受 cap_prod 12.0 截断（1.72×3^4≈139 R253 调参后仍超帽）
 	GameConfig.advance_frame()                     # 换帧：避开管线幂等缓存
 	var ctx_amp := DamageContext.make()
 	ctx_amp.source_uid = p_w.uid
@@ -453,8 +453,8 @@ func _bank_shot_checks(p_w: BallisticWeapon) -> void:
 	ctx_amp.frame_stamp = GameConfig.frame_stamp
 	_gl.pipeline.begin_frame()
 	var amp_result: DamageResult = _gl.pipeline.call(&"resolve", ctx_amp)
-	_check("③ 增值链经 cap_prod 8.0 截断（mult_product==8.0）",
-		amp_result != null and absf(amp_result.mult_product - 8.0) < 0.001,
+	_check("③ 增值链经 cap_prod 12.0 截断（mult_product==12.0）",
+		amp_result != null and absf(amp_result.mult_product - 12.0) < 0.001,
 		"实得 %.3f" % (amp_result.mult_product if amp_result != null else -1.0))
 	(_gl.pools[&"enemy"] as EnemyPool).release(main)
 	(_gl.pools[&"enemy"] as EnemyPool).release(shard_t)

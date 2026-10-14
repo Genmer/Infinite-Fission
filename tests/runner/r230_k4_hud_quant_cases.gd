@@ -12,13 +12,19 @@
 #      d. 保留复核（R230 主控裁定）：镜面 toast 冰青 lerp / R187 读数浅紫 lerp 两处
 #         按 R230 复核**保留原值**（F9 门禁证伪「逐件独立配色」前提，量化无 dc 收益
 #         不值可见配色变更）——断言两 lerp 值仍不在量化色板（未混入单源）+ 色相族保持。
-#   ③ grep 零残留直配（hud.gd 源级）：Label.new 恰 30 处；label_color 调用恰 36 处
-#      （28 sticker 站点 + 4 动态写点各 2 角色）；每处 label_sticker / font_color override
+#   ③ grep 零残留直配（hud.gd 源级）：Label.new 恰 33 处；label_color 调用恰 39 处
+#      （31 sticker 站点 + 4 动态写点各 2 角色）；每处 label_sticker / font_color override
 #      调用（含跨行，窗口扫描）经 label_color 或命中保留白名单（镜面/R187 两站 lerp）；
 #      theme.gd 色板机制块在位。
 #      R241 有意契约迁移（原 29/33/29+2/3）：skill_auto_cast 自动施放按钮入面——
 #      +1 Label.new（SkillAutoCast 文案）+1 sticker 站点 +1 动态写点（开=金/关=灰蓝
 #      双角色，_sync_skill_auto_visual 全走 label_color——刀面精神不破）。
+#      二cv#1 有意契约迁移（原 30/36/30）：护盾层数读数「X N」入面——+1 Label.new
+#      （ShieldLayers 读数）+1 sticker 站点（WHITE 角色，hud.gd 护盾条右端——刀面
+#      精神不破；夹具无护盾时护盾面板不建，④ 运行时静态 24 枚口径不受扰）。
+#      二db/R249 有意契约迁移（原 31/37/31）：橙盾条入面（「闪避」tag + 「N·Xs」
+#      层数×剩余秒读数）——+2 Label.new +2 sticker 站点（SOFT/WHITE 角色，均走
+#      label_color——刀面精神不破；橙条层>0 才建，④ 运行时口径不受扰）。
 #   ④ 运行时行为（真 HUD 实例）：全子树 Label font_color override ∈ 色板∪2 保留 lerp 色；
 #      语义钉（Boss 横幅=警示红 / HP=正文墨 / 金币=品质金 / 悬停卡=暗底白 / R187=柔电紫）；
 #      动态切换（AUTO 开关 墨/灰蓝、复活横幅 金/警示红）两端均∈色板；四类临时 toast
@@ -199,14 +205,14 @@ func _test_source_no_direct_coloring() -> void:
 		return
 	var lines := src.split("\n")
 	var label_news := _lines_with(lines, "Label.new()")
-	_check("③ Label.new 恰 30 处（刀面全覆盖口径；R241 +SkillAutoCast）", label_news.size() == 30,
+	_check("③ Label.new 恰 33 处（刀面全覆盖口径；R241 +SkillAutoCast；二cv#1 +护盾层数读数；二db/R249 +橙盾条两站）", label_news.size() == 33,
 		"count=%d" % label_news.size())
 	var lc_calls := _lines_with(lines, "label_color(StickerTheme.LabelRole")
 	var lc_total := 0
 	for i in lc_calls:
 		lc_total += lines[i].count("label_color(StickerTheme.LabelRole")
-	_check("③ label_color 调用恰 36 处（28 sticker 站点 + 4 动态写点各 2 角色；镜面/R187 两站保留 lerp 原色；R241 +自动施放站）",
-		lc_total == 36, "count=%d" % lc_total)
+	_check("③ label_color 调用恰 39 处（31 sticker 站点 + 4 动态写点各 2 角色；镜面/R187 两站保留 lerp 原色；R241 +自动施放站；二cv#1 +护盾层数站；二db +橙盾条两站）",
+		lc_total == 39, "count=%d" % lc_total)
 	# 每处 label_sticker 调用（含跨行 2 行窗）都经 label_color 或命中保留白名单
 	# （R230 主控复核：镜面 toast 冰青 / R187 读数浅紫两站保留原 lerp——F9 门禁证伪
 	#  「逐件独立配色」前提后收回收敛，见 hud.gd:647 注释）
@@ -222,8 +228,8 @@ func _test_source_no_direct_coloring() -> void:
 		if not routed:
 			sticker_ok = false
 			sticker_bad = "行 %d：%s" % [i + 1, str(lines[i]).strip_edges()]
-	_check("③ 30 处 label_sticker：28 走 label_color + 2 保留 lerp 原色（复核白名单；R241 +1 站）",
-		sticker_ok and sticker_lines.size() == 30, sticker_bad)
+	_check("③ 33 处 label_sticker：31 走 label_color + 2 保留 lerp 原色（复核白名单；R241 +1 站；二cv#1 +护盾层数站；二db +橙盾条两站——均走 label_color）",
+		sticker_ok and sticker_lines.size() == 33, sticker_bad)
 	# 每处 font_color override（跨行 2 行窗）都经 label_color
 	var override_lines := _lines_with(lines, "add_theme_color_override(\"font_color\"")
 	var override_ok := true

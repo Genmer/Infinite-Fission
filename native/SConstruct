@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+import os
+
+# R239 原生第一刀 SConstruct（godot-cpp 4.3 标准模板——参照 gdext_probe 探索工程同款）。
+# godot-cpp 复用 R234 探索沙盒（branch 4.3 @ d5cc777，详见
+# docs/qa/2026-10-06-R234-探索-原生工具链.md），可用环境变量 GODOT_CPP_PATH 覆盖。
+# 编译命令（工作区根，双平台）：
+#   Windows:  export PATH="/e/Code/Agent/Infinite-Fission/gdext_probe/mingw64/bin:$PATH"
+#             E:/.../gdext_probe/venv/Scripts/scons.exe -C repo/native target=template_debug  platform=windows use_mingw=yes -j8
+#             （template_release 同式）
+#   Android:  unset ANDROID_HOME ANDROID_SDK_ROOT
+#             export ANDROID_NDK_ROOT="E:/.../gdext_probe/android-ndk-r27c"
+#             E:/.../gdext_probe/venv/Scripts/scons.exe -C repo/native target=template_debug platform=android arch=arm64 android_api_level=21 ANDROID_HOME= -j8
+GODOT_CPP_PATH = os.environ.get(
+    "GODOT_CPP_PATH",
+    "E:/Code/Agent/Infinite-Fission/gdext_probe/godot-cpp",
+)
+
+env = SConscript(os.path.join(GODOT_CPP_PATH, "SConstruct"))
+
+env.Append(CPPPATH=["src/"])
+# -ffp-contract=off：禁 FMA 收缩——distance² 的 mul+add 逐位对齐引擎 GDScript 口径
+# （桌面 MinGW x86-64 基线指令集本就不含 FMA；此旗标为 Android arm64 NEON 钉死同口径，
+# 供下一轮真机 A/B 对拍时排除收缩噪声）。
+env.Append(CXXFLAGS=["-ffp-contract=off"])
+
+sources = Glob("src/*.cpp")
+
+library = env.SharedLibrary(
+    "bin/libfission_space_grid{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
+)
+
+Default(library)

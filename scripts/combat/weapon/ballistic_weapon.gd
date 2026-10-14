@@ -29,10 +29,13 @@ const SPIN_COOLDOWN_RESET := 0.8               # 停射冷却重置（A3 §3.2�
 const FORMATION_PELLET_CAP := 16               # 并排全链硬帽（validator pellets∈[1,16] 域内）
 const VOLLEY_OVERFLOW_GAP_MULT := 1.5          # 弹幕态超 16 帽部分转阵宽 +50% 补偿
 const PARALLEL_CAL_CONVERGE_STEP := 0.05       # 平行校准收束点步进（55%→70%，3 层封顶）
-const ETERNAL_QUOTA := 240                     # 永存弹同屏配额（R187 §2.4 第 6 条）
+const ETERNAL_QUOTA_FRAMEPRI := 120            # R220 刀13③：帧率优先永存弹同屏配额（旧值 240）
+const ETERNAL_QUOTA_FXPRI := 240               # 特效优先配额（原值——两常量拆分，代码分支非 .tres）
 const ETERNAL_LIFETIME_MARK := 120.0           # 永存态判定线（ON_SPAWN 反弹赠 20s / 永存 999s）
 const QUOTA_SCAN_INTERVAL := 0.5               # 配额扫描节流 s（try_fire 时强制刷新）
 const BANK_SHARD_RADIUS := 120.0               # 黄金弹落点弹片邻近索敌半径（同 EF_CRIT_SHARD 口径）
+const LIFETIME_MULT_FRAMEPRI := 1.15           # R220 刀13①：帧率优先寿命系数（旧值 1.5）
+const LIFETIME_MULT_FXPRI := 1.5               # 特效优先寿命系数（原值——注释留底回滚）
 
 var _volley_left: float = 0.0                  # TH_VOLLEY_STATE 弹幕态剩余 s（0 = 未激活）
 var _volley_cd_left: float = 0.0               # 弹幕态散热剩余 s
@@ -97,11 +100,16 @@ func muzzle_position() -> Vector2:
 func try_fire() -> bool:
 	# N=pellets 发 × 散射锥均匀分布 → ProjectilePool.acquire（软上限池侧拒绝）
 	# R187 编队：并排横向偏移（position 侧）+ 收束初速矢量；无编队键的变体走原锥形路径
+	# R220 刀7：真不变量 hoist 出 pellets 循环（muzzle/射程/穿透/面板快照/基础寿命/
+	# 元素候选池——原逐丸重付）；刀12：帧率优先配额闸（超配丸顺延 1-2 帧交错散开）。
 	if data == null or projectile_pool == null:
 		return false
 	_maybe_enter_volley()                         # TH_VOLLEY_STATE 发射驱动触发检查
 	_refresh_eternal_quota()                      # 永存弹配额刷新（断供判定先行）
-	var pellets := _volley_pellet_count()
+	var due := _quota_pending                   # 刀12：到期顺延丸并入本拍（优先通道放行；
+	_quota_pending = 0                          # 编队 offset 随新总数重排）
+	var pellets := _volley_pellet_count() + due
+	var allowed := _spawn_quota_allow(_volley_pellet_count(), due)   # 刀12 闸（特效优先恒全放）
 	var speed := _projectile_speed()   # AFF_PROJ_SPD 弹速池消费在 _projectile_speed 内（勿二次叠乘）
 	var size_mult := _proj_size_mult()                    # AFF_AREA 体积池（死卡接线）
 	var formation := _formation_enabled()
@@ -128,9 +136,25 @@ func try_fire() -> bool:
 	var corridor := _corridor_active()
 	var bank_armed := _bank_shot_armed()
 	var bounce_amp := _bounce_amp()
+	# ── R220 刀7 真不变量 hoist（原 :142/:150/:157/:166/:175 逐丸重付） ──
+	var muzzle := muzzle_position()
+	var range_left := _range()
+	var pierce_cnt := _pierce_count()
+	var panel_snap := build_panel_snapshot()
+	# 刀5：运行栈逐丸池借出（★勿 hoist——每丸独立栈实例是 E-13 逐弹独立触发冷却承重，
+	# 共享一栈会使弹 A 的词条冷却串到弹 B；池化开关开时池优先借出、关时=copy_runtime）
+	var is_boom := bool(data.ballistic.get("boomerang", false))
+	# R220 刀13①：寿命系数模式分支——帧率优先 1.15（分裂子代 dwell -23%）/ 特效优先
+	# 旧值 1.5（直弹不受影响——range 判死在前，仅分裂子代受影响；回滚=切回 1.5）
+	var life_mult := LIFETIME_MULT_FRAMEPRI if PerfGovernor.frame_priority() else LIFETIME_MULT_FXPRI
+	var base_life := 3.2 if is_boom else maxf(range_left / maxf(speed, 1.0), 0.1) * life_mult
+	# 刀7：元素候选池构建 hoist（循环内仅逐发 randi 掷取——多元素逐发随机语义保真）
+	var elems := _element_pool()
 	var dir := aim_dir
 	var fired := 0
 	for i in range(pellets):
+		if fired >= allowed:
+			break                             # 刀12：本拍放行数用尽——余丸已顺延记账（非丢弃）
 		var proj := projectile_pool.acquire() as ProjectileBase
 		if proj == null:
 			DebugStats.count(&"w1_spawn_dropped")   # 池满丢弃计数（AC-14.4 拒收率审计口）
@@ -139,7 +163,7 @@ func try_fire() -> bool:
 		var offset := 0.0
 		if formation and pellets > 1:
 			offset = gap * (float(i) - float(pellets - 1) * 0.5)
-		var spawn_pos := muzzle_position() + perp * offset
+		var spawn_pos := muzzle + perp * offset
 		var shot_dir := aim_dir
 		if formation and converge > 0.0 and absf(offset) > 0.01:
 			# 收束几何（55% 射程落线）：外偏弹初速指「瞄准线上 converge×射程 处焦点」
@@ -147,33 +171,32 @@ func try_fire() -> bool:
 			# converge_authored 弹让位（双通道叠加会在收束点过冲翻到镜像侧——
 			# ⑤ 上限阀 30s soak 的活弹构成按本几何标定，评审 R8 键名死路已修：
 			# lateral_offset 全量入弹，走廊镜像 / 非授权收束场景由弹侧通道执行）
-			var focal := muzzle_position() + aim_dir * (_range() * converge)
+			var focal := muzzle + aim_dir * (range_left * converge)
 			var to_focal := focal - spawn_pos
 			if to_focal.length_squared() > 1.0:
 				shot_dir = to_focal.normalized()
 		var angle := 0.0
 		if not formation_active or pellets <= 1:
 			angle = _spread_angle(i, pellets)   # R196 FIX-1：编队退化/非编队回落原锥形逐丸分布（单丸=锥内随机抖动）
-		var range_left := _range()
-		# G4 回旋刃：出程减速 + 回程返航由弹体自身接管——寿命走固定 3.2s 兜底
-		#（常规弹 range/speed×1.5 会在回程中途过期截断双程伤害）
-		var is_boom := bool(data.ballistic.get("boomerang", false))
 		proj.spawn({
 			"position": spawn_pos,
 			"velocity": shot_dir.rotated(angle) * speed,
-			"lifetime": 3.2 if is_boom else maxf(range_left / maxf(speed, 1.0), 0.1) * 1.5,
+			"lifetime": base_life,
 			"range": range_left,
-			"pierce": _pierce_count(),
+			"pierce": pierce_cnt,
 			"bounces": _bounce_budget(),
 			"boomerang": is_boom,
 			"hitbox_radius": data.hitbox_r * size_mult,
-			"element": _shot_element(),
+			"element": _element_pick(elems),
+			# R243 §6.3 四处接线口径补齐（homing/flying_sword/ground_axe 同款——弹侧
+			# _build_trait_ctx 填 tctx.host_elements；空池行为等价防回归）
+			"attach_elements": elems.duplicate(),
 			"attach_value": 0.0,
 			"generation": 0,
 			"weapon_uid": uid,
 			"weapon_ref": self,
-			"panel_snapshot": build_panel_snapshot(),
-			"trait_stack": trait_stack.copy_runtime() if trait_stack != null else null,
+			"panel_snapshot": panel_snap,
+			"trait_stack": trait_stack.acquire_runtime() if trait_stack != null else null,
 			"team": 0,
 			# ── R187 编队/跳弹扩展键（弹体侧共享通道消费；缺省中性值对其他变体零影响） ──
 			"lateral_offset": offset,            # 出膛横向偏移（回廊 offset 镜像基准）
@@ -281,7 +304,14 @@ func _projectile_speed() -> float:
 
 
 func _range() -> float:
-	return maxf(float(data.ballistic.get("range", 680.0)), 10.0)
+	# R243 §5.2 MEC_THROW_RANGE「回旋远掷」：range × (1+Σadd_boom_range)——回旋甩程
+	# 三段链消费首段（→ try_fire spawn "range" → ProjectileBase._boom_range 快照，地板 120）。
+	# 仿 _projectile_speed 的 add_spd 写法（:295-300 先例）；直弹武器无此池词条 → 乘 1.0
+	# 零影响。3 层满 380×1.54=585.2px，总飞行 ≈2.73s < base_life 3.2s（寿命天花板内）。
+	var mult := 0.0
+	if trait_stack != null:
+		mult = float(trait_stack.aggregate_panel().get("add_boom_range", 0.0))
+	return maxf(float(data.ballistic.get("range", 680.0)) * (1.0 + mult), 10.0)
 
 
 func _spread_deg() -> float:
@@ -301,7 +331,8 @@ func _spin_up_time() -> float:
 func _leveled_param(p_key: String, p_default: float) -> float:
 	# 逐级形态参数（形态段新增键 <key>_levels: Array[float]——AC-02.1 仅新增键；
 	# A3 §3.2/§3.3：加特林 spin_up/rof_hot 与霰弹 L5 锥角随等级变化）
-	var levels: Variant = data.ballistic.get(String(p_key) + "_levels", null)
+	# QA-heal r1：键串拼改 WeaponBase._leveled_key 静态键缓存（常量税——每步开火链触达）
+	var levels: Variant = data.ballistic.get(WeaponBase._leveled_key(p_key), null)
 	if levels is Array and level >= 1 and level <= (levels as Array).size():
 		return float((levels as Array)[level - 1])
 	return p_default
@@ -516,7 +547,13 @@ func _refresh_eternal_quota() -> void:
 		var pb := p as ProjectileBase
 		if pb != null and pb.weapon_uid == uid and pb.lifetime_left >= ETERNAL_LIFETIME_MARK:
 			live += 1
-	_eternal_quota_full = live >= ETERNAL_QUOTA
+	_eternal_quota_full = live >= eternal_quota()
+
+
+static func eternal_quota() -> int:
+	# R220 刀13③：永存配额模式读口（帧率优先 120 / 特效优先 240——const 不能条件化，
+	# 代码分支非 .tres，主控决策#5；旧值台账 240 见常量注释）
+	return ETERNAL_QUOTA_FRAMEPRI if PerfGovernor.frame_priority() else ETERNAL_QUOTA_FXPRI
 
 
 # ── 挂载表查询（同 id 聚合；先判有效再赋值） ───────────────────────

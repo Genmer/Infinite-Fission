@@ -17,6 +17,8 @@ const ADD_POOL_IDS: Array[StringName] = [
 	&"add_atk", &"add_rof", &"add_cdr", &"add_crit", &"add_critdmg",
 	&"add_spd", &"add_hp", &"add_skillcdr", &"add_pickup", &"add_size", &"add_pierce", &"add_pellets", &"add_xp", &"add_knock", &"add_gold",
 	&"add_range",   # R196 武器范围池（AFF_RANGE 广域印刻）：环绕轨道半径与挥砍范围 +18%/层（第 16 员，追加不重排）
+	&"add_block",   # R243 挡弹池（MEC_BULLET_PARRY 弹反刀意）：近战挡弹概率 +8%/层（第 17 员，追加不重排）
+	&"add_boom_range",   # R243 回旋甩程池（MEC_THROW_RANGE 回旋远掷）：甩程 +18%/层（第 18 员，追加不重排）
 ]
 # 独立乘区池 id 全集（§三.5 + A3 §4.3；vuln 为目标侧易伤区，A2 §1.8）
 const MULT_POOL_IDS: Array[StringName] = [
@@ -243,6 +245,15 @@ func validate_trait(t: TraitData) -> Array:
 	# effect_id 必填且 ∈ builtin 处理器注册表（AC-13.3 悬空 effect_id 剔除）
 	_err(out, &"effect_id", t.effect_id == &"" or not TECH_EFFECT_IDS.has(t.effect_id),
 		"effect_id 必填且 ∈ TECH_EFFECT_IDS（EF_STAT/EF_SIZE/EF_FRACTAL/EF_BOUNCE/EF_ELEMENTAL/EF_MECH/EF_CRIT_SHARD/EF_HIT_BURST + R187 六新 EF）")
+	# R262b L11：R187 六新 EF 无 TraitEffect 处理器（行为内联武器 threshold_traits）——
+	# 声明它们的词条必须 threshold_only（TH_* 全满足零行为变化）；否则未来任何可上架
+	# 词条声明六 EF 会过白名单→resolve 恒 null→can_trigger 恒 false=静默死卡。
+	# 启动期拦截把该后果提到加载报告。
+	if t.effect_id != &"" and TECH_EFFECT_IDS.has(t.effect_id):
+		var no_handler_ef := t.effect_id in [&"EF_CHOIR", &"EF_SWARM_NOVA", &"EF_VOLLEY",
+			&"EF_BANK", &"EF_DETONATION_ECHO", &"EF_RING_PRESSURE"]
+		_err(out, &"effect_id", no_handler_ef and not bool(t.params.get("threshold_only", false)),
+			"%s 无内置处理器（行为内联武器阈值链）——仅 threshold_only 词条可声明" % String(t.effect_id))
 	_err(out, &"stack_max", t.stack_max < 1, "stack_max ≥ 1")
 	if t.pool == GameConst.PoolClass.ADD:
 		_err(out, &"decay_delta", t.decay_delta <= 0.0 or t.decay_delta > MAX_DECAY_DELTA,
@@ -258,7 +269,7 @@ func validate_trait(t: TraitData) -> Array:
 		_err(out, &"condition.condition_id", not t.condition.has("condition_id"), "MULT 类 condition 缺 condition_id")
 		if t.condition.has("condition_id"):
 			var cid := int(t.condition["condition_id"])
-			_err(out, &"condition.condition_id", cid < 0 or cid > GameConst.ConditionId.NONE, "condition_id ∈ ConditionId 枚举（0~8）")
+			_err(out, &"condition.condition_id", cid < 0 or cid > GameConst.ConditionId.NONE, "condition_id ∈ ConditionId 枚举（0~NONE，R262b L16 文案对齐：已扩至 PLAYER_HP_ABOVE=9）")
 	return out
 
 
@@ -280,7 +291,7 @@ func validate_synergy(s: SynergyRuleData) -> Array:
 	var out: Array = []
 	_err(out, &"id", s.id == &"", "id 非空")
 	_err(out, &"pool_id", s.pool_id == &"" or not MULT_POOL_IDS.has(s.pool_id), "pool_id ∈ 乘区封闭枚举")
-	_err(out, &"condition_id", s.condition_id < 0 or s.condition_id > GameConst.ConditionId.NONE, "condition_id ∈ ConditionId 枚举（0~8）")
+	_err(out, &"condition_id", s.condition_id < 0 or s.condition_id > GameConst.ConditionId.NONE, "condition_id ∈ ConditionId 枚举（0~NONE，R262b L16 文案对齐：已扩至 PLAYER_HP_ABOVE=9）")
 	_err(out, &"contribution_expr", not CONTRIBUTION_EXPRS.has(s.contribution_expr),
 		"contribution_expr ∈ 白名单模板（禁运行时 Expression）：%s" % s.contribution_expr)
 	_err(out, &"cap_pool_p", s.cap_pool_p <= 0.0, "cap_pool_p > 0 必填（F-14）")
@@ -698,6 +709,29 @@ func _validate_melee_segment(seg: Dictionary, out: Array) -> void:
 	if seg.has("effective_blade_cap"):
 		var cap := int(seg["effective_blade_cap"])
 		_err(out, &"melee.effective_blade_cap", cap < 1 or cap > 16, "effective_blade_cap ∈ [1, 16]")
+	# R243 类别键域（§1.5，全可选——在册即守域；旧数据缺省回落零告警）：
+	# weapon_class ∈ {melee, talisman} / mode ∈ {orbit, slash, cleave, swords, axe} /
+	# block_chance ∈ [0,1] / shock_radius ∈ (0,128]（W12 落地震荡半径，对齐 detonate_radius 同域）
+	if seg.has("weapon_class"):
+		_err(out, &"melee.weapon_class", not ["melee", "talisman"].has(String(seg["weapon_class"])),
+			"weapon_class ∈ {melee, talisman}（当前 %s）" % String(seg["weapon_class"]))
+	if seg.has("mode"):
+		_err(out, &"melee.mode", not ["orbit", "slash", "cleave", "swords", "axe"].has(String(seg["mode"])),
+			"mode ∈ {orbit, slash, cleave, swords, axe}（当前 %s）" % String(seg["mode"]))
+	if seg.has("block_chance"):
+		var blk := float(seg["block_chance"])
+		_err(out, &"melee.block_chance", blk < 0.0 or blk > 1.0, "block_chance ∈ [0, 1]（当前 %.3f）" % blk)
+	if seg.has("shock_radius"):
+		var shock := float(seg["shock_radius"])
+		_err(out, &"melee.shock_radius", shock <= 0.0 or shock > 128.0, "shock_radius ∈ (0, 128]（当前 %.3f）" % shock)
+	_validate_level_array_f(seg, "shock_radius_levels", 0.0, 128.0, false, out, &"melee.shock_radius")
+	# R243 质变形态键（§7，全可选）：transcend 若在册必须是 Dictionary 且 name 非空
+	if seg.has("transcend"):
+		var tc: Variant = seg["transcend"]
+		_err(out, &"melee.transcend", not (tc is Dictionary), "transcend 须为 Dictionary（当前 %s）" % type_string(typeof(tc)))
+		if tc is Dictionary:
+			_err(out, &"melee.transcend.name", String((tc as Dictionary).get("name", "")).is_empty(),
+				"transcend.name 非空（质变形态名）")
 
 
 func _validate_level_array_f(seg: Dictionary, p_key: String, p_min: float, p_max: float,

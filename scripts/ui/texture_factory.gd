@@ -6,6 +6,11 @@ class_name TextureFactory
 extends RefCounted
 
 static var _cache: Dictionary = {}            # 键 -> ImageTexture（惰性生成）
+# 二cv#8 帧率：敌基图 CPU 旁缓存（键同 _cache 的 enemy_* 基图键——新增旁表，不改共享
+# 键空间语义）。烤图期把 create_from_image 前的 Image 留一份引用，enemy_tex_flash 取
+# 色免 GPU 回读（get_image()=GL→CPU 回读是战斗帧内 5-40ms 怪物帧大头）；代价
+# ~16-37KB/键×约百键，可忽略。仅敌基图入表（其余贴图无闪白变体消费方）。
+static var _img_cache: Dictionary = {}        # enemy 基图键 -> Image（同源旁表）
 
 
 # ── 实体贴图 ──────────────────────────────────────────────────────
@@ -107,7 +112,67 @@ static func enemy_tex(p_kind: StringName, p_angry: bool = false) -> ImageTexture
 	var key := "enemy_%s_%s" % [String(p_kind), str(p_angry)]
 	return _cached(key, func() -> ImageTexture:
 		var canvas := 96 if String(p_kind).begins_with("boss") else 64
-		return _render(canvas, canvas, _shade(_enemy_layers(p_kind, p_angry))))
+		# 二cv#8 帧率：改走 _render_keep——烤图 Image 留旁缓存，闪白变体免 GPU 回读
+		return _render_keep(canvas, canvas, _shade(_enemy_layers(p_kind, p_angry)), key))
+
+
+static func enemy_tex_flash(p_kind: StringName, p_angry: bool, p_strong: bool) -> ImageTexture:
+	# R237 闪白换桶刀：敌贴图白变体烘焙缓存（满载档受击闪白贴图化）。
+	# 两档强度对齐 R217 刀A 量化（敌侧 p_amount>=0.5 强/弱分档）：
+	#   p_strong=true  → 纯白剪影（RGB 全通道白 / alpha 保留——经典 hit-flash 观感）
+	#   p_strong=false → 半白混合（与原色 0.5 混白）
+	# 基图取 enemy_tex 同 kind/angry 已缓存贴图像素级重烤（形状逐位一致，不重跑 SDF）；
+	# 键=kind+angry+强度档，运行时烘焙进 _cache（无新文件、不进 export include）。
+	# 两变体=至多 2 个闪白桶=至多 2 批（bounded——替代满载闪白窗内 modulate≠WHITE
+	# 逐敌同桶交错断批，R237 渲染轴归因 F1 主源刀）。
+	var key := "enemy_%s_%s_flash_%s" % [String(p_kind), str(p_angry), "s" if p_strong else "w"]
+	return _cached(key, func() -> ImageTexture:
+		# 二cv#8 帧率：优先读烤图期 CPU 旁缓存（像素与上传源逐位同源，零 GPU 回读）；
+		# 旁缓存缺席（异常序兜底）回落旧 get_image() 路径保语义。像素混白算式零触碰
+		#（r237_flashtex ⑥a-c 逐像素断言口径不变）。
+		var base: Image = _img_cache.get("enemy_%s_%s" % [String(p_kind), str(p_angry)])
+		if base == null:
+			base = enemy_tex(p_kind, p_angry).get_image()
+		var w: int = base.get_width()
+		var h: int = base.get_height()
+		var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+		for y in range(h):
+			for x in range(w):
+				var c: Color = base.get_pixel(x, y)
+				if c.a <= 0.0005:
+					continue                     # 全透明像素保持零（RGB 无意义不写）
+				if p_strong:
+					c.r = 1.0
+					c.g = 1.0
+					c.b = 1.0
+				else:
+					c.r = lerpf(c.r, 1.0, 0.5)
+					c.g = lerpf(c.g, 1.0, 0.5)
+					c.b = lerpf(c.b, 1.0, 0.5)
+				img.set_pixel(x, y, c)
+		return ImageTexture.create_from_image(img))
+
+
+static func prewarm_shared() -> int:
+	# R215 刀C：共享域 boot 预热（敌/弹/XP 星/底影/微光珠——敌分型走 game_loop
+	# _boot_prewarm_textures 的真 spawn 路径，本函数只管稳定参数域）。返回新建数。
+	var built := _cache.size()
+	var fills: Array = [PopPalette.PLAYER, PopPalette.ENEMY, PopPalette.GOLD]
+	for c in PopPalette.ELEMENT_COLORS.values():
+		if not fills.has(c):
+			fills.append(c)
+	for f in fills:
+		bead(f, 64)                            # 弹珠 TEX_SIZE 口径（projectile_base）
+	bead(PopPalette.GOLD, 16, false)           # 精英微光珠（enemy._ensure_sparkles）
+	star(44, Color.WHITE)                      # XP 星（pickup R211 白底口径）
+	shadow_ellipse()                           # boss/精英底影
+	# R267 视觉刀 §2.5-5：水晶刃缺省色域预烤（三弹体 × 七元素 × 档2 = 21 键，
+	# CrystalBladeFactory 自持缓存——不进 _cache，返回值口径不变）；首击元素弹体
+	# 零冷 miss（§2.6 微基准计数断言的烤源）。〔实施注：prewarm_shared 在产品侧
+	# 为测试/诊断口（game_loop 拆粒建队另走）——产品首击 miss 兜底见工厂缓存单键
+	# ≤10ms 预算，此处登记保整域口语义完整〕
+	CrystalBladeFactory.prewarm_default_domain()
+	return _cache.size() - built
 
 
 static func _enemy_layers(p_kind: StringName, p_angry: bool) -> Array:
@@ -1003,7 +1068,7 @@ static func soft_dot(p_size: int = 64) -> ImageTexture:
 
 
 static func confetti_piece(p_kind: int) -> ImageTexture:
-	# 彩纸屑（0=小矩形 1=圆点；白色本体，运行期 modulate 上多色）。
+	# 彩纸屑（0=小矩形 1=圆点；单色消费方——当前唯一消费 elemental_fx_layer 电花碎屑固定单色且 α 已过 _qa；多色使用须先过 R229 四分档量化，R262b L7 防断批陷阱）。
 	# 圆点用细描边（bead 厚描边在小画布上会反超本体——多色糖粒观感优先）
 	var key := "confetti_%d" % p_kind
 	return _cached(key, func() -> ImageTexture:
@@ -1018,7 +1083,8 @@ static func confetti_piece(p_kind: int) -> ImageTexture:
 
 static func type_icon(p_kind: int, p_pool: int) -> ImageTexture:
 	# 选卡类型圆章：白圆章 + 藏青描边，内嵌类别形（ADD 菱 / MULT 三角 / LOCAL 圆角方 /
-	# MECH 六边 / ELEM 圆环 / MASTERY 金星 / RELIC 葡萄钻 / FALLBACK 灰菱 / WEAPON 小火箭）
+	# MECH 六边 / ELEM 圆环 / MASTERY 金星 / RELIC 葡萄钻 / FALLBACK 灰菱 / WEAPON 小火箭 /
+	# SUBLIME 红环菱——R246 升华卡红品质独占）
 	var key := "type_icon_%d_%d" % [p_kind, p_pool]
 	return _cached(key, func() -> ImageTexture:
 		var layers: Array = [
@@ -1039,6 +1105,11 @@ static func type_icon(p_kind: int, p_pool: int) -> ImageTexture:
 				layers.append({"sd": _poly_sd(PackedVector2Array([
 					Vector2(0.0, -14.0), Vector2(8.0, 8.0), Vector2(0.0, 3.0), Vector2(-8.0, 8.0),
 				])), "fill": PopPalette.PLAYER, "ow": 0.0})
+			6:                                     # R246 SUBLIME：升华卡红圆章——红环 + 红菱
+				#（红环菱形；勿重蹈 R185 kind5 无分支落灰菱形前科——kind 6 与
+				 # CardKind.SUBLIME 对位，cards 泳道枚举第 7 位）
+				layers.append({"sd": _ring_at(18.0, 4.0), "fill": PopPalette.RARITY_SUBLIME, "ow": 0.0})
+				layers.append({"sd": _poly_sd(_regular_pts(4, 11.0, 0.0)), "fill": PopPalette.RARITY_SUBLIME, "ow": 0.0})
 			_: layers.append({"sd": _poly_sd(_regular_pts(4, 13.5)), "fill": PopPalette.INK_SOFT, "ow": 0.0})  # FALLBACK
 		return _render(64, 64, _shade(layers)))
 
@@ -1071,19 +1142,21 @@ static func flame_bit() -> ImageTexture:
 		])))
 
 
-static func tracer_tex() -> ImageTexture:
+static func tracer_tex(p_body: Color = PopPalette.INK) -> ImageTexture:
 	# 加特林曳光弹条（R19 用户反馈「手枪和加特林表现没啥不一样」）：横向曳光——
 	# 画布 56×12，朝右（弹体按速度方向旋转，高射速下成线束）。
 	# R70 深色重做（用户反馈「加黑一点，看的很不清楚」）：R69 版白亮芯曳光在晴空
 	# 亮底美术下对比不足——改藏青弹体（中轴微亮塑形）+ 头部白热段（方向读感）+
-	# 尾部渐隐；深色在亮底/暗底两头都可读
-	var key := "tracer_tex"
+	# 尾部渐隐；深色在亮底/暗底两头都可读。
+	# R208（用户反馈「加特林选了元素没变对应色」）：p_body 弹体基色参数化（缺省
+	# 藏青不变）——元素附魔时传元素表色（缓存键带色，同色零重绘）。
+	var key := "tracer_tex_%s" % p_body.to_html()
 	return _cached(key, func() -> ImageTexture:
 		var w := 56
 		var h := 12
 		var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 		var mid := float(h - 1) * 0.5
-		var body := PopPalette.INK                       # 藏青弹体（#22254a）
+		var body := p_body                         # 弹体基色（元素附魔=元素表色）
 		for x in range(w):
 			var t := float(x) / float(w - 1)             # 0 头 → 1 尾（渐隐）
 			for y in range(h):
@@ -1097,17 +1170,28 @@ static func tracer_tex() -> ImageTexture:
 		return ImageTexture.create_from_image(img))
 
 
-static func boomerang_tex() -> ImageTexture:
+static func boomerang_tex(p_fill: Color = PopPalette.GOLD, p_quality: int = -1) -> ImageTexture:
 	# G4 回旋刃（W10）弹体：金色新月刃——外圆挖偏心内圆的月牙，外缘白热刃口、
 	# 藏青描边（晴空亮底可读）；tick 高速自旋下成金色旋轮
-	var key := "boomerang_tex"
+	# R241 ②（用户反馈「回旋刃颜色（元素染色）有问题」）：p_fill 刃体基色参数化
+	# （R208 加特林曳光同款）——元素附魔时传元素表色（缓存键带色，同色零重绘），
+	# KIN 缺省=金色原观感不变。
+	# R267 视觉刀 §2.4：元素染色 → 水晶月牙（CrystalBladeFactory 烘焙形态——对应
+	# 元素透明刀水晶质感，反馈 B；缓存键含 quality=低特效降级接 §2.5-4）；KIN 金
+	# 缺省走原配方逐位不动（§2.2 豁免——projectile_base KIN 传 GOLD 恒落原路径，
+	# 旧键 "boomerang_tex_%s" 结构保持）。
+	if not CrystalBladeFactory.is_identity_fill(p_fill):
+		var q := CrystalBladeFactory.live_fx_quality() if p_quality < 0 \
+			else clampi(p_quality, 0, 2)
+		return CrystalBladeFactory.crystal_tex(&"boomerang", p_fill, false, q)
+	var key := "boomerang_tex_%s" % p_fill.to_html()
 	return _cached(key, func() -> ImageTexture:
 		var w := 44
 		var h := 44
 		var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 		var outer_c := Vector2(18.0, 22.0)          # 外圆
 		var inner_c := Vector2(13.0, 22.0)          # 偏心内圆（右挖月牙）
-		var gold := PopPalette.GOLD
+		var fill := p_fill
 		for x in range(w):
 			for y in range(h):
 				var p := Vector2(float(x), float(y))
@@ -1115,7 +1199,7 @@ static func boomerang_tex() -> ImageTexture:
 					-(p.distance_to(inner_c) - 13.5))
 				if sd > 0.0:
 					continue                          # 画布外
-				var col := gold.lerp(Color(0.72, 0.5, 0.1), clampf(-sd / 5.0, 0.0, 1.0))
+				var col := fill.lerp(fill.darkened(0.45), clampf(-sd / 5.0, 0.0, 1.0))
 				if sd > -1.3:
 					col = PopPalette.INK.lerp(col, 0.25)   # 藏青描边
 				elif sd < -10.5:
@@ -1124,12 +1208,16 @@ static func boomerang_tex() -> ImageTexture:
 		return ImageTexture.create_from_image(img))
 
 
-static func missile_tex() -> ImageTexture:
+static func missile_tex(p_fill: Color = Color(0.78, 0.84, 0.95)) -> ImageTexture:
 	# 微型导弹/集束火箭弹体（R13 用户反馈「给个导弹建模」）：灰蓝弹体 + 橙色弹头 +
 	# 尾鳍 + 底部尾焰（画布 22×30，朝上——弹体飞行时按速度方向旋转）
-	var key := "missile_tex"
+	# 簇2 c2-①（R211 收口报告 :128 遗留 #3 收口）：弹体基色参数化（R208 tracer_tex/
+	# 二cm boomerang_tex 同款）——元素附魔传元素表色（缓存键带色，同色零重绘）；
+	# 缺省=原浅灰蓝保 KIN 原观感（不可用 PopPalette.INK 深藏青，否则全 KIN 导弹骤变深色）。
+	# 旧 "missile_tex" 无色键退役（无预烤消费方，首战惰性重烤一次，量级同既有首烤）。
+	var key := "missile_tex_%s" % p_fill.to_html()
 	return _cached(key, func() -> ImageTexture:
-		var body_col := Color(0.78, 0.84, 0.95)
+		var body_col := p_fill
 		var nose_col := Color(1.0, 0.6, 0.25)
 		var fin_col := Color(0.5, 0.58, 0.75)
 		var body := PackedVector2Array([
@@ -1228,6 +1316,12 @@ static func weapon_icon(p_id: StringName) -> ImageTexture:
 		var blue := PopPalette.PLAYER
 		var deep := blue.lerp(PopPalette.OUTLINE, 0.32)
 		var white := Color(1.0, 1.0, 1.0, 0.9)
+		# R243 三新武器图标委托（§7.1/§8 裁定：委托各武器脚本 static func
+		# weapon_icon_tex——置于 match 之前：脚本未交付 → null → 自然落 `_:` 四角星
+		# 占位臂，不崩；非新武器 id 本函数恒 null 零波及）
+		var delegated := _delegate_weapon_icon(p_id, false)
+		if delegated != null:
+			return delegated
 		var layers: Array = []
 		match String(p_id):
 			"W1_pistol":                      # 手枪：L 形枪身 + 握把
@@ -1351,27 +1445,104 @@ static func weapon_icon(p_id: StringName) -> ImageTexture:
 						Vector2(18.8, -1.7), Vector2(22.6, 1.0), Vector2(18.8, 3.7),
 					])), "fill": hot, "ow": 2.0},
 				]
-			"W8_orbit_field":                 # 环绕力场：力场环 + 双卫星珠
+			"W8_orbit_field":
+				# R243 图标重绘（§2.4）：环绕力场 → 近战·天狼刀——蓝狼头弯刀（刀身沿 +X=
+				# 化身朝向口径，W8 非刃白名单不走 +90° 补偿）：蓝刃身 + 藏青狼首护手
+				# （双耳剪影）+ 白獠牙高光；缓存键不变
+				var wolf_blade := PackedVector2Array([
+					Vector2(21.0, -0.5), Vector2(12.0, -5.0), Vector2(2.0, -6.5),
+					Vector2(-7.5, -5.5), Vector2(-7.5, -1.5), Vector2(4.0, -2.0), Vector2(14.5, 1.0),
+				])
+				var wolf_head := PackedVector2Array([
+					Vector2(-6.5, -1.0), Vector2(-10.0, -4.5), Vector2(-12.0, -9.0),
+					Vector2(-14.0, -4.0), Vector2(-16.5, -7.5), Vector2(-17.5, -1.5),
+					Vector2(-14.5, 3.5), Vector2(-10.0, 2.5),
+				])
 				layers = [
-					{"sd": _ring_at(16.0, 4.2), "fill": blue, "ow": 0.0},
-					{"sd": _circle_at(Vector2(0.0, -16.0), 4.6), "fill": deep, "ow": 2.8},
-					{"sd": _circle_at(Vector2(13.9, 8.0), 4.6), "fill": deep, "ow": 2.8},
-					{"sd": _circle_at(Vector2(0.0, 0.0), 3.0), "fill": white, "ow": 0.0},
+					{"sd": _box_at(Vector2(-21.5, 0.0), Vector2(3.2, 2.0), 1.6), "fill": deep, "ow": 2.4},
+					{"sd": _poly_sd(wolf_head), "fill": deep, "ow": 2.6},
+					{"sd": _poly_sd(wolf_blade), "fill": blue, "ow": 2.6},
+					# 白獠牙（狼首下颌两枚小尖牙）
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(-8.2, 1.6), Vector2(-9.6, 4.6), Vector2(-10.4, 1.8),
+					])), "fill": white, "ow": 0.0},
+					# 刃口白高光（上缘细条）
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(17.5, -1.2), Vector2(10.0, -4.4), Vector2(2.0, -5.6),
+						Vector2(-5.0, -4.6), Vector2(-5.0, -3.4), Vector2(2.5, -4.4), Vector2(11.0, -3.0),
+					])), "fill": Color(1.0, 1.0, 1.0, 0.75), "ow": 0.0},
 				]
-			"W9_arc_slash":                  # 弧斩化身（R59 用户反馈「悬浮的挥砍像扇子」）：扇形弧刀改直刀——竖直长刃 + 血槽线 + 十字护手 + 缠绳柄
+			"W9_arc_slash":
+				# R243 图标重绘（§2.1）：周期挥斩 → 法器·旋风刀——青绿弯月弯刀
+				#（深弯月弧刃 _poly_sd + 白刃口高光；画布朝上 -Y 与刃白名单 +90° 补偿同式；
+				# 缓存键不变）
+				var teal := Color(0.35, 0.92, 0.55)
+				var teal_deep := teal.lerp(PopPalette.OUTLINE, 0.35)
+				var saber_moon := PackedVector2Array([
+					Vector2(5.5, -20.0), Vector2(11.5, -12.0), Vector2(13.0, -3.0),
+					Vector2(11.0, 5.0), Vector2(6.5, 11.5), Vector2(3.0, 8.5),
+					Vector2(5.2, 1.0), Vector2(5.8, -8.0), Vector2(2.8, -14.5),
+				])
+				layers = [
+					{"sd": _poly_sd(saber_moon), "fill": teal, "ow": 2.6},
+					# 白刃口（内缘细弧）
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(4.6, -15.0), Vector2(6.6, -7.5), Vector2(6.2, 2.0),
+						Vector2(4.8, 1.4), Vector2(5.2, -7.5), Vector2(3.8, -13.5),
+					])), "fill": Color(1.0, 1.0, 1.0, 0.85), "ow": 0.0},
+					{"sd": _box_at(Vector2(1.0, 12.5), Vector2(6.5, 1.7), 1.2), "fill": teal_deep, "ow": 2.4},
+					{"sd": _box_at(Vector2(1.0, 17.5), Vector2(1.7, 5.0), 1.2), "fill": teal_deep, "ow": 2.4},
+				]
+			"W11_spirit_sword":
+				# R243 占位骨架（w2 交付 weapon_icon_tex 后经委托臂自动接管——委托在
+				# match 之前，本臂仅脚本未交付期兜底）：银蓝竖剑剪影（画布朝上 -Y）
+				var silver := blue.lerp(Color.WHITE, 0.55)
 				layers = [
 					{"sd": _poly_sd(PackedVector2Array([
-						Vector2(2.0, -22.0), Vector2(5.0, -18.0), Vector2(4.5, 6.0), Vector2(-0.5, 6.0), Vector2(-1.0, -18.0),
-					])), "fill": blue, "ow": 2.6},
+						Vector2(0.0, -22.0), Vector2(3.5, -14.0), Vector2(-3.5, -14.0),
+					])), "fill": blue, "ow": 2.4},
+					{"sd": _box_at(Vector2(0.0, -4.5), Vector2(2.0, 9.5), 1.4), "fill": silver, "ow": 2.4},
+					{"sd": _box_at(Vector2(0.0, 5.5), Vector2(6.5, 1.8), 1.2), "fill": deep, "ow": 2.2},
+					{"sd": _box_at(Vector2(0.0, 11.5), Vector2(1.6, 4.8), 1.2), "fill": deep, "ow": 2.2},
+					{"sd": _circle_at(Vector2(0.0, 17.5), 2.0), "fill": white, "ow": 0.0},
+				]
+			"W12_ground_axe":
+				# R243 占位骨架（同上——w2 委托接管）：掷斧剪影（竖柄 + 顶部弧刃，岩金）
+				var axe_steel := blue.lerp(PopPalette.XP, 0.35)
+				layers = [
+					{"sd": _box_at(Vector2(0.0, 4.0), Vector2(1.8, 13.0), 1.2), "fill": deep, "ow": 2.4},
 					{"sd": _poly_sd(PackedVector2Array([
-						Vector2(2.0, -22.0), Vector2(3.0, -14.0), Vector2(1.2, 2.0), Vector2(0.8, -14.0),
-					])), "fill": Color(1.0, 1.0, 1.0, 0.85), "ow": 0.0},
-					{"sd": _box_at(Vector2(0.75, 8.0), Vector2(7.0, 1.8), 1.2), "fill": deep, "ow": 2.4},
-					{"sd": _box_at(Vector2(0.75, 13.5), Vector2(1.8, 6.0), 1.2), "fill": deep, "ow": 2.4},
+						Vector2(1.0, -18.0), Vector2(14.0, -14.0), Vector2(16.0, -5.0),
+						Vector2(9.0, -2.5), Vector2(1.5, -7.0),
+					])), "fill": axe_steel, "ow": 2.6},
+					{"sd": _circle_at(Vector2(12.5, -9.0), 1.8), "fill": white, "ow": 0.0},
+					{"sd": _circle_at(Vector2(0.0, -18.5), 2.0), "fill": PopPalette.XP, "ow": 2.2},
+				]
+			"W13_great_sword":
+				# R243 占位骨架（同上——w2 委托接管）：黑金巨剑剪影（宽刃 + 金刃口 + 十字护手）
+				var dark_steel := Color(0.16, 0.15, 0.2)
+				var gold_edge := Color(0.95, 0.78, 0.35)
+				layers = [
+					{"sd": _poly_sd(PackedVector2Array([
+						Vector2(0.0, -22.0), Vector2(5.5, -16.0), Vector2(-5.5, -16.0),
+					])), "fill": dark_steel, "ow": 2.6},
+					{"sd": _box_at(Vector2(0.0, -5.5), Vector2(4.2, 10.5), 1.6), "fill": dark_steel, "ow": 2.6},
+					{"sd": _box_at(Vector2(0.0, -5.5), Vector2(1.1, 10.0), 0.8), "fill": gold_edge, "ow": 0.0},
+					{"sd": _box_at(Vector2(0.0, 3.8), Vector2(8.5, 1.9), 1.2), "fill": gold_edge, "ow": 2.2},
+					{"sd": _box_at(Vector2(0.0, 10.5), Vector2(1.7, 5.5), 1.2), "fill": deep, "ow": 2.2},
 				]
 			"W10_boomerang":                 # G4 回旋刃：金色新月刃 + 外圈旋转轨迹环 + 刃口白高光
 				var gold_i := PopPalette.GOLD
 				layers = [
+					# R267 视觉刀：水晶外壳层（金月牙同形外扩半透——c′ 防混搭特征层；
+					# 经本 match 臂换装非 boomerang_tex 复用——§2.4〔v3〕钉死路径）
+					{"sd": _poly_sd(CrystalBladeFactory.expand_poly(PackedVector2Array([
+						Vector2(0.4, -12.6), Vector2(5.4, -10.0), Vector2(8.8, -5.5), Vector2(10.0, 0.0),
+						Vector2(8.8, 5.5), Vector2(5.4, 10.0), Vector2(0.4, 12.6),
+						Vector2(-3.7, 10.6), Vector2(0.6, 8.4), Vector2(3.5, 4.7), Vector2(4.5, 0.0),
+						Vector2(3.5, -4.7), Vector2(0.6, -8.4), Vector2(-3.7, -10.6),
+					]), CrystalBladeFactory.ICON_SHELL_EXPAND)),
+						"fill": CrystalBladeFactory.icon_shell_color(gold_i), "ow": 0.0},
 					{"sd": _ring_at(21.0, 1.8), "fill": Color(gold_i.r, gold_i.g, gold_i.b, 0.4), "ow": 0.0},
 					{"sd": _poly_sd(PackedVector2Array([
 						Vector2(0.4, -12.6), Vector2(5.4, -10.0), Vector2(8.8, -5.5), Vector2(10.0, 0.0),
@@ -1381,6 +1552,7 @@ static func weapon_icon(p_id: StringName) -> ImageTexture:
 					])), "fill": gold_i, "ow": 2.8},
 					{"sd": _circle_at(Vector2(9.0, -8.5), 2.2), "fill": white, "ow": 0.0},
 				]
+				CrystalBladeFactory.note_icon_built(&"W10_boomerang")   # R267 c′ 机制标记
 			_:                                # 兜底：四角星
 				layers = [
 					{"sd": _poly_sd(PackedVector2Array([
@@ -1392,6 +1564,80 @@ static func weapon_icon(p_id: StringName) -> ImageTexture:
 		return _render(56, 56, _shade(layers)))
 
 
+static func weapon_icon_t2(p_id: StringName) -> ImageTexture:
+	# R243 质变变体入口（§7.1 缓存键机制 <id>_t2）：委托臂同式（p_transcended=true 传各
+	# 武器脚本 static func）；W8/W9/W11/W12/W13 五武器均已注册委托（W8/W9 为 R243 评审
+	# 修复批补登——质变化身图标此前恒回落基图）。未委托成功的 id 回落基图——缓存键已
+	# 分立，后续波次只补本 builder 对应 case 即换质变贴图，消费侧
+	#（weapon_orbit_avatars 按 transcended 选键）零改动。
+	var key := "weapon_icon_%s_t2" % String(p_id)
+	return _cached(key, func() -> ImageTexture:
+		var delegated := _delegate_weapon_icon(p_id, true)
+		if delegated != null:
+			return delegated
+		return weapon_icon(p_id))
+
+
+# R252D P4：委托臂双缓存（第 3 轮复核中采纳的升级——轮 2 原稿只缓存扫描段，但扫描后
+# script.call 仍重生成程序化贴图数十 ms，且 _cached 只兜 weapon_icon/_t2 两个包装键、
+# 直调口完全绕开）。①_delegate_has_tex：script path → 是否有 weapon_icon_tex 静态方法
+#（消每次 load+get_script_method_list 扫描段）；②_delegate_tex："<id>|<transcended>" →
+# 成品 ImageTexture（含 null 值——未委托 id/委托返非贴图也入缓存，防反复探测）；
+# 直调与包装口（weapon_icon_t2 经 _cached）双路径均命中成品缓存，第二次调用 ≤1ms。
+# 跨局贴图不失效（程序化贴图确定性）。
+static var _delegate_has_tex: Dictionary = {}
+static var _delegate_tex: Dictionary = {}
+
+
+static func _delegate_weapon_icon(p_id: StringName, p_transcended: bool) -> ImageTexture:
+	# R243 委托臂：load 守卫调各武器脚本 static func weapon_icon_tex(p_transcended)。
+	# 脚本未交付（文件不存在 / 无该静态方法 / 返回非贴图）→ null（调用方回落占位/基图，
+	# 不崩）。W13 无独立脚本（cleave 分支在 OrbitWeapon 内——设计 §1.3 行为载体表）→
+	# 委托 orbit_weapon.gd 的同名静态口。
+	# R243 评审修复：has_static_method 在 Godot 4.3 GDScript 不存在（Invalid call 运行时
+	# 错 → 本函数恒中止返 null → W11/W12/W13 图标恒落占位骨架、_t2 恒=基图）。改扫
+	# get_script_method_list()（探针实证该 API 列出 static func；Object.has_method 只查
+	# 实例方法面，对 GDScript 资源不适用）。
+	# R252D P4-②：入口先查成品缓存（含 null），命中直返——修前基线直调热调 25.5ms
+	#（程序化贴图重生成），M3「直调第二次 ≤1ms」由本缓存达成。
+	var cache_key := "%s|%s" % [String(p_id), p_transcended]
+	if _delegate_tex.has(cache_key):
+		var cached: Variant = _delegate_tex[cache_key]
+		return cached as ImageTexture
+	var paths := {
+		"W8_orbit_field": "res://scripts/combat/weapon/melee/orbit_field.gd",
+		"W9_arc_slash": "res://scripts/combat/weapon/melee/arc_slash.gd",
+		"W11_spirit_sword": "res://scripts/combat/weapon/melee/flying_sword_weapon.gd",
+		"W12_ground_axe": "res://scripts/combat/weapon/melee/ground_axe_weapon.gd",
+		"W13_great_sword": "res://scripts/combat/weapon/melee/orbit_weapon.gd",
+	}
+	var path: String = paths.get(String(p_id), "")
+	if path == "" or not ResourceLoader.exists(path):
+		_delegate_tex[cache_key] = null
+		return null
+	var script: GDScript = load(path)
+	if script == null:
+		_delegate_tex[cache_key] = null
+		return null
+	var has_tex := false
+	# R252D P4-①：扫描段按 path 缓存（get_script_method_list 全表扫不便宜）
+	if _delegate_has_tex.has(path):
+		has_tex = bool(_delegate_has_tex[path])
+	else:
+		for m in script.get_script_method_list():
+			if m is Dictionary and String(m.get("name", "")) == "weapon_icon_tex":
+				has_tex = true
+				break
+		_delegate_has_tex[path] = has_tex
+	if not has_tex:
+		_delegate_tex[cache_key] = null
+		return null
+	var tex: Variant = script.call("weapon_icon_tex", p_transcended)
+	var result := tex as ImageTexture
+	_delegate_tex[cache_key] = result        # 含 null（委托返非贴图同入缓存防重探测）
+	return result
+
+
 static func skill_icon(p_id: StringName) -> ImageTexture:
 	# 角色技能图标（HUD 技能键 + 角色选人卡，2026-08-31 用户反馈「技能好歹画个对应的
 	# 图标」）：10 角色各一枚贴纸风程序化图形，64px 画布——剪影 + 主题色承载辨识度
@@ -1400,6 +1646,9 @@ static func skill_icon(p_id: StringName) -> ImageTexture:
 	# R198（二aw-5）：fission/echo 专属两 case 补齐——此前两者落 `_:` 通用星；
 	# `_:` 默认分支保留（防未来新角色裸奔）。fission 无技能（no_skill 契约），其图标
 	# 仅消费于选人卡 skill_ico；echo 图标 HUD 技能键自动生效（同函数同缓存键）。
+	# R246：medic/vortex/reaper 三新角色（_channels.md R247 渠道扩充）逐角色补齐
+	#（照二aw-5 口径——医疗十字 / 漩涡奇点 / 镰刃），主题色随角色视觉锚
+	#（medic 白绿 / vortex 深紫蓝 / reaper 暗红）。
 	var key := "skill_icon_%s" % String(p_id)
 	return _cached(key, func() -> ImageTexture:
 		var blue := PopPalette.PLAYER
@@ -1518,6 +1767,46 @@ static func skill_icon(p_id: StringName) -> ImageTexture:
 					{"sd": _poly_sd(gem_r), "fill": echo_deep, "ow": 3.0},
 					{"sd": _circle_at(Vector2.ZERO, 2.4), "fill": white, "ow": 0.0},
 				]
+			"medic":                          # R246 战地医师·苏·应急修复：医疗十字（白绿）
+			                                  # ——单笔十字多边形（双条叠加描边会切穿交点）
+				var medic_col := PopPalette.SUCCESS.lerp(Color.WHITE, 0.18)
+				var cross_pts := PackedVector2Array([
+					Vector2(-7.0, -24.0), Vector2(7.0, -24.0), Vector2(7.0, -7.0),
+					Vector2(24.0, -7.0), Vector2(24.0, 7.0), Vector2(7.0, 7.0),
+					Vector2(7.0, 24.0), Vector2(-7.0, 24.0), Vector2(-7.0, 7.0),
+					Vector2(-24.0, 7.0), Vector2(-24.0, -7.0), Vector2(-7.0, -7.0),
+				])
+				layers = [
+					{"sd": _poly_sd(cross_pts), "fill": medic_col, "ow": 3.4},
+					{"sd": _circle_at(Vector2(-7.0, -13.0), 2.4), "fill": white, "ow": 0.0},
+				]
+			"vortex":                        # R246 坍缩者·汐·奇点坍缩：外环 + 三向内卷涡臂
+			                                  # + 深色奇点核（深紫蓝）——「牵引聚拢」读感
+				var vt_core := PopPalette.SHOCK.lerp(PopPalette.OUTLINE, 0.3)
+				layers = [
+					{"sd": _ring_at(21.0, 2.6), "fill": PopPalette.SHOCK.lerp(Color.WHITE, 0.3), "ow": 0.0},
+				]
+				for i in range(3):
+					var ang := -PI * 0.5 + TAU * float(i) / 3.0
+					var mid := Vector2(cos(ang), sin(ang)) * 13.0
+					layers.append({"sd": _box_rot_at(mid, Vector2(9.0, 3.2), 1.5,
+						ang + PI * 0.38),
+						"fill": PopPalette.SHOCK.lerp(Color.WHITE, 0.1 * float(i)), "ow": 2.4})
+				layers.append({"sd": _circle_at(Vector2.ZERO, 7.0), "fill": vt_core, "ow": 2.6})
+				layers.append({"sd": _circle_at(Vector2.ZERO, 2.2), "fill": white, "ow": 0.0})
+			"reaper":                        # R246 处刑者·刈·处决时刻：弯月镰刃 + 短柄（暗红）
+				var reaper_col := PopPalette.ENEMY.lerp(PopPalette.OUTLINE, 0.25)
+				var blade_pts := PackedVector2Array([
+					Vector2(14.0, -15.0), Vector2(0.0, -21.0), Vector2(-16.0, -14.0),
+					Vector2(-21.0, 2.0), Vector2(-13.0, -8.0), Vector2(-1.0, -14.0),
+					Vector2(9.0, -11.0),
+				])
+				layers = [
+					{"sd": _box_rot_at(Vector2(-14.0, 12.0), Vector2(2.2, 13.0), 1.1, -0.6),
+						"fill": deep, "ow": 2.6},
+					{"sd": _poly_sd(blade_pts), "fill": reaper_col, "ow": 3.0},
+					{"sd": _circle_at(Vector2(-10.0, -16.0), 2.2), "fill": white, "ow": 0.0},
+				]
 			_:
 				layers = [
 					{"sd": _poly_sd(_star_pts(16.0, 7.0)), "fill": blue, "ow": 3.0},
@@ -1584,6 +1873,23 @@ static func ui_gem() -> ImageTexture:
 		return _render(64, 64, _shade(layers)))
 
 
+static func stardust_icon() -> ImageTexture:
+	# R263 UI 字形贴纸：星尘 = 四芒星（暖金 PopPalette.GOLD + 左上白高光，与 ui_gem
+	# 蓝结晶切面菱形双色区分——双轨局外货币不可混）。大厅养成面板星尘行 icon。
+	var key := "ui_stardust"
+	return _cached(key, func() -> ImageTexture:
+		var star := PackedVector2Array([
+			Vector2(0.0, -15.0), Vector2(3.4, -3.4), Vector2(15.0, 0.0), Vector2(3.4, 3.4),
+			Vector2(0.0, 15.0), Vector2(-3.4, 3.4), Vector2(-15.0, 0.0), Vector2(-3.4, -3.4),
+		])
+		var layers: Array = [
+			{"sd": _poly_sd(star), "fill": PopPalette.GOLD, "ow": 3.2},
+			{"sd": _circle_at(Vector2(-4.0, -5.0), 1.8), "fill": Color(1.0, 1.0, 1.0, 0.95),
+				"ow": 0.0},
+		]
+		return _render(64, 64, _shade(layers)))
+
+
 static func ui_trophy() -> ImageTexture:
 	# R196 UI 字形贴纸：奖杯 = 杯体五边 + 双耳环（画在杯体下层，内弧被覆写）+ 杯颈 +
 	# 深色底座。成就位/成就 toast 视觉锚，替代奖杯 emoji 字面量。
@@ -1615,6 +1921,21 @@ static func _render(p_w: int, p_h: int, p_shade: Callable) -> ImageTexture:
 		var py := float(y) + 0.5 - half_h
 		for x in range(p_w):
 			img.set_pixel(x, y, p_shade.call(float(x) + 0.5 - half_w, py))
+	return ImageTexture.create_from_image(img)
+
+
+static func _render_keep(p_w: int, p_h: int, p_shade: Callable, p_key: String) -> ImageTexture:
+	# 二cv#8 帧率：_render 同一逐像素路径 + 烤图 Image 留 _img_cache 旁表（同键）——
+	# 供 enemy_tex_flash 直读 CPU 像素（上传源引用，与纹理像素逐位同源），免去受击
+	# 首击路径的 GL→CPU 回读。仅新增保留，不碰 _render 既有调用面。
+	var img := Image.create(p_w, p_h, false, Image.FORMAT_RGBA8)
+	var half_w := float(p_w) * 0.5
+	var half_h := float(p_h) * 0.5
+	for y in range(p_h):
+		var py := float(y) + 0.5 - half_h
+		for x in range(p_w):
+			img.set_pixel(x, y, p_shade.call(float(x) + 0.5 - half_w, py))
+	_img_cache[p_key] = img
 	return ImageTexture.create_from_image(img)
 
 

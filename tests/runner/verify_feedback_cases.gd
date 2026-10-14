@@ -3,7 +3,7 @@
 # 覆盖 2026-08-29 两轮试玩反馈的「行为级」验收（不只编译/回归，而是逐项真实跑通）：
 #   ① 升级回满血 ② 新武器卡上架→装配真件（add_weapon 链）→构筑面板签名刷新
 #   ③ 槽满不上架武器卡 ④ 稀有度数值缩放（金 ×2.6、白不缩放、注册表资源不落改）
-#   ⑤ 紫精通连升 2 级 + 文案 Lv 区间 ⑥ MEC_HIT_BURST 命中迸裂真实落血
+#   ⑤ 精通品质梯三档分化（R245：白/蓝/紫 +1/+2/+3）+ 文案 Lv 区间 ⑥ MEC_HIT_BURST 命中迸裂真实落血
 #   ⑦ E7 喷吐者远程开火（敌弹池入池） ⑧ 死亡元素释放（感电残弧广播）
 #   ⑨ 左下角构筑面板 → 暂停 + 详情卡可见 ⑩ 粒子池寿命兜底回收（爆炸残留修复）
 #   ⑪ 感电落雷/燃烧余烬/冰冻冰晶表现件挂载 ⑫ Boss 巨大化 + 弹幕密度 + E7 织入波表
@@ -94,6 +94,9 @@ func run(p_tree: SceneTree) -> void:
 	_test_round7_audit()
 	_test_r191_shared_ui()
 	_test_r199_g7()
+	_test_rcv6_sanctuary()
+	_test_rcv5_dash_recolor()
+	_test_rcv7_relic_gold()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
 	print("验收汇总：PASS %d / FAIL %d（共 %d 项）" % [_pass, _fail, _pass + _fail])
@@ -134,10 +137,12 @@ func _test_r191_shared_ui() -> void:
 		th.get_font_size("font_size", "TooltipLabel") >= 20
 		and th.get_font("font", "TooltipLabel") == StickerTheme.font()
 		and th.get_constant("outline_size", "TooltipLabel") == 0, "")
-	# R191#5：图鉴 4 页签含「反应」（页级行级断言在 test_rxn_codex.gd 独立套件）
-	_check("R191：图鉴页签 4 枚含「反应」",
-		_gl.menu_screen._codex_tabs.size() == 4
-		and _gl.menu_screen._codex_tabs.has("反应"), "")
+	# R191#5：图鉴页签含「反应」（页级行级断言在 test_rxn_codex.gd 独立套件）；
+	# R245 §4.4-1：+「遗物」页签 4→5 枚（流C 扩容——断言随设计迁移）
+	_check("R191/R245：图鉴页签 5 枚含「反应」「遗物」",
+		_gl.menu_screen._codex_tabs.size() == 5
+			and _gl.menu_screen._codex_tabs.has("反应")
+			and _gl.menu_screen._codex_tabs.has("遗物"), "")
 
 
 func _teardown_game_loop() -> void:
@@ -422,7 +427,7 @@ func _test_r60_card_text() -> void:
 		int(fctx.split_request.get("count", 0)) >= 4)
 
 
-# ── ⑤ 紫精通连升 2 级 + Lv 区间文案 ──────────────────────────────
+# ── ⑤ 精通品质梯三档分化（R245 boosts=1+rarity）+ Lv 区间文案 ────
 func _test_mastery_double_and_wording() -> void:
 	print("── 精通连升与文案 ──")
 	var gen: CardGenerator = _gl.card_generator
@@ -430,7 +435,9 @@ func _test_mastery_double_and_wording() -> void:
 	var w: WeaponBase = (p.get("weapon_slots") as Array)[0]
 	w.level = 3                                   # R85 紫门合法位（L1-2 强制紫会被门控钳回）
 	var lv0: int = int(w.get("level"))
-	var cands := gen.generate_candidates({"player": p, "wave": 1, "fixed_rarities": [2, -1, -1]})
+	# R252 迁值（设计 §6：权重 RELIC 6→8 后 seed=42 类别 roll 漂移——紫精通不再恒落首位。
+	# 逐位强制紫档 [2,2,2] 保持用例意图「紫精通卡 → boosts=3」确定性，不依赖类别 roll 位次）
+	var cands := gen.generate_candidates({"player": p, "wave": 1, "fixed_rarities": [2, 2, 2]})
 	var mastery: Dictionary = {}
 	for c in cands:
 		if int(c.get("kind")) == CardGenerator.CardKind.MASTERY \
@@ -440,28 +447,30 @@ func _test_mastery_double_and_wording() -> void:
 	_check("紫精通卡 roll 到（连升通道）", not mastery.is_empty())
 	if mastery.is_empty():
 		return
-	_check("文案含等级区间（Lv%d→Lv%d）" % [lv0, mini(lv0 + 2, WeaponBase.MAX_LEVEL)],
+	_check("文案含等级区间（Lv%d→Lv%d）" % [lv0, mini(lv0 + 3, WeaponBase.MAX_LEVEL)],
 		String(mastery.get("display_name")).contains("→"))
-	_check("level_boosts = 2", int(mastery.get("level_boosts", 0)) == 2)
+	_check("level_boosts = 3（R245 紫=+3）", int(mastery.get("level_boosts", 0)) == 3,
+		"boosts=%d" % int(mastery.get("level_boosts", 0)))
 	gen.apply_choice(mastery, p)
-	_check("应用后连升 2 级（lv +%d）" % int(mastery.get("level_boosts", 0)),
-		int(w.get("level")) == mini(lv0 + 2, WeaponBase.MAX_LEVEL))
-	# R85 低级门控：L1 武器强制金 roll → 钳回蓝（+1）——「1 级升 2 级就金色」根修
+	_check("应用后连升 3 级 mini 钳 5（lv +%d 实升 %d）" % [int(mastery.get("level_boosts", 0)),
+			mini(lv0 + 3, WeaponBase.MAX_LEVEL) - lv0],
+		int(w.get("level")) == mini(lv0 + 3, WeaponBase.MAX_LEVEL))
+	# R245 三档分化断言迁移（原 R85 蓝白同值锁废除）：L1 强制金 → 钳蓝 +2；L4 强制金 → 钳紫 +3
 	var w10: WeaponBase = _gl.player.add_weapon(_gl.registry.get_weapon(&"W10_boomerang"))
 	if w10 != null:
 		w10.level = 1
 		var forced: Dictionary = gen._make_mastery_card(w10)
 		forced["rarity"] = 3                       # 模拟金 roll / 遗物保底金
 		gen._apply_rarity_values([forced])
-		_check("R85：L1 精通强制金 → 钳回蓝（+1 不连升）",
-			int(forced.get("rarity", 0)) <= 1 and int(forced.get("level_boosts", 0)) == 1,
+		_check("R245：L1 精通强制金 → 钳回蓝（+2 稀有连升）",
+			int(forced.get("rarity", 0)) <= 1 and int(forced.get("level_boosts", 0)) == 2,
 			"rarity=%d boosts=%d" % [int(forced.get("rarity", 0)), int(forced.get("level_boosts", 0))])
 		w10.level = 4
 		var forced4: Dictionary = gen._make_mastery_card(w10)
 		forced4["rarity"] = 3
 		gen._apply_rarity_values([forced4])
-		_check("R85：精通卡无金档（L4 强制金 → 钳紫连升）",
-			int(forced4.get("rarity", 0)) == 2 and int(forced4.get("level_boosts", 0)) == 2,
+		_check("R245：精通卡无金档（L4 强制金 → 钳紫 +3）",
+			int(forced4.get("rarity", 0)) == 2 and int(forced4.get("level_boosts", 0)) == 3,
 			"rarity=%d boosts=%d" % [int(forced4.get("rarity", 0)), int(forced4.get("level_boosts", 0))])
 		_gl.player.weapon_slots[_gl.player.weapon_slots.find(w10)] = null
 		w10.queue_free()
@@ -962,6 +971,11 @@ func _test_maps_systems() -> void:
 	_check("解锁链：next_map_id（grass→frost）",
 		MapTable.next_map_id(&"world_grass") == &"world_frost")
 	_gl._on_menu_start(&"world_frost")
+	# R262d 迁移：R252 起出发链插入祝福面板步骤（_blessing_pool 非空即弹、state 留
+	# MENU 模态）——本机 user:// 图鉴有解锁记录 → 面板恒弹。模拟「不选保留」收口
+	#（面板层三收口信号同款直调）后续跑 start_run；图鉴空档退化路径由 qa_r262 系锁
+	if bool(_gl.get("_blessing_pending")):
+		_gl.call("_finish_menu_start", _gl.get("_blessing_pick_map"))
 	_check("选图：启动进入 PLAYING", _gl.state == GameConst.GameStatus.PLAYING)
 	_check("选图：当前地图 = 寒霜冰原", _gl.current_map_id == &"world_frost")
 	_check("选图：波表已切换（id=frost）", _gl.wave_director.wave_table.id == &"frost")
@@ -1031,8 +1045,8 @@ func _test_swamp_eco() -> void:
 # ── ⑱ 角色系统 + 局外养成（M8 落地验收） ─────────────────────────
 func _test_char_meta() -> void:
 	print("── 角色与局外养成 ──")
-	_check("CharacterTable：10 角色（R186 +2——通关门3/购买2/挑战2/分档门2/初始1）",
-		CharacterTable.count() == 10)
+	_check("CharacterTable：13 角色（R247 +3——通关门3/购买3/挑战·成就2/分档门2/无尽深度门2/初始1）",
+		CharacterTable.count() == 13)
 	# 解锁矩阵（2026-09-13）：ranger/zero 转结晶购买门——全图通关不再解锁二者
 	for m in MapTable.MAPS:
 		Meta.mark_map_cleared(m.id)
@@ -1221,8 +1235,8 @@ func _test_char_meta() -> void:
 	for c in menu._panel_list.get_children():
 		c.free()                                  # 立即清（queue_free 无帧迭代不清真——计数口径）
 	menu._on_lobby_pressed("upgrade")
-	_check("大厅：养成面板（结晶头 + 8 升级 + 注释 = 10 行（2026-08-31 增「预案推演」））",
-		_live_children(menu._panel_list) == 10,
+	_check("大厅：养成面板（结晶头+星尘行+8 升级+注释 = 11 行（R263 星尘行 +1））",
+		_live_children(menu._panel_list) == 11,
 		"live=%d" % _live_children(menu._panel_list))
 	menu._on_panel_close()
 	Meta.character_id = &"sentinel"
@@ -1310,9 +1324,9 @@ func _test_polish() -> void:
 	p.set("invuln_left", 0.0)                     # 清无敌（接触伤害有无敌帧护栏）
 	p.set("hp", 1.0)
 	p.call(&"take_contact_damage", 50.0)
-	_check("复活：致死伤害 → 满血存活 + 3s 无敌（R186 E2 r2 同步）",
+	_check("复活：致死伤害 → 满血存活 + 5s 无敌（二cs 同步）",
 		absf(float(p.get("hp")) - float(p.get("max_hp"))) <= 0.01
-		and is_equal_approx(float(p.get("invuln_left")), 3.0) and int(p.get("revives_left")) == 0)
+		and is_equal_approx(float(p.get("invuln_left")), 5.0) and int(p.get("revives_left")) == 0)
 	p.set("invuln_left", 0.0)
 	p.call(&"take_contact_damage", 99999.0)
 	_check("复活：耗尽后正常死亡仲裁（E-16 不受扰）", bool(p.get("_dead")))
@@ -1359,6 +1373,9 @@ func _test_p0_fixes() -> void:
 		and bool(p.get("shield_ready")))
 	main_w.attach_trait(shield_data)             # 2 层
 	_check("护盾链：2 层 → interval=5.5", absf(float(p.get("shield_interval")) - 5.5) <= 0.01)
+	# 二cv#1：层数透出契约——apply_shield_trait 须把聚合总层数存 player.shield_layers
+	#（HUD 护盾条「X N」读数源，用户「有几条显示几条」）
+	_check("护盾链：2 层 → shield_layers=2（HUD 层数读数源）", int(p.get("shield_layers")) == 2)
 	p.set("shield_timer", 0.01)
 	for i in range(3):                           # 3 帧 ×8.33ms 必然走完 10ms 尾差
 		p.call(&"tick", 1.0 / 120.0, Vector2.ZERO)
@@ -1703,11 +1720,12 @@ func _test_map_affixes2() -> void:
 		for sub in (row_node as Node).get_children():
 			if sub is Label:
 				var txt := String((sub as Label).text)
-				if txt.begins_with("祝"):
+				if txt.begins_with("兆"):              # R253 词缀前缀祝→兆（与祝福系统消歧）
 					bless_cnt += 1
 				elif txt.begins_with("诅"):
 					curse_cnt += 1
-	_check("菜单展示：双词缀两行小字（5 祝 + 5 诅）", bless_cnt == 5 and curse_cnt == 5,
+	_check("菜单展示：双词缀两行小字（5 兆 + 5 诅；R253 祝→兆）",
+		bless_cnt == 5 and curse_cnt == 5,
 		"bless=%d curse=%d" % [bless_cnt, curse_cnt])
 	_gl.menu_screen._on_panel_close()
 
@@ -2184,9 +2202,10 @@ func _test_p2_daily() -> void:
 				var txt := String((sub as Label).text)
 				if txt == "诅":
 					curse_rows += 1
-				elif txt == "祝":
+				elif txt == "兆":                      # R253 词缀前缀祝→兆
 					bless_rows += 1
-	_check("每日：大厅面板当日三词缀展示（2 诅 + 1 祝）", curse_rows == 2 and bless_rows == 1)
+	_check("每日：大厅面板当日三词缀展示（2 诅 + 1 兆；R253 祝→兆）",
+		curse_rows == 2 and bless_rows == 1)
 	_check("每日：出发挑战按钮就位", menu._panel_list.find_child("DailyStartButton", true, false) != null)
 	menu._on_panel_close()
 
@@ -3013,14 +3032,18 @@ func _test_round7_audit() -> void:
 	w_shot.try_fire()
 	var pistol_elems: Array[int] = []
 	var shot_elems: Array[int] = []
-	for c in (_gl.pools[&"projectile"] as Node).get_children():
-		var pr: Variant = c
-		if pr == null or not is_instance_valid(pr) or not bool(pr.get("_live")):
+	# R214 E' 分桶后活弹挂 bucket 宿主非池根——get_children 只见闲置件（本段自 R214
+	# 起恒空集，恰被下方 bool(null) SCRIPT ERROR 掩盖至今）——改走 active_projectiles()
+	# 活弹枚举口（GameLoop tick 数据源同款；ballistic_weapon 自查先例同口径）
+	for pr0 in (_gl.pools[&"projectile"] as ProjectilePool).active_projectiles():
+		var live_v: Variant = pr0.get("_live")
+		if pr0 == null or not is_instance_valid(pr0) \
+				or typeof(live_v) != TYPE_BOOL or not bool(live_v):
 			continue
-		var el: int = int(pr.get("element"))
-		if int(pr.get("weapon_uid")) == w_pistol.uid:
+		var el: int = int(pr0.get("element"))
+		if int(pr0.get("weapon_uid")) == w_pistol.uid:
 			pistol_elems.append(el)
-		elif int(pr.get("weapon_uid")) == w_shot.uid:
+		elif int(pr0.get("weapon_uid")) == w_shot.uid:
 			shot_elems.append(el)
 	var pistol_clean := true
 	for el: int in pistol_elems:
@@ -3035,9 +3058,10 @@ func _test_round7_audit() -> void:
 		"pistol_elems=%s" % str(pistol_elems))
 	_check("元素弹色：霰弹弹全部 FIR（火附魔生效）", shot_fire,
 		"shot_elems=%s" % str(shot_elems))
-	for c in (_gl.pools[&"projectile"] as Node).get_children():
-		if c is ProjectileBase and bool(c.get("_live")):
-			(c as ProjectileBase).nullify()
+	for pr0 in (_gl.pools[&"projectile"] as ProjectilePool).active_projectiles():
+		# 清场同走活弹枚举口（池根 get_children 只见闲置件——见上方收集循环注释）
+		if pr0 is ProjectileBase and bool(pr0.get("_live")):
+			(pr0 as ProjectileBase).nullify()
 	# ⑪ R15：经验萃取卡显示【通用】（不再挂武器名）
 	var xp_card: Dictionary = gen._make_trait_card(&"AFF_XP_GAIN", 1, w_pistol)
 	_check("通用前缀：经验萃取卡含【通用】（不再挂武器名）",
@@ -3050,11 +3074,15 @@ func _test_round7_audit() -> void:
 		homing_w.try_fire()
 		var bounced := false
 		var homing_live := 0
+		# R220 刀13②口径对齐：反弹寿命模式上限随 frame_priority 动态（帧率优先 10.0 /
+		# 特效优先 20.0）——原硬编码 20.0 与上方 :3002 同函数断言口径分裂（headless
+		# 帧率优先 → 上限 10.0，bounced 恒假；本段自写入起从未真正跑过——被掩盖）
+		var bounce_life := 10.0 if PerfGovernor.frame_priority() else 20.0
 		for c in (_gl.pools[&"homing"] as Node).get_children():   # R94：导弹入 homing 池
 			var pr2: Variant = c
 			if pr2 != null and is_instance_valid(pr2) and bool(pr2.get("_live")) 					and int(pr2.get("weapon_uid")) == homing_w.uid:
 				homing_live += 1
-				if int(pr2.get("bounces_left")) > 0 and float(pr2.get("lifetime_left")) >= 20.0:
+				if int(pr2.get("bounces_left")) > 0 and float(pr2.get("lifetime_left")) >= bounce_life:
 					bounced = true
 		_check("自导反弹：导弹带预算（射程无限 + 预算注入）", homing_live > 0 and bounced,
 			"live=%d" % homing_live)
@@ -3138,7 +3166,9 @@ func _test_r69_rarity_ladder() -> void:
 		"i=%.2f" % _gl.player.shield_interval)
 	_gl.player.apply_shield_trait(1, {"interval_s": 8.0, "interval_lv2": 5.5}, 1.0)
 	# R238 H4 契约后补清理：上面两次直接调用在首挂即就绪下置 ready=true——残留会把
-	# 后续 R72 法术圈引爆等接触伤用例挡掉（实证 hp 60→60）。清三件套（:114 口径）。
+	# 后续 R72 法术圈引爆等接触伤用例挡掉（实证 hp 60→60）。R253 独立计时后格挡
+	# 真源 = _shield_units（旧三件套已是 HUD 视图）——清单元字典才真挡清理。
+	_gl.player._shield_units.clear()
 	_gl.player.set("shield_ready", false)
 	_gl.player.set("shield_timer", 0.0)
 	_gl.player.set("shield_interval", 0.0)
@@ -3684,6 +3714,12 @@ func _test_r72_content() -> void:
 		_gl.player.global_position + Vector2(80.0, 0.0))
 	var thorn_hp0 := thorn_e.hp
 	_gl.player.invuln_left = 0.0
+	# R251 联动隔离：本块 ④ 圈外引爆（:3566 caster._detonate_spell 圈外位）经 enemy.gd
+	# 新发射点给玩家授了 1 层橙盾（躲过法术圈=新契约正确行为）——橙盾整击吞下会在
+	# player.gd take_contact_damage 提前 return、player_hit 不发→荆棘不触发。荆棘反击
+	# 断言须在无盾态受击；清盾不改断言语义（测的就是无盾态受击反弹）
+	_gl.player.set("temp_shield_stacks", 0)
+	_gl.player.set("temp_shield_left", 0.0)
 	_gl.player.take_contact_damage(5.0)
 	_check("R72：受击反击 → 近旁敌人掉血（settle_aoe 真结算）",
 		thorn_e.hp < thorn_hp0, "%.0f→%.0f" % [thorn_hp0, thorn_e.hp])
@@ -3822,9 +3858,9 @@ func _test_ev2_revive() -> void:
 	var ok := _gl.player._try_revive()
 	EventBus.revive_burst.disconnect(burst_cb)
 	EventBus.bullet_nullified.disconnect(nullified_cb)
-	_check("E2 前置：复活成功且满血 + 3s 无敌（R186）",
+	_check("E2 前置：复活成功且满血 + 5s 无敌（二cs）",
 		ok and _gl.player.hp == _gl.player.max_hp
-		and is_equal_approx(_gl.player.invuln_left, 3.0))
+		and is_equal_approx(_gl.player.invuln_left, 5.0))
 	_check("R186·E2：复活走专用通道（payload = 玩家位 + 扣减后余量）",
 		bursts.size() == 1 and (bursts[0]["pos"] as Vector2).distance_to(ppos) <= 0.01
 		and int(bursts[0]["charges"]) == 0, str(bursts))
@@ -3833,9 +3869,9 @@ func _test_ev2_revive() -> void:
 	_check("R186·E2：260px 外敌弹不受扰（保留存活）",
 		far_b1 != null and far_b2 != null
 		and not far_b1.is_clean and not far_b2.is_clean)
-	_check("R186·E2：青弧置位（3.0s 倒数双字段）",
-		is_equal_approx(_gl.player._revive_protect_left, 3.0)
-		and is_equal_approx(_gl.player._revive_protect_max, 3.0))
+	_check("R186·E2：青弧置位（5.0s 倒数双字段，二cs）",
+		is_equal_approx(_gl.player._revive_protect_left, 5.0)
+		and is_equal_approx(_gl.player._revive_protect_max, 5.0))
 	if far_b1 != null:
 		far_b1.pool.release(far_b1)               # 存活弹归还（24 颗清弹已随 nullify 归还）
 	if far_b2 != null:
@@ -3918,11 +3954,12 @@ func _test_ev3_burst() -> void:
 
 
 func _test_ev5_first_met() -> void:
-	print("── E5 新怪首遇提示条（跨局一次） ──")
+	print("── E5 新怪首遇卡片（跨局一次） ──")
 	Meta.codex_first_met.clear()                # 测试档清位（首遇态复位）
-	var notices: Array[String] = []
-	var cb := func(p_text: String) -> void: notices.append(p_text)
-	EventBus.mechanics_intro.connect(cb)
+	var notices: Array = []                     # [title, body, kind, id] 行容器（lambda 按值捕获写回）
+	var cb := func(p_title: String, p_body: String, p_kind: StringName, p_id: StringName) -> void:
+		notices.append([p_title, p_body, p_kind, p_id])
+	EventBus.first_encounter_card.connect(cb)
 	var e := _spawn_r72_enemy(&"E26_shield_lancer",
 		_gl.player.global_position + Vector2(150.0, 0.0))
 	_gl.enemy_grid.rebuild(_gl.spawner.active)
@@ -3933,16 +3970,23 @@ func _test_ev5_first_met() -> void:
 	sp.registry = _gl.registry
 	sp.enqueue({"data_id": &"E28_hexcaster", "wave": 1, "tags": 0})
 	sp.tick(0.016, _gl.enemy_grid)
-	EventBus.mechanics_intro.disconnect(cb)
-	_check("E5：首遇出队 → 提示条（首次遭遇 + 机制一句话）",
-		notices.size() >= 1 and String(notices[0]).contains("首次遭遇")
-			and String(notices[0]).contains("法术圈"), str(notices))
+	EventBus.first_encounter_card.disconnect(cb)
+	# R251 全敌覆盖后，_gl.spawner.tick 可能顺带出队前序用例积压的旧怪（同样新契约弹卡，
+	# 属正确行为）——本断言按 M1 语义收紧到 E28 专属卡恰 1 次
+	var e28_cards: Array = []
+	for n: Variant in notices:
+		if StringName(n[2]) == &"enemy" and StringName(n[3]) == &"E28_hexcaster":
+			e28_cards.append(n)
+	_check("E5：首遇出队 → 首遇卡（首次遭遇 + 咒术师 + 法术圈 + enemy 域）",
+		e28_cards.size() == 1 and String(e28_cards[0][0]).contains("首次遭遇")
+			and String(e28_cards[0][0]).contains("咒术师")
+			and String(e28_cards[0][1]).contains("法术圈"), str(e28_cards))
 	_check("E5：meta 标记落账（跨局记忆）",
 		Meta.codex_first_met.has("E28_hexcaster"))
 	_check("E5：二次遭遇不再提示",
 		not Meta.mark_first_met(&"E28_hexcaster"))
-	_check("E5：旧怪无提示文案（零打扰）",
-		GameConst.enemy_attack_note("E1_grunt").is_empty())
+	_check("E5：全敌文案已覆盖（E1 首遇也弹卡——R251 旧怪零打扰契约废止）",
+		not GameConst.enemy_attack_note("E1_grunt").is_empty())
 	_release_r72_enemy(e)
 	if sp.active.size() > 0:
 		var se: Enemy = sp.active[0]
@@ -4161,22 +4205,24 @@ func _test_g4_boomerang() -> void:
 	_check("G6：W10 三条阈值质变钩子（巨刃新星/永动回旋/暴击碎屑）",
 		wdata.threshold_traits.size() == 3,
 		"n=%d" % wdata.threshold_traits.size())
-	# G8 新武器首获横幅：首装发「【新武器】回旋刃：…」，再装不打扰
+	# G8 新武器首获首遇卡：首装发「【新武器】回旋刃」卡，再装不打扰（R251 通道升级）
 	_gl.player.set("unlocked_slots", 4)
 	Meta.get("codex_first_met").erase("W_W10_boomerang")
-	var banner := [""]                        # lambda 按值捕获——容器原位写回
-	var cap := func(p_msg: String) -> void: banner[0] = p_msg
-	EventBus.mechanics_intro.connect(cap)
+	var card_seen: Array = []                 # lambda 按值捕获——容器原位写回
+	var cap := func(p_title: String, p_body: String, p_kind: StringName, _p_id: StringName) -> void:
+		card_seen.append([p_title, p_body, p_kind])
+	EventBus.first_encounter_card.connect(cap)
 	_gl.player.add_weapon(wdata)
-	EventBus.mechanics_intro.disconnect(cap)
-	_check("G8：W10 首获发新武器横幅（含一句话）",
-		String(banner[0]).begins_with("【新武器】回旋刃：") and String(banner[0]).contains("双程"),
-		String(banner[0]))
-	banner[0] = ""
-	EventBus.mechanics_intro.connect(cap)
+	EventBus.first_encounter_card.disconnect(cap)
+	_check("G8：W10 首获发首遇卡（新武器 + 一句话 + weapon 域）",
+		card_seen.size() == 1 and String(card_seen[0][0]).begins_with("【新武器】回旋刃")
+			and String(card_seen[0][1]).contains("双程")
+			and StringName(card_seen[0][2]) == &"weapon", str(card_seen))
+	card_seen.clear()
+	EventBus.first_encounter_card.connect(cap)
 	_gl.player.add_weapon(_gl.registry.get_weapon(&"W10_boomerang"))
-	EventBus.mechanics_intro.disconnect(cap)
-	_check("G8：W10 再获不发横幅（一次不打扰）", String(banner[0]) == "", String(banner[0]))
+	EventBus.first_encounter_card.disconnect(cap)
+	_check("G8：W10 再获不发卡（一次不打扰）", card_seen.is_empty(), str(card_seen))
 
 	# 装备到空槽（槽 0 手枪全程不动——后续套件依赖主武器暖状态），按 weapon_ref 过滤弹体
 	_gl.player.set("unlocked_slots", 4)
@@ -4325,9 +4371,14 @@ func _test_g10_peak_and_banner() -> void:
 	# start_run 只收集，消费点 = _on_menu_start / _on_menu_start_daily / restart_run
 	_gl._run_intro_lines.clear()
 	_gl.call(&"start_run")
+	# 二dc（R250）难度武器门横幅先于 R72 数值行收口（r250 G1/G2 源码锚：落位清行后、
+	# R72 行同侧幸存区）——旧锁「lines[0] 含复活 1 次」按新契约迁移为「集合含该行」
+	var g10_diff_line := false
+	for ln: Variant in _gl._run_intro_lines:
+		if String(ln).begins_with("【困难】") and String(ln).contains("复活 1 次"):
+			g10_diff_line = true
 	_check("G10：困难开局收口难度横幅（数值/复活/奖励——R186 三源合并消费口径）",
-		_gl._run_intro_lines.size() >= 1 and String(_gl._run_intro_lines[0]).begins_with("【困难】")
-			and String(_gl._run_intro_lines[0]).contains("复活 1 次"),
+		_gl._run_intro_lines.size() >= 1 and g10_diff_line,
 		str(_gl._run_intro_lines))
 	_gl._run_intro_lines.clear()               # 测试不留残留（无消费点路径）
 	_gl.call(&"quit_to_menu")
@@ -5078,3 +5129,135 @@ func _test_r199_g7() -> void:
 	bar._root.visible = false
 	bar.boss = null
 	_gl.call(&"quit_to_menu")
+
+
+# ── 二cv#6 近战敌贴脸豁免（补刀刃圈内近战敌攻击不生效） ──────────
+func _test_rcv6_sanctuary() -> void:
+	print("── 二cv#6 近战敌贴脸豁免 ──")
+	var radial_save: bool = Enemy.CONTACT_RADIAL
+	Enemy.CONTACT_RADIAL = true                  # 直判模（确定性直驱，套件尾复位）
+	var p: Player = _gl.player
+	var unlocked_save: int = p.unlocked_slots
+	p.set("unlocked_slots", 5)
+	var w9 := p.add_weapon(_gl.registry.get_weapon(&"W9_arc_slash")) as OrbitWeapon
+	p.tick(1.0 / 120.0, Vector2.ZERO)            # 豁免圈折算（玩家逐帧真实口径）
+	var cnt0: int = DebugStats.get_counter(&"melee_enemy_suppressed")
+	var e := (_gl.pools[&"enemy"] as EnemyPool).acquire()
+	var d := EnemyData.new()
+	d.id = &"E_RCV_VF"
+	d.display_name = "E_RCV_VF"
+	d.hp_base = 100.0
+	d.spd_base = 0.0
+	d.dmg_base = 25.0
+	d.exp_base = 1.0
+	d.hitbox_r = 14.0
+	d.resist = [0.0, 0.0, 0.0, 0.0]
+	e.spawn(d, 1, 0)
+	p.hp = 1000.0
+	p.invuln_left = 0.0
+	p._dead = false
+	e.global_position = p.global_position + Vector2(20.0, 0.0)   # 贴脸 ⊂ W9 刃圈 150
+	e.tick(1.0 / 120.0)
+	_check("二cv#6：近战敌贴脸攻击被抑制（hp 不动 + melee_enemy_suppressed 计数>0）",
+		w9 != null and absf(p.melee_sanctuary_r - 150.0) < 0.01
+		and absf(p.hp - 1000.0) < 0.001
+		and DebugStats.get_counter(&"melee_enemy_suppressed") > cnt0,
+		"r=%.1f hp=%.1f cnt %d→%d" % [p.melee_sanctuary_r, p.hp, cnt0,
+		DebugStats.get_counter(&"melee_enemy_suppressed")])
+	(_gl.pools[&"enemy"] as EnemyPool).release(e)
+	for i in range(p.weapon_slots.size()):       # 清场：测试武器随节点回收（主武器不动）
+		if p.weapon_slots[i] == w9:
+			p.weapon_slots[i] = null
+	if w9 != null:
+		w9.queue_free()
+	p.set("unlocked_slots", unlocked_save)
+	p.melee_sanctuary_r = 0.0
+	Enemy.CONTACT_RADIAL = radial_save
+
+
+# ── 二cv#5 追补：待机范围虚线选元素即时换色（_dash_shown 去重不吞色变重绘） ──
+# 二cx#3 夹具迁移 W9→W13：虚线门收紧为 weapon_class==melee 专属（W9=talisman 双圈
+# 根因——用户「只有一个近战却两层虚线」），变色契约改在虚线现主人 W13 上锁定。
+func _test_rcv5_dash_recolor() -> void:
+	print("── 二cv#5 追补：待机虚线即时换色 ──")
+	var q_orig: int = int(Meta.settings("fx_quality"))
+	Meta.set_setting("fx_quality", 2)            # 虚线 0 档隐藏（arc_slash._fx_quality）——钉高档防测试档脏位假阴
+	var p: Player = _gl.player
+	var unlocked_save: int = p.unlocked_slots
+	p.set("unlocked_slots", 5)
+	var w13 := p.add_weapon(_gl.registry.get_weapon(&"W13_great_sword")) as OrbitWeapon
+	if w13 == null:
+		_check("二cv#5 追补：W13 装配（夹具前置）", false, "add_weapon=null（无空槽）")
+		p.set("unlocked_slots", unlocked_save)
+		Meta.set_setting("fx_quality", q_orig)
+		return
+	w13.call(&"_ensure_arc_slash")               # 池槽随用随建——直呼建槽（槽 0 = arc_slash 观测口）
+	var slash: ArcSlash = w13.arc_slash
+	slash.tick(1.0 / 120.0, p.global_position)   # 窗外首 tick → 待机虚线亮起 + 首帧 tint 缓存
+	var base_tint: Color = slash._dash_tint
+	_check("二cv#5 追补：待机虚线亮起（_dash_shown 去重态 + tint 缓存落位）",
+		slash.visible and bool(slash._dash_shown) and base_tint.a > 0.0,
+		"vis=%s shown=%s tint=%s" % [str(slash.visible), str(slash._dash_shown), str(base_tint)])
+	# 选元素卡语义 = 挂 ELEM 词条（blend_element_color 变色真链）；下一 tick 虚线须即刻
+	# 换色重绘——修复前 _dash_shown 去重把重绘吞到下一次窗开/闭切换帧（色滞后主诉面）
+	var ele: TraitData = _gl.registry.get_trait(&"ELE_IGNITE")
+	var attached: bool = ele != null and w13.attach_trait(ele)
+	slash.tick(1.0 / 120.0, p.global_position)
+	var live_ok := attached and slash._dash_tint.is_equal_approx(w13.blend_element_color()) \
+		and not slash._dash_tint.is_equal_approx(base_tint)
+	_check("二cv#5 追补：元素挂载后虚线色同帧跟随（不等窗切换帧）", live_ok,
+		"attached=%s tint=%s base=%s" % [str(attached), str(slash._dash_tint), str(base_tint)])
+	# 二cx#3 负断言：法器 W9（weapon_class=talisman）同机制不画——双圈根因回归锁
+	var w9 := p.add_weapon(_gl.registry.get_weapon(&"W9_arc_slash")) as OrbitWeapon
+	var tal_no_dash := w9 != null
+	if w9 != null:
+		w9.call(&"_ensure_arc_slash")
+		var s9: ArcSlash = w9.arc_slash
+		s9.tick(1.0 / 120.0, p.global_position)
+		tal_no_dash = not s9._range_dash_active() and not s9.visible
+		for i in range(p.weapon_slots.size()):
+			if p.weapon_slots[i] == w9:
+				p.weapon_slots[i] = null
+		w9.queue_free()
+	_check("二cx#3 法器不画待机虚线（W9 talisman 门假+隐——单近战单圈）", tal_no_dash,
+		"w9=%s" % str(w9 != null))
+	# 清场（rcv6 同式：测试武器随节点回收，主武器不动；档位还原 Meta 单一真源）
+	for i in range(p.weapon_slots.size()):
+		if p.weapon_slots[i] == w13:
+			p.weapon_slots[i] = null
+	w13.queue_free()
+	p.set("unlocked_slots", unlocked_save)
+	p.melee_sanctuary_r = 0.0
+	Meta.set_setting("fx_quality", q_orig)
+
+
+# ── 二cv#7 遗物恒金（超频核心紫/金同貌根修的回归网：数据档 + 生成器保底双锁） ──
+func _test_rcv7_relic_gold() -> void:
+	print("── 二cv#7 遗物恒金 ──")
+	# 数据面：全遗物 .tres 声明档 rarity==3（18 件恒金）。此前仅 data_validator _warn
+	# 不阻断、生成器 maxi 保底无测试锁定（评审指出的回归网缺口：.tres 降档或生成器
+	# 回退均无拦截，证据只剩代码实读）
+	var all_gold := true
+	var bad := ""
+	for rd: RelicData in _gl.registry.relics.values():
+		if int(rd.rarity) != 3:
+			all_gold = false
+			bad = "%s.rarity=%s" % [String(rd.id), str(rd.rarity)]
+			break
+	_check("二cv#7：全遗物 .tres 声明档恒金（rarity==3）", all_gold, bad)
+	# 生成面：_make_relic_card 品质 = maxi(_roll_rarity, .tres 档)——白/蓝 roll 波次也不
+	# 落紫（RELIC 无 _apply_rarity_values 分支，紫 roll 与金 roll 卡面逐字节同貌 = 二cv#7
+	# 根因；断言 ≥3 而非 ==3——金 roll 上探 4 档属合法，恒金语义 = 不低于金）
+	var gen: CardGenerator = _gl.card_generator
+	var gen_ok := true
+	var detail := ""
+	for rid_v: Variant in _gl.registry.relics.keys():
+		var card: Dictionary = gen._make_relic_card(StringName(String(rid_v)), 1)
+		if int(card.get("kind", -1)) != CardGenerator.CardKind.RELIC \
+				or int(card.get("rarity", -1)) < 3:
+			gen_ok = false
+			detail = "%s kind=%s r=%s" % [String(rid_v),
+				str(card.get("kind")), str(card.get("rarity"))]
+			break
+	_check("二cv#7：_make_relic_card 低波恒金（maxi(_roll_rarity, tres 档) 保底非退化）",
+		gen_ok, detail)

@@ -132,6 +132,10 @@ func _close_card_flow() -> void:
 # ── ① 卡面零重建复用 + dots 预建（刀1 附带微刀 + 装配模式锁现状） ──
 func _test_1_face_reuse_and_dots() -> void:
 	print("── ① 卡面复用 / dots 预建 ──")
+	# R267 刀P2② 声明迁移点（红线 2 之①）：桌面分帧翻门后 open() 首帧量测分帧——本案
+	# 同步遍历全候选读 dots/instance_id（缓存/预建珠语义与分帧正交），注入 -2 强制整帧
+	# 装配口径；用例收尾恢复 -1
+	CardSelectUI.card_split_override = -2
 	var ui: CardSelectUI = _gl.card_select_ui
 	var cands := _candidates(4)
 	var ids0: Array[int] = []
@@ -143,11 +147,13 @@ func _test_1_face_reuse_and_dots() -> void:
 	var dot_ids0: Array[int] = []
 	for f in ui._card_faces:
 		var dots := f["dots"] as HBoxContainer
-		if dots.get_child_count() != 4:
+		# R246 同步：预建珠 range(4)→range(5)（红档升华卡第 5 珠；r246_ui G2b 锁定，
+		# 同 test_r230_k4 存量锁同步口径——卡片描述见 FEEDBACK_TRACKER R246 ui 泳道行）
+		if dots.get_child_count() != 5:
 			dot_ok_build = false
 		for c in dots.get_children():
 			dot_ids0.append(c.get_instance_id())
-	_check("dots 预建 4 珠（装配期一次，R212 刀1 附带）", dot_ok_build, "")
+	_check("dots 预建 5 珠（装配期一次，R212 刀1 附带；R246 扩第 5 珠）", dot_ok_build, "")
 	ui.open(cands, false)
 	var ids1: Array[int] = []
 	for b in ui._buttons:
@@ -182,11 +188,15 @@ func _test_1_face_reuse_and_dots() -> void:
 			dot_ids1.append(c.get_instance_id())
 	_check("dots 珠 instance_id 跨 open×2 恒等（零 queue_free/零 new）",
 		dot_ids0 == dot_ids1, "")
+	CardSelectUI.card_split_override = -1      # R267 迁移点收尾复位
 
 
 # ── ② _fit_desc 量测缓存（刀1 主验） ──
 func _test_2_fit_desc_cache() -> void:
 	print("── ② 量测缓存 ──")
+	# R267 刀P2② 声明迁移点（红线 2 之①）：同案①——本案同步读 4 卡量测/命中数（分帧
+	# 下第 4 卡量测延后），注入 -2 强制整帧装配口径；收尾恢复 -1
+	CardSelectUI.card_split_override = -2
 	var ui: CardSelectUI = _gl.card_select_ui
 	CardSelectUI._fit_desc_cache.clear()
 	CardSelectUI.fit_desc_measures = 0
@@ -220,6 +230,7 @@ func _test_2_fit_desc_cache() -> void:
 	print("[perf-probe] 冷开 %d µs / 热开 %d µs（headless 无 Android 回退链，毫秒仅参考——以量测数为准）"
 		% [cold_us, warm_us])
 	ui.close()
+	CardSelectUI.card_split_override = -1      # R267 迁移点收尾复位
 
 
 # ── ③ 连升选卡期代理指标（真链 gain_xp → LEVEL_UP → open） ──

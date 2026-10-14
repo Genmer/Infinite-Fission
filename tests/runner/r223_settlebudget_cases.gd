@@ -350,7 +350,9 @@ func _test_7_gate_hermeticity() -> void:
 	DamagePipeline.settle_budget_override = -3
 	PerfGovernor.mode_override = 0
 	PerfGovernor.tier_override = 3
-	_check("⑦模拟真机门：tier3 → 帽 0", DamagePipeline._settle_cap_now() == 0, "")
+	# 二cv#8 帧率：tier3 并档 tier2 同帽 96（深载恰是削峰器最需要在场时，原恒 0 缺席）
+	_check("⑦模拟真机门：tier3 → 帽 96（二cv#8 并档 tier2）",
+		DamagePipeline._settle_cap_now() == 96, "")
 	PerfGovernor.tier_override = 2
 	_check("⑦模拟真机门：tier2 → 帽 96", DamagePipeline._settle_cap_now() == 96, "")
 	PerfGovernor.tier_override = 1

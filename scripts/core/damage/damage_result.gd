@@ -20,3 +20,6 @@ var pool_breakdown: Dictionary = {}           # pool_id -> agg（乘区明细，
 var feel_level: int = 0                       # GameConst.FeelLevel（HIT/CRIT/CATALYST）
 var popup_style: int = 0                      # GameConst.PopupStyle
 var audit: DamageAudit = null
+var deferred_merge: bool = false              # R223 刀R：预算顺延占位结果（final=0/不落血/
+                                              # 不入派发队；真实伤害并入后续冲刷结算——调用方
+                                              # 穿透/节拍照常消费，同「无管线防御」零值先例）

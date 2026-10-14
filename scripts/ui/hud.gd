@@ -23,14 +23,18 @@ var _hp_label: Label = null
 var _xp_fill: Panel = null                    # 经验条填充
 var _level_label: Label = null
 var _wave_label: Label = null
+var _wave_left_label: Label = null            # R209 波次余敌副行（「余 N」=待出生+场上活跃）
 var map_name: String = ""                  # 当前地图名（M2 多地图，HUD 波次前缀）
 var endless_depth_base: int = 0            # R62 无尽徽标基准（final_wave）：wave 超基后波次
                                             # 徽章切「无尽 N」（N = 超出波数）；0 = 常规口径
 var _skill_btn: Button = null              # 角色技能键（右下角；冷却中置灰倒计时）
 var _skill_icon: TextureRect = null        # 技能键底图（28% 印刷感）
 var _skill_icon_fg: TextureRect = null     # 技能键前景图标（就绪亮显 / 冷却压暗）
+var _skill_sublime_ring: TextureRect = null    # R246 升华红环覆盖层（技能已升华态描边）
 var _skill_cd_label: Label = null          # 冷却数字覆盖层（仅冷却中非空）
 var _skill_active_bar: ColorRect = null    # 技能效果剩余时长条（R19：增益期金色倒计时）
+var _skill_auto_btn: Button = null         # R241 ④ 技能自动施放开关（技能键正下方）
+var _skill_auto_label: Label = null        # 开关文案（开=金「自动施放」/关=灰「手动施放」）
 var _gold_label: Label = null                 # 金币（战地黑市货币，M7）
 var _boss_banner: Label = null                # Boss 出场横幅（表现层一期）
 var _kill_label: Label = null
@@ -43,6 +47,12 @@ var _build_armed: bool = false                # R194 松手判定武装态（位
 var _shield_panel: Control = null             # 护盾条（MEC_SHIELD 持有时显示——用户反馈）
 var _shield_fill: Panel = null
 var _shield_fill_style: StyleBoxFlat = null
+var _shield_layers_label: Label = null         # 二cv#1：层数读数「X N」（用户「有几条显示几条」）
+# ── 二db 橙盾条（躲雷奖励 10s 临时盾：蓝条正下方，层数>0 才显） ──
+var _temp_panel: Control = null
+var _temp_fill: Panel = null
+var _temp_fill_style: StyleBoxFlat = null
+var _temp_label: Label = null                  # 层数×剩余秒读数「N·Xs」（用户「显示过期时间」）
 var _state_label: Label = null                # 状态提示（LEVEL_UP/PAUSED/GAME_OVER——测试锁定节点名）
 var _toast_label: Label = null                # 波次 toast（果冻 pop + lore 文案）
 var _toast_left: float = 0.0                  # toast 剩余展示时长（raw 通道）
@@ -67,6 +77,11 @@ enum TbState { HIDDEN, LOCKED, FADING }       # 小状态机：隐藏 → 锁定
 var _spawner: Node = null                     # EnemySpawner 宽类型（setup 注入；组兜底解析）
 var _agg: Dictionary = {}                     # uid → 本帧合格伤害和（回调侧 O(1) 累加）
 var _agg_frame: int = 0                       # 最近聚合帧号（damage_resolved 记录；观测用）
+var _tb_cand_buf: Array[int] = []             # R188⑤：帧结算候选缓冲（原每帧 Array[int]+
+                                              # assign(_agg.keys()) 双分配——成员原地重建）
+var _tb_hp_q: int = -1                        # R188⑥：HP 文本量化缓存 hp 档（-1=未建）
+var _tb_mh_q: int = -1                        # R188⑥：同上 max_hp 档
+var _tb_hp_text_last: String = ""             # R188⑥：档位未变直出的缓存文本（省每帧构造）
 var _tb_state: TbState = TbState.HIDDEN       # 状态机 HIDDEN → LOCKED → FADING
 var _tb_lock_uid: int = 0                     # 锁定敌 uid（0 = 无）
 var _tb_lock_node: Node2D = null              # 锁定敌节点引用（每帧有效性三查）
@@ -100,6 +115,8 @@ var _revive_banner: Label = null              # 复活大字横幅（金/警示�
 var _revive_banner_tween: Tween = null
 var _revive_badge: Label = null               # 血条右上「✚×N」常驻徽标（归零置灰）
 var _r187_readout: Label = null                # R187 武器形态读数位（W4 束数徽标 / W5 镜面 ×N / W8 引爆数）
+var _fps_label: Label = null                   # R202：FPS 读数小字（show_fps 键控 visible；急切
+                                              # 创建于 _build_ui，禁懒创建——见 _build_ui 内注）
 
 # ── R199（P08）首局拖动教学一次性标志 ──────────────────────────────
 # 进程级一次（static）：跨局持久化须往 Meta settings 白名单加键，而键表/写口归
@@ -121,9 +138,23 @@ var _fallback_timer: float = 0.0              # 1Hz 兜底刷新
 var _stats_dirty: bool = false
 var refresh_stats_calls: int = 0              # 测试观测口：refresh_stats 全量执行次数
 
+# ── R212 刀2：选卡/暂停期 HUD 全量刷新节流（mobile 门） ──────────────
+# vc18 真机取证：选卡期（LEVEL_UP）磁吸碎片持续吸收（R26）→ xp_gained 风暴逐帧置脏
+# → _tick_ui 每帧 flush_stats_dirty 全量 refresh_stats（多 Label.text 重排 +
+# _compute_build_sig 遍历武器词条 + _refresh_wave_left 扫生成队列）——选卡覆盖层下
+# 这些排版每帧白刷。mobile 门：LEVEL_UP/PAUSED 态帧末 flush 降频至 0.25s 一档；
+# 离开模态态（PLAYING/GAME_OVER）即回每帧 flush（战斗口径零变化）。
+# 1Hz 兜底 refresh_stats 照常（tick 前段，不经本门）；displayed_* 读口直调
+# flush_stats_dirty 亦不经本门（读取即最新语义不变）。flush_throttle_override 为
+# 测试观测口：-1=平台自动（mobile+模态才节流）/ 0=强制不节流 / 1=强制节流。
+const LEVELUP_FLUSH_INTERVAL_S := 0.25        # 模态态帧末 flush 节流档（4Hz）
+var _flush_gate_left: float = 0.0             # 节流相位剩余 s
+var flush_throttle_override: int = -1         # 测试覆写口（套件用毕复位 -1）
+
 const HP_BAR_SIZE := Vector2(340.0, 30.0)
 const XP_BAR_SIZE := Vector2(292.0, 14.0)
 const TOAST_TIME := 1.7                       # 波次 toast 展示时长 s
+const TOAST_MAX_LINES := 3                     # R253 toast 多行钳制帽（44px 带 34pt 行最多 3 行——超出截尾省略）
 const INTRO_TOAST_TIME := 3.4                 # 大关新机制横幅时长 s（文案长，需读完）
 const TOAST_FADE := 0.3                       # 末段淡出 s
 const ACH_TOAST_MAX_NAMES := 3                # 成就合批 toast 最多列名数（R191 评审#3：截断保读）
@@ -150,7 +181,7 @@ const TB_BASE_ALPHA := 0.88                   # 比 BossBar 弱一档
 # ── R186 复活反馈数值（设计案 §2 表） ────────────────────────────────
 const REVIVE_FLASH_ALPHA := 0.85              # 2 档全量白闪 alpha（0/1 档 fx_quality 降档）
 const REVIVE_FLASH_TIME := 0.45               # 2 档白闪时长 s（EASE_OUT）
-const REVIVE_BANNER_HOLD := 1.2               # 横幅停留 s（0.22 弹入 + 1.2 + 0.4 ≈1.82 < 3s 无敌）
+const REVIVE_BANNER_HOLD := 2.2               # 横幅停留 s（二cs：1.2→2.2；0.22 弹入 + 2.2 + 0.4 ≈2.82 < 5s 无敌）
 
 
 func _ready() -> void:
@@ -208,6 +239,8 @@ func bind_events() -> void:
 	EventBus.laser_subbeam_spawned.connect(_on_r187_stats_dirty)
 	EventBus.mirror_formed.connect(_on_mirror_formed_toast)
 	EventBus.w8_detonated.connect(_on_r187_stats_dirty)
+	EventBus.mine_dodged.connect(_on_mine_dodged_hud)   # 二db：躲过敌方爆炸授盾即时显条（专属 handler 小刷新）
+	EventBus.shield_blocked.connect(_on_shield_blocked_hud)   # 二db L1：橙盾层数读数挡下即刷（四控件小刷新）
 
 
 func setup(p_player: Node2D, p_spawner: Node = null) -> void:
@@ -243,6 +276,13 @@ func refresh_stats() -> void:
 			_shield_fill.size = Vector2(maxf((148.0 - 34.0 - 3.0) * s_pct, 8.0), 36.0 - 6.0)
 			_shield_fill_style.bg_color = PopPalette.PLAYER.lerp(
 				PopPalette.INK_SOFT, 0.35 * (1.0 - s_pct)) if not s_ready else PopPalette.PLAYER
+			# 二cv#1：层数透出「X N」（有几层显示几层；typeof 判型防缺属性运行时错）
+			var s_layers_v: Variant = player.get("shield_layers")
+			var s_layers: int = int(s_layers_v) if typeof(s_layers_v) in [TYPE_INT, TYPE_FLOAT] else 0
+			_shield_layers_label.text = "X %d" % s_layers if s_layers > 0 else ""
+		# 二db 橙盾条（躲雷奖励：层>0 才显；填充=剩余时间比例〔10s=Player.TEMP_SHIELD_TIME，
+		# 字面量同源〕，右端「N·Xs」=层数·剩余秒）
+		_refresh_temp_shield_bar()               # 二db 橙盾条（1Hz 兜底通道；即时显条走 _on_mine_dodged_hud）
 		var sig := _compute_build_sig()
 		if sig != _build_sig:
 			_build_sig = sig
@@ -253,6 +293,7 @@ func refresh_stats() -> void:
 		_wave_label.text = "无尽 %d" % (wave - endless_depth_base)
 	else:
 		_wave_label.text = "第 %d 波" % wave
+	_refresh_wave_left()                      # R209：1Hz 兜底（伴生/硬上限叠波等非击杀增量）
 	if _gold_label != null and player != null and is_instance_valid(player):
 		_gold_label.text = "◎ %d" % int(player.get("gold"))
 	if _skill_btn != null and player != null and is_instance_valid(player):
@@ -281,12 +322,23 @@ func refresh_stats() -> void:
 		else:
 			_skill_cd_label.text = "%ds" % ceili(float(player.get("skill_cd_left")))
 			_skill_icon_fg.modulate = Color(0.72, 0.74, 0.82, 1.0)   # 冷却压灰（图标读感保留）
+		# R246 升华态读口（HUD 升华反馈）：skills 泳道 Player.skill_sublime 局内布尔
+		#（enable_sublime() 契约置位，拾取红色传说卡生效）→ 技能键红环描边
+		#（PopPalette.RARITY_SUBLIME 单源取色）。has_method 守卫（R186 同式）保证契约
+		# 未落地环境维持现状，skills 合入后自动生效；无技能角色置灰逻辑不动
+		#（红环仅在 has_skill 角色上显示，深置灰键不叠加红反馈）
+		var sublime_on := has_skill and player.has_method(&"enable_sublime") \
+			and bool(player.get("skill_sublime"))
+		if _skill_sublime_ring != null:
+			_skill_sublime_ring.visible = sublime_on
 		# R186 复活次数常驻徽标（血条右上「✚×N」：revive_burst 即时 + 1Hz 兜底；归零置灰）
 		if _revive_badge != null:
 			var rc := int(player.get("revives_left"))
 			_revive_badge.text = "✚×%d" % rc
+			# R230 K4：动态色同样走量化口（品质金/弱化灰蓝角色切换）
 			_revive_badge.add_theme_color_override("font_color",
-				PopPalette.GOLD if rc > 0 else PopPalette.INK_SOFT)
+				StickerTheme.label_color(StickerTheme.LabelRole.GOLD) if rc > 0
+				else StickerTheme.label_color(StickerTheme.LabelRole.SOFT))
 		_refresh_r187_readout()
 		# R19 技能效果时长条（增益期金色倒数——「不知道效果何时结束」终解）
 		var fx_ratio: float = float(player.call(&"skill_active_ratio")) 			if player.has_method(&"skill_active_ratio") else 0.0
@@ -302,6 +354,7 @@ func refresh_stats() -> void:
 
 func tick(p_raw_delta: float) -> void:
 	# ①~⑧ 帧序 UI 阶段（raw 通道）：计时累计 + 1Hz 兜底刷新 + 波次 toast 衰减
+	_tick_skill_auto_cast()                # R241 ④ 自动施放仲裁（内部五重门，非 PLAYING 直返）
 	run_elapsed += p_raw_delta
 	_fallback_timer += p_raw_delta
 	if _fallback_timer >= 1.0:
@@ -322,9 +375,32 @@ func tick(p_raw_delta: float) -> void:
 				_move_hint_shown = true
 				_move_hint_wait = -1.0
 				_show_toast(GameConst.TUTORIAL_MOVE_BATTLE, MOVE_HINT_TIME)
-	_tick_hover()
+	# R207：悬停说明卡=光标特性，触屏设备无 hover——mobile 整段跳过（vc14 真机
+	# UI 段持续 10-20ms 之一刀；桌面行为不变）
+	if not OS.has_feature("mobile"):
+		_tick_hover()
 	_tb_tick(p_raw_delta)   # R186 TargetBar（帧结算 + 每帧读血，并入 ⑧ UI 阶段既有调用）
-	flush_stats_dirty()     # R188-perf：帧末同帧 flush（本帧事件风暴合并为一次全量刷新）
+	_flush_stats_tick(p_raw_delta)   # R188-perf 帧末同帧 flush + R212 刀2 模态态节流门
+
+
+func _flush_stats_tick(p_raw_delta: float) -> void:
+	# R212 刀2：帧末 flush 的节流门（mobile + LEVEL_UP/PAUSED 才生效；桌面/战斗态
+	# 每帧 flush 原样）。进模态态首帧门全开（gate=0 → 首个脏帧立即 flush，HUD 进
+	# 选卡期先同步一次），其后 0.25s 一档；xp_gained 风暴期 _stats_dirty 持真，
+	# 中间帧跳过的是重复全量排版（displayed 值到档即同步，中间值本就不可见）。
+	var throttled: bool = flush_throttle_override == 1 \
+		or (flush_throttle_override < 0 and OS.has_feature("mobile") \
+			and (_state_cur == GameConst.GameStatus.LEVEL_UP
+				or _state_cur == GameConst.GameStatus.PAUSED))
+	if not throttled:
+		_flush_gate_left = 0.0
+		flush_stats_dirty()     # R188-perf：帧末同帧 flush（事件风暴合并为一次全量刷新）
+		return
+	_flush_gate_left -= p_raw_delta
+	if _flush_gate_left > 0.0:
+		return
+	_flush_gate_left = LEVELUP_FLUSH_INTERVAL_S
+	flush_stats_dirty()
 
 
 # ── R13 自绘悬停说明 ──────────────────────────────────────────────
@@ -390,10 +466,30 @@ func _on_xp_gained(_p_amount: float) -> void:
 	_stats_dirty = true
 
 
+func _refresh_wave_left() -> void:
+	# R209 波次余敌：spawner 待出生队列 + 场上活跃之和（「这波还要杀多少」；敌不含
+	# 尸体/召唤伴生入队也计入——伴生 enqueue 同走队列，口径自洽）。宽类型读：setup
+	# 注入缺失时走 enemy_spawner 组兜底（同 TargetBar 数据源惯例）
+	if _wave_left_label == null:
+		return
+	var sp: Node = _spawner if _spawner != null and is_instance_valid(_spawner) \
+		else get_tree().get_first_node_in_group("enemy_spawner")
+	if sp == null:
+		return
+	var queue_v: Variant = sp.get("spawn_queue")
+	var act_v: Variant = sp.get("active")
+	if not (queue_v is Array) or not (act_v is Array):
+		return
+	var left: int = (queue_v as Array).size() + (act_v as Array).size()
+	_wave_left_label.text = "余 %d" % left
+	_wave_left_label.visible = left > 0
+
+
 func _on_wave_started(p_wave: int) -> void:
 	wave = p_wave
 	_show_toast(Lore.wave_toast(p_wave))
 	_stats_dirty = true
+	_refresh_wave_left()                      # 发射在 start_wave enqueue 之后 → 直接读到整队
 
 
 func _on_enemy_killed(p_enemy: Node2D) -> void:
@@ -411,6 +507,7 @@ func _on_enemy_killed(p_enemy: Node2D) -> void:
 	if killed_uid is int and int(killed_uid) == _tb_lock_uid:
 		_tb_lock_dying = true
 	_stats_dirty = true
+	_refresh_wave_left()   # 本处理器晚于 spawner 归还（active 已减）→ 杀一只掉一号
 
 
 func flush_stats_dirty() -> void:
@@ -450,6 +547,8 @@ func _on_state_changed(p_state: int) -> void:
 			or p_state == GameConst.GameStatus.LEVEL_UP
 	if _skill_btn != null:
 		_skill_btn.visible = p_state == GameConst.GameStatus.PLAYING   # 暂停按钮仅战斗态显示
+	if _skill_auto_btn != null:
+		_skill_auto_btn.visible = p_state == GameConst.GameStatus.PLAYING   # R241 ④ 自动施放键同技能键门
 	if p_state != GameConst.GameStatus.PLAYING:
 		_toast_left = 0.0                     # 状态覆盖期收起波次 toast
 		_toast_label.visible = false
@@ -485,6 +584,41 @@ func _on_skill_pressed() -> void:
 			player.call(&"activate_skill")
 
 
+# ── R241 ④ 技能自动施放（Meta 单一真源，R188 AUTO 开关同款式样） ──────
+func _on_skill_auto_pressed() -> void:
+	var on := not bool(Meta.settings("skill_auto_cast"))
+	Meta.set_setting("skill_auto_cast", on)
+	_sync_skill_auto_visual()
+	_show_toast("技能自动施放：%s" % ("开（冷却完成即自动施放）" if on else "关"), TOAST_TIME)
+
+
+func _sync_skill_auto_visual() -> void:
+	# 文案/配色双态（开=金;关=灰）；无技能角色压灰只读（施放链 has_skill 守卫仍拦）
+	var on := bool(Meta.settings("skill_auto_cast"))
+	if _skill_auto_label != null:
+		_skill_auto_label.text = "自动施放" if on else "手动施放"
+		_skill_auto_label.add_theme_color_override("font_color",
+			StickerTheme.label_color(StickerTheme.LabelRole.GOLD) if on
+			else StickerTheme.label_color(StickerTheme.LabelRole.SOFT))
+
+
+func _tick_skill_auto_cast() -> void:
+	# R241 ④ 施放帧：开态+PLAYING（state_changed 记录态）+未暂停（选卡/商店模态）+
+	# 有技能+冷却完成 → 自动施放。逐帧两 call 仲裁（skill_ready 内含死亡守卫）。
+	if player == null or not is_instance_valid(player):
+		return
+	if _state_cur != GameConst.GameStatus.PLAYING:
+		return
+	if not bool(Meta.settings("skill_auto_cast")):
+		return
+	if get_tree().paused:
+		return
+	if player.has_method(&"has_skill") and not bool(player.call(&"has_skill")):
+		return
+	if bool(player.call(&"skill_ready")):
+		player.call(&"activate_skill")
+
+
 # ── R188-idle AUTO 挂机开关（读写 Meta 单一真源，无缓存 bool） ──────
 func _on_auto_toggle_pressed() -> void:
 	# 点击翻转 → Meta.set_setting 落盘 → settings() 回填（单写口）→ toast 一次
@@ -511,8 +645,10 @@ func _sync_auto_visual() -> void:
 	_auto_capsule.add_theme_stylebox_override("panel", _auto_capsule_style)
 	if _auto_label != null:
 		_auto_label.text = "AUTO"
+		# R230 K4：动态色同样走量化口（正文墨/弱化灰蓝角色切换）
 		_auto_label.add_theme_color_override("font_color",
-			PopPalette.INK if on else PopPalette.INK_SOFT)
+			StickerTheme.label_color(StickerTheme.LabelRole.INK) if on
+			else StickerTheme.label_color(StickerTheme.LabelRole.SOFT))
 
 
 func is_auto_on() -> bool:
@@ -577,8 +713,38 @@ func _on_r187_stats_dirty(_p_arg: Variant = null, _p_arg2: Variant = null) -> vo
 	_refresh_r187_readout()
 
 
+func _on_mine_dodged_hud(_p_pos: Vector2) -> void:
+	# 二db 躲过敌方爆炸授盾即时显条（R187 同款专属 handler——不走 _stats_dirty 全量 flush：
+	# 橙条仅 4 控件小刷新，不背 laser 风暴的合并刷新语义；1Hz 兜底继续走 refresh_stats）
+	_refresh_temp_shield_bar()
+
+
+func _on_shield_blocked_hud(_p_pos: Vector2) -> void:
+	# 二db L1：橙盾被消耗（挡下一次伤害）读数即时（层 N 秒级递减不误读）；蓝条维持
+	# 1Hz 宅风不动——橙条是本批新读数，即时性优先
+	_refresh_temp_shield_bar()
+
+
+func _refresh_temp_shield_bar() -> void:
+	# 二db 橙盾条刷新共用口（refresh_stats 1Hz 兜底 + mine_dodged 即时通道）
+	if _temp_panel == null or player == null or not is_instance_valid(player):
+		return
+	var t_stacks_v: Variant = player.get("temp_shield_stacks")
+	var t_stacks: int = int(t_stacks_v) if typeof(t_stacks_v) in [TYPE_INT, TYPE_FLOAT] else 0
+	_temp_panel.visible = t_stacks > 0
+	if t_stacks > 0:
+		var t_left: float = float(player.get("temp_shield_left"))
+		var t_pct := clampf(t_left / Player.TEMP_SHIELD_TIME, 0.0, 1.0)   # R253：读真源常量（原 /10.0 字面量与 player 脱钩风险）
+		_temp_fill.size = Vector2(maxf((148.0 - 34.0 - 3.0) * t_pct, 8.0), 36.0 - 6.0)
+		_temp_fill_style.bg_color = PopPalette.ORANGE.lerp(
+			PopPalette.INK_SOFT, 0.35 * (1.0 - t_pct))
+		_temp_label.text = "%d·%ds" % [t_stacks, int(ceil(t_left))]
+
+
 func _on_mirror_formed_toast(p_text: String) -> void:
 	# R187 镜面生成 toast（「棱镜映照：镜面承接了 X」——与 R183 金色「召唤僚机」句式分界）
+	# R230 K4 复核：原冰青 lerp 自由色保留（K4 量化在此处收回——F9 门禁证伪「逐件独立
+	# 配色」前提，29 站点本就共享 6 值色板，量化无 dc 收益不值可见配色变更）
 	var toast := StickerTheme.label_sticker(Label.new(), 17,
 		PopPalette.PLAYER.lerp(Color.WHITE, 0.62), 4, Color.WHITE, true)   # 冰青（禁金）
 	toast.text = p_text
@@ -609,7 +775,7 @@ func _on_trait_milestone_toast(_p_trait_id: StringName, p_name: String, p_mult: 
 		SfxBank.I.play(&"tier_epic")
 	var text := "◆ 质变！%s 数值 ×%.1f" % [p_name, p_mult] if p_mult > 0.0 \
 		else "◆ %s —— 终极形态达成" % p_name
-	var toast := StickerTheme.label_sticker(Label.new(), 22, PopPalette.GOLD, 5, Color.WHITE, true)
+	var toast := StickerTheme.label_sticker(Label.new(), 22, StickerTheme.label_color(StickerTheme.LabelRole.GOLD), 5, Color.WHITE, true)
 	toast.text = text
 	toast.reset_size()
 	_fit_font_size(toast, text, 520.0)
@@ -636,7 +802,7 @@ func _on_reroll_toast(p_count: int) -> void:
 	# 刷新次数获得 toast（选卡刷新机制）：小 toast + 金币音——「换一批 ×N」余量可见
 	if SfxBank.I != null:
 		SfxBank.I.play(&"coin")
-	var toast := StickerTheme.label_sticker(Label.new(), 17, PopPalette.PLAYER, 4, Color.WHITE, true)
+	var toast := StickerTheme.label_sticker(Label.new(), 17, StickerTheme.label_color(StickerTheme.LabelRole.PLAYER), 4, Color.WHITE, true)
 	toast.text = "换一批次数 +%d" % p_count
 	# R198（r195-3）：活宽拉伸锚（同 :560 镜面 toast 注）——y 保持设计位 300
 	toast.anchor_right = 1.0
@@ -654,8 +820,23 @@ func _on_reroll_toast(p_count: int) -> void:
 	tw.tween_callback(toast.queue_free)
 
 
+var _intro_frame_stamp: int = -1                  # R253 QA BUG-1：mechanics_intro 同帧合并账
+var _intro_merged_text: String = ""
+
+
 func _on_mechanics_intro(p_text: String) -> void:
-	# 大关新机制解锁横幅（开局宣告）：复用波次 toast 位 + 加长展示时长（文案需读完）
+	# 大关新机制解锁横幅（开局宣告）：复用波次 toast 位 + 加长展示时长（文案需读完）。
+	# R253 QA BUG-1 同帧合并：apply_choice 先发「词条栏已满」、尾部 emit_card_chosen 触发
+	# 词条首获 → 祝福解锁播报同帧后到——单 Label 直发后者覆写前者（R238 H2「栈满降级
+	# 不再静默」被吞，新档 r238 ④c 必红）。同帧第二条起拼接重发（TOAST_MAX_LINES 钳制
+	# 兜底）；金卡解锁播报（:1106 同通道）同享防覆盖。事件本身仍逐条广播（测试面零改）。
+	var frame := Engine.get_process_frames()
+	if frame == _intro_frame_stamp:
+		_intro_merged_text += "\n" + p_text
+		_show_toast(_intro_merged_text, INTRO_TOAST_TIME)
+		return
+	_intro_frame_stamp = frame
+	_intro_merged_text = p_text
 	_show_toast(p_text, INTRO_TOAST_TIME)
 
 
@@ -693,7 +874,7 @@ func _flush_achievement_toast() -> void:
 	var summary := "、".join(names.slice(0, ACH_TOAST_MAX_NAMES))
 	if names.size() > ACH_TOAST_MAX_NAMES:
 		summary += "…等 %d 项" % names.size()
-	var toast := StickerTheme.label_sticker(Label.new(), 17, PopPalette.GOLD, 4, Color.WHITE, true)
+	var toast := StickerTheme.label_sticker(Label.new(), 17, StickerTheme.label_color(StickerTheme.LabelRole.GOLD), 4, Color.WHITE, true)
 	toast.name = "AchToast"                       # 测试观测口（合批断言按名定位）
 	# R191 定案（阶梯中间档 0 结晶）：reward=0 不显示金额——total>0 才拼「（+X）」金额段
 	# R196：奖杯/结晶 emoji 字面量移除（Android 系统字体链缺字形——apk_menu_no_icons 定案）
@@ -764,12 +945,14 @@ func _on_build_gui_input(p_ev: InputEvent) -> void:
 func _apply_build_panel_pos() -> void:
 	# R196 构筑面板位置三档（Meta.settings("panel_pos")：0=右上 1=右下 2=左下）；R197 竖排
 	# 两列改版：尺寸 252×132 → 140×258（窄高——左列武器/右列词条），三落位随之重排：
-	# · 右上 x556-696×y196-454：暂停钮 y26-98 / 金币 pill y92-128 / AUTO y126-190 /
+	# R208 面板收窄 140→118（真机反馈右侧空白）——三档右沿口径保持（右上右沿 696、
+	# 右下右沿 584、左下左沿 24），仅宽收：
+	# · 右上 x578-696×y196-454：暂停钮 y26-98 / 金币 pill y92-128 / AUTO y126-190 /
 	#   波次徽章 y16-122 / BossBar y112-184 全部 y<196，持久元素零冲突；Boss 出场横幅
 	#   y210-256 为 ~2.2s 瞬态 IGNORE 标签，面板（后挂）压其上可短暂遮文案尾——可接受。
-	# · 右下 x444-584×y998-1256：右沿 W-136 < 技能键左沿恒 W-110，任意宽度零重叠
+	# · 右下 x466-584×y998-1256：右沿 W-136 < 技能键左沿恒 W-110，任意宽度零重叠
 	#   （技能键 R196 已改右缘锚）。
-	# · 左下 x24-164×y998-1256：贴底 24px 与左沿 24 保持 R195 口径。
+	# · 左下 x24-142×y998-1256：贴底 24px 与左沿 24 保持 R195 口径。
 	# 驱动双口：_build_ui 末尾（初始落位）+ settings_changed("panel_pos")（写口即时重挂）。
 	if _build_panel == null:
 		return
@@ -779,19 +962,19 @@ func _apply_build_panel_pos() -> void:
 			_build_panel.anchor_right = 1.0
 			_build_panel.anchor_top = 0.0
 			_build_panel.anchor_bottom = 0.0
-			_build_panel.offset_left = -164.0   # x556
+			_build_panel.offset_left = -142.0  # x578
 			_build_panel.offset_top = 196.0
-			_build_panel.offset_right = -24.0   # x696
+			_build_panel.offset_right = -24.0  # x696
 			_build_panel.offset_bottom = 454.0
 		1:                                    # 右下：全 1 锚
 			_build_panel.anchor_left = 1.0
 			_build_panel.anchor_right = 1.0
 			_build_panel.anchor_top = 1.0
 			_build_panel.anchor_bottom = 1.0
-			_build_panel.offset_left = -276.0   # x444
-			_build_panel.offset_top = -282.0    # y998
-			_build_panel.offset_right = -136.0  # x584
-			_build_panel.offset_bottom = -24.0   # y1256
+			_build_panel.offset_left = -254.0  # x466
+			_build_panel.offset_top = -282.0   # y998
+			_build_panel.offset_right = -136.0 # x584
+			_build_panel.offset_bottom = -24.0  # y1256
 		2:                                    # 左下（原位）：贴底/左沿保持 R195 口径
 			_build_panel.anchor_left = 0.0
 			_build_panel.anchor_right = 0.0
@@ -799,17 +982,95 @@ func _apply_build_panel_pos() -> void:
 			_build_panel.anchor_bottom = 1.0
 			_build_panel.offset_left = 24.0
 			_build_panel.offset_top = -282.0
-			_build_panel.offset_right = 164.0
+			_build_panel.offset_right = 142.0
 			_build_panel.offset_bottom = -24.0
 
 
 func _on_meta_setting_changed(p_key: String) -> void:
 	# R196：设置页「构筑面板位置」循环行 → set_setting 写口经本订阅即时重挂（键守卫）
+	# R202：show_fps 同款键守卫接线（fps_cap/fx_opacity 先例——消费端各自订阅/单点应用）
 	if p_key == "panel_pos":
 		_apply_build_panel_pos()
+	elif p_key == "show_fps":
+		_apply_show_fps()
+
+
+# ── R202 帧率显示（设置键 show_fps：HUD 右缘小字读数，纯显示） ──────
+func _apply_show_fps() -> void:
+	# 消费端单点：boot 末段初值（_build_ui 收口）+ settings_changed("show_fps") 即时切换，
+	# 只切 visible（节点急切建好）。与 fps_cap 正交：fps_cap 是 mobile 门内 Engine.max_fps
+	# 帽（meta_manager._apply_fps_cap），show_fps 纯显示互不依赖。关态 set_process(false)
+	# ——_process 每帧刷新只在开启期挂起，关即零常驻开销。
+	if _fps_label == null:
+		return
+	var on := bool(Meta.settings("show_fps"))
+	_fps_label.visible = on
+	set_process(on)
+
+
+var _fps_diag_tick: int = 0                     # R204：诊断节流（dc/obj 15 帧一取）
+var _fps_diag_text: String = ""                 # 缓存段（两取之间不重建字符串）
+var _fps_last: int = -1                         # R188⑦：FPS 读数缓存（-1=未建；读数与诊断段
+                                                # 均不变时整行文本不重建——稳态帧零 String 构造）
+
+
+func _process(_p_delta: float) -> void:
+	# R202：FPS 读数每帧刷新（Engine.get_frames_per_second() 引擎平滑口径）。
+	# 仅 show_fps 开启期到达（_apply_show_fps 关态 set_process(false) 挂起本回调）；
+	# headless 安全无需门（无渲染循环下读数恒 0，不崩）。
+	# R204：附绘制诊断（15 帧一取——RenderingServer 帧级计数 dc/obj）：
+	# 真机再遇掉帧时读数直接给出「画布项/绘制调用是否爆炸」的证据，不用猜。
+	# R188⑦：读数/诊断段任一未变不重拼文本（诊断段更新帧强制刷一次，防 15 帧节流段
+	# 变了却被读数缓存吞掉）；文本内容与旧逐帧拼接逐位一致
+	if _fps_label == null or not _fps_label.visible:
+		return
+	_fps_diag_tick += 1
+	var diag_changed := false
+	if _fps_diag_tick % 15 == 0:
+		var dc := RenderingServer.get_rendering_info(
+			RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)
+		var obj := RenderingServer.get_rendering_info(
+			RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME)
+		_fps_diag_text = " dc %d o %d" % [dc, obj]
+		diag_changed = true
+	var fps := Engine.get_frames_per_second()
+	if diag_changed or fps != _fps_last:
+		_fps_last = fps
+		_fps_label.text = "FPS %d" % fps + _fps_diag_text
+
+
+# ── R220 刀11：damage_resolved 累计聚合 30Hz 降频门（R207 半频相位先例） ──
+# mobile 门内隔帧消费：关门帧结果引用暂存（保序）、开门帧一并累计——total_damage/
+# TargetBar _agg 累计值不丢、时序不变，只把回调频率压半（HUD 常驻订阅的每帧 dict
+# 操作 ×N 命中减半）。桌面/headless 与注入口 0=每帧原路径（既有测试同步断言不受扰）。
+var dmg_half_freq_override: int = -1         # 测试注入口（-1=平台自动 / 0=每帧 / 1=半频）
+var _dmg_subtick_left: int = 1               # 半频相位（1=本帧消费；R206 _ui_subtick 同款）
+var _dmg_pending: Array[DamageResult] = []   # 关门帧暂存队列（开门帧保序消费）
+
+
+func _dmg_half_freq() -> bool:
+	if dmg_half_freq_override >= 0:
+		return dmg_half_freq_override == 1
+	return OS.has_feature("mobile")
 
 
 func _on_damage_resolved(p_result: DamageResult) -> void:
+	# R220 刀11：批化消费入口（EventBus 派发时点=⑧段前 game_loop dispatch——本回调在
+	# 派发批内保序到达）；30Hz 门内关门帧暂存、开门帧一并 _apply_damage_result。
+	if _dmg_half_freq():
+		_dmg_pending.append(p_result)
+		_dmg_subtick_left -= 1
+		if _dmg_subtick_left > 0:
+			return                           # 关门帧：暂存（累计值不丢）
+		_dmg_subtick_left = 2
+		for r in _dmg_pending:
+			_apply_damage_result(r)
+		_dmg_pending.clear()
+		return
+	_apply_damage_result(p_result)
+
+
+func _apply_damage_result(p_result: DamageResult) -> void:
 	# 总伤害统计（结算屏数据源；HUD 不逐次刷新——1Hz 兜底承担）
 	total_damage += p_result.final_value
 	# R186 TargetBar 聚合（回调纪律 O(1)，严禁扫树——风暴线 event_bus.gd:54）：合格伤害
@@ -956,12 +1217,14 @@ func _refresh_build() -> void:
 			# 可悬停提示）。图标无点击处理器 → PASS：tooltip 保留、拖动链放行
 			icon.mouse_filter = Control.MOUSE_FILTER_PASS
 			content.add_child(icon)
-			# R198（r197-2）：字号 10→11（与 ×N 贴纸同批——桌面窗缩放下可读性微调；
-			# 实测「Lv10」@11pt = 26px ≤ 承载宽 30px，不溢出）
-			var lv := StickerTheme.label_sticker(Label.new(), 11, PopPalette.INK, 0, Color.WHITE, true)
+			# R200（真机反馈「buff 显示的字很小」）：字号 11→14；R203 真机二次反馈
+			# 「又变小」→14→16（1.5K-2K 屏 720 逻辑宽下 14pt≈8.2dp 仍低于可读档，
+			# HP 条 18pt 为基准）。承载宽 = 宝石列 x74 − (icon+4)（R203 右沿 66→74 让位，
+			# 位置仍 icon+4、间隙仍 4px），icon 帽 32 时 = 38px，「Lv10」@16pt ≈ 37px
+			var lv := StickerTheme.label_sticker(Label.new(), 16, StickerTheme.label_color(StickerTheme.LabelRole.INK), 0, Color.WHITE, true)
 			lv.text = "Lv%d" % int(w.get("level"))
-			lv.size = Vector2(66.0 - icon_size - 4.0, 13.0)
-			lv.position = Vector2(icon_size + 4.0, row_y + (row_h - 13.0) * 0.5)
+			lv.size = Vector2(74.0 - icon_size - 4.0, 18.0)
+			lv.position = Vector2(icon_size + 4.0, row_y + (row_h - 18.0) * 0.5)
 			content.add_child(lv)
 		else:
 			# R183 上锁样式：锁徽 + 暗环（用户口径「另外就弄个上锁的样式」）——
@@ -986,9 +1249,13 @@ func _refresh_build() -> void:
 				lock.texture = TextureFactory.ui_lock()
 				lock.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 				lock.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-				lock.size = Vector2(14.0, 14.0)
-				lock.position = Vector2((icon_size - 14.0) * 0.5,
-					row_y + (row_h - 14.0) * 0.5)
+				# R208（真机反馈「锁的图标太小」）：14 固定 → 0.7×行图标比例放大
+				# （cap5 行 45.6/icon32 → 锁 22.4；cap6 行 38/icon30 → 锁 21；小屏
+				# icon20 → 14 兜底不变），仍居中于暗环
+				var lock_sz := maxf(icon_size * 0.7, 14.0)
+				lock.size = Vector2(lock_sz, lock_sz)
+				lock.position = Vector2((icon_size - lock_sz) * 0.5,
+					row_y + (row_h - lock_sz) * 0.5)
 				lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				content.add_child(lock)
 	# ② 右列·词条宝石竖排（跨武器聚合挂载序，最多 7 枚：类别章形 + ×层数右侧）
@@ -1017,31 +1284,30 @@ func _refresh_build() -> void:
 		gem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		content.add_child(gem_icon)
 		if int(gems[gi]["layers"]) > 1:
-			# R198（r197-2）：字号 9→10（540×960 桌面窗 0.75 缩放下可读性微调）
-			# R198（r197-3）取方案一：宽 24→20 + 文本右对齐——右沿恰 100+20=120 ==
-			# content 宽（:866），消除旧 24 宽右沿 124>120 的 4px 出界；A⑤ x=100 断言不动。
-			# 实码双实测（headless）：①「×10」@10pt 字符串度量 = 20px 恰等承载宽（规划判据
-			# 「未超 20px」→ 不触发方案二 content 120→124）；②引擎 Label min-width 结算
-			# 「×10」=28px>20（整形/最小宽口径差）——但 R196 帽 stack_max+OVERCAP_EXT_MAX
-			# 全池最高 4+5=9，×10 局内不可达，可达域 ×2..×9 均 ≤20px 承载；未来抬帽出两
-			# 位数 ×N 时回退方案二并按 min-width 28 重定 content 宽（r198_hud_layout R⑤~⑧ 锁）
-			var cnt := StickerTheme.label_sticker(Label.new(), 10, PopPalette.INK, 0, Color.WHITE, true)
+			# R200（真机反馈「buff 显示的字很小」）：字号 10→14；R203 二次反馈→16、
+			# 宽 24→28；R208 面板收窄 140→118——x 96→92→88（右沿 88+28=116 ≤ 118，
+			# 右对齐收敛保持）。
+			# R226 有意契约变更：叠层帽拆除后两位数 ×N 局内可达（原 R196 帽全池最高 ×9）
+			# ——承载宽 28→36、x 88→80（右沿 80+36=116 ≤ 118 右对齐收敛保持，
+			# ×2..×99 @16pt 字符串度量 ≤36px 承载；三位数按引擎 Label min-width 再议）
+			var cnt := StickerTheme.label_sticker(Label.new(), 16, StickerTheme.label_color(StickerTheme.LabelRole.INK), 0, Color.WHITE, true)
 			cnt.text = "×%d" % int(gems[gi]["layers"])
-			cnt.size = Vector2(20.0, 12.0)
-			cnt.position = Vector2(100.0, gy + 9.0)
+			cnt.size = Vector2(36.0, 18.0)
+			cnt.position = Vector2(80.0, gy + 6.0)
 			cnt.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			content.add_child(cnt)
 	# R198（r197-1）：第 8 枚起静默截断 → 补「+N」溢出提示（挂最后一枚宝石行下方，
-	# y214+12=226 ≤ content 高 228）。节点名取「OverflowGem」——规划字面「GemOverflow」
+	# R200 字号 10→14；R203 二次反馈→16 高 18、y 212→210：210+18=228 == content 高
+	# 恰等保持）。节点名取「OverflowGem」——规划字面「GemOverflow」
 	# 恰以 Gem 开头，会使 r197 B③「Gem0..Gem6 恰 7 枚」的 begins_with("Gem") 计数断裂
 	# （r197_build_panel_cases.gd:233-236 / r196_growth_cases.gd:436 三处同名前缀消费），
 	# 本条自身的「非 Gem* 前缀」约束优先，令名保留语义 token
 	if gems.size() > 7:
-		var overflow := StickerTheme.label_sticker(Label.new(), 10, PopPalette.INK_SOFT)
+		var overflow := StickerTheme.label_sticker(Label.new(), 16, StickerTheme.label_color(StickerTheme.LabelRole.SOFT))
 		overflow.name = "OverflowGem"
 		overflow.text = "+%d" % (gems.size() - 7)
-		overflow.position = Vector2(74.0, 214.0)
-		overflow.size = Vector2(40.0, 12.0)
+		overflow.position = Vector2(74.0, 210.0)
+		overflow.size = Vector2(44.0, 18.0)
 		content.add_child(overflow)
 
 
@@ -1081,14 +1347,14 @@ func _build_ui() -> void:
 	_tb_ghost.size = Vector2.ZERO
 	_tb_ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_tb_panel.add_child(_tb_ghost)
-	_tb_name_label = StickerTheme.label_sticker(Label.new(), 13, PopPalette.INK, 0, Color.WHITE, true)
+	_tb_name_label = StickerTheme.label_sticker(Label.new(), 13, StickerTheme.label_color(StickerTheme.LabelRole.INK), 0, Color.WHITE, true)
 	_tb_name_label.name = "TargetName"
 	_tb_name_label.text = ""
 	_tb_name_label.position = Vector2(12.0, 3.0)
 	_tb_name_label.size = Vector2(140.0, 20.0)
 	_tb_name_label.clip_text = true
 	_tb_panel.add_child(_tb_name_label)
-	_tb_hp_label = StickerTheme.label_sticker(Label.new(), 13, PopPalette.INK, 0, Color.WHITE, true)
+	_tb_hp_label = StickerTheme.label_sticker(Label.new(), 13, StickerTheme.label_color(StickerTheme.LabelRole.INK), 0, Color.WHITE, true)
 	_tb_hp_label.name = "TargetHp"
 	_tb_hp_label.text = ""
 	_tb_hp_label.position = Vector2(140.0, 3.0)
@@ -1123,14 +1389,15 @@ func _build_ui() -> void:
 	_hp_fill.size = HP_BAR_SIZE - Vector2(8.0, 8.0)
 	_hp_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hp_panel.add_child(_hp_fill)
-	_hp_label = StickerTheme.label_sticker(Label.new(), 18, PopPalette.INK, 0, Color.WHITE, true)
+	_hp_label = StickerTheme.label_sticker(Label.new(), 18, StickerTheme.label_color(StickerTheme.LabelRole.INK), 0, Color.WHITE, true)
 	_hp_label.name = "HpText"
 	_hp_label.size = Vector2(HP_BAR_SIZE.x, 24.0)
 	_hp_label.position = Vector2(0.0, 3.0)
 	_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hp_panel.add_child(_hp_label)
 	# R186 复活次数常驻徽标（血条右上「✚×N」小 label：refresh_stats 驱动，归零置灰）
-	_revive_badge = StickerTheme.label_sticker(Label.new(), 13, PopPalette.GOLD, 4, Color.WHITE, true)
+	# R200：13→16（顶带常驻读数与 R187 读数同族抬档；「✚×3」@16 ≈ 50px ≤ 64 承载）
+	_revive_badge = StickerTheme.label_sticker(Label.new(), 16, StickerTheme.label_color(StickerTheme.LabelRole.GOLD), 4, Color.WHITE, true)
 	_revive_badge.name = "ReviveBadge"
 	_revive_badge.text = "✚×0"
 	_revive_badge.size = Vector2(64.0, 16.0)
@@ -1140,11 +1407,17 @@ func _build_ui() -> void:
 	root.add_child(_revive_badge)
 	# R187 武器形态读数位（单行紧凑徽标，refresh_stats 驱动 + 信号即时刷新）：
 	# 「束 ×N」= W4 副激光束数徽标 /「镜 ×N」= W5 镜面军团角标 /「爆 ×N」= W8 蓄能引爆读数
-	_r187_readout = StickerTheme.label_sticker(Label.new(), 13, PopPalette.SHOCK.lerp(Color.WHITE, 0.25), 4, Color.WHITE, true)
+	# R200（真机反馈「buff 字很小」）：13→18 对齐 HP 行读数档。QA/评审 D1 修复：盒
+	# 右沿 480→592 挪进空走廊——HP 胶囊实宽 340（右沿 24+340=364），盒左沿 368 留
+	# 4px 缝（r195 R2 法按矩形判交），最坏三段全文 @18pt ≈ 175px 右对齐起笔 ≥417，
+	# 字形彻底不碰血条（旧 480 右沿时起笔 305~327 侵入胶囊 37~59px）；波次徽章
+	# 左沿 ~598 → 右沿 592 留 6px。y30+20=50 仍在顶带行内
+	# R230 K4：浅紫 lerp 自由色收敛入 SHOCK 角色（紫族色相保持，明度序断言钉——语义色保全）
+	_r187_readout = StickerTheme.label_sticker(Label.new(), 18, PopPalette.SHOCK.lerp(Color.WHITE, 0.25), 4, Color.WHITE, true)
 	_r187_readout.name = "R187Readout"
 	_r187_readout.text = ""
-	_r187_readout.size = Vector2(180.0, 16.0)
-	_r187_readout.position = Vector2(300.0, 34.0)
+	_r187_readout.size = Vector2(224.0, 20.0)
+	_r187_readout.position = Vector2(368.0, 30.0)
 	_r187_readout.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_r187_readout.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_r187_readout)
@@ -1170,7 +1443,7 @@ func _build_ui() -> void:
 	_xp_fill.size = Vector2(3.0, XP_BAR_SIZE.y - 6.0)
 	_xp_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	xp_panel.add_child(_xp_fill)
-	_level_label = StickerTheme.label_sticker(Label.new(), 18, PopPalette.INK, 0, Color.WHITE, true)
+	_level_label = StickerTheme.label_sticker(Label.new(), 18, StickerTheme.label_color(StickerTheme.LabelRole.INK), 0, Color.WHITE, true)
 	_level_label.name = "LevelText"
 	_level_label.text = "Lv 1"
 	_level_label.position = Vector2(356.0, 60.0)
@@ -1188,25 +1461,35 @@ func _build_ui() -> void:
 	badge.offset_bottom = 122.0
 	_add_hover(badge, "波次
 当前波次；清完最终 Boss 波即通关结算")
-	var badge_cap := StickerTheme.label_sticker(Label.new(), 13, PopPalette.INK_SOFT)
+	var badge_cap := StickerTheme.label_sticker(Label.new(), 13, StickerTheme.label_color(StickerTheme.LabelRole.SOFT))
 	badge_cap.text = "WAVE"
 	badge_cap.size = Vector2(106.0, 16.0)
 	badge_cap.position = Vector2(0.0, 22.0)
 	badge_cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge.add_child(badge_cap)
-	_wave_label = StickerTheme.label_sticker(Label.new(), 22, PopPalette.INK, 0, Color.WHITE, true)
+	_wave_label = StickerTheme.label_sticker(Label.new(), 22, StickerTheme.label_color(StickerTheme.LabelRole.INK), 0, Color.WHITE, true)
 	_wave_label.name = "WaveText"
 	_wave_label.text = "第 0 波"
 	_wave_label.size = Vector2(106.0, 34.0)
 	_wave_label.position = Vector2(0.0, 42.0)
 	_wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge.add_child(_wave_label)
+	# R209 余敌副行：徽章下缘空带（y76-106 圆内弦宽 ≥62px，「余 N」13pt 居中可读）；
+	# 口径=待出生队列+场上活跃（≤8/帧出生节流下含队列才单调递减不跳变）
+	_wave_left_label = StickerTheme.label_sticker(Label.new(), 13, StickerTheme.label_color(StickerTheme.LabelRole.SOFT))
+	_wave_left_label.name = "WaveLeftText"
+	_wave_left_label.text = "余 0"
+	_wave_left_label.size = Vector2(106.0, 18.0)
+	_wave_left_label.position = Vector2(0.0, 78.0)
+	_wave_left_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_wave_left_label.visible = false
+	badge.add_child(_wave_left_label)
 
 	# 击杀气泡 + 计时气泡
 	var kill_pill := _sticker_panel(root, Vector2(24.0, 92.0), Vector2(150.0, 36.0), 18.0)
 	_add_hover(kill_pill, "击杀
 本局击杀数（图鉴/成就统计源）")
-	_kill_label = StickerTheme.label_sticker(Label.new(), 18, PopPalette.INK, 0, Color.WHITE, true)
+	_kill_label = StickerTheme.label_sticker(Label.new(), 18, StickerTheme.label_color(StickerTheme.LabelRole.INK), 0, Color.WHITE, true)
 	_kill_label.name = "KillText"
 	_kill_label.text = "击杀 0"
 	_kill_label.size = Vector2(150.0, 24.0)
@@ -1216,7 +1499,7 @@ func _build_ui() -> void:
 	var time_pill := _sticker_panel(root, Vector2(184.0, 92.0), Vector2(112.0, 36.0), 18.0)
 	_add_hover(time_pill, "时长
 本局已经过时间")
-	_time_label = StickerTheme.label_sticker(Label.new(), 18, PopPalette.INK_SOFT)
+	_time_label = StickerTheme.label_sticker(Label.new(), 18, StickerTheme.label_color(StickerTheme.LabelRole.SOFT))
 	_time_label.name = "TimeText"
 	_time_label.text = "0:00"
 	_time_label.size = Vector2(112.0, 24.0)
@@ -1269,6 +1552,19 @@ func _build_ui() -> void:
 	skill_fg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	skill_btn.add_child(skill_fg)
 	_skill_icon_fg = skill_fg
+	# R246 升华红环覆盖层（默认隐藏；refresh_stats 按 player.skill_sublime 态显隐——
+	# RARITY_SUBLIME 单源取色，ring_tex 惰性缓存一次生成）；独立节点不占用
+	# _skill_icon_fg.modulate 状态机（就绪白/冷却灰/无技能压暗/增益金零扰动）
+	var sublime_ring := TextureRect.new()
+	sublime_ring.name = "SkillSublimeRing"
+	sublime_ring.texture = TextureFactory.ring_tex(PopPalette.RARITY_SUBLIME, 86, 5.5)
+	sublime_ring.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sublime_ring.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	sublime_ring.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	sublime_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sublime_ring.visible = false
+	skill_btn.add_child(sublime_ring)
+	_skill_sublime_ring = sublime_ring
 	# R19 技能效果剩余时长条（增益期金色倒数，贴按钮下缘）
 	var fx_bar := ColorRect.new()
 	fx_bar.name = "SkillActiveBar"
@@ -1279,7 +1575,7 @@ func _build_ui() -> void:
 	fx_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	skill_btn.add_child(fx_bar)
 	_skill_active_bar = fx_bar
-	_skill_cd_label = StickerTheme.label_sticker(Label.new(), 26, PopPalette.INK, 4, Color.WHITE, true)
+	_skill_cd_label = StickerTheme.label_sticker(Label.new(), 26, StickerTheme.label_color(StickerTheme.LabelRole.INK), 4, Color.WHITE, true)
 	_skill_cd_label.name = "SkillCd"
 	_skill_cd_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_skill_cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1287,6 +1583,40 @@ func _build_ui() -> void:
 	_skill_cd_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_skill_cd_label.text = ""
 	skill_btn.add_child(_skill_cd_label)
+	# R241 ④ 技能自动施法开关（技能键正下方，右缘同列锚）：开=每次技能冷却完成自动
+	# 施放（R188-idle AUTO 挂机开关同款 Meta 单一真源持久化；关=手动点按现状）。
+	# 观感：小胶囊 56×30，开=金「自动施放」/关=灰「手动施放」；无技能角色按键无效。
+	var auto_cast_btn := Button.new()
+	auto_cast_btn.name = "SkillAutoCast"
+	for style_name in ["normal", "hover", "pressed", "focus", "disabled"]:
+		auto_cast_btn.add_theme_stylebox_override(style_name, StyleBoxEmpty.new())
+	auto_cast_btn.anchor_left = 1.0
+	auto_cast_btn.anchor_right = 1.0
+	auto_cast_btn.anchor_top = 1.0
+	auto_cast_btn.anchor_bottom = 1.0
+	auto_cast_btn.offset_left = -110.0
+	auto_cast_btn.offset_right = -24.0
+	auto_cast_btn.offset_top = -76.0              # 技能键底 -82 下留 6px 缝
+	auto_cast_btn.offset_bottom = -44.0           # 高 32px 触控带（56 宽同 AUTO）
+	auto_cast_btn.focus_mode = Control.FOCUS_NONE
+	auto_cast_btn.pressed.connect(_on_skill_auto_pressed)
+	auto_cast_btn.button_down.connect(func() -> void: StickerTheme.press_punch(auto_cast_btn))
+	_skill_auto_label = StickerTheme.label_sticker(Label.new(), 13,
+		StickerTheme.label_color(StickerTheme.LabelRole.SOFT), 3, Color.WHITE, true)
+	_skill_auto_label.name = "SkillAutoCastText"
+	_skill_auto_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_skill_auto_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_skill_auto_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_skill_auto_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	auto_cast_btn.add_child(_skill_auto_label)
+	root.add_child(auto_cast_btn)
+	_skill_auto_btn = auto_cast_btn
+	_add_hover(auto_cast_btn, "技能自动施放
+开：角色技能每次冷却完成自动施放
+（无技能角色无效；暂停/选卡期不施放）
+关：手动点技能键施放")
+	_sync_skill_auto_visual()
+	auto_cast_btn.visible = false                 # 初始 MENU 态隐藏（state_changed 驱动——与技能键同门）
 	# 金币 pill（击杀/计时/护盾同行末段——2026-08-31 P0 反馈「金币压血条」修复落位；
 	# 原 (24,44) 与血条 24~54/经验条 63~77 双重叠，现移至护盾条右侧 464~596）
 	var gold_pill := _sticker_panel(root, Vector2(464.0, 92.0), Vector2(132.0, 36.0), 18.0)
@@ -1295,14 +1625,14 @@ func _build_ui() -> void:
 （「丰饶/富矿」祝福提升获取）")
 	gold_pill.name = "GoldPill"
 	gold_pill.modulate.a = 0.94
-	_gold_label = StickerTheme.label_sticker(Label.new(), 17, PopPalette.XP, 0, Color.WHITE, true)
+	_gold_label = StickerTheme.label_sticker(Label.new(), 17, StickerTheme.label_color(StickerTheme.LabelRole.GOLD), 0, Color.WHITE, true)
 	_gold_label.text = "◎ 0"
 	_gold_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_gold_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_gold_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	gold_pill.add_child(_gold_label)
 	# Boss 出场横幅（演出：缩放弹入 → 停留 → 淡出）
-	_boss_banner = StickerTheme.label_sticker(Label.new(), 30, PopPalette.ENEMY, 6, Color.WHITE, true)
+	_boss_banner = StickerTheme.label_sticker(Label.new(), 30, StickerTheme.label_color(StickerTheme.LabelRole.ENEMY), 6, Color.WHITE, true)
 	_boss_banner.name = "BossBanner"
 	_boss_banner.text = ""
 	# R195 适配分区：全宽标签拉伸锚（anchor_l=0/anchor_r=1、y 不变；720 宽恒等，
@@ -1322,9 +1652,11 @@ func _build_ui() -> void:
 	build_root.name = "BuildPanel"
 	# R197 竖排两列：252×132 横排 → 140×258 窄高（左列武器/右列词条——用户反馈）
 	build_root.position = Vector2(24.0, 998.0)
-	build_root.size = Vector2(140.0, 258.0)
+	# R208（真机反馈「buff 栏细长一点——长条内部右侧有空白」）：宽 140→118——右列
+	# 宝石区收缩（icon x74..96、×N 右沿 116），右沿口径保持；左列武器/锁行 0..74 不动。
+	build_root.size = Vector2(118.0, 258.0)
 	# R195 适配分区：底带下锚（offset=现值−锚点(0,1280)：上 998−1280=-282、底沿
-	# 1256−1280 贴底恒 24px；默认窗 (24,998)140×258 恒等；实际落位由 _apply_build_panel_pos 收口）
+	# 1256−1280 贴底恒 24px；默认窗 (24,998)118×258 恒等；实际落位由 _apply_build_panel_pos 收口）
 	build_root.anchor_top = 1.0
 	build_root.anchor_bottom = 1.0
 	build_root.offset_top = -282.0
@@ -1338,15 +1670,17 @@ func _build_ui() -> void:
 	build_root.gui_input.connect(_on_build_gui_input)
 	root.add_child(build_root)
 	_build_panel = build_root
-	var build_bg := _sticker_panel(build_root, Vector2.ZERO, Vector2(140.0, 258.0), 16.0)
+	var build_bg := _sticker_panel(build_root, Vector2.ZERO, Vector2(118.0, 258.0), 16.0)
 	build_bg.name = "BuildBg"
 	build_bg.modulate.a = 0.92
 	build_bg.mouse_filter = Control.MOUSE_FILTER_PASS               # 点击穿透到 BuildPanel
-	_build_label = StickerTheme.label_sticker(Label.new(), 12, PopPalette.INK_SOFT)
+	# R200（真机反馈）：底行字号 12→14；R208 面板收窄 140→118——文案改两段短式
+	# 「构筑 · 详情」@14 ≈ 76px ≤ 118（原「构筑 · 点击查看详情」124px 溢出）；居中口径不变
+	_build_label = StickerTheme.label_sticker(Label.new(), 14, StickerTheme.label_color(StickerTheme.LabelRole.SOFT))
 	_build_label.name = "BuildText"
-	_build_label.text = "构筑 · 点击查看详情"
-	_build_label.size = Vector2(140.0, 16.0)
-	_build_label.position = Vector2(0.0, 240.0)
+	_build_label.text = "构筑 · 详情"
+	_build_label.size = Vector2(118.0, 18.0)
+	_build_label.position = Vector2(0.0, 238.0)
 	_build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	build_bg.add_child(_build_label)
 
@@ -1363,7 +1697,7 @@ func _build_ui() -> void:
 	_hover_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hover_card.z_index = 50
 	_hover_label = Label.new()
-	StickerTheme.label_sticker(_hover_label, 14, Color.WHITE, 0, Color.TRANSPARENT)
+	StickerTheme.label_sticker(_hover_label, 14, StickerTheme.label_color(StickerTheme.LabelRole.WHITE), 0, Color.TRANSPARENT)
 	_hover_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_hover_label.custom_minimum_size = Vector2(300.0, 0.0)
 	_hover_card.add_child(_hover_label)
@@ -1372,8 +1706,8 @@ func _build_ui() -> void:
 	# 护盾条（时间气泡右侧；MEC_SHIELD 持有才显示——用户反馈「单独的护盾条」）
 	_shield_panel = _sticker_panel(root, Vector2(306.0, 92.0), Vector2(148.0, 36.0), 18.0)
 	_add_hover(_shield_panel, "临时护盾
-持有「能量护盾」词条时出现
-就绪=挡下一次接触伤害；挡后进入充能")
+持有「格挡力场」词条时出现（R238 文案更正：原「能量护盾」为旧名残留）
+就绪=挡下一次接触伤害；选卡后立即可用一次，此后进入充能")
 	_shield_panel.name = "ShieldBar"
 	_shield_panel.modulate.a = 0.94
 	_shield_panel.visible = false
@@ -1396,11 +1730,49 @@ func _build_ui() -> void:
 	_shield_fill.size = Vector2(3.0, 30.0)
 	_shield_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_shield_panel.add_child(_shield_fill)
-	var shield_tag := StickerTheme.label_sticker(Label.new(), 12, PopPalette.INK_SOFT)
+	# R200：护盾是 buff 族常驻条——标签 12→14（「护盾」@14 = 28px，填充区 x34 起左侧富余）
+	var shield_tag := StickerTheme.label_sticker(Label.new(), 14, StickerTheme.label_color(StickerTheme.LabelRole.SOFT))
 	shield_tag.text = "护盾"
 	shield_tag.position = Vector2(36.0, 8.0)
 	shield_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_shield_panel.add_child(shield_tag)
+	# 二cv#1：层数读数「X N」叠条右端（用户「护盾条里写X 2，有几条显示几条」——白字与
+	# SOFT 标签拉开层级，数值是关键读数；每帧随护盾块刷新，见 refresh_stats）
+	_shield_layers_label = StickerTheme.label_sticker(Label.new(), 14, StickerTheme.label_color(StickerTheme.LabelRole.WHITE))
+	_shield_layers_label.text = ""
+	_shield_layers_label.position = Vector2(108.0, 8.0)
+	_shield_layers_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shield_panel.add_child(_shield_layers_label)
+
+	# 二db 橙盾条（躲雷奖励：蓝条正下方 y132 = 92+36+4；层数>0 才显——与蓝条互不依赖，
+	# 未持有 MEC_SHIELD 词条时橙盾独立存在）
+	_temp_panel = _sticker_panel(root, Vector2(306.0, 132.0), Vector2(148.0, 36.0), 18.0)
+	_add_hover(_temp_panel, "闪避护盾
+躲过敌方爆炸（地雷/自爆虫/闪现爆/法术圈）获得，存在 10 秒，可叠加至 5 层
+每层挡下一次接触伤害（敌弹同效）；再次躲过刷新时长")
+	_temp_panel.name = "OrangeShieldBar"
+	_temp_panel.modulate.a = 0.94
+	_temp_panel.visible = false
+	_temp_fill = Panel.new()
+	_temp_fill.name = "OrangeShieldFill"
+	_temp_fill_style = StyleBoxFlat.new()
+	_temp_fill_style.bg_color = PopPalette.ORANGE
+	_temp_fill_style.set_corner_radius_all(6)
+	_temp_fill.add_theme_stylebox_override("panel", _temp_fill_style)
+	_temp_fill.position = Vector2(34.0, 3.0)
+	_temp_fill.size = Vector2(3.0, 30.0)
+	_temp_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_temp_panel.add_child(_temp_fill)
+	var temp_tag := StickerTheme.label_sticker(Label.new(), 14, StickerTheme.label_color(StickerTheme.LabelRole.SOFT))
+	temp_tag.text = "闪避"
+	temp_tag.position = Vector2(36.0, 8.0)
+	temp_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_temp_panel.add_child(temp_tag)
+	_temp_label = StickerTheme.label_sticker(Label.new(), 14, StickerTheme.label_color(StickerTheme.LabelRole.WHITE))
+	_temp_label.text = ""
+	_temp_label.position = Vector2(100.0, 8.0)
+	_temp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_temp_panel.add_child(_temp_label)
 
 	# 暂停按钮（右上角贴纸图标：白底圆角 + 藏青 ⏸ 双竖条；仅 PLAYING 态显示——
 	# 用户反馈 2026-08-29「没有暂停的地方」；申请经信号 → GameLoop 仲裁）
@@ -1466,7 +1838,7 @@ func _build_ui() -> void:
 	_auto_btn.focus_mode = Control.FOCUS_NONE
 	_auto_btn.pressed.connect(_on_auto_toggle_pressed)
 	_auto_btn.button_down.connect(func() -> void: StickerTheme.press_punch(_auto_btn))
-	_auto_label = StickerTheme.label_sticker(Label.new(), 13, PopPalette.INK_SOFT, 0, Color.WHITE, true)
+	_auto_label = StickerTheme.label_sticker(Label.new(), 13, StickerTheme.label_color(StickerTheme.LabelRole.SOFT), 0, Color.WHITE, true)
 	_auto_label.name = "AutoToggleText"
 	_auto_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_auto_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1481,7 +1853,7 @@ func _build_ui() -> void:
 	_auto_btn.visible = false                    # 初始 MENU 态隐藏（state_changed 驱动）
 
 	# 波次 toast（果冻 pop；居中，避开 Boss 条与状态提示行）
-	_toast_label = StickerTheme.label_sticker(Label.new(), 34, PopPalette.INK, 12, Color.WHITE, true)
+	_toast_label = StickerTheme.label_sticker(Label.new(), 34, StickerTheme.label_color(StickerTheme.LabelRole.INK), 12, Color.WHITE, true)
 	_toast_label.name = "WaveToast"
 	_toast_label.text = ""
 	# R195 适配分区：全宽标签拉伸锚（y 不变；宽视口下满宽居中，_show_toast 侧活宽同口径）
@@ -1495,7 +1867,7 @@ func _build_ui() -> void:
 	root.add_child(_toast_label)
 
 	# 状态提示（测试锁定节点名与文案口径）
-	_state_label = StickerTheme.label_sticker(Label.new(), 32, PopPalette.INK, 12, Color.WHITE, true)
+	_state_label = StickerTheme.label_sticker(Label.new(), 32, StickerTheme.label_color(StickerTheme.LabelRole.INK), 12, Color.WHITE, true)
 	_state_label.name = "StateLabel"
 	_state_label.text = ""
 	# R195 适配分区：全宽标签拉伸锚（y 不变恒等；宽视口下满宽居中）
@@ -1517,8 +1889,8 @@ func _build_ui() -> void:
 	_revive_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_revive_flash.visible = false
 	root.add_child(_revive_flash)
-	# R186 复活大字横幅（金色 48 号；y316 介于状态行 y212 与 toast y392 之间——设计案 §2）
-	_revive_banner = StickerTheme.label_sticker(Label.new(), 48, PopPalette.GOLD, 8, Color.WHITE, true)
+	# R186 复活大字横幅（金色 48 号基准/显时 64——二cs 加醒；y316 介于状态行 y212 与 toast y392 之间——设计案 §2）
+	_revive_banner = StickerTheme.label_sticker(Label.new(), 48, StickerTheme.label_color(StickerTheme.LabelRole.GOLD), 8, Color.WHITE, true)
 	_revive_banner.name = "ReviveBanner"
 	_revive_banner.text = ""
 	# R195 适配分区：全宽标签拉伸锚（y 不变恒等；宽视口下满宽居中）
@@ -1532,8 +1904,33 @@ func _build_ui() -> void:
 	_revive_banner.visible = false
 	_revive_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_revive_banner)
+	# R202：FPS 读数小字（设置键 show_fps 控 visible，默认隐藏）。⚠急切创建于 _build_ui
+	# 期、运行期仅切 visible——禁懒创建：r198_hud_layout_cases.gd:125-131 _toast_by_diff
+	# 按「HUD 直挂新 Label 子节点」差集识别 toast，懒建 Label 会被差集误捕砸 T①~T⑧
+	#（本标签挂 Root 子树本就不入该差集，双保险）。落位=右缘构筑面板 POS0（y196-454）
+	# 正下方 y470 空带（G4 探针 probe_fps_band 实测：BuildPanel 底 454 与技能键顶 1112
+	# 之间右缘无持久元素；避开左上 HP/XP 簇 r195_layout R2 对与 _r187_readout(368,30)）；
+	# 右缘锚（offset=现值−锚点(720,0)，720×1280 恒等 x604-704）随宽视口贴沿 → R1 界内
+	# 恒成立；panel_pos 三档（右上/右下/左下）落位均与本带零冲突。
+	_fps_label = StickerTheme.label_sticker(Label.new(), 20, StickerTheme.label_color(StickerTheme.LabelRole.SOFT), 3, Color.WHITE, true)
+	_fps_label.name = "FpsLabel"
+	_fps_label.text = ""
+	_fps_label.anchor_left = 1.0
+	_fps_label.anchor_right = 1.0
+	# R208（真机反馈「显示靠右没显示全」）：原宽仅 100px，右对齐下「FPS 10 dc 412
+	# o 891」@20pt≈215px 左半硬截——拓到 290px（x414..704，诊断行专属带，仅
+	# show_fps 开启期可见）
+	_fps_label.offset_left = -290.0
+	_fps_label.offset_right = -16.0              # x704 == 波次徽章右沿（BADGE 右贴 16px 口径）
+	_fps_label.offset_top = 470.0
+	_fps_label.offset_bottom = 494.0
+	_fps_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_fps_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_fps_label.visible = false
+	root.add_child(_fps_label)
 	refresh_stats()
 	_apply_build_panel_pos()                     # R196：初始落位（Meta.settings("panel_pos")，autoload 已就绪）
+	_apply_show_fps()                            # R202：show_fps 初值（默认 false → 隐藏 + set_process(false)）
 
 
 func _sticker_panel(p_parent: Control, p_pos: Vector2, p_size: Vector2, p_radius: float) -> Panel:
@@ -1565,10 +1962,21 @@ static func _fit_font_size(p_label: Label, p_text: String, p_max_w: float,
 
 func _show_toast(p_text: String, p_time: float = TOAST_TIME) -> void:
 	# 波次 toast：果冻 squash & stretch 出现（重要 UI 元素全局动效口径）
-	_toast_label.text = p_text
+	# R253（二dc L3 缓办清账）多行钳制：toast 带 44px（y392~436）装不下多行——开场
+	# 横幅 join("\n") 理论可 5+ 行（难度门+难度参数+武装+保底遗物+祝福），超 TOAST_MAX_LINES
+	# 截尾加省略行（首行组信息密度最高，尾部「另有 N 条」保留计数可读性）
+	var text := p_text
+	var lines := p_text.count("\n") + 1
+	if lines > TOAST_MAX_LINES:
+		var kept := p_text.split("\n")
+		text = "\n".join(kept.slice(0, TOAST_MAX_LINES)) \
+			+ "\n…（另有 %d 条）" % (lines - TOAST_MAX_LINES)
+		# R253 评审 M2：去「见暂停面板」指路——暂停面板只列武器/词条/遗物，难度门/
+		# 祝福/大关横幅行无处可查，指路为假承诺（保行数计数可读性）
+	_toast_label.text = text
 	_toast_label.remove_theme_font_size_override("font_size")     # R86：重置后按本文缩放
 	_toast_label.add_theme_font_size_override("font_size", 34)
-	_fit_font_size(_toast_label, p_text, 700.0)
+	_fit_font_size(_toast_label, text, 700.0)
 	_toast_label.reset_size()
 	# R195 适配：重定位改活宽——拉伸锚下 offset 左/右归 0 = 父域（visible_rect）满宽，
 	# 等效原「size=(活宽,44)」且规避非等对锚 set_size 的引擎告警；y 回设计位 392~436
@@ -1664,11 +2072,15 @@ func _tb_settle(_p_dt: float) -> void:
 	# 优切无空白帧，无候选才 0.25s 白残影闪白收尾，白闪期内新提案可打断）；③ 主目标
 	# 裁决（HIDDEN 免滞回接管 / LOCKED 滞回+续窗 / FADING 提案打断）。④ 聚合清空。
 	# （滞回归零在 _tb_tick 侧按 wall-clock 衰减——无提案帧不清零候选，慢速武器可切换）
-	var candidates: Array[int] = []
+	# R188⑤：候选改成员缓冲原地重建（原 `Array[int]+assign(_agg.keys())` 每帧两段
+	# 分配——keys() 中转组 + 装箱组；逐帧迭代字典 append 进 _tb_cand_buf 零新建）。
+	# 结算同步段内用完即弃（无重入口），排序器 _tb_uid_desc 读 _agg 与原口径一致
+	_tb_cand_buf.clear()
 	if not _agg.is_empty():
-		candidates.assign(_agg.keys())
-		candidates.sort_custom(_tb_uid_desc)
-	var primary: Node2D = _tb_first_qualified(candidates)
+		for uid: int in _agg:
+			_tb_cand_buf.append(uid)
+		_tb_cand_buf.sort_custom(_tb_uid_desc)
+	var primary: Node2D = _tb_first_qualified(_tb_cand_buf)
 	if _tb_lock_dying:
 		_tb_lock_dying = false
 		if primary != null:
@@ -1852,7 +2264,16 @@ func _tb_refresh_visual(p_dt: float) -> void:
 			0.75 * (_tb_hurt_flash / TB_HURT_FLASH))             # boss_bar.gd:71 同式
 	elif not _tb_fill_style.bg_color.is_equal_approx(PopPalette.ENEMY):
 		_tb_fill_style.bg_color = PopPalette.ENEMY
-	_tb_hp_label.text = "%s/%s" % [_tb_fmt_num(hp), _tb_fmt_num(mh)]
+	# R188⑥：HP 文本量化显示缓存（口径与 _tb_fmt_num 同——<10000 整数步 / ≥10000 0.1k
+	# 步）：档位不变整段跳过。认知口径：Godot 4 Label set_text 同值本就 early-out 无重
+	# 排版，此处省的是每帧 "%s/%s" 数组装箱 + 两段 String 构造，非排版
+	var hq := _tb_num_quantized(hp)
+	var mq := _tb_num_quantized(mh)
+	if hq != _tb_hp_q or mq != _tb_mh_q:
+		_tb_hp_q = hq
+		_tb_mh_q = mq
+		_tb_hp_text_last = "%s/%s" % [_tb_fmt_num(hp), _tb_fmt_num(mh)]
+		_tb_hp_label.text = _tb_hp_text_last
 
 
 func _tb_sync_ghost() -> void:
@@ -1869,6 +2290,14 @@ static func _tb_fmt_num(p_v: float) -> String:
 	if p_v < 10000.0:
 		return str(int(round(p_v)))
 	return "%.1fk" % (p_v / 1000.0)
+
+
+static func _tb_num_quantized(p_v: float) -> int:
+	# R188⑥：HP 显示量化键（与 _tb_fmt_num 同口径——<10000 取整、≥10000 0.1k=百血步）。
+	# 两值量化相等 ⇔ 格式化文本相等 → 档位未变跳过写文本零语义差
+	if p_v < 10000.0:
+		return int(round(p_v))
+	return int(roundf(p_v * 0.01))               # 0.1k 一步（%.1fk 一位小数 = /1000 保留 1 位）
 
 
 # ── R186 复活全屏反馈（订阅 G1 新增 EventBus.revive_burst） ────────────
@@ -1894,14 +2323,17 @@ func _on_revive_burst(_p_pos: Vector2, p_charges: int) -> void:
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 		_revive_flash_tween.tween_callback(func() -> void: _revive_flash.visible = false)
 	if _revive_banner != null:
-		# 横幅三段式（复制 boss_banner 三段式）：弹入 0.22 → 停留 1.2 → 淡出 0.4
-		# ≈1.82s < 3s 无敌；余量 0 切警示色 + 「次数已耗尽」文案
-		var text := ("✦ 复活！剩余 %d 次" % p_charges) if p_charges > 0 else "✦ 复活！次数已耗尽"
+		# 横幅三段式（复制 boss_banner 三段式）：弹入 0.22 → 停留 2.2 → 淡出 0.4
+		# ≈2.82s < 5s 无敌（二cs：加「5s 无敌」提示 + 字号 48→64——用户「没反应过来」）；
+		# 余量 0 切警示色 + 「次数已耗尽」文案
+		var text := ("✦ 复活！5s 无敌 · 剩余 %d 次" % p_charges) if p_charges > 0 else "✦ 复活！5s 无敌 · 次数已耗尽"
 		_revive_banner.text = text
+		# R230 K4：动态色同样走量化口（品质金/警示红角色切换——警示红硬保全）
 		_revive_banner.add_theme_color_override("font_color",
-			PopPalette.GOLD if p_charges > 0 else PopPalette.ENEMY)
+			StickerTheme.label_color(StickerTheme.LabelRole.GOLD) if p_charges > 0
+			else StickerTheme.label_color(StickerTheme.LabelRole.ENEMY))
 		_revive_banner.remove_theme_font_size_override("font_size")
-		_revive_banner.add_theme_font_size_override("font_size", 48)
+		_revive_banner.add_theme_font_size_override("font_size", 64)
 		_fit_font_size(_revive_banner, text, 680.0)
 		if _revive_banner_tween != null:
 			_revive_banner_tween.kill()

@@ -186,15 +186,16 @@ func _test_3_menu_tex_prewarm() -> void:
 		"queue=%d" % q.size())
 	var size0: int = q.size()
 	_gl.state = GameConst.GameStatus.MENU
-	# R215 修：①②期间 MENU 物理帧已消化常规段、队首可能已抵 boss 段（挂机门正确
+	# R215 修：①②期间 MENU 帧已消化常规段、队首可能已抵 boss 段（挂机门正确
 	# 暂停=净减 0）——置 dwell≥阈值验预算消化路径；门行为由下方专测覆盖。
 	# R222 Fix P 契约迁移：重项超预算折臂跳帧（跳帧帧零消化）——本断言锁「预算消化
 	# 路径」，先清占空余额隔离（占空行为由 r222_runrearm ② 承接）
+	# R244 冲刷桶批迁移：预热消费在渲染轴 _process（原 _physics_process MENU 臂）
 	_gl.set("_menu_dwell_s", 99.0)
 	_gl.set("_tex_prewarm_skip", 0)
-	_gl._physics_process(DT)                  # MENU 臂：12ms 预算消化
+	_gl._process(DT)                       # MENU 态渲染帧：12ms 预算消化
 	var size1: int = (_gl.get("_tex_prewarm_queue") as Array).size()
-	_check("MENU 帧消化（队列净减 ≥1）", size1 < size0, "%d→%d" % [size0, size1])
+	_check("MENU 渲染帧消化（队列净减 ≥1）", size1 < size0, "%d→%d" % [size0, size1])
 	# R215 修：boss 双面挂机门——先消化常规段（dwell 归零后 <3s），队首抵 boss 项时
 	# 单帧应暂停（不丢项不消化）；随后置 dwell≥阈值放行全量清队
 	# （R222 Fix P：循环内逐帧清占空余额——本循环锁门/清队语义不锁占空节奏）
@@ -202,19 +203,19 @@ func _test_3_menu_tex_prewarm() -> void:
 	while not (_gl.get("_tex_prewarm_queue") as Array).is_empty() \
 			and not String(((_gl.get("_tex_prewarm_queue") as Array)[0] as Dictionary).get(&"kind", &"")).begins_with("boss"):
 		_gl.set("_tex_prewarm_skip", 0)
-		_gl._physics_process(DT)
+		_gl._process(DT)
 	var q_at_boss: Array = _gl.get("_tex_prewarm_queue")
 	if not q_at_boss.is_empty():
 		var boss_cnt_pre: int = q_at_boss.size()
 		_gl.set("_tex_prewarm_skip", 0)
-		_gl._physics_process(DT)              # dwell 累计 1/60s < 3s → boss 项不出队
+		_gl._process(DT)                    # dwell=0 <3s（渲染帧不累计 dwell）→ boss 项不出队
 		_check("boss 挂机门（dwell<3s 队首 boss 项暂停）",
 			(_gl.get("_tex_prewarm_queue") as Array).size() == boss_cnt_pre,
 			"%d" % boss_cnt_pre)
 		_gl.set("_menu_dwell_s", 99.0)
 		while not (_gl.get("_tex_prewarm_queue") as Array).is_empty():
 			_gl.set("_tex_prewarm_skip", 0)   # R222 Fix P：逐帧清臂（锁清队语义不锁占空）
-			_gl._physics_process(DT)
+			_gl._process(DT)
 		_check("预算循环清队（全变体在缓存）",
 			(_gl.get("_tex_prewarm_queue") as Array).is_empty(), "")
 	var cache: Dictionary = TextureFactory._cache

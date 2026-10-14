@@ -242,13 +242,21 @@ func _test_a_predicate_off_zero_write() -> void:
 	_check("A4 恢复挂点同谓词恰一处 ∧ 快照保鲜无条件恰一处（R233 T7 切换态保鲜迁移——恢复/插值写仍谓词零执行，插值层不脱钩）",
 		gate_n == 1 and restore_hook == 1 and snap_free == 1,
 		"gate=%d restore=%d snap=%d" % [gate_n, restore_hook, snap_free])
-	var n_pred := src.count("if not sim30_effective():")
-	var n_headless := src.count("DisplayServer.get_name() == \"headless\"")
-	var n_call := src.count("_ip_render_write(_ip_alpha_advance(p_delta))")
+	# R244 修轮：A5 四计数从全文件裁到 _process 函数体区间——全文件口径被后来者
+	# 污染两次（R242 _on_graze_feedback 复用 headless 直返式 → headless=2 假红；本批
+	# _process 头部迁入菜单预热块若引用同式亦然）。函数体区间计数保「_process 内结构
+	# 恰一处」原意图，防再漂。
+	var fn_at := src.find("func _process(")
+	var fn_end := src.find("func _physics_process(", fn_at)
+	var src_fn := src.substr(fn_at, fn_end - fn_at) if fn_at >= 0 and fn_end > fn_at else ""
+	var n_pred := src_fn.count("if not sim30_effective():")
+	var n_headless := src_fn.count("DisplayServer.get_name() == \"headless\"")
+	var n_call := src_fn.count("_ip_render_write(_ip_alpha_advance(p_delta))")
 	var n_feed := src.count("ip_write_us_total += int(Time.get_ticks_usec() - us0)")
-	_check("A5 _process 谓词直返+headless 直返+写入口（谓词×1/headless×1/调用×1/喂数×1）",
-		n_pred == 1 and n_headless == 1 and n_call == 1 and n_feed == 1,
-		"pred=%d headless=%d call=%d feed=%d" % [n_pred, n_headless, n_call, n_feed])
+	_check("A5 _process 谓词直返+headless 直返+写入口（谓词×1/headless×1/调用×1/喂数×1——R244 修轮：前三计数裁 _process 函数体区间防后来者污染）",
+		n_pred == 1 and n_headless == 1 and n_call == 1 and n_feed == 1 and not src_fn.is_empty(),
+		"pred=%d headless=%d call=%d feed=%d fn_len=%d"
+			% [n_pred, n_headless, n_call, n_feed, src_fn.length()])
 	var fs := FileAccess.open(SPAWNER_SOURCE, FileAccess.READ)
 	var spawner_n := -1
 	if fs != null:

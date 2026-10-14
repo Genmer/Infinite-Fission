@@ -78,10 +78,10 @@ const SIZES: Array = [
 #（DebugStats._diag_capacity 动态读口 60/120/240/360 行，默认 240=只留最新 N 条；
 # 双注册 + 旧档缺键回默认 240——r212_diaglog2_cases.gd 键契约段专项）
 const EXPECTED_SETTING_KEYS: Array[String] = [
-	"auto_restart_mode", "auto_select_on", "bgm_volume", "damage_numbers_on",
-	"diag_log", "diag_log_len", "fps_cap", "fx_opacity", "fx_quality",
-	"master_mute", "panel_pos", "perf_mode", "shake_on", "show_fps",
-	"skill_auto_cast", "sfx_volume",
+	"auto_restart_mode", "auto_select_on", "bgm_volume", "boost_res",
+	"damage_numbers_on", "diag_log", "diag_log_len", "fps_cap", "fx_opacity",
+	"fx_quality", "master_mute", "panel_pos", "perf_boost", "perf_mode",
+	"shake_on", "show_fps", "skill_auto_cast", "sfx_volume",
 ]
 
 var tree: SceneTree
@@ -865,8 +865,11 @@ func _test_settings_keys() -> void:
 	# R241 有意契约变更（原「恰 15 键」）：skill_auto_cast 技能自动施放键入面
 	#（二cm④ HUD 技能键下自动施放按钮——双注册齐 r241_boomfix_cases.gd ④段专项；
 	# 存档兼容同口径零迁移）
-	_check("D2①：SETTINGS_DEFAULTS 恰 16 键且键集与 R241 后逐位一致（skill_auto_cast 为唯一新增键）",
-		actual_keys == expected_keys and actual_keys.size() == 16,
+	# R269 有意契约变更（原「恰 16 键」）：perf_boost 保帧模式键 + boost_res 分辨率档
+	# 键入面（A 轨双注册——qa_r269_boostmode_cases.gd a1 段专项；垫值不落盘口径
+	# + 存档兼容同口径零迁移）
+	_check("D2①：SETTINGS_DEFAULTS 恰 18 键且键集与 R269 后逐位一致（perf_boost/boost_res 为本批新增键）",
+		actual_keys == expected_keys and actual_keys.size() == 18,
 		"actual=%s" % str(actual_keys))
 	var no_new := true
 	for key in actual_keys:

@@ -203,7 +203,7 @@ func _case1_data() -> void:
 		and String(w13.melee.get("mode")) == "cleave"
 		and not bool(w13.melee.get("nullify"))
 		and is_equal_approx(float(w13.melee.get("block_chance")), 0.30)
-		and w13.melee.get("slash_radius_levels") == [190.0, 190.0, 210.0, 210.0, 260.0]
+		and w13.melee.get("slash_radius_levels") == [130.0, 140.0, 155.0, 170.0, 190.0]   # R245 表值迁移（§3.2 下压）
 		and w13.melee.get("arc_deg_levels") == [140.0, 140.0, 140.0, 160.0, 180.0]
 		and int(w13.melee.get("max_targets")) == 10
 		and is_equal_approx(float(w13.melee.get("knockback")), 100.0)

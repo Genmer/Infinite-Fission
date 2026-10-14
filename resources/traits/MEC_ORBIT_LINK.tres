@@ -6,13 +6,13 @@
 script = ExtResource("1_td")
 id = &"MEC_ORBIT_LINK"
 display_name = "谐振轨道"
-description = "环绕武器（环绕力场/周期挥砍）的飞刀 +1，可叠 3 层"
+description = "近战/法器武器的攻击体 +1/层，可叠 3 层"
 pool = 3
 pool_id = &""
 effect_id = &"EF_MECH"
 value = 1.45
 value2 = 0.0
-params = {"required_weapon": [&"W8_orbit_field", &"W9_arc_slash"]}
+params = {"required_weapon": [&"W8_orbit_field", &"W9_arc_slash", &"W11_spirit_sword", &"W12_ground_axe", &"W13_great_sword"]}
 event_hooks = [0]
 stack_max = 3
 decay_delta = 0.0

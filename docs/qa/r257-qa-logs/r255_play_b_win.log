@@ -1,0 +1,35 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4070 Laptop GPU
+
+[entry] 局=b cases=res://tests/qa_r255_play_b.gd
+══ QA-play R255 局B：困难·紫晶魔域（第三关）出发链 ══
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+[B] 解锁判据：unlocked(demon,HARD)=true（构造前=false）· unlocked(frost,HARD)=false
+[B] 已切困难档（selected=1）
+  SHOT#11 [选关面板·困难档（第三关应有出发钮）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-11.png (720x1280)
+[B] 点第三关出发钮 → 观察终态（R254-2：曾回主页）
+  SHOT#12 [祝福面板·困难紫池（第三关出发后）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-12.png (720x1280)
+[B] 祝福面板 → 出发（未选词条=空选合法）
+[B] ★出发链终态：PLAYING（出发链正常） · map=world_demon
+[B] wave 0 → 1（t=1.6s hp=115/115 lv1）
+  SHOT#13 [困难局选卡#1] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-13.png (720x1280)
+[B] wave 1 → 2（t=28.8s hp=115/115 lv2）
+  SHOT#14 [困难魔域·战斗中 wave2] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-14.png (720x1280)
+[B] 玩家死亡（wave=2）→ 困难局结算屏
+  SHOT#15 [困难局死亡结算（wave=2）] -> E:/Code/Agent/Infinite-Fission/repo/docs/qa/r255-play/combat-15.png (720x1280)
+[B] 点结算/暂停「回主菜单」按钮
+[B] 回主菜单 state=1（0=MENU）
+[B] Meta 内存已还原（构造键存在=false→false）
+[B] 结束：选卡 1 次
+══ 局B done（34.9s）══
+WARNING: 40 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 65 RID allocations of type 'N10RendererRD14TextureStorage7TextureE' were leaked at exit.
+WARNING: 75 RIDs of type "Texture" were leaked.
+     at: finalize (servers/rendering/rendering_device.cpp:5758)
+ERROR: 161 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

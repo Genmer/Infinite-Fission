@@ -75,6 +75,11 @@ var relic_handler: RelicHandler = null         # R199 D07：遗物命中乘区�
                                                # GameLoop Boot 段 relic_handler 先于本系统建并持成员
                                                # 引用；测试无宿主保持 null → 注入零操作零回归）
 var _hosts: Array[Node2D] = []                 # 已挂载状态容器的敌人（§1.3-3 白名单：状态宿主）
+# R202 ⑦：tick/detect_reactions 遍历快照复用缓冲（原两处每帧 _hosts.duplicate()
+# 稳态分配——clear+append_array 容量复用后零稳态分配；倒序索引遍历。快照语义与
+# duplicate 逐位一致：体内级联死亡 → spawner.unregister_host 的 _hosts.erase 不影响
+# 本轮快照，每宿主恰处理一次（已亡者由 dead/elemental 双闸跳过——行为不变）。
+var _hosts_iter: Array[Node2D] = []
 
 var _reaction_mults: Dictionary = {}           # source_uid -> mult（ELE_REACTION_VOID ×1.8 聚合）
 var _uid_dot: int = 0                          # DOT 结算幂等键 source_uid（分流）
@@ -184,7 +189,10 @@ func tick(p_game_delta: float) -> void:
 	var lambdas: Array[float] = LAMBDA_FALLBACK
 	if GameConfig.balance != null:
 		lambdas = GameConfig.balance.element_decay_lambda
-	for host in _hosts.duplicate():
+	_hosts_iter.clear()
+	_hosts_iter.append_array(_hosts)             # R202 ⑦：复用缓冲快照（倒序索引遍历）
+	for i in range(_hosts_iter.size() - 1, -1, -1):
+		var host := _hosts_iter[i]
 		if host == null or bool(host.get("dead")):
 			continue
 		var state: Variant = host.get("elemental")
@@ -208,7 +216,10 @@ func detect_reactions() -> void:
 	var cd_rxn := 2.0
 	if GameConfig.balance != null:
 		cd_rxn = GameConfig.balance.cd_rxn
-	for host in _hosts.duplicate():
+	_hosts_iter.clear()
+	_hosts_iter.append_array(_hosts)             # R202 ⑦：复用缓冲快照（倒序索引遍历）
+	for i in range(_hosts_iter.size() - 1, -1, -1):
+		var host := _hosts_iter[i]
 		if host == null or bool(host.get("dead")):
 			continue
 		var state: Variant = host.get("elemental")
@@ -216,9 +227,9 @@ func detect_reactions() -> void:
 			continue
 		var st := state as ElementalState
 		var mask := 0
-		for i in range(1, st.gauges.size()):
-			if st.gauges[i] > 0.0:
-				mask |= 1 << i
+		for j in range(1, st.gauges.size()):
+			if st.gauges[j] > 0.0:
+				mask |= 1 << j
 		if mask == 0 or (mask & (mask - 1)) == 0:
 			continue                             # k≤1：无配对可能，零候选短路
 		for rxn in _candidates_for(mask):

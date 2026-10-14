@@ -1,0 +1,89 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R220 模式地基（PerfGovernor/优先模式行/perf_mode 键/fx 档帽） 回归 ══════════
+── ① perf_mode 键契约（双注册/钳制/持久化） ──
+  PASS | ①SETTINGS_DEFAULTS 含 perf_mode（读侧注册）且默认 0
+  PASS | ①写口钳制：set 5 → 1（clampi int 0,1）
+  PASS | ①写口钳制：set -3 → 0
+  PASS | ①未知键静默丢弃（不写不落盘——脏写穿档防口不回归）
+  PASS | ①持久化：写 1 落盘 → _load 重读还原 1（写 settings 重读还原）
+  PASS | ①复位 0（写即存）+ frame_priority() 缺省通道 true
+── ② 设置面板「优先模式」行（插行/两态循环/几何重排） ──
+  PASS | ②行文案「优先模式」在卡（左标签）
+  PASS | ②按钮在卡（PerfModeButton）且首态 ✓ 帧率优先
+  PASS | ②插行位置：「帧率上限」行之后、「震屏」行之前
+  PASS | ②十一开关行按钮互不重叠（R269：行距 46→44 重排零重叠——含保帧行）
+  PASS | ②钮高 44（= R194 触控目标下限——塞卡不扩高）
+  PASS | ②十一行 330..770、行距 44（R269 重排钉死——不扩卡高塞入）
+  PASS | ②末行钮底 814 ≤ hint 顶 824−6px（卡内不溢）
+  PASS | ②卡高不扩（offset_bottom==618 ∧ 卡高 968 钉死）
+  PASS | ②hint y824 / 关闭钮 y872 原位不动（收尾件零位移）
+  PASS | ②点击 → perf_mode=1 + 文案 ◉ 特效优先（写即存）
+  PASS | ②frame_priority() 立即翻转（写口后首读 = false）
+  PASS | ②再点循环回 0 + ✓ 帧率优先 + frame_priority()==true（两态循环闭合）
+── ③ 帧率优先转换序（降档地板1/升档帽3/迟滞带） ──
+  PASS | ③持续门槛：1.5s < 2.0s 不降档（tier 仍 3）
+  PASS | ③满 2.0s 降档 3→2（transitions=1）
+  PASS | ③再满 2.0s 降档 2→1（transitions=2）
+  PASS | ③地板 1：深降 EMA 持续不再降（transitions 仍 2）
+  PASS | ③升档迟滞：4.5s < 5.0s 不升（tier 仍 1）
+  PASS | ③满 5.0s 升档 1→2（transitions=3）
+  PASS | ③再满 5.0s 升档 2→3（transitions=4）
+  PASS | ③帽 3：高 EMA 持续不再升（transitions 仍 4）
+  PASS | ③带内 0.95×target 恰界：不升（严格 >，EMA==阈值不动）
+  PASS | ③带内 0.90×target 恰界：不降（严格 <）
+  PASS | ③transitions 与档变一一对应（本域 4 计数 ↔ 3→2→1→2→3）
+── ④ 特效优先转换序（地板2/0.85 阈值/模式切换清零） ──
+  PASS | ④<0.70×target 满 2.0s 降档 3→2（transitions=1）
+  PASS | ④地板 2：深降 EMA 持续不再降（tier 仍 2 / transitions 仍 1）
+  PASS | ④同值对照：0.92×target 帧率优先带内 12 拍不动（不升不降）
+  PASS | ④0.92>0.85：特效优先 4.5s 不升（迟滞）
+  PASS | ④满 5.0s 升档 2→3（0.85 阈值生效——帧率优先同值不动）
+  PASS | ④切换前 1.5s 未降（tier 3）
+  PASS | ④切换瞬间 tier 保持（3）
+  PASS | ④模式切换计时清零：切后再 1.5s 仍未降（未清零则第 1 拍即降）
+  PASS | ④切换后满 2.0s 降档 3→2（清零后重累计满额）
+── ⑤ paused / LEVEL_UP 期转换计时挂起 ──
+  PASS | ⑤LEVEL_UP 期 8 拍不降档（选卡期挂起）
+  PASS | ⑤LEVEL_UP 期 EMA 不清（采样照走——值保持注入位）
+  PASS | ⑤回 PLAYING 1 拍即降档（冻结的 1.5s 续账至 2.0s——非清零）
+  PASS | ⑤paused 期 8 拍不降档（挂起）
+  PASS | ⑤解除 paused 1 拍即降档（冻结续账）
+── ⑥ 读序（mode_override > settings）+ tier_override 直驱 ──
+  PASS | ⑥读序：mode_override=0 压过 settings=1 → 帧率优先
+  PASS | ⑥读序：mode_override=1 → 特效优先
+  PASS | ⑥读序：无注入回落 settings=1 → 特效优先
+  PASS | ⑥读序：settings=0 → 帧率优先（缺省通道）
+  PASS | ⑥直驱：override=1 → effective_tier=1 / fx_quality_cap=0 / 真值 tier 不动（3）
+  PASS | ⑥直驱不跑转换：PLAYING 8 拍深降 EMA → tier 仍 3、transitions 仍 0
+  PASS | ⑥直驱映射：override=3 → cap=2 / override=2 → cap=1（tier→帽 3→2/2→1/1→0）
+  PASS | ⑥直驱释放：headless 非 mobile 无注入 → cap 恒 2（零扰动承重墙）
+── ⑦ Enemy._fx_q 映射写点（默认零扰动 + 档变联动） ──
+  PASS | ⑦零扰动：fx_quality=0 → _fx_q()==0（默认档帽 2 合成后不变）
+  PASS | ⑦零扰动：fx_quality=1 → _fx_q()==1（默认档帽 2 合成后不变）
+  PASS | ⑦零扰动：fx_quality=2 → _fx_q()==2（默认档帽 2 合成后不变）
+  PASS | ⑦override=3（帽 2）+ fx=2 → _fx_q()==2（帽不咬合）
+  PASS | ⑦override=2（帽 1）+ fx=2 → _fx_q()==1（合成取小）
+  PASS | ⑦override=1（帽 0）+ fx=2 → _fx_q()==0（合成取小）
+  PASS | ⑦override=1 + fx=0 → _fx_q()==0（两侧同小）
+  PASS | ⑦档变联动：override 3→2→1 → _fx_q() 输出 2→1→0（写点随档变被调用）
+  PASS | ⑦源级锚：_fx_q 双分支接 PerfGovernor.fx_quality_cap()（mobile 门合成取小）
+── ⑧ 注册序（Meta < PerfGovernor）/ 常量冻结 / 计数器块 ──
+  PASS | ⑧PerfGovernor 在树且晚于 Meta（读口就绪序——序错首帧读空）
+  PASS | ⑧PROCESS_MODE_ALWAYS（暂停/选卡期采样不停）
+  PASS | ⑧冻结常量九项逐位（契约 §2.1 照抄）
+  PASS | ⑧project.godot 注册行序：Meta 行 < PerfGovernor 行
+  PASS | ⑧DebugStats R220_COUNTER_KEYS 三键冻结（决策#3 审计块）
+  PASS | ⑧计数通道可写可读（count 通用字典——后续包写点直用）
+────────────────────────────────────────
+汇总：PASS 66 / FAIL 0（共 66 项）
+验收汇总：66/66 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 20 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 100 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

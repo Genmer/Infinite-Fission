@@ -8,7 +8,8 @@
 #   域B PerfGovernor 注入：降档迟滞（2.0s 门槛）/ 升档迟滞（5.0s）/ 特效优先地板 2 /
 #        paused·LEVEL_UP 挂起续账 / target=min(fps_cap,120) 跟随设置（144 钳 120 的
 #        判别用例 + 阈值随 target 缩放）/ tier_override 帽映射 3/2/1→2/1/0。
-#   域C 刀2 变体全清单：4 稀有度 × MASTERY±2 近窗 × ⇄ × 尾行 × 宽 × 紧凑 × 行距
+#   域C 刀2 变体全清单：4 稀有度 × MASTERY±3 近窗（R245 boosts 最高 +3，相邻两窗等级
+#        最大跳变 3）× ⇄ × 尾行 × 宽 × 紧凑 × 行距
 #        组合抽查全命中 + 开窗 fit_desc_measures 增量 ≤2 + Reroll/连升批同口径。
 #   域D 分帧预算 ≤12ms/帧（单帧墙钟 ≤ 预算 + 单项梯量测原子粒度上界）。
 #   域E 日志头 R220 新口径声明在位（十六段/模N带*/窗口错位/⑧段前派发 + 旧锁子串
@@ -105,7 +106,8 @@ func _domain_c_prewarm() -> void:
 	_check("C0 MENU 帧推进自动建队 + 消化进度>0（D3 驱动链在位）",
 		Prewarm.total_built() > 0 and Prewarm.remaining() < Prewarm.total_built(),
 		"total=%d remaining=%d" % [Prewarm.total_built(), Prewarm.remaining()])
-	# C0b 离开菜单暂停（PLAYING 帧推进 remaining 不变——不偷跑战斗期帧预算）
+	# C0b 战斗续泵（R256 序1 契约翻案——同 r220_cardprewarm ①：PLAYING 态 2ms/帧续泵，
+	# 旧「零泵」契约随刀废止；红断言恰为泵生效反证）
 	_gl.current_map_id = MapTable.FIRST_MAP_ID
 	_gl.start_run()
 	_check("C0b start_run → PLAYING", _gl.state == GameConst.GameStatus.PLAYING,
@@ -114,7 +116,7 @@ func _domain_c_prewarm() -> void:
 	await tree.process_frame
 	await tree.process_frame
 	await tree.process_frame
-	_check("C0b 离开菜单暂停（PLAYING 期预热器零泵）", Prewarm.remaining() == r0,
+	_check("C0b 战斗续泵（PLAYING 期 remaining 递减）", Prewarm.remaining() < r0,
 		"%d → %d" % [r0, Prewarm.remaining()])
 
 	# ── 全量重泵取干净基线（清缓存清队——后续命中断言的零点） ──
@@ -204,7 +206,8 @@ func _domain_c_prewarm() -> void:
 		tail_ok and not CardSelectUI.compose_desc_text(String(picked[0]["desc"]), 1.0, false)
 			.contains("品质加成"), "")
 
-	# C3 MASTERY ±2 近窗：任意当前级 L 的 [L-2, L+2] 窗内文本 ⊆ 预热全集 + 窗内键全命中
+	# C3 MASTERY ±3 近窗（R245 boosts 最高 +3）：任意当前级 L 的 [L-3, L+3] 窗内文本 ⊆
+	# 预热全集 + 窗内键全命中
 	var max_lv: int = WeaponBase.MAX_LEVEL
 	var full_texts := {}
 	for v in variants:
@@ -215,8 +218,8 @@ func _domain_c_prewarm() -> void:
 	var m1: int = CardSelectUI.fit_desc_measures
 	var mastery_keys := 0
 	for L in range(1, max_lv + 1):
-		var lo := maxi(1, L - 2)
-		var hi := mini(max_lv, L + 2)
+		var lo := maxi(1, L - 3)
+		var hi := mini(max_lv, L + 3)
 		var win: Array[Dictionary] = gen.enumerate_prewarm_variants(range(lo, hi + 1))
 		for w in win:
 			var txt := String(w["desc"])
@@ -228,7 +231,7 @@ func _domain_c_prewarm() -> void:
 				CardSelectUI._fit_desc(CardSelectUI.compose_desc_text(txt, 1.0, true),
 					CardSelectUI.DUAL_CARD_SIZE.x, true, ls)
 				mastery_keys += 2
-	_check("C3 MASTERY ±2 近窗 ⊆ 预热全集（L=1..%d 全窗扫描零缺失）" % max_lv,
+	_check("C3 MASTERY ±3 近窗 ⊆ 预热全集（L=1..%d 全窗扫描零缺失）" % max_lv,
 		win_missing.is_empty(), str(win_missing.slice(0, 3)))
 	_check("C3 窗内 MASTERY 键全命中（%d 键量测零增量）" % mastery_keys,
 		mastery_keys > 0 and CardSelectUI.fit_desc_measures == m1,

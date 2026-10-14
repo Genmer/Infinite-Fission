@@ -1,0 +1,48 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R211 诊断日志采样开关验收 ══════════
+── ① 默认开不突变 ──
+  PASS | 缺键回退默认 true（现状不突变）
+  PASS | 1Hz 节拍窗内不重复采样（r205 ② 口径不回归）
+── ② 双注册命中 ──
+  PASS | 写口归一生效（非静默丢弃）
+  PASS | int 入参归一强转
+  PASS | 未知键仍被拒（防御不破）
+── ③ 关=停采 ──
+  PASS | 关后连调多次零写入
+── ④ 缓冲保留+重开恢复 ──
+  PASS | 开态先采 1 行
+  PASS | 关后已存缓冲保留（size 不减）
+  PASS | 关态导出正文仍含已存行
+  PASS | 重开下一拍恢复采样（size +1）
+── ⑤ 导出/清空不受影响 ──
+  FAIL | 关态清空返回清掉行数（cleared=4）
+  PASS | 清空后缓冲归零
+  PASS | 空缓冲导出仅头不炸（无采样行）
+  PASS | 再次清空返回 0（空缓冲）
+  PASS | 关态「导出日志」仍弹预览对话框
+── ⑥ 持久化 ──
+  PASS | 存档 settings/values 含 diag_log=false
+  PASS | _load 重读回 false（归一同链）
+  PASS | 重读后缺键回退 true
+── ⑦ 迁移：菜单按钮 → 设置页两行 ──
+  PASS | 主菜单底带「记录日志」按钮已移除（find_child == null）
+  PASS | 设置页「记录日志」开关行在位（DiagLogToggleButton）
+  PASS | 设置页「日志长度」档位行在位（DiagLenButton）
+  PASS | 关态文案「✗ 关」
+  PASS | 开态文案「✓ 开」
+  PASS | pressed 后值翻转 false
+  PASS | pressed 后文案即时刷新
+  PASS | 翻转关后采样立停（size 保持 0）
+  PASS | 再 pressed 翻回 true
+  PASS | 翻回开即恢复采样（size 1）
+  PASS | 档位文案「✓ 240 行」
+  PASS | cycle 一档 240→360
+  PASS | cycle 满一圈回 240
+  PASS | 脏档 cycle 一轮归位 240
+────────────────────────────────────────
+汇总：PASS 31 / FAIL 1（共 32 项）
+  FAIL 详情：关态清空返回清掉行数（cleared=4）
+验收汇总：31/32 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

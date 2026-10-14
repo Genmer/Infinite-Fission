@@ -1,0 +1,5 @@
+qa_r269_boostmode | exit=0 | 验收汇总：69/69 通过
+test_qa_r220_mode | exit=0 | 验收汇总：67/67 通过
+test_r220_governor | exit=0 | 验收汇总：66/66 通过
+test_verify_feedback | exit=0 | 验收汇总：PASS 685 / FAIL 0（共 685 项）
+BATTERY_DONE

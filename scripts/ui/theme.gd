@@ -135,21 +135,24 @@ static func panel_style(p_radius: float = 20.0, p_border: int = 3, p_shadow: boo
 
 
 # ── 果冻感工具（squash & stretch 全局口径） ────────────────────────
-static func squash_pop(p_node: Control, p_delay: float = 0.0) -> void:
+static func squash_pop(p_node: Control, p_delay: float = 0.0,
+		p_end_scale: Vector2 = Vector2.ONE) -> void:
 	# 出现：横向先胖后收的果冻弹跳（0.34s，TRANS_BACK 回弹）
+	# R270 修P1：p_end_scale 终态缩放（降档画布全高卡适配——缺省 ONE，
+	# 既有全部调用点行为逐位不变）
 	if p_node == null:
 		return
 	p_node.pivot_offset = p_node.size * 0.5
-	p_node.scale = Vector2(0.4, 0.25)
+	p_node.scale = Vector2(0.4, 0.25) * p_end_scale
 	var tw := p_node.create_tween()
 	if p_delay > 0.0:
 		tw.tween_interval(p_delay)
 		p_node.modulate.a = 0.0
 		tw.parallel().tween_property(p_node, "modulate:a", 1.0, 0.12)
-	tw.tween_property(p_node, "scale", Vector2(1.12, 0.86), 0.14) \
+	tw.tween_property(p_node, "scale", Vector2(1.12, 0.86) * p_end_scale, 0.14) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(p_node, "scale", Vector2(0.95, 1.05), 0.09)
-	tw.tween_property(p_node, "scale", Vector2.ONE, 0.11)
+	tw.tween_property(p_node, "scale", Vector2(0.95, 1.05) * p_end_scale, 0.09)
+	tw.tween_property(p_node, "scale", p_end_scale, 0.11)
 
 
 static func pulse(p_node: Control, p_period: float = 1.1, p_amount: float = 0.05) -> Tween:
@@ -174,6 +177,33 @@ static func press_punch(p_node: Control) -> void:
 	tw.tween_property(p_node, "scale", Vector2(0.9, 0.94), 0.05)
 	tw.tween_property(p_node, "scale", Vector2.ONE, 0.16) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+# ── R230 K4：Label 语义角色量化色板（HUD dc 刀——配色收敛单源口） ──────────
+# HUD 29 处 Label.new 逐件自由 font_color = 逐件唯一 modulate = 断批（同贴图+同 modulate
+# 才合批定律，R214/vc33/R216/R217 四轮真机实证）。全部收口到本表按语义角色取色——同角色
+# Label 共享 modulate 可合批（F9 族 dc 预期 −25~−45，夹具 post-merge 复扫验收）。
+# 语义色保全（R230 设计 v2 硬性子项；R31/R38/R200 用户 UI 色敏感史在案）：正文墨/弱化灰蓝/
+# 品质金/我方蓝/警示红/暗底白六值逐位保真（=PopPalette 单源直引，值零改动）；仅两处运行时
+# lerp 自由色收敛——镜面 toast 冰青（PLAYER.lerp(WHITE,0.62)）入 PLAYER 角色（「禁金」约束
+# 原样成立：PLAYER 与 GOLD 互异）、R187 读数浅紫（SHOCK.lerp(WHITE,0.25)）入 SHOCK 角色
+#（紫族色相保持）。套件断言（互异+明度序+保真+零残留直配）：
+# tests/runner/test_r230_k4_hud_quant.gd。
+enum LabelRole { INK, SOFT, GOLD, PLAYER, SHOCK, ENEMY, WHITE }
+const LABEL_ROLE_COLORS: Array[Color] = [
+	PopPalette.INK,        # 正文墨（明度最低——主读数/正文）
+	PopPalette.INK_SOFT,   # 弱化灰蓝（副文本/说明）
+	PopPalette.GOLD,       # 品质/增益金（XP 同值 #ffc93c——品质金硬保全）
+	PopPalette.PLAYER,     # 我方信息蓝（召唤/刷新类 toast）
+	PopPalette.SHOCK,      # 柔电紫（R187 武器形态读数位）
+	PopPalette.ENEMY,      # 警示红（Boss 横幅/复活耗尽——警示色硬保全）
+	Color.WHITE,           # 暗底卡白字（HoverCard 悬停说明）
+]
+
+
+static func label_color(p_role: int) -> Color:
+	# 语义角色取色（越界钳制——rarity_color 同式防呆；HUD 全部 Label 配色唯一入口）
+	return LABEL_ROLE_COLORS[clampi(p_role, 0, LABEL_ROLE_COLORS.size() - 1)]
 
 
 static func label_sticker(p_label: Label, p_size: int, p_fill: Color = PopPalette.INK,

@@ -1,0 +1,84 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · QA R220 模式地基+卡窗预热（独立取证） 回归 ══════════
+── 域C 刀2 变体全清单 + 开窗增量 ≤2 ──
+  PASS | C0 MENU 帧推进自动建队 + 消化进度>0（D3 驱动链在位）
+  PASS | C0b start_run → PLAYING
+  PASS | C0b 战斗续泵（PLAYING 期 remaining 递减）
+  PASS | C0c 全量泵清队（808 键）
+  PASS | C1 宽档两组合：600 非紧凑 + 324 紧凑（无第三组合）
+  PASS | C1 行距单值同源且 >0（预热键行距维=开窗实拼键）
+  PASS | C1 ⇄ 双列对半结构（每变体普通+双列各一键）
+  PASS | C2 4 稀有度数值重写变体各就位（×1.0/×1.4/×1.9/×2.6）
+  PASS | C2 组合抽查全命中（4 稀有度 × ⇄ × 尾行 × 宽 × 紧凑：量测零增量）
+  PASS | C2 命中计数 == 样本数（8）
+  PASS | C2b value_scale>1 尾行各档在键（×1.4/×1.9/×2.6 拼接同源）
+  PASS | C3 MASTERY ±3 近窗 ⊆ 预热全集（L=1..5 全窗扫描零缺失）
+  PASS | C3 窗内 MASTERY 键全命中（58 键量测零增量）
+  PASS | C4 预热后普通开窗量测增量 ≤2（4 稀有度+尾行+MASTERY 窗内级）
+  PASS | C4 预热后双列开窗（⇄ 行）量测增量 ≤2
+  PASS | C5 真链开窗（LEVEL_UP + 货架开）
+  PASS | C5 真链开窗量测增量 ≤2
+  PASS | C5 Reroll 重发同口径（量测增量 ≤2）
+  PASS | C5 选卡收口回 PLAYING
+  PASS | C5 连升批每窗 ≤2（总增量 ≤2×连升数）
+      [info] 连升 8 级批内量测增量 0（每窗均值 0.0）
+── 域A 设置行两态循环 / 持久 / 立即生效 / 旧档回落 ──
+  PASS | A1 两态循环闭合：0→1→0（写即存）
+  PASS | A1 文案随态刷新（◉ 特效优先 ↔ ✓ 帧率优先）
+  PASS | A1 立即生效：写口后首读 frame_priority() 即翻转（每读直查零滞后）
+  PASS | A2 持久化：写 1 过 user:// 磁盘写读回路还原 1
+  PASS | A3 旧档无 perf_mode 键（磁盘真档去键）→ 读口回落默认 0
+  PASS | A3 旧档回落 → frame_priority()==true（帧率优先缺省）
+  PASS | A3 旧档回落 → 面板文案回「✓ 帧率优先」
+  PASS | A4 内存缺键读口回退 0（零迁移降级不崩）
+  PASS | A5 切换前 1.5s 未降（tier 3）
+  PASS | A5 切换瞬间 tier 保持（3）
+  PASS | A5 模式切换计时清零：切后再 1.5s 仍未降（未清零则第 1 拍即降）
+  PASS | A5 切换后满 2.0s 降档 3→2（清零后重累计满额）
+── 域B PerfGovernor 注入（迟滞/地板2/挂起/target 跟随） ──
+  PASS | B1 降迟滞：1.5s < 2.0s 不降（tier 3）
+  PASS | B1 满 2.0s 降档 3→2（transitions=1）
+  PASS | B1 再满 2.0s 降档 2→1（transitions=2）
+  PASS | B1 地板 1：深降 EMA 持续不再降（transitions 仍 2）
+  PASS | B2 升迟滞：4.5s < 5.0s 不升（tier 1）
+  PASS | B2 满 5.0s 升档 1→2（transitions=3）
+  PASS | B2 再满 5.0s 升档 2→3（transitions=4）
+  PASS | B2 帽 3：高 EMA 持续不再升（transitions 仍 4）
+  PASS | B3 特效优先 <0.70t 满 2.0s 降档 3→2（transitions=1）
+  PASS | B3 地板 2：深降 EMA 持续不再降（tier 仍 2 / transitions 仍 1）
+  PASS | B3 0.92t 升迟滞：4.5s < 5.0s 不升（0.85 阈值）
+  PASS | B3 满 5.0s 升档 2→3（0.85 阈值生效）
+  PASS | B4a LEVEL_UP 期 8 拍不降档（选卡期挂起）
+  PASS | B4a LEVEL_UP 期 EMA 不清（采样照走——值保持注入位）
+  PASS | B4a 回 PLAYING 1 拍即降档（冻结的 1.5s 续账至 2.0s——非清零）
+  PASS | B4b paused 期 8 拍不降档（挂起）
+  PASS | B4b paused 期 EMA 不清
+  PASS | B4b 解除 paused 1 拍即降档（冻结续账）
+  PASS | B5 target 读口：144→120 / 0（不限）→120 / 30→30 / 90→90 / 缺键→60（默认表）
+  PASS | B5b 钳帽判别：fps_cap=144 + EMA=115 → 5s 升档 2→3（target=120 侧；若误按 144 则 2s 已降档）
+  PASS | B5c target=30：EMA=25（<0.90×30）满 2.0s 降档 3→2
+  PASS | B5c target=30：EMA=29（>0.95×30）满 5.0s 升档 2→3（阈值随 target 缩放）
+  PASS | B6 tier_override 帽映射 3/2/1→2/1/0；释放后非 mobile 无注入恒 2（承重墙）
+── 域D 分帧预算 ≤12ms/帧（12ms + 单项梯量测原子粒度） ──
+  PASS | D0 pump(0) 恰处理 1 项（预算用尽即停、最小粒度不饿死）
+  PASS | D1 全量泵清队（808 键 / 10 帧）
+  PASS | D1 分帧消化跨 ≥2 帧（预算实际咬合）
+  PASS | D1 每帧墙钟 ≤12ms + 单项粒度上界（实测单项 179us，最重帧 12158us）
+      [info] 单项上界 179us / 最重帧 12158us / 预算 12000us / 10 帧
+── 域E 日志头 R220 新口径声明在位 ──
+  PASS | E1 导出成功（diag_export 返回文本体）
+  PASS | E1 R220 口径声明段在位（口径声明（R220）锚）
+  PASS | E1 十六段拆键声明（card_open 开窗级联 / card_drain 溢出批消化）
+  PASS | E1 模N 新口径 + 跨窗 * 标记声明（物理帧差分×1000÷墙钟窗 / 模值带 *）
+  PASS | E1 弹段探针 vs fps 窗口错位声明（不可直接互除对账）
+  PASS | E1 派发时点声明（damage_resolved =⑧ UI 段前统一保序批化）
+  PASS | E1 旧锁子串保持：「采样 1Hz × 60 行环形」随容量档刷新（r212_diaglog2 锁）
+  PASS | E1 容量回档后头随档刷新（采样 1Hz × 240 行环形）
+────────────────────────────────────────
+汇总：PASS 67 / FAIL 0（共 67 项）
+验收汇总：67/67 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

@@ -46,6 +46,13 @@ static func difficulty_revives(p_d: int) -> int:
 	return [0, 1, 3][clampi(p_d, 0, 2)]
 
 
+static func blessing_rarity_tier(p_d: int) -> int:
+	# R252 需求②祝福档位映射：难度 → 稀有度档——普通→蓝(1) / 困难→紫(2) / 地狱→金(3)
+	#（用户原话「普通开局可以选一个蓝色buff，到困难开局就可以自选一个紫色buff，
+	# 地狱开局可以选一个金色buff」；difficulty_revives 同族静态口）
+	return [1, 2, 3][clampi(p_d, 0, 2)]
+
+
 static func difficulty_dual_pick(p_d: int, p_roll: float) -> bool:
 	# 升级双选卡判定：地狱 100%（每次）/ 困难 5%（p_roll = [0,1) 随机数，测试可注入）
 	return p_d == Difficulty.HELL or (p_d == Difficulty.HARD and p_roll < 0.05)
@@ -67,8 +74,12 @@ const PLAYER_SIDE_POOLS: Array[StringName] = [&"add_hp", &"add_xp", &"add_pickup
 	&"add_skillcdr", &"add_gold"]   # 玩家侧词条池（全局生效）：卡面【通用】前缀 + 构筑详情
 	                                # 「通用词条」段的归类真源（R80：此前错挂武器段误导归因）
 
-# R196 超质变叠层注记（文案真源：词条卡/黑市/详情经卡描述带出，UI 禁手抄；用户口径原文）
-const OVERCAP_NOTE := "超出质变等级的层数收益降低 30%"
+# ── R243 武器类别文案单源（§1.2：近战/法器两类别——display_name 前缀与卡面类别行共用，
+#    UI 禁手抄；键 = WeaponData.melee.weapon_class 字符串值封闭集） ──
+const WEAPON_CLASS_NAMES := {"melee": "近战", "talisman": "法器"}
+
+# R226 有意契约变更：R196 OVERCAP_NOTE（「超出质变等级的层数收益降低 30%」）随超帽衰减
+# 一并退役——肉鸽无上限，满层后继续叠全额（用户拍板），注记无存在意义
 
 # ── R199（P08）拖动操作教学文案真源（lore 菜单行 / HUD 战斗内首局一次性提示共用
 #    单源，UI 禁手抄——移动是唯一输入与生存手段，全游戏此前无一处告知） ──
@@ -110,6 +121,12 @@ static func weapon_note(p_weapon_id: String) -> String:
 			return "弧斩化身——近身旋斩，贴脸收割"
 		"W10_boomerang":
 			return "定距甩满再返航——双程贯穿碰到弹开，同敌 0.4s 一跳"
+		"W11_spirit_sword":
+			return "高速飞剑刺击——单体高伤快节拍，飞行路径百分百消弹"
+		"W12_ground_axe":
+			return "掷斧越顶飞落——落地震荡范围全额伤害并清弹，可碎裂出子斧"
+		"W13_great_sword":
+			return "定身巨斩——原地大弧慢节拍超高单击，正面警戒弧持续格挡"
 		_:
 			return ""
 
@@ -332,8 +349,55 @@ static func reaction_note(p_rxn_id: String) -> Dictionary:
 
 
 static func enemy_attack_note(p_enemy_id: String) -> String:
-	# E5/R72 新形态机制一句话（图鉴行 + 首遇提示条共用；空 = 旧怪不提示）
+	# 全敌机制一句话（图鉴行 + R251 首遇卡片共用；29 敌全覆盖——R251 §3.4 由 6 行
+	# 扩到全量，首遇弹卡不再有「旧怪零打扰」例外）
 	match p_enemy_id:
+		"E1_grunt":
+			return "成群涌来的基础敌人——别被围角"
+		"E2_runner":
+			return "蓄力后高速冲刺——看到它压扁就横移"
+		"E3_bastion":
+			return "血极厚的移动肉盾——没有特殊机制，集火即可"
+		"E4_volatile":
+			return "接触后 1.2 秒自爆——拉开距离，击退能打断引爆"
+		"E5_elite":
+			return "强化变异体——血量伤害大幅提升，奖励也更肥"
+		"E6_boss1":
+			return "区域 Boss（两阶段）——弹幕环有膨胀预警，看红圈走位"
+		"E6_boss2":
+			return "区域 Boss（两阶段）——半血进入弹幕强化期，留好爆发"
+		"E6_boss3":
+			return "区域 Boss（两阶段）——二阶段召唤自爆虫，优先清理或拉开距离"
+		"E7_spitter":
+			return "远程喷吐弹丸——横向走位躲开弹道"
+		"E8_imp":
+			return "成群骚扰的近战小鬼——别被缠住"
+		"E9_frostling":
+			return "冰原近战小怪——数量多，注意聚群围堵"
+		"E10_woodbird":
+			return "蓄力后高速冲刺——压扁前摇就是走位信号"
+		"E11_aquasquirt":
+			return "远程水弹骚扰——弹速偏慢，横移即可躲"
+		"E12_bogslime":
+			return "死亡会原地毒爆（六成伤害+毒环）——击杀后立刻后撤"
+		"E13_bogspitter":
+			return "远程毒弹骚扰——保持横向移动"
+		"E14_boguard":
+			return "沼泽近战卫兵——血量偏厚，别被前排挡路"
+		"E15_bogleaper":
+			return "蓄力冲刺型近战——压扁前摇就是走位信号"
+		"E16_marshmaw":
+			return "近战压迫型大体型——优先击杀或绕行"
+		"E17_frost_sovereign":
+			return "冰原 Boss（三阶段）——二阶段布冰霜雷区+减速池，红圈尽快脱离"
+		"E18_demon_lord":
+			return "魔域 Boss（三阶段）——瞄准型弹幕密集，保持绕行"
+		"E19_grove_warden":
+			return "林地 Boss（三阶段）——二阶段布荆棘地雷，看红圈走位"
+		"E20_swamp_hydra":
+			return "沼泽 Boss（三阶段）——开局即布毒雷+毒潭，别站圈输出"
+		"E24_rift_demon":
+			return "闪现到你身边自爆——引信更长，走位窗更充裕"
 		"E25_phase_bomber":
 			return "闪现到你身边自爆——落地红圈就是走位窗"
 		"E26_shield_lancer":
@@ -355,14 +419,15 @@ static func difficulty_name(p_d: int) -> String:
 
 
 static func difficulty_desc(p_d: int) -> String:
-	# 选难度行副文案（图鉴口径同源）
+	# 选难度行副文案（图鉴口径同源）。二dc M2：补武器差异句（武器增量是困难/地狱
+	# 核心卖点——决策点必须可见，规则不靠 3.4s 即逝的开局 toast 单点广播）
 	match clampi(p_d, 0, 2):
 		Difficulty.HARD:
-			return "敌 HP/攻击 ×3 · 复活 +1 · 升级 5% 概率成对抉择"
+			return "敌 HP/攻击 ×3 · 复活 +1 · 升级 5% 概率成对抉择 · 解锁近战/法器首批（第 4 关起）"
 		Difficulty.HELL:
-			return "敌 HP/攻击 ×9 · 复活 +3 · 每次升级成对抉择（2 列 6 卡选同行两张）"
+			return "敌 HP/攻击 ×9 · 复活 +3 · 每次升级成对抉择 · 近战/法器全开（按大关推进）"
 		_:
-			return "现行口径 · 无附赠复活"
+			return "现行口径 · 无附赠复活 · 近战/法器类不开放"
 enum PopupStyle { NORMAL, CRIT, REACTION, DOT, HEAL, XP, IMMUNE, CHARGE_BURST }   # IMMUNE：R22 元素免疫跳字；CHARGE_BURST：R187 W8 蓄能满档引爆（独立桶——同 uid 合并不吞引爆大数字）
 enum FeelLevel { HIT, CRIT, CATALYST, BOSS_DEATH }        # GameFeel 分级（Q-12）
 enum ReactionType {                                                 # 反应中性 ID（唯一真源 idContract §3.3）

@@ -20,7 +20,9 @@ var _title: Label = null
 var _card_faces: Array[Dictionary] = []       # 卡面子件 {band, stamp, kind, name, desc, dots}
 var _reroll_btn: Button = null                # 换一批按钮（刷新机制；次数由 GameLoop 注入）
 
-const KIND_NAMES: Array[String] = ["精通", "词条", "遗物", "保底", "新武器", "槽位"]
+# R246：第 7 位「升华」对应 CardKind.SUBLIME=6（红品质「技能升华」卡——cards 泳道
+# 枚举追加位，本表按位跟进；类别行 :247-248 单源拼接自动出「升华 · 传说」）
+const KIND_NAMES: Array[String] = ["精通", "词条", "遗物", "保底", "新武器", "槽位", "升华"]
 const CARD_SIZE := Vector2(600.0, 180.0)
 const CARD_X := 60.0
 const CARD_TOP := 264.0                       # 首卡 y（错峰果冻出场基准）
@@ -40,6 +42,52 @@ const STACK_BOTTOM_MAX := 1272.0              # 卡栈下缘红线（1280 − 8p
 
 var _dual: bool = false                       # 当前货架是否成对模式
 var _highlight_slots: Array[int] = []         # R188-3 挂机预选描金槽位（highlight_candidate 落值；close 清除）
+
+# ── R212 刀1：_fit_desc 量测结果静态缓存（全平台） ─────────────────────
+# vc18 真机取证：升级/选卡瞬间 UI 段尖峰 77-247ms、感段 110-138ms、玩段 26-164ms
+# 同源同帧——每 open 最多 4卡×7=28 / 6卡×5=30 次全中文 get_multiline_string_size
+# wrap 量测（SystemFont 六级回退链在 Android 全 miss 落 sans-serif，单次排版远贵于
+# 桌面）。键 = 描述文本+可用宽+紧凑位+行距（同键结果确定性一致——StickerTheme.font()
+# 惰性缓存后字体实例不变），命中直返：同文案二次 open/reroll/连升重开零量测。
+# 常驻卡文案有限（卡池文本 × 稀有度数值重写型），无淘汰必要；两计数器为测试观测口
+#（r212_carddigest 断言「同文案重开新增量测 ==0 / 全新 open ≤30」）。
+static var _fit_desc_cache: Dictionary = {}   # 键串 -> {fs, need}
+static var fit_desc_measures: int = 0         # 观测口：get_multiline_string_size 实测次数（含梯底兜底）
+static var fit_desc_cache_hits: int = 0       # 观测口：缓存命中次数
+
+# ── 二cv#8 帧率：开窗卡片构建分帧（mobile 门） ────────────────────────
+# vc48 真机尖峰开 40-47ms=每次升级开窗级联（generate_candidates+可能整段 reroll 二次
+# 生成+change_state+本 open 逐卡装配）单帧；成长期升级以秒计频次，单次 40ms 级吞 2-3
+# 帧→fps 均值塌陷再回弹（vc48 震荡形态）。刀=mobile 门内本帧只装配前 CARD_SPLIT_FIRST
+# 张，余卡 _process 预算闸内续建。真链零感知：LEVEL_UP 态玩家输入被覆盖层挡住；R188
+# 自动选卡窗 0.5s ≫ 续建 1-2 帧；choose/highlight_candidate 读 _cards 数据面不读按钮面。
+static var card_split_override: int = -1      # 测试注入口（pool_valve_override 先例）：
+                                              # -3=模拟 mobile（headless 驱分帧臂）/-2=强制关
+const CARD_SPLIT_FIRST := 3                   # 首帧先出卡数（4/6 卡货架余 1/3 张续建）
+const CARD_BUILD_BUDGET_US := 8000            # 续建单帧预算闸 µs（R212 刀4 8ms 同形）
+var _build_left: int = 0                      # 待续建卡数（>0=分帧中；open 复位/close 清零）
+
+
+static func _card_split_on() -> bool:
+	# 二cv#8 帧率门：mobile（哨兵同 _pool_valve_on 款：-2 恒关/-3 模拟真机）。不挂
+	# 帧率档——升级开窗频次以秒计、分帧恒比整帧级联便宜（vc48 调3 全程尖峰开在册，
+	# 挂档反而在 tier3 冻结态失能）。
+	# R267 刀P2②：桌面翻门——缺省档全平台开分帧（vc71 用户体验「还是卡」升级弹卡
+	# 19-33ms 桌面实测在案；桌面分帧缝见 _card_split_hide_tail 注——真机/mobile 行为
+	# 零变化）。-2 强制关 / -3 模拟 mobile（隐卡整卡分帧原口径）注入口保留供测试。
+	if card_split_override == -2:
+		return false
+	return true
+
+
+static func _card_split_hide_tail() -> bool:
+	# R267 刀P2②：分帧缝选档——mobile（含 -3 模拟）= 原整卡隐卡分帧口径（vc48 已验证
+	# 路径零变化）；桌面 = 整卡同步装配（含顶带/名字/圆点/描述文本——全部廉价面），
+	# 仅 _fit_desc 量测与变高几何（get_multiline_string_size 是级联尾段大头）延后到
+	# _process 续建。桌面缝保同步廉价读（卡面名色/圆点显隐等既有测试口径）零破坏。
+	if card_split_override == -3:
+		return true
+	return OS.has_feature("mobile")
 
 
 func _ready() -> void:
@@ -80,18 +128,63 @@ func open(p_candidates: Array[Dictionary], p_dual: bool = false) -> void:
 	_highlight_slots.clear()                     # 新货架重开：上一局描金态作废（open 重上色机制兜底还原）
 	var slot_base := 4 if _dual else 0
 	var slot_cap := 10 if _dual else 4
+	# 二cv#8 帧率：mobile 门内首帧只装配窗体+前 CARD_SPLIT_FIRST 张卡，余卡 _process
+	# 续建（vc48 尖峰开 40-47ms=开窗级联单帧——逐卡装配含描述自适应量测是级联尾段
+	# 大头）；门关=build_to 全量，下方循环与原口径逐位等价（idx < build_to 恒真）。
+	# R267 刀P2② 桌面翻门：桌面缝下 build_to 仍全量（整卡同步装配），量测 fit_to 才
+	# 分帧（首帧 CARD_SPLIT_FIRST 张已量测定稿，余卡 _process ≤8ms/帧续量测）——开窗
+	# 帧成本 = 廉价装配全卡 + 前 3 卡量测，量测大头（梯 miss 7 次/卡 → 二分 ≤3 次/卡，
+	# 刀P2①）+ 余卡延后双管齐下。
+	var build_to := _cards.size()
+	var fit_to := _cards.size()
+	if _card_split_on():
+		fit_to = mini(_cards.size(), CARD_SPLIT_FIRST)
+		if _card_split_hide_tail():
+			build_to = fit_to                # mobile 缝：整卡隐卡分帧（原口径零变化）
+	# R267 刀P2：桌面缝旗位提升到环外（环内 4-10 次重复静态调 → 1 次）
+	var fit_tail_seam := _card_split_on() and not _card_split_hide_tail()
 	for s in range(_buttons.size()):
 		var in_mode: bool = s >= slot_base and s < slot_cap
 		var idx := s - slot_base
 		var card: Dictionary = _cards[idx] if in_mode and idx < _cards.size() else {}
-		_setup_button(_buttons[s], card)
-		_buttons[s].visible = in_mode and idx < _cards.size()
+		if in_mode and idx >= build_to:
+			card = {}                            # 分帧余卡位先空置（空卡=禁点，隐形）
+		_setup_button(_buttons[s], card,
+			fit_tail_seam and in_mode and idx >= fit_to)
+		_buttons[s].visible = in_mode and idx < _cards.size() and idx < build_to
 	_reflow_stack()                              # R199：变高卡栈防重叠重排（纯几何）
 	_title.text = "成对抉择！带走同一行的两张" if _dual else "升级！选择一项"
 	_root.visible = true
 	is_open = true
-	for i in range(mini(_cards.size(), slot_cap - slot_base)):
+	# 二cv#8 帧率：待续建计数（门关恒 0=零续建；重开/reroll 经 open 复位，close 清零）；
+	# R267 桌面缝下计数语义 = 待量测卡数（mobile 缝 = 待装配卡数，原口径）
+	_build_left = (_cards.size() - fit_to) if _card_split_on() else 0
+	for i in range(mini(build_to, slot_cap - slot_base)):
 		StickerTheme.squash_pop(_buttons[slot_base + i], 0.07 * float(i))
+
+
+func _process(_delta: float) -> void:
+	# 二cv#8 帧率：分帧续建消费点（本类 process_mode=ALWAYS——LEVEL_UP 暂停期照跑；
+	# 非分帧期成本=两次 bool 读）。单帧预算闸=R212 刀4 形态（帧内已耗超闸即停，余量
+	# 下帧续）；续建序=货架序追加，_reflow_stack 收敛与整帧装配同一终局布局。
+	if _build_left <= 0 or not is_open or _cards.is_empty():
+		return
+	var t0 := Time.get_ticks_usec()
+	var slot_base := 4 if _dual else 0
+	while _build_left > 0:
+		var idx: int = _cards.size() - _build_left
+		var s: int = slot_base + idx
+		# R267 刀P2② 桌面缝：续建=补量测/变高几何（整卡装配已完成——_setup_button
+		# 全量重跑幂等，廉价面重做成本可忽略且两缝共用同一装配单源零漂移）；mobile
+		# 缝原口径：整卡装配 + 显卡 + 果冻出场。
+		_setup_button(_buttons[s], _cards[idx])
+		if _card_split_hide_tail():
+			_buttons[s].visible = true
+			StickerTheme.squash_pop(_buttons[s], 0.0)
+		_build_left -= 1
+		if _build_left > 0 and Time.get_ticks_usec() - t0 > CARD_BUILD_BUDGET_US:
+			break
+	_reflow_stack()                              # 续建批落位（已建卡位不回退，追加排栈）
 
 
 func close() -> void:
@@ -100,6 +193,7 @@ func close() -> void:
 	_root.visible = false
 	is_open = false
 	_cards = []
+	_build_left = 0                              # 二cv#8 帧率：防 _process 悬空续建（卡数据已清）
 
 
 func choose(p_index: int) -> void:
@@ -152,6 +246,13 @@ func highlight_candidate(p_index: int) -> void:
 			return
 		slots.append(p_index)
 	for s in slots:
+		# R246 D11：红卡（rarity==4 升华卡）槽位跳过描金——红顶带+5 珠自带全货架最高
+		# 视觉优先级，被金覆盖=读感降级；仅记录槽位保持 highlighted_slots() 观测口语义
+		#（挂机预选链 pick 仍指它）。_clear_highlight 对未描色槽位重上稀有度色幂等无害
+		var ci := s - (4 if _dual else 0)
+		if ci >= 0 and ci < _cards.size() and int(_cards[ci].get("rarity", 0)) == 4:
+			_highlight_slots.append(s)
+			continue
 		_apply_band_color(s, PopPalette.GOLD)
 		_highlight_slots.append(s)
 
@@ -211,19 +312,32 @@ func _on_reroll_pressed() -> void:
 		reroll_requested.emit()
 
 
-func _setup_button(p_btn: Button, p_card: Dictionary) -> void:
+func _setup_button(p_btn: Button, p_card: Dictionary, p_defer_fit: bool = false) -> void:
 	# 卡面装配（贴纸装：稀有度顶带 + 类型圆章 + 类别行 + 名称 + 描述 + 层级圆点）
+	# R267 刀P2②：p_defer_fit=true = 桌面分帧缝——廉价面（顶带/章/类别/名字/描述文本/
+	# 圆点显隐换纹）同步装配，_fit_desc 量测与变高几何延后（_process 续建收口）。
 	var idx := _buttons.find(p_btn)
 	var face: Dictionary = _card_faces[idx] if idx >= 0 and idx < _card_faces.size() else {}
 	if p_card.is_empty():
 		p_btn.disabled = true
+		(face.get("maxed") as Label).visible = false   # R262e ①：空卡清徽标（槽复用残留防御）
 		return
 	p_btn.disabled = false
+	# R262e ①：已满层徽标显隐（生成侧 "maxed" flag——显示=实挂同仲裁源）
+	(face.get("maxed") as Label).visible = bool(p_card.get("maxed", false))
 	var kind: int = int(p_card.get("kind", 0))
 	var rarity: int = int(p_card.get("rarity", 0))
 	var rarity_color := PopPalette.rarity_color(rarity)
 	# 顶带 = 稀有度色（重上色走 _apply_band_color 唯一通道——描金高亮共用同一机制）
-	_apply_band_color(idx, rarity_color)
+	# QA-heal r1：二cv#8 分帧续建竞态收口——自动窗首拍描金（game_loop 展示窗首帧
+	# highlight_candidate）可能先于本槽续建落位，此处无条件重上稀有度色会把预落在
+	# 未建卡上的金顶带冲掉（金视觉丢失至窗结束；仅 mobile 分帧门内可达——桌面/
+	# headless 门关零续建，逐位等价）。落位时槽位在描金表且非红卡（R246 D11 与
+	# highlight_candidate 同判式）→ 按描金态重上金色，金视觉与数据面锁步。
+	var band_color := rarity_color
+	if _highlight_slots.has(idx) and rarity != 4:
+		band_color = PopPalette.GOLD
+	_apply_band_color(idx, band_color)
 	# 类型圆章
 	var stamp: TextureRect = face["stamp"]
 	var pool := -1
@@ -238,19 +352,50 @@ func _setup_button(p_btn: Button, p_card: Dictionary) -> void:
 	# 名称 + 描述（高稀有度数值强化 → 描述内已重写真实数值；尾行标注品质倍率作为解释）
 	var name_label: Label = face["name"]
 	name_label.text = String(p_card.get("display_name", ""))
+	# QA-R242-P05：槽复用色残留清——先无条件落墨基色（同键 override 即覆盖），再按态
+	# 覆写；否则上一货架的质变金/诅咒红名残留到本货架普通卡（金残留系 2026-08-31
+	# 既有病，红残留为本轮诅咒面新增——一并根治）
+	name_label.add_theme_color_override("font_color", PopPalette.INK)
 	# 满层质变卡（2026-08-31）：名称金色高亮（「到什么程度会质变」卡面预览）
 	if bool(p_card.get("milestone", false)):
 		name_label.add_theme_color_override("font_color", PopPalette.GOLD)
+	# REL_GAMBLER 诅咒卡显性化（用户 2026-10-07 反馈「第 4 张必带诅咒页面看起来
+	# 差不多」——cursed 键此前零 UI 呈现）：名字警示红（ENEMY=r230 语义钉同源）
+	# + 类别行插「诅咒」段，描述尾行代价经 compose_desc_text 单源（预热键契约 R220
+	# 不破——诅咒卡开窗时预热 miss 至多 1 条/窗，_fit_desc 现场量测回退可忽略）
+	if bool(p_card.get("cursed", false)):
+		name_label.add_theme_color_override("font_color", PopPalette.ENEMY)
+		# 评审 LOW-4：类别行整行改警示红（原插「诅咒」段后仍稀有度色——传说诅咒卡
+		# 上「词条 · 诅咒 · 传说」整行金色=警告词被高级色稀释）
+		kind_label.text = String(kind_label.text).replace(" · ", " · 诅咒 · ")
+		kind_label.add_theme_color_override("font_color", PopPalette.ENEMY)
 	var desc_label: Label = face["desc"]
-	var desc_text := String(p_card.get("description", ""))
-	var value_scale := float(p_card.get("value_scale", 1.0))
-	if value_scale > 1.0:
-		desc_text += "\n品质加成：该词条效果 ×%.1f（已计入上行数字）" % value_scale
-	# F3 成对抉择行内提示（self-evolution）：窄卡空间小——组合语义就地说明
-	#（标题有全局说明，但首见玩家视线落在卡上）
-	if _dual:
-		desc_text += "\n⇄ 点这张会同时带走同一行另一张"
+	var desc_text := compose_desc_text(String(p_card.get("description", "")),
+		float(p_card.get("value_scale", 1.0)), _dual,
+		bool(p_card.get("cursed", false)))
 	desc_label.text = desc_text
+	# 层级圆点（rarity+1 枚稀有度色圆珠）——R212 刀1 附带微刀：预建 5 珠按 rarity
+	# 显隐复用（原每次 open queue_free 全清 + 逐珠 new 1-4 个 TextureRect/卡；珠纹理
+	# 走 TextureFactory.bead 静态缓存，换纹理零重生成）。rarity 域 0..4（R246 红档 [4]
+	# 升华卡，PopPalette 扩档后取色放行），5 珠全覆盖；HBox 对隐藏子件不占位 →
+	# 行内恒显 rarity+1 枚（红卡 5 珠全红，:303 显隐逻辑零改动自动跟随）
+	# R267 刀P2②：圆点显隐/换纹前移为廉价面（桌面缝首帧同步装配——同步读口径不破）；
+	# dots.position 随量测几何在 fit 段定（量测延后时先落基位 150）
+	var dots: HBoxContainer = face["dots"]
+	var bead_tex := TextureFactory.bead(rarity_color, 22, false)
+	var bead_i := 0
+	for child_v: Variant in dots.get_children():
+		var bead: TextureRect = child_v as TextureRect
+		if bead == null:
+			continue                              # 防御：非珠子子件不动（现状无此形态）
+		var show_i := bead_i < rarity + 1
+		bead.visible = show_i
+		if show_i:
+			bead.texture = bead_tex
+		bead_i += 1
+	if p_defer_fit:
+		dots.position = Vector2(18.0, 150.0)
+		return                                   # R267 刀P2②：量测/变高几何延后（续建收口）
 	# R199(P05/P06/F15) 描述区自适应扩容：58px 定高+clip 改为按 StickerTheme 实测行高
 	# 适配——字号梯从大到小取首个装得下的档，框高=实测需求高（含行距），卡体随描述
 	# 扩高（≤设计帽），层级圆点让位下移；超长描述（元素族全反应列举）在梯底钳帽由
@@ -267,19 +412,7 @@ func _setup_button(p_btn: Button, p_card: Dictionary) -> void:
 	var h_new: float = minf(maxf(h_base, dots_y + h_base - 150.0),
 		DUAL_H_MAX if is_compact else CARD_H_MAX)
 	p_btn.size = Vector2(p_btn.size.x, h_new)
-	# 层级圆点（rarity+1 枚稀有度色圆珠）
-	var dots: HBoxContainer = face["dots"]
 	dots.position = Vector2(18.0, minf(dots_y, h_new - 30.0))
-	for child_v: Variant in dots.get_children():
-		(child_v as Node).queue_free()
-	for d in range(rarity + 1):
-		var dot := TextureRect.new()
-		dot.texture = TextureFactory.bead(rarity_color, 22, false)
-		dot.custom_minimum_size = Vector2(14.0, 14.0)
-		dot.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		dot.stretch_mode = TextureRect.STRETCH_SCALE
-		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		dots.add_child(dot)
 
 
 func _build_ui() -> void:
@@ -314,23 +447,32 @@ func _build_ui() -> void:
 	_reroll_btn.text = "换一批"
 	_reroll_btn.add_theme_font_size_override("font_size", 19)
 	_reroll_btn.add_theme_font_override("font", StickerTheme.font_bold())
-	_reroll_btn.position = Vector2(452.0, 198.0)
+	_reroll_btn.position = Vector2(452.0, 196.0)
 	_reroll_btn.size = Vector2(208.0, 56.0)
-	# R195 适配分区：reroll 钮同卡栈整体居中锚（offset=现值−设计中心(360,640)——
-	# 与卡栈同组随视口居中移动，栈内相对位恒等）
+	# R195 适配分区：reroll 钮 x 同卡栈水平居中锚（offset=现值−设计中心 x360——
+	# 宽视口下随中心随动，栈内相对位恒等；_reflow_stack 只直写 y，卡 x 仍随中心缩放）
 	_reroll_btn.anchor_left = 0.5
 	_reroll_btn.anchor_right = 0.5
-	_reroll_btn.anchor_top = 0.5
-	_reroll_btn.anchor_bottom = 0.5
+	# R202①（换一批按钮遮挡修复）：y 锚对齐视觉组——title（anchor_top=0，148..194）
+	# 与卡栈（_reflow_stack 自 CARD_TOP=264 直写 position → 绝对 y）整组均为绝对
+	# 设计域 y 语义；原 y 挂 0.5 中心锚在 ≠1280 高视口下随中心平移（1440→y276、
+	# 1680→y396）撞入卡区（按钮与组锚语义错配，探针实证）。绝对 y 下相对几何
+	# 不随视口变化，全矩阵尺寸恒等
+	_reroll_btn.anchor_top = 0.0
+	_reroll_btn.anchor_bottom = 0.0
 	_reroll_btn.offset_left = 92.0
 	_reroll_btn.offset_right = 300.0
-	_reroll_btn.offset_top = -442.0
-	_reroll_btn.offset_bottom = -386.0
+	# R202①：设计位整体上提 2px（原 0.5 锚 -442/-388 ≡ y198..254 → 绝对 y196..252）
+	# ——对标题底 194 留 2px 缝；极端字体档（min 高 79 溢出设计 56）下最坏重叠
+	# 13→11px，正常档（min 高 56）全矩阵尺寸零重叠（按钮底 252 与卡顶 264 恒 12px
+	# 缝）。position 镜像值 198→196 同步（anchors+offsets 显式覆盖后为纯注释性自洽，
+	# 不参与最终布局）
+	_reroll_btn.offset_top = 196.0
+	_reroll_btn.offset_bottom = 252.0
 	_reroll_btn.pivot_offset = _reroll_btn.size * 0.5
 	_reroll_btn.focus_mode = Control.FOCUS_NONE
 	_reroll_btn.pressed.connect(_on_reroll_pressed)
 	_reroll_btn.button_down.connect(func() -> void: StickerTheme.press_punch(_reroll_btn))
-	_root.add_child(_reroll_btn)
 	# 4 卡槽位（open() 按货架数显隐——三选一时第 4 槽隐藏）
 	# R195 适配分区：卡栈整体居中锚——各卡 offset=设计位−设计中心(360,640)（等效包一层
 	# 居中容器，免重挂父子），CARD_TOP/CARD_STEP/DUAL_* 设计位公式原样父相对恒等；
@@ -375,6 +517,12 @@ func _build_ui() -> void:
 		_root.add_child(dbtn)
 		_buttons.append(dbtn)
 		_card_faces.append(_build_card_face(dbtn, true))
+	# R202③（换一批按钮遮挡修复）：reroll 钮 add 推迟到全部卡之后（树序兜底）——
+	# 极端字体档按钮 min 高 79 溢出设计 56（> 卡顶 264 上方 70px 走廊）时，重叠表现
+	# 为按钮盖卡顶边 ≤11px（按钮恒可见可点），而非原卡后 add 树序盖按钮（点击落入
+	# 卡区 → 误选卡）。正常字体档（min 高 56）零重叠，树序变化无副作用（dim 仍是
+	# _root 首个 ColorRect 子节点，first_color_rect 观测口恒等）
+	_root.add_child(_reroll_btn)
 
 
 func _build_card_face(p_btn: Button, p_compact: bool = false) -> Dictionary:
@@ -392,12 +540,31 @@ func _build_card_face(p_btn: Button, p_compact: bool = false) -> Dictionary:
 	band.size = Vector2(cw - 8.0, 14.0)
 	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p_btn.add_child(band)
+	# R262e ①：已满层徽标（用户「如果 buff 满了，出现的 buff 左上角加个提示」）——
+	# 左上角深底白字角标，_setup_button 按 "maxed" flag 显隐（一次装配零重建）
+	var maxed_badge := Label.new()
+	maxed_badge.name = "MaxedBadge"
+	maxed_badge.text = "已满层"
+	var badge_style := StyleBoxFlat.new()
+	badge_style.bg_color = PopPalette.INK
+	badge_style.set_corner_radius_all(8)
+	badge_style.content_margin_left = 8.0
+	badge_style.content_margin_right = 8.0
+	badge_style.content_margin_top = 2.0
+	badge_style.content_margin_bottom = 2.0
+	maxed_badge.add_theme_stylebox_override("normal", badge_style)
+	maxed_badge.add_theme_font_size_override("font_size", 13)
+	maxed_badge.add_theme_color_override("font_color", Color.WHITE)
+	maxed_badge.position = Vector2(8.0, 20.0)
+	maxed_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	maxed_badge.visible = false
+	p_btn.add_child(maxed_badge)
 	var kind_label := StickerTheme.label_sticker(Label.new(), 15, PopPalette.RARITY_NORMAL)
 	kind_label.name = "KindChip"
 	kind_label.position = Vector2(18.0, 26.0)
 	kind_label.size = Vector2(cw - 120.0, 20.0)
 	if p_compact:
-		kind_label.add_theme_font_size_override("font_size", 12)
+		kind_label.add_theme_font_size_override("font_size", 13)
 	p_btn.add_child(kind_label)
 	var stamp := TextureRect.new()
 	stamp.name = "TypeStamp"
@@ -415,12 +582,14 @@ func _build_card_face(p_btn: Button, p_compact: bool = false) -> Dictionary:
 		name_label.add_theme_font_size_override("font_size", 18)
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	p_btn.add_child(name_label)
-	var desc_label := StickerTheme.label_sticker(Label.new(), 18, PopPalette.INK_SOFT)
+	# R200（真机反馈「buff 字很小」）：描述基准 18→20 / 紧凑 14→15（梯顶同步）——
+	# 3 倍密度手机上 18pt ≈ 10.5dp 偏小；名称 22 / 紧凑 18 保持层级差
+	var desc_label := StickerTheme.label_sticker(Label.new(), 20, PopPalette.INK_SOFT)
 	desc_label.name = "CardDesc"
 	desc_label.position = Vector2(18.0, 88.0)
 	desc_label.size = Vector2(cw - 36.0, 58.0)
 	if p_compact:
-		desc_label.add_theme_font_size_override("font_size", 14)
+		desc_label.add_theme_font_size_override("font_size", 15)
 	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc_label.clip_text = true
 	p_btn.add_child(desc_label)
@@ -431,11 +600,63 @@ func _build_card_face(p_btn: Button, p_compact: bool = false) -> Dictionary:
 	dots.add_theme_constant_override("separation", 6)
 	dots.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p_btn.add_child(dots)
+	# R212 刀1 附带微刀：5 珠预建（装配期一次），open 期仅显隐+换纹理——零 queue_free/
+	# 零 new（原每次 open 1-4 个 TextureRect 实例化/卡 ×10 槽）
+	# R246：4→5 珠（rarity=4 升华红卡显 5 珠；r212 量测缓存断言对 0..3 卡保持绿——
+	# 显隐口径 rarity+1 未动，仅预建上限扩一）
+	for d in range(5):
+		var bead := TextureRect.new()
+		bead.name = "RarityDot%d" % d
+		bead.custom_minimum_size = Vector2(14.0, 14.0)
+		bead.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		bead.stretch_mode = TextureRect.STRETCH_SCALE
+		bead.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bead.visible = false
+		dots.add_child(bead)
 	return {"band": band, "stamp": stamp, "kind": kind_label,
-		"name": name_label, "desc": desc_label, "dots": dots}
+		"name": name_label, "desc": desc_label, "dots": dots, "maxed": maxed_badge}
 
 
-func _fit_desc(p_text: String, p_cw: float, p_compact: bool, p_line_spacing: float) -> Dictionary:
+static func compose_desc_text(p_desc: String, p_value_scale: float, p_dual: bool,
+		p_cursed: bool = false) -> String:
+	# R220 刀2（D1）：卡面描述最终文本拼接单源（原 _setup_button :256-264 内联段提取，
+	# 逐字节等价——value_scale>1 尾行 + 成对 ⇄ 行）。产品 _setup_button 与卡面预热器
+	#（card_desc_prewarm.gd）共用本口——预热键文本与开窗实拼文本必然逐位一致，
+	# 杜绝两处格式串漂移导致的「预热键 miss」。
+	# p_cursed（R242 诅咒显性化）：REL_GAMBLER 第 4 张尾行明示代价——预热器不传此参
+	# （默认 false，变体枚举无诅咒档），诅咒卡开窗预热 miss 至多 1 条/窗可忽略。
+	var out := p_desc
+	# c8②：二元拓扑卡假尾注抑制——生成侧（_scaled_description）已给这类卡追加
+	#「（品质不影响效果）」字样，本口按同一字样判同（单源标记：产品与预热器两路
+	# desc 同源，键天然逐位一致，无需加参传旗），不再拼「品质加成 ×N」假话行。
+	if p_value_scale > 1.0 and not p_desc.contains("品质不影响效果"):
+		out += "\n品质加成：该词条效果 ×%.1f（已计入上行数字）" % p_value_scale
+	# F3 成对抉择行内提示（self-evolution）：窄卡空间小——组合语义就地说明
+	#（标题有全局说明，但首见玩家视线落在卡上）
+	if p_dual:
+		out += "\n⇄ 点这张会同时带走同一行另一张"
+	if p_cursed:
+		var curse_pct := int(round(-float(CardGenerator.CARD_EXTRA_CURSE_PARAMS
+			.get("curse_atk_pct", -0.1)) * 100.0))
+		# ※（U+203B 参考记号）CJK 字体单色字形广泛收录——评审 MED-2：⚠（U+26A0）在
+		# 部分 Android 设备回退彩色 emoji 字体（贴纸卡面冒彩三角+量纲撑行），弃用
+		out += "\n※ 代价：攻击力 -%d%%" % curse_pct
+	return out
+
+
+static func prewarm_line_spacing() -> float:
+	# R220 刀2（D1）：行距探针（卡面预热器建队用）——与 _setup_button 量测调用点
+	#（:272 desc_label.get_theme_constant("line_spacing")）同 theme 环境：树外探针
+	# 显式挂 StickerTheme.theme()（与 _root.theme 同一实例），两路径查找序一致
+	#（theme 常量 → 引擎默认 theme）→ 读值恒等，预热键行距维与开窗实拼键逐位一致。
+	var probe := Label.new()
+	probe.theme = StickerTheme.theme()
+	var ls := float(probe.get_theme_constant("line_spacing"))
+	probe.free()
+	return ls
+
+
+static func _fit_desc(p_text: String, p_cw: float, p_compact: bool, p_line_spacing: float) -> Dictionary:
 	# R199(P05/P06/F15) 描述框自适应量测：按 StickerTheme 实测行高排版测高（体检实测
 	# 18pt≈54px 宿主相关——禁拍值，get_multiline_string_size 同参口径），字号梯从大到
 	# 小取首个「需求高 ≤ 框帽」的档；梯底仍超 → 梯底字号 + 需求钳帽（clip_text 兜底）。
@@ -443,28 +664,66 @@ func _fit_desc(p_text: String, p_cw: float, p_compact: bool, p_line_spacing: flo
 	# get_multiline_string_size 高 = n×get_height 整除口径）。框帽 = 卡高帽 − 基准卡高
 	# + 54（描述顶 88 + 圆点/底距 34 的反解，与 _setup_button 落位公式同源）。
 	# 返回 {fs: 字号, need: 实测需求高含行距（已钳帽）}。
-	var ladder: Array = [14, 13, 12, 11, 10] if p_compact \
-		else [18, 16, 14, 13, 12, 11, 10]
+	# R200：梯顶 18→20 / 紧凑 14→15、梯底 10→12——真机可读下限（10pt≈6dp 不可读）；
+	# P05 整卡可见优先级不变：梯底仍超 → 梯底字号 + 需求钳帽 clip_text 兜底
+	# R212 刀1：键=文本+宽度(0.1px 粒度)+紧凑位+行距(0.1px 粒度)——同键结果确定
+	# 性一致，命中直返（同文案二次 open/reroll/连升重开零 get_multiline_string_size）
+	# R220 刀2（D1）：静态化（函数体纯参数无实例依赖，缓存 :52 本就是 static）——供
+	# 卡面描述预热器（card_desc_prewarm.gd）菜单期直调同函数入缓存；缓存键与命中
+	# 路径逐位不变（预热只提前不改变排版结果）。
+	var cache_key := "%s|%d|%d|%d" % [p_text, roundi(p_cw * 10.0),
+		1 if p_compact else 0, roundi(p_line_spacing * 10.0)]
+	if _fit_desc_cache.has(cache_key):
+		fit_desc_cache_hits += 1
+		return _fit_desc_cache[cache_key]
+	var ladder: Array = [15, 14, 13, 12] if p_compact \
+		else [20, 18, 16, 14, 13, 12]
 	var h_cap: float = DUAL_H_MAX if p_compact else CARD_H_MAX
 	var h_base: float = DUAL_CARD_SIZE.y if p_compact else CARD_SIZE.y
 	var max_h := h_cap - h_base + 54.0
 	var width := p_cw - 36.0
 	var font: Font = StickerTheme.font()
+	# R267 刀P2①：字号梯二分定档（原梯全走 miss 最多 7 次量测——梯底预量 1 + 逐档
+	# 至多 6；Android SystemFont 六级回退链单次排版远贵桌面，量测次数即成本主源）。
+	# 二分在降序梯上找「最大装得下字号」：⌈log2(6)⌉=3 次（4 档梯 ≤3）封顶，选中档
+	# 的 need 即该档实测高（与原口径同值同源）；全超帽时收敛到梯底（need=梯底实测，
+	# minf(need,max_h) 钳帽 clip 兜底——与原梯底语义逐位一致）。定档结果与原「从大
+	# 到小取首个 fit」同解（最大 fit 档唯一），缓存键与命中路径零改动（刀P2 契约）。
+	var lo := 0
+	var hi := ladder.size() - 1
 	var best: int = int(ladder[ladder.size() - 1])
-	var need := _measured_desc_h(font, p_text, width, best, p_line_spacing)
-	for fs_v: Variant in ladder:
-		var fs := int(fs_v)
-		var h := _measured_desc_h(font, p_text, width, fs, p_line_spacing)
+	var need := 0.0
+	while lo <= hi:
+		var mid := (lo + hi) / 2
+		var h := _measured_desc_h(font, p_text, width, int(ladder[mid]), p_line_spacing)
 		if h <= max_h:
-			best = fs
+			best = int(ladder[mid])
 			need = h
-			break
-	return {"fs": best, "need": minf(need, max_h)}
+			hi = mid - 1                      # 再试更大字号（降序梯更小下标）
+		else:
+			if mid == ladder.size() - 1:
+				need = h                      # 梯底实测在案（全超帽路径的 need 源——免二次量）
+			lo = mid + 1
+	if need <= 0.0:
+		# 全档超帽且二分未触梯底（数学上仅 1 档梯可达）——补量恰 1 次（总次数 ≤3+1）；
+		# 与原「梯底预量测」路径同值
+		need = _measured_desc_h(font, p_text, width, int(ladder[ladder.size() - 1]),
+			p_line_spacing)
+	var out := {"fs": best, "need": minf(need, max_h)}
+	_fit_desc_cache[cache_key] = out
+	return out
 
 
-func _measured_desc_h(p_font: Font, p_text: String, p_width: float, p_fs: int,
+static func _measured_desc_h(p_font: Font, p_text: String, p_width: float, p_fs: int,
 		p_line_spacing: float) -> float:
 	# 实测描述排版高：wrap 需求高（= n×行高）+ 行间行距 (n−1)×line_spacing
+	# R212 刀1：计数器为测试观测口（量测缓存命中断言——未命中路径每调用 +1）
+	# R220 刀2（D1）：同步静态化（随 _fit_desc）；DebugStats.count 写点=每次真实量测
+	#（get_multiline_string_size 本体）+1——只在本函数即缓存 miss 路径被调，命中路径
+	# 零计数；预热期的量测同样计数（量测本体口径，预热不豁免）——R220_COUNTER_KEYS
+	# 审计键（debug_stats.gd R220 块），把方案书 1.R3 的拟合带转为实测。
+	fit_desc_measures += 1
+	DebugStats.count(&"fit_desc_measures")
 	var raw: float = p_font.get_multiline_string_size(p_text,
 		HORIZONTAL_ALIGNMENT_LEFT, p_width, p_fs, -1, 7).y
 	var line_h := maxf(p_font.get_height(p_fs), 1.0)

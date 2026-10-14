@@ -219,21 +219,22 @@ func _test_page_build() -> void:
 		gl.boot_ready and gl.menu_screen.registry != null)
 	_menu = gl.menu_screen
 	var tab_keys: Array = _menu._codex_tabs.keys()
-	_check("A1 [翻转基线] 图鉴页签恰 4 枚 = 怪物/武器/词条/反应",
-		tab_keys.size() == 4 and tab_keys.has("怪物") and tab_keys.has("武器")
-		and tab_keys.has("词条") and tab_keys.has("反应"))
-	_check("A1b 页签几何：宽 126 · 「反应」末沿 486+126=612（右距 36 不变）",
-		(_menu._codex_tabs["反应"] as Button).size.x == 126.0
-		and (_menu._codex_tabs["反应"] as Button).position.x == 486.0
-		and (_menu._codex_tabs["怪物"] as Button).size.x == 126.0)
+	_check("A1 [R252 迁移·祝福改名] 图鉴页签恰 5 枚 = 怪物/武器/祝福/反应/遗物",
+		tab_keys.size() == 5 and tab_keys.has("怪物") and tab_keys.has("武器")
+		and tab_keys.has("祝福") and tab_keys.has("反应") and tab_keys.has("遗物"))
+	_check("A1b 页签几何：宽 108 · 「遗物」末沿 504+108=612（右距 36 不变——R245 五枚重排）",
+		(_menu._codex_tabs["反应"] as Button).size.x == 108.0
+		and (_menu._codex_tabs["反应"] as Button).position.x == 387.0
+		and (_menu._codex_tabs["遗物"] as Button).position.x == 504.0
+		and (_menu._codex_tabs["怪物"] as Button).size.x == 108.0)
 	_menu._on_lobby_pressed("codex")
 	_check("A2 图鉴面板打开且怪物页条目 >0",
 		_menu._panel_root.visible and _live_count(_menu._panel_list) > 0)
 	_menu._on_codex_tab("武器")
 	_check("A3 武器页条目 = registry 武器数（%d）" % _menu.registry.weapons.size(),
 		_live_count(_menu._panel_list) == _menu.registry.weapons.size())
-	_menu._on_codex_tab("词条")
-	_check("A4 词条页条目 = registry 词条数（%d）" % _menu.registry.traits.size(),
+	_menu._on_codex_tab("祝福")
+	_check("A4 祝福页（原词条）条目 = registry 词条数（%d）" % _menu.registry.traits.size(),
 		_live_count(_menu._panel_list) == _menu.registry.traits.size())
 	_menu._on_codex_tab("反应")
 	var live5 := _live_count(_menu._panel_list)
@@ -391,6 +392,7 @@ func _test_multiplier_follows_table() -> void:
 		mult_l != null and mult_l.text.contains("3.5"),
 		"txt=%s" % (mult_l.text if mult_l != null else "-"))
 	rt["RXN_FIR_ICE"]["coef"] = coef0                # 还原（防进程内数值表污染）
+	menu._invalidate_codex_cache()          # R254-1 页缓存：改表还原=行文案源变，失效再切
 	menu._on_codex_tab("反应")
 	rows = _live_rows(menu._panel_list)
 	mult_l = null

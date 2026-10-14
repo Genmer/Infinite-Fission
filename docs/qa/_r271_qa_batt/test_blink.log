@@ -1,0 +1,37 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · BLINK 闪爆族专项自测 ══════════
+── E24 数据 / 校验 ──
+PASS | E24：注册表收录
+PASS | E24：behavior = BLINK（未降级）
+PASS | E24：special 五键齐（cd/prep/fuse/blast_r/range）
+PASS | E24：validator 零 error
+PASS | 校验：BLINK 缺 special.fuse/blast_r → error
+── 快照 / 引爆 ──
+PASS | BLINK：进入读条（快照就位）
+PASS | BLINK：快照 = 施法帧玩家位置（±1px）
+PASS | BLINK：读条毕进入引信态
+PASS | BLINK：落点 = 快照 ±24px（§3.3）
+PASS | BLINK：引信期存活
+PASS | BLINK：引信毕自爆死亡
+PASS | BLINK：圈内玩家吃爆炸 18（30% 档）
+PASS | BLINK：走位出圈免伤（引爆仍致死本体）
+── 打断双路 ──
+PASS | BLINK：冻结断读条（回巡航）
+PASS | BLINK：打断后未位移
+PASS | BLINK：打断后进施法冷却（1s 内不重读条）
+PASS | BLINK：引信期冻结停摆（不引爆不推进）
+PASS | BLINK：击退断引信（回巡航）
+PASS | BLINK：打断后不引爆
+── 世界层红圈 ──
+PASS | BLINK：落点红圈实例化（TelegraphCircle）
+PASS | BLINK：红圈挂世界层（非怪子节点——闪现后怪已位移）
+PASS | BLINK：红圈钉死快照落点
+PASS | BLINK：红圈半径 = blast_r 110
+── 魔域波表 ──
+PASS | 魔域 w3：E24_rift_demon 织入（w3 新体验锚点）
+PASS | 注册表：E24 可被波表引用（悬空剔除校验通过）
+────────────────────────────────────────
+汇总：PASS 25 / FAIL 0（共 25 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

@@ -5,9 +5,9 @@ class_name BalanceTables
 extends Resource
 
 @export var res_logic: Vector2i = Vector2i(720, 1280)        # F-01 裁定；错误 → 致命（拒绝启动）
-@export_range(2.0, 32.0) var cap_prod: float = 8.0           # F-16 乘区段整体钳制
+@export_range(2.0, 32.0) var cap_prod: float = 12.0          # F-16 乘区段整体钳制（R253 调参 8→12：16 新乘区遗物满叠原收益 ×12.3 被钳 −35%）
 @export var r_alarm_ratio: float = 500.0                     # ×500 告警线；>0
-@export_range(4, 16) var cap_mul_count: int = 8              # 乘区名额上限
+@export_range(4, 16) var cap_mul_count: int = 10             # 乘区名额上限（R253 调参 8→10：第 9 池不再静默丢最小池）
 @export var cap_proj_traits: int = 12                        # 单投射物词条；>0
 @export_range(0.001, 2.0) var flat_ratio_cap: float = 0.5    # f_flat 比例钳制
 # F4 保险丝：add_atk:2.0, add_rof:1.5, add_cdr:0.6, add_crit:1.0, add_critdmg:2.0；每值 >0
@@ -41,7 +41,7 @@ extends Resource
 # until_wave 波起回落 1.0——构筑起步提速 +25%，中期回归标准通胀
 @export var early_xp_boost: Dictionary = {"mult": 1.25, "until_wave": 6}   # mult ≥1 / until_wave ≥1
 @export var rarity_weights: Dictionary = {"WHITE": 58, "BLUE": 30, "PURPLE": 10, "GOLD": 2}  # 权重和 >0
-@export var category_weights: Dictionary = {"MASTERY": 12, "ADD": 40, "MULT": 18, "MECH": 14, "ELEM": 14, "RELIC": 6}
+@export var category_weights: Dictionary = {"MASTERY": 12, "ADD": 40, "MULT": 18, "MECH": 14, "ELEM": 14, "RELIC": 8}   # RELIC 6→8（R252 池 18→34 稀释对冲；三源同改）
 # ELEM 10→14（R192 数值三源纪律：本默认 + balance_tables.tres 运行时真源 + card_generator
 # CATEGORY_WEIGHTS const 镜像，三处同批同值；单改常量运行时无效——setup() 用 .tres 逐键覆写）
 @export var cd_rxn: float = 2.0                              # 反应 CD（F-34）

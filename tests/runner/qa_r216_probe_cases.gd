@@ -659,6 +659,8 @@ func _test_8_dwell_gate_and_cache() -> void:
 	# boss 挂机门随 dwell=0 重新武装（回菜单即享 3s 缓冲的行为口径）
 	# R222 Fix P 契约迁移：重项超预算折臂跳帧（跳帧帧零消化）——本组锁门/放行/清队
 	# 语义，逐帧清占空余额隔离（占空行为由 r222_runrearm ② 承接）
+	# R244 冲刷桶批迁移：预热消费在渲染轴 _process（原 _physics_process MENU 臂）——
+	# 消化循环/门帧全迁 _process；dwell 计时仍在物理侧（⑧a-⑧c 口径不扰）
 	var q: Array = _gl2.get("_tex_prewarm_queue")
 	var guard := 0
 	while not q.is_empty() and guard < 200:
@@ -667,7 +669,7 @@ func _test_8_dwell_gate_and_cache() -> void:
 			break
 		_gl2.set("_menu_dwell_s", 0.0)                      # 模拟刚回菜单（dwell 恒小）
 		_gl2.set("_tex_prewarm_skip", 0)
-		_gl2._physics_process(DT)
+		_gl2._process(DT)
 		guard += 1
 	var head_ok: bool = not q.is_empty() \
 		and int((q[0] as Dictionary).get(&"op", 0)) == 0 \
@@ -678,14 +680,14 @@ func _test_8_dwell_gate_and_cache() -> void:
 		var size0: int = q.size()
 		_gl2.set("_menu_dwell_s", 0.0)
 		_gl2.set("_tex_prewarm_skip", 0)
-		_gl2._physics_process(DT)                           # dwell≈DT < 3 → 门扣住
+		_gl2._process(DT)                                   # dwell=0 < 3 → 门扣住
 		var held: bool = q.size() == size0 \
 			and String((q[0] as Dictionary).get(&"kind", &"")).begins_with("boss")
 		_check("⑧e 门武装：dwell<3 帧 boss 项不出队", held,
 			"%d→%d" % [size0, q.size()])
 		_gl2.set("_menu_dwell_s", 99.0)
 		_gl2.set("_tex_prewarm_skip", 0)
-		_gl2._physics_process(DT)                           # 放行
+		_gl2._process(DT)                                   # 放行
 		_check("⑧f 放行：dwell≥3 帧 boss 项出队", q.size() == size0 - 1,
 			"%d→%d" % [size0, q.size()])
 	# 清队 + 18 星变体全量入缓存（预热闭环）
@@ -693,7 +695,7 @@ func _test_8_dwell_gate_and_cache() -> void:
 	var g2 := 0
 	while not q.is_empty() and g2 < 400:
 		_gl2.set("_tex_prewarm_skip", 0)                    # R222 Fix P：逐帧清臂
-		_gl2._physics_process(DT)
+		_gl2._process(DT)
 		g2 += 1
 	_check("⑧g 预热清队（含 boss 双面）", q.is_empty(), "guard=%d" % g2)
 	var cache: Dictionary = TextureFactory._cache

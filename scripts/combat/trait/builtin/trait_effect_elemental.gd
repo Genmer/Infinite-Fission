@@ -34,15 +34,11 @@ func handle(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 func _emit_attach_request(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 	# 附着请求输出（引擎在管线结算后统一提交：快照/本次伤害取结算结果，§4.4 ⑤）
 	var element := int(p_trait.data.params.get("element", GameConst.Element.KIN))
-	# R191 宿主元素守卫：attach_request 单槽字典，同栈后位词条整写会吃掉前位输出——
-	# 按当发宿主元素只放行匹配词条；host_el 取投射物→光束→KIN（六事件宿主按形态其一，
-	# TraitContext 契约）。KIN 宿主 = 无宿主元素约束 → 全放行（W8 零消费点通道不变）。
-	var host_el := GameConst.Element.KIN
-	if p_ctx.projectile != null:
-		host_el = int(p_ctx.projectile.element)
-	elif p_ctx.beam != null:
-		host_el = int(p_ctx.beam.element)
-	if host_el != GameConst.Element.KIN and host_el != element:
+	# R243 §6.3 宿主集合守卫（supersede R191 当发单元素守卫——多元素全效果并发）：
+	# host_elements = 本发附着元素全集（弹体 attach_elements / 近战 _element_pool 投递，
+	# TraitContext 契约）；ELE 卡元素 ∉ 池则零附着。空池 = 无限制旧语义（KIN 直挂/
+	# 兼容通道全放行——W8 已由 ELE 卡 excluded_weapons 精确下架，本守卫不再背 W8 锁）。
+	if not p_ctx.host_elements.is_empty() and not p_ctx.host_elements.has(element):
 		return
 	var value := p_trait.data.value
 	var overrides: Dictionary = {}
@@ -56,4 +52,8 @@ func _emit_attach_request(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 		for key in ["dot_ratio", "chain_targets", "chain_decay", "spread_radius"]:
 			if p_trait.data.params.has(String(key) + "_lv2"):
 				overrides[key] = float(p_trait.data.params[String(key) + "_lv2"])
-	p_ctx.attach_request = {"element": element, "value": value, "overrides": overrides}
+	# R243 全元素并发：逐词条 append 进 attach_requests 数组（引擎消费点
+	# projectile_base._apply_elemental 数组非空时逐条附着并跳过单槽分支防双发）；
+	# 旧单槽 attach_request 保持 = 数组末位（后位覆写兼容——单元素栈输出逐字节不变）。
+	p_ctx.attach_requests.append({"element": element, "value": value, "overrides": overrides})
+	p_ctx.attach_request = p_ctx.attach_requests[-1]

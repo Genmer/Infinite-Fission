@@ -1,0 +1,26 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R232（刀1c MULT 贡献缓存） 回归 ══════════
+── ① 全 condition_id × 随机参数 100 组：缓存 vs 活评逐值对拍 ──
+  PASS | ①100 组缓存 vs 活评逐值相等（失配 0）
+  PASS | ①11 条件全覆盖（含 NONE/TARGET_TAG_IN 留位）
+── ② PIERCE_INDEX_GE 贡献式缓存（base 现乘 (pi−1)） ──
+  PASS | ②pi1 不注入 · pi2=0.3 · pi3=0.6 · pi4=0.9（逐位=活评）
+── ③ 缓存失效（attach 新 MULT → 重建可见） ──
+  PASS | ③首次构建 NONE 常驻 1 池 contrib=0.5
+  PASS | ③attach 后缓存重建（2 池 · 0.5/0.8 同现）
+  PASS | ③取优换定义后新值 1.1 可见（失效面③覆盖）
+── ④ 帧稳定条件跨帧（player_hp_pct 跨阈值——条件活评非缓存） ──
+  PASS | ④缓存建立（血线 0.2<0.35 → 1 池 0.4）
+  PASS | ④血线回升同栈缓存命中期条件翻转（0 池——贡献缓存不冻结条件）
+  PASS | ④血线再回落恢复注入（1 池）
+  PASS | ④WAVE_FIRST_HIT 逐命中活评（true→1 池 / false→0 池）
+── ⑤ 池 dict 复用断言 + orbit/arc 排除（tctx.projectile=null 走活评） ──
+  PASS | ⑤缓存路径两次 collect 返回同一 dict 实例（复用改值不重建——is_same 身份判）
+  PASS | ⑤projectile=null（orbit/arc 形态）走活评（每次新 dict 实例——主栈 LIVE 语义）
+── ⑥ 开关 false 原路径回归 ──
+  PASS | ⑥开关 false 活评路径（1 池 0.6——满血壁垒真）
+  PASS | 套件总项数（EXPECTED=13——R231 假绿教训：总项数也要断言）
+────────────────────────────────────────
+汇总：PASS 14 / FAIL 0（共 14 项）
+验收汇总：14/14 通过

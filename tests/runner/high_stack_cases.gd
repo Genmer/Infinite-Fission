@@ -3,7 +3,7 @@
 # 真源：用户问「buff 后期无限叠层是否都在生效」——本套件落库十条即绿口径：
 # ①千层聚合线性（100/1000 层 ±1e-9 + 逐层增量）②attach 门 stack_max 封顶
 # ③F4 池钳 2.0 + clamped_add 记账 + FALLBACK dmg(40)==dmg(99)（饱和点=设计内显式钳制）
-# ④诅咒全额线性 + 终值钳 0 无 NaN ⑤乘区护栏（cap_pool/top-8/cap_prod 8.0/crit 1.0/
+# ④诅咒全额线性 + 终值钳 0 无 NaN ⑤乘区护栏（cap_pool/top-10/cap_prod 12.0/crit 1.0/
 #   cdr 0.6/rof 30）⑥R186 每击谐振预算网格（60 击/回充帽/就绪不计费/同帧 120 击恰 60/
 #   120Hz 帧粒度 soak ≥120k tick）⑦R183 反应乘区注册表千次循环归 1.0
 # ⑧详情面板叠层显示（pause_overlay.gd:524 正则修复：+15%×2→+30% 等）
@@ -39,7 +39,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_f4_pool_clamp()
 	_section("④ 诅咒全额线性 + 终值钳 0（无 NaN/Inf 泄漏）")
 	_test_curse_full_and_zero_floor()
-	_section("⑤ 乘区护栏（cap_pool/top-8/cap_prod 8.0/crit 1.0/cdr 0.6/rof 30）")
+	_section("⑤ 乘区护栏（cap_pool/top-10/cap_prod 12.0/crit 1.0/cdr 0.6/rof 30）")
 	_test_mult_guards()
 	_section("⑥ R186 每击谐振预算网格 + 120Hz 帧粒度 soak")
 	_test_r186_budget_grid()
@@ -330,7 +330,7 @@ func _test_mult_guards() -> void:
 	_check("⑤a 单区钳：contrib 5.0/cap_pool 2.0 → merged_M = 3.0",
 		ms.resolved_mults.size() == 1 and absf(float(ms.resolved_mults[0]["M"]) - 3.0) < 1e-12,
 		str(ms.resolved_mults))
-	# 名额 top-8 + 整体钳 cap_prod=8.0（20 区 ×3.0 → 3^8=6561 → 8）
+	# 名额 top-10 + 整体钳 cap_prod=12.0（20 区 ×3.0 → 3^10=59049 → 12；R253 调参）
 	var ms4 := ModifierStack.new()
 	ms4.audit = DamageAudit.new()
 	var many: Array[Dictionary] = []
@@ -338,8 +338,8 @@ func _test_mult_guards() -> void:
 		many.append({"pool_id": StringName("mult_p%02d" % i), "source_uid": 0,
 			"contrib": 2.0, "cap_pool": 2.0, "priority": 0})
 	ms4.aggregate_mults(many, int(_cfg().balance.cap_mul_count), float(_cfg().balance.cap_prod))
-	_check("⑤b 乘区名额 top-8（20 区 → 8 入）+ cap_prod 钳 8.0 + 审计 compressed",
-		ms4.resolved_mults.size() == 8 and absf(ms4.product_clamped - 8.0) < 1e-12
+	_check("⑤b 乘区名额 top-10（20 区 → 10 入）+ cap_prod 钳 12.0 + 审计 compressed",
+		ms4.resolved_mults.size() == 10 and absf(ms4.product_clamped - 12.0) < 1e-12
 		and (ms4.audit as DamageAudit).compressed,
 		"n=%d prod=%s" % [ms4.resolved_mults.size(), str(ms4.product_clamped)])
 	# 消费口显式钳：crit 1.0 / 技能急速 0.6 / BALLISTIC 节拍 30/s

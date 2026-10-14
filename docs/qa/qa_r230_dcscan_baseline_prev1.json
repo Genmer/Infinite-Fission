@@ -1,0 +1,961 @@
+{
+	"blade_order": [
+		{
+			"blade": "无候选刀(进backlog)",
+			"fam": 1,
+			"fam_name": "F1敌桶本体",
+			"marginal_dc": 230,
+			"share_pct": 58.8
+		},
+		{
+			"blade": "K4HUD配色量化",
+			"fam": 9,
+			"fam_name": "F9HUD/BossBar",
+			"marginal_dc": 54,
+			"share_pct": 13.8
+		},
+		{
+			"blade": "无候选刀(进backlog)",
+			"fam": 11,
+			"fam_name": "F11玩家树",
+			"marginal_dc": 49,
+			"share_pct": 12.5
+		}
+	],
+	"fg0": {
+		"arm": "window-full",
+		"rendering": "forward_plus"
+	},
+	"fg2": {
+		"profiles": [
+			{
+				"baseline_dc": 391,
+				"share_by_fam": {
+					"1": 58.8235294117647,
+					"2": 0,
+					"3": 0.51150895140665,
+					"4": 0,
+					"5": -0.25575447570332,
+					"6": 2.81329923273657,
+					"7": 5.1150895140665,
+					"8": 5.1150895140665,
+					"9": 13.8107416879795,
+					"10": 0.767263427109974,
+					"11": 12.5319693094629,
+					"12": 0.767263427109974,
+					"13": 0
+				},
+				"tag": "run",
+				"top5": [
+					1,
+					9,
+					11,
+					7,
+					8
+				],
+				"top5_sum_pct": 95.4
+			},
+			{
+				"baseline_dc": 296,
+				"share_by_fam": {
+					"1": 45.945945945946,
+					"2": -0.33783783783784,
+					"3": -0.33783783783784,
+					"4": 2.02702702702703,
+					"5": -1.01351351351351,
+					"6": 3.37837837837838,
+					"7": 6.41891891891892,
+					"8": 7.09459459459459,
+					"9": 18.2432432432432,
+					"10": 1.01351351351351,
+					"11": 16.5540540540541,
+					"12": 1.01351351351351,
+					"13": 0
+				},
+				"tag": "lastrun",
+				"top5": [
+					1,
+					9,
+					11,
+					8,
+					7
+				],
+				"top5_sum_pct": 94.3
+			}
+		],
+		"sources": 2
+	},
+	"fg4": {
+		"gap_account": "夹具 v2（敌方弹/棱镜/词缀内容注入+K1/K4/K2c 刀后）SA dc=391 vs 真机 vc34 深载带 700-990 → 剩余缺口 309~599 dc。构成两桶（写实不拆分）：①内容差残余=夹具仍未复刻的真机构成面（真实构筑未知项/波次过渡态/地图词缀/未入场敌种构成）；②平台面=PC 4070 与手机 GPU/驱动差异（FG4 v1 裁定已消灭『渲染器合批差异』主嫌疑线，此残面为 GPU 侧填充/带宽类，PC 不可量化）。",
+		"real_band": [
+			700,
+			990
+		],
+		"sa_baseline_dc": 391,
+		"threshold": 500,
+		"verdict": "fork：缺口不在渲染器在内容差（敌方弹/棱镜/真实构筑）——夹具升级一浪后重扫，刀序顺延"
+	},
+	"gates": {
+		"FG3[SAA] 望远镜闭环 ≤±5": {
+			"detail": "closure=0",
+			"ok": true
+		},
+		"FG3[SA] 望远镜闭环 ≤±5": {
+			"detail": "closure=0",
+			"ok": true
+		},
+		"FG3[SB] 望远镜闭环 ≤±5": {
+			"detail": "closure=0",
+			"ok": true
+		},
+		"FG5 锚档方向：F4 弹池 锚档边际(8) vs SA(0) 噪声带 ±5": {
+			"detail": "差=+8（披露类：弹桶 dc 面≈1-4 合批近零，方向无信号——阀门作用于空闲栈容量非活弹 dc 面，见 _fg5_check 头注偏差记录）",
+			"disclosed": true,
+			"ok": false
+		},
+		"FG5 锚档方向：F6 粒子 锚档边际(29) ≥ SA 真机档(11)": {
+			"detail": "差=+18（阀门关=不减薄；SAA 粒子活口 64 vs SA 11 同向佐证）",
+			"ok": true
+		},
+		"G-棱镜注入：镜面数=5（W5_prism L5+SPLIT×2→帽5）": {
+			"detail": "mirror_count=5 split=2/2（MIRROR_CAP=5，mirror_weapon.gd:26）",
+			"ok": true
+		},
+		"G-沙箱 user:// 重定向生效（含 .qa_sandbox_r230）": {
+			"detail": "user_dir=E:/Code/Agent/Infinite-Fission/.qa_sandbox_r230/Godot/app_userdata/Infinite Fission",
+			"ok": true
+		},
+		"K4 F9 HUD：降幅 ∈[25,45]（v1 49 → 刀后 54）": {
+			"detail": "差=-5",
+			"ok": false
+		},
+		"KG1 F8 跳字：降幅 ≥60%（v1 34 → 刀后 20）": {
+			"detail": "降幅=41.2%（差=+14；主控预期带 ≤14）",
+			"ok": false
+		},
+		"SA 敌弹注入生效：敌弹 p50>0（team=1，D4 洞补齐）": {
+			"detail": "敌弹=30 射手=12",
+			"ok": true
+		},
+		"SA 敌弹量级对拍：敌弹 p50∈[8,60]（真机 1:40 行 弹26 量级带）": {
+			"detail": "敌弹=30 射手=12（披露类：精调=post-merge 全量基线调参）",
+			"disclosed": true,
+			"ok": true
+		},
+		"SB 校准门：弹N p50∈[190,325] 且 敌N p50∈[28,33]": {
+			"detail": "弹=259 敌=30（超带=构筑旋钮再调，调参史随报告披露）",
+			"ok": true
+		}
+	},
+	"kg": {
+		"k4": {
+			"drop": -5,
+			"v1": 49,
+			"v2": 54
+		},
+		"kg1": {
+			"drop": 14,
+			"drop_pct": 41.2,
+			"v1": 34,
+			"v2": 20
+		},
+		"kg2": [
+			{
+				"drift": -3,
+				"fam": 2,
+				"share_v1": 1.1,
+				"share_v2": 0,
+				"v1": 3,
+				"v2": 0
+			},
+			{
+				"drift": -3,
+				"fam": 5,
+				"share_v1": 0.8,
+				"share_v2": -0.3,
+				"v1": 2,
+				"v2": -1
+			},
+			{
+				"drift": 5,
+				"fam": 6,
+				"share_v1": 2.3,
+				"share_v2": 2.8,
+				"v1": 6,
+				"v2": 11
+			},
+			{
+				"drift": -1,
+				"fam": 7,
+				"share_v1": 8,
+				"share_v2": 5.1,
+				"v1": 21,
+				"v2": 20
+			},
+			{
+				"drift": 0,
+				"fam": 10,
+				"share_v1": 1.1,
+				"share_v2": 0.8,
+				"v1": 3,
+				"v2": 3
+			},
+			{
+				"drift": 2,
+				"fam": 12,
+				"share_v1": 0.4,
+				"share_v2": 0.8,
+				"v1": 1,
+				"v2": 3
+			}
+		],
+		"note": "对标限内容稳定族（F8/F9 刀目标内容未变；F1 刀效混淆走 K2c 否决臂；F3/F4/F13/F11 内容已变不入对标）",
+		"v1_baseline_dc": 263,
+		"v1_ref": "res://docs/qa/qa_r230_dcscan_baseline_v1_ref.json",
+		"v2_baseline_dc": 391
+	},
+	"meta": {
+		"blades": "post-merge 三浪合并全开：K1 跳字 alpha 4 档量化（damage_popup.gd，产品级恒开）/K4 HUD Label 语义角色量化色板（theme.gd，产品级恒开）/K2c 死亡演出并发帽 DEATHPOP_FX_CAP=10（enemy.gd，夹具哨兵 -3 模拟档=真机 tier2 帽开形态；SAA=-2 锚档阀全关；桌面 auto 恒关）",
+		"build": "W2_gatling L5 + PIERCE×3/MULTI×2/BOUNCE×3/NOVA×2/FRACTAL×2 + W5_prism L5 镜5（SB 追加 MULTI×1；content v2 构筑面）",
+		"content_notes": "FG4 fork v2 内容注入：敌方远程弹（E7_spitter×5 射手切片+精英 affix_ring+弹池注入补出生管线缺环——R224 QA D4 洞）+ 棱镜（W5_prism L5+MEC_MIRROR_SPLIT×2=镜5）；分类器 12→13 族（F13 敌弹=team1）",
+		"content_version": 2,
+		"date": "2026-10-04",
+		"decision_quantities": "族占比与刀后相对降幅（白名单）；绝对 dc 仅夹具内部一致性，不与真机互比",
+		"governor": "frozen, mode=frame_priority, tier_override=2（SAA=3）",
+		"map": "world_grove w16（敌血 ×0.3 定标复本）",
+		"package": "pc-window-gl-compatibility-fixture（校准对象=真机 vc34 深载带 dc700-990）",
+		"protocol": "基线 60 帧/族 弃3+settle10+采样30 取中位/P1 F1→F13/P2 单独可见/P3 逆序（仅SA）/逐帧族掩码重放（RS 层，节点 visible 零触碰）",
+		"rendering": "forward_plus",
+		"seed": 20261004,
+		"sentinels": "fullload=1 bitmap=1 runstart_bake=1 settle=-3 burst_thin=-3 pool_valve=-3 deathpop_cap=-3（SAA：fullload=0/tier3/-2/-2/帽-2）；fx_quality=1/damage_numbers_on=1/fx_opacity=1.0 内存注入；chromatic 逐帧 RS 隐藏；persist_defer 挂起；APPDATA 沙箱",
+		"user_dir_sandbox": "E:/Code/Agent/Infinite-Fission/.qa_sandbox_r230/Godot/app_userdata/Infinite Fission"
+	},
+	"scenarios": {
+		"SA": {
+			"P1": [
+				{
+					"after_dc": 161,
+					"fam": 1,
+					"marginal_dc": 230
+				},
+				{
+					"after_dc": 161,
+					"fam": 2,
+					"marginal_dc": 0
+				},
+				{
+					"after_dc": 159,
+					"fam": 3,
+					"marginal_dc": 2
+				},
+				{
+					"after_dc": 159,
+					"fam": 4,
+					"marginal_dc": 0
+				},
+				{
+					"after_dc": 160,
+					"fam": 5,
+					"marginal_dc": -1
+				},
+				{
+					"after_dc": 149,
+					"fam": 6,
+					"marginal_dc": 11
+				},
+				{
+					"after_dc": 129,
+					"fam": 7,
+					"marginal_dc": 20
+				},
+				{
+					"after_dc": 109,
+					"fam": 8,
+					"marginal_dc": 20
+				},
+				{
+					"after_dc": 55,
+					"fam": 9,
+					"marginal_dc": 54
+				},
+				{
+					"after_dc": 52,
+					"fam": 10,
+					"marginal_dc": 3
+				},
+				{
+					"after_dc": 3,
+					"fam": 11,
+					"marginal_dc": 49
+				},
+				{
+					"after_dc": 0,
+					"fam": 12,
+					"marginal_dc": 3
+				},
+				{
+					"after_dc": 0,
+					"fam": 13,
+					"marginal_dc": 0
+				}
+			],
+			"P2": [
+				{
+					"fam": 1,
+					"indep_dc": 55,
+					"live": 485
+				},
+				{
+					"fam": 2,
+					"indep_dc": 0,
+					"live": 9
+				},
+				{
+					"fam": 3,
+					"indep_dc": 0,
+					"live": 8
+				},
+				{
+					"fam": 4,
+					"indep_dc": 2,
+					"live": 708
+				},
+				{
+					"fam": 5,
+					"indep_dc": 1,
+					"live": 14
+				},
+				{
+					"fam": 6,
+					"indep_dc": 8,
+					"live": 8
+				},
+				{
+					"fam": 7,
+					"indep_dc": 0,
+					"live": 27
+				},
+				{
+					"fam": 8,
+					"indep_dc": 21,
+					"live": 111
+				},
+				{
+					"fam": 9,
+					"indep_dc": 54,
+					"live": 0
+				},
+				{
+					"fam": 10,
+					"indep_dc": 0,
+					"live": 0
+				},
+				{
+					"fam": 11,
+					"indep_dc": 0,
+					"live": 0
+				},
+				{
+					"fam": 12,
+					"indep_dc": 3,
+					"live": 7
+				},
+				{
+					"fam": 13,
+					"indep_dc": 0,
+					"live": 116
+				}
+			],
+			"P3": [
+				{
+					"after_dc": 410,
+					"fam": 13,
+					"marginal_dc": -19
+				},
+				{
+					"after_dc": 337,
+					"fam": 12,
+					"marginal_dc": 73
+				},
+				{
+					"after_dc": 305,
+					"fam": 11,
+					"marginal_dc": 32
+				},
+				{
+					"after_dc": 181,
+					"fam": 10,
+					"marginal_dc": 124
+				},
+				{
+					"after_dc": 239,
+					"fam": 9,
+					"marginal_dc": -58
+				},
+				{
+					"after_dc": 200,
+					"fam": 8,
+					"marginal_dc": 39
+				},
+				{
+					"after_dc": 198,
+					"fam": 7,
+					"marginal_dc": 2
+				},
+				{
+					"after_dc": 189,
+					"fam": 6,
+					"marginal_dc": 9
+				},
+				{
+					"after_dc": 132,
+					"fam": 5,
+					"marginal_dc": 57
+				},
+				{
+					"after_dc": 213,
+					"fam": 4,
+					"marginal_dc": -81
+				},
+				{
+					"after_dc": 74,
+					"fam": 3,
+					"marginal_dc": 139
+				},
+				{
+					"after_dc": 66,
+					"fam": 2,
+					"marginal_dc": 8
+				},
+				{
+					"after_dc": 0,
+					"fam": 1,
+					"marginal_dc": 66
+				}
+			],
+			"anchor": false,
+			"baseline_dc": 391,
+			"baseline_dcs": [
+				240,
+				256,
+				352,
+				372,
+				393,
+				394,
+				411,
+				423,
+				421,
+				412,
+				405,
+				412,
+				420,
+				424,
+				408,
+				416,
+				395,
+				397,
+				378,
+				368,
+				384,
+				412,
+				413,
+				422,
+				412,
+				424,
+				417,
+				416,
+				425,
+				431,
+				429,
+				427,
+				391,
+				407,
+				409,
+				403,
+				394,
+				292,
+				273,
+				280,
+				289,
+				286,
+				267,
+				259,
+				277,
+				244,
+				248,
+				262,
+				262,
+				287,
+				307,
+				293,
+				296,
+				293,
+				276,
+				274,
+				269,
+				253,
+				259,
+				279
+			],
+			"counts": {
+				"1": 485,
+				"2": 13,
+				"3": 7,
+				"4": 718,
+				"5": 14,
+				"6": 9,
+				"7": 26,
+				"8": 106,
+				"9": 58,
+				"10": 14,
+				"11": 31,
+				"12": 8,
+				"13": 66
+			},
+			"hold": 120,
+			"live": {
+				"enemy_live": 120,
+				"eproj_live": 30,
+				"popup_live": 40,
+				"proj_live": 430,
+				"spitter_live": 12
+			},
+			"residual_dc": 0,
+			"stage_p50_ms": {
+				"card_drain": 0,
+				"enemy": 0.89,
+				"feel": 0.02,
+				"feel_shard": 0,
+				"fx": 0.08,
+				"grid_projectile": 15.86,
+				"grid_rebuild": 0.33,
+				"other": 0.26,
+				"player": 1.14,
+				"player_mv": 0.01,
+				"player_wp": 1.11,
+				"popup": 0.19,
+				"shard": 0.02,
+				"ui": 1.46,
+				"wave": 0.01
+			}
+		},
+		"SAA": {
+			"P1": [
+				{
+					"after_dc": 189,
+					"fam": 1,
+					"marginal_dc": 583
+				},
+				{
+					"after_dc": 188,
+					"fam": 2,
+					"marginal_dc": 1
+				},
+				{
+					"after_dc": 192,
+					"fam": 3,
+					"marginal_dc": -4
+				},
+				{
+					"after_dc": 184,
+					"fam": 4,
+					"marginal_dc": 8
+				},
+				{
+					"after_dc": 176,
+					"fam": 5,
+					"marginal_dc": 8
+				},
+				{
+					"after_dc": 147,
+					"fam": 6,
+					"marginal_dc": 29
+				},
+				{
+					"after_dc": 133,
+					"fam": 7,
+					"marginal_dc": 14
+				},
+				{
+					"after_dc": 109,
+					"fam": 8,
+					"marginal_dc": 24
+				},
+				{
+					"after_dc": 55,
+					"fam": 9,
+					"marginal_dc": 54
+				},
+				{
+					"after_dc": 51,
+					"fam": 10,
+					"marginal_dc": 4
+				},
+				{
+					"after_dc": 3,
+					"fam": 11,
+					"marginal_dc": 48
+				},
+				{
+					"after_dc": 0,
+					"fam": 12,
+					"marginal_dc": 3
+				},
+				{
+					"after_dc": 0,
+					"fam": 13,
+					"marginal_dc": 0
+				}
+			],
+			"P2": [
+				{
+					"fam": 1,
+					"indep_dc": 55,
+					"live": 485
+				},
+				{
+					"fam": 2,
+					"indep_dc": 0,
+					"live": 70
+				},
+				{
+					"fam": 3,
+					"indep_dc": 0,
+					"live": 11
+				},
+				{
+					"fam": 4,
+					"indep_dc": 1,
+					"live": 730
+				},
+				{
+					"fam": 5,
+					"indep_dc": 5,
+					"live": 73
+				},
+				{
+					"fam": 6,
+					"indep_dc": 29,
+					"live": 64
+				},
+				{
+					"fam": 7,
+					"indep_dc": 0,
+					"live": 28
+				},
+				{
+					"fam": 8,
+					"indep_dc": 24,
+					"live": 109
+				},
+				{
+					"fam": 9,
+					"indep_dc": 55,
+					"live": 0
+				},
+				{
+					"fam": 10,
+					"indep_dc": 0,
+					"live": 0
+				},
+				{
+					"fam": 11,
+					"indep_dc": 0,
+					"live": 0
+				},
+				{
+					"fam": 12,
+					"indep_dc": 3,
+					"live": 7
+				},
+				{
+					"fam": 13,
+					"indep_dc": 0,
+					"live": 120
+				}
+			],
+			"P3": [],
+			"anchor": true,
+			"baseline_dc": 772,
+			"baseline_dcs": [
+				667,
+				763,
+				773,
+				766,
+				772,
+				742,
+				733,
+				736,
+				734,
+				732,
+				714,
+				700,
+				816,
+				818,
+				817,
+				813,
+				848,
+				820,
+				663,
+				656,
+				814,
+				828,
+				806,
+				779,
+				765,
+				772,
+				691,
+				699,
+				784,
+				770,
+				793,
+				783,
+				791,
+				803,
+				772,
+				772,
+				791,
+				804,
+				805,
+				799,
+				782,
+				768,
+				787,
+				788,
+				819,
+				750,
+				770,
+				852,
+				834,
+				784,
+				773,
+				681,
+				679,
+				694,
+				695,
+				724,
+				723,
+				710,
+				684,
+				687
+			],
+			"counts": {
+				"1": 485,
+				"2": 51,
+				"3": 8,
+				"4": 674,
+				"5": 259,
+				"6": 64,
+				"7": 27,
+				"8": 106,
+				"9": 58,
+				"10": 14,
+				"11": 30,
+				"12": 8,
+				"13": 80
+			},
+			"hold": 120,
+			"live": {
+				"enemy_live": 120,
+				"eproj_live": 31,
+				"popup_live": 40,
+				"proj_live": 401,
+				"spitter_live": 15
+			},
+			"residual_dc": 0,
+			"stage_p50_ms": {
+				"card_drain": 0,
+				"enemy": 1.02,
+				"feel": 0.05,
+				"feel_shard": 0.06,
+				"fx": 0.09,
+				"grid_projectile": 16.71,
+				"grid_rebuild": 0.35,
+				"other": 0.28,
+				"player": 1.16,
+				"player_mv": 0.01,
+				"player_wp": 1.13,
+				"popup": 0.2,
+				"shard": 0.27,
+				"ui": 1.73,
+				"wave": 0.02
+			}
+		},
+		"SB": {
+			"P1": [
+				{
+					"after_dc": 154,
+					"fam": 1,
+					"marginal_dc": 195
+				},
+				{
+					"after_dc": 155,
+					"fam": 2,
+					"marginal_dc": -1
+				},
+				{
+					"after_dc": 158,
+					"fam": 3,
+					"marginal_dc": -3
+				},
+				{
+					"after_dc": 156,
+					"fam": 4,
+					"marginal_dc": 2
+				},
+				{
+					"after_dc": 149,
+					"fam": 5,
+					"marginal_dc": 7
+				},
+				{
+					"after_dc": 154,
+					"fam": 6,
+					"marginal_dc": -5
+				},
+				{
+					"after_dc": 128,
+					"fam": 7,
+					"marginal_dc": 26
+				},
+				{
+					"after_dc": 109,
+					"fam": 8,
+					"marginal_dc": 19
+				},
+				{
+					"after_dc": 54,
+					"fam": 9,
+					"marginal_dc": 55
+				},
+				{
+					"after_dc": 53,
+					"fam": 10,
+					"marginal_dc": 1
+				},
+				{
+					"after_dc": 5,
+					"fam": 11,
+					"marginal_dc": 48
+				},
+				{
+					"after_dc": 0,
+					"fam": 12,
+					"marginal_dc": 5
+				},
+				{
+					"after_dc": 0,
+					"fam": 13,
+					"marginal_dc": 0
+				}
+			],
+			"P2": [],
+			"P3": [],
+			"anchor": false,
+			"baseline_dc": 349,
+			"baseline_dcs": [
+				258,
+				246,
+				248,
+				252,
+				243,
+				240,
+				243,
+				239,
+				239,
+				238,
+				251,
+				188,
+				193,
+				187,
+				274,
+				278,
+				280,
+				258,
+				273,
+				274,
+				274,
+				274,
+				269,
+				271,
+				268,
+				293,
+				306,
+				323,
+				400,
+				399,
+				398,
+				391,
+				394,
+				394,
+				394,
+				398,
+				391,
+				371,
+				385,
+				374,
+				373,
+				359,
+				361,
+				366,
+				359,
+				356,
+				361,
+				375,
+				381,
+				364,
+				365,
+				366,
+				369,
+				355,
+				358,
+				349,
+				346,
+				346,
+				350,
+				353
+			],
+			"counts": {
+				"1": 125,
+				"2": 3,
+				"3": 2,
+				"4": 520,
+				"5": 13,
+				"6": 1,
+				"7": 23,
+				"8": 106,
+				"9": 59,
+				"10": 14,
+				"11": 29,
+				"12": 8,
+				"13": 2
+			},
+			"hold": 30,
+			"live": {
+				"enemy_live": 30,
+				"eproj_live": 1,
+				"popup_live": 33,
+				"proj_live": 259,
+				"spitter_live": 4
+			},
+			"residual_dc": 0,
+			"stage_p50_ms": {
+				"card_drain": 0,
+				"enemy": 0.26,
+				"feel": 0.02,
+				"feel_shard": 0,
+				"fx": 0.07,
+				"grid_projectile": 3.28,
+				"grid_rebuild": 0.13,
+				"other": 0.25,
+				"player": 0.95,
+				"player_mv": 0.01,
+				"player_wp": 0.93,
+				"popup": 0.16,
+				"shard": 0.02,
+				"ui": 0.24,
+				"wave": 0.01
+			}
+		}
+	}
+}

@@ -315,7 +315,8 @@ func _test_mult_guards() -> void:
 	var r: DamageResult = pipe.resolve(ctx)
 	_check("单区钳制：agg=min(3,2)=2 → M=3.0 → 300",
 		r != null and is_equal_approx(r.final_value, 300.0), "got %s" % str(r.final_value if r != null else null))
-	# 名额 top-8：10 区取贡献最大 8 个，截断记审计
+	# 名额 top-10（R253 帽调参 8→10）：10 区帽内全入零截断；12 区取贡献最大 10 个，
+	# 截断记审计——帽内/帽外两向都钉（翻案前 top-8 版本见 git 史）
 	pipe.begin_frame(2)
 	var ctx10 := _make_ctx(target, 2)
 	var ten: Array[Dictionary] = []
@@ -324,32 +325,45 @@ func _test_mult_guards() -> void:
 			"contrib": 0.02 * float(i + 1), "cap_pool": 10.0})
 	ctx10.mult_pools = ten
 	var r10: DamageResult = pipe.resolve(ctx10)
-	var expect_top8 := 1.0
-	for j in range(3, 11):
-		expect_top8 *= 1.0 + 0.02 * float(j)
-	_check("名额截断：10 区 → top-8 + 截断审计 2 条", r10 != null and r10.audit != null
-		and r10.audit.truncated_mults.size() == 2 and r10.audit.pool_count == 8,
+	_check("名额帽内：10 区 → top-10 全入零截断", r10 != null and r10.audit != null
+		and r10.audit.truncated_mults.is_empty() and r10.audit.pool_count == 10,
 		"truncated=%s pool_count=%s" % [str(r10.audit.truncated_mults.size() if r10 != null else -1), str(r10.audit.pool_count if r10 != null else -1)])
-	_check("top-8 乘积正确（贡献 0.06~0.20 连乘）", r10 != null
-		and is_equal_approx(r10.final_value, 100.0 * expect_top8),
-		"got %s expect %s" % [str(r10.final_value if r10 != null else null), str(100.0 * expect_top8)])
-	_check("截断区为贡献最小的两区", r10 != null and r10.audit != null
-		and r10.audit.truncated_mults.has(&"pool_00") and r10.audit.truncated_mults.has(&"pool_01"))
-	# 同值 priority 决胜（确定性破序键）：10 区同贡献、priority = i+1 → 高 priority 8 区入选
+	var expect_all10 := 1.0
+	for j in range(1, 11):
+		expect_all10 *= 1.0 + 0.02 * float(j)
+	_check("帽内乘积正确（贡献 0.02~0.20 全连乘）", r10 != null
+		and is_equal_approx(r10.final_value, 100.0 * expect_all10),
+		"got %s expect %s" % [str(r10.final_value if r10 != null else null), str(100.0 * expect_all10)])
+	# 12 区 → top-10：截贡献最小两区（pool_00/01），审计 2 条
+	pipe.begin_frame(3)
+	var ctx12 := _make_ctx(target, 3)
+	var twelve: Array[Dictionary] = []
+	for i in range(12):
+		twelve.append({"pool_id": StringName("q_%02d" % i), "source_uid": i + 1,
+			"contrib": 0.02 * float(i + 1), "cap_pool": 10.0})
+	ctx12.mult_pools = twelve
+	var r12: DamageResult = pipe.resolve(ctx12)
+	_check("名额截断：12 区 → top-10 + 截断审计 2 条", r12 != null and r12.audit != null
+		and r12.audit.truncated_mults.size() == 2 and r12.audit.pool_count == 10,
+		"truncated=%s pool_count=%s" % [str(r12.audit.truncated_mults.size() if r12 != null else -1), str(r12.audit.pool_count if r12 != null else -1)])
+	_check("截断区为贡献最小的两区（q_00/q_01）", r12 != null and r12.audit != null
+		and r12.audit.truncated_mults.has(&"q_00") and r12.audit.truncated_mults.has(&"q_01"))
+	# 同值 priority 决胜（确定性破序键）：11 区同贡献、priority = i+1 → 高 priority 10
+	# 区入选，截 priority 最低 1 区（R253 帽 10——原 10 区版翻案）
 	pipe.begin_frame(3)
 	var ctxp := _make_ctx(target, 3)
 	var prio: Array[Dictionary] = []
-	for i in range(10):
+	for i in range(11):
 		prio.append({"pool_id": StringName("prio_%02d" % i), "source_uid": i + 1,
 			"contrib": 0.5, "cap_pool": 2.0, "priority": i + 1})
 	ctxp.mult_pools = prio
 	var rp: DamageResult = pipe.resolve(ctxp)
-	_check("priority 决胜：priority 高的 8 区入选", rp != null and rp.audit != null
-		and rp.pool_breakdown.has(&"prio_09") and rp.pool_breakdown.has(&"prio_02")
-		and not rp.pool_breakdown.has(&"prio_00") and not rp.pool_breakdown.has(&"prio_01"))
-	_check("priority 决胜确定性：截断恰为 priority 最低两区", rp != null and rp.audit != null
-		and rp.audit.truncated_mults.has(&"prio_00") and rp.audit.truncated_mults.has(&"prio_01"))
-	# F9 整体钳制 8.0（F-16）
+	_check("priority 决胜：priority 高的 10 区入选", rp != null and rp.audit != null
+		and rp.pool_breakdown.has(&"prio_10") and rp.pool_breakdown.has(&"prio_02")
+		and not rp.pool_breakdown.has(&"prio_00"))
+	_check("priority 决胜确定性：截断恰为 priority 最低一区", rp != null and rp.audit != null
+		and rp.audit.truncated_mults.has(&"prio_00") and rp.audit.truncated_mults.size() == 1)
+	# F9 整体钳制 12.0（R253 帽调参 8→12）
 	pipe.begin_frame(4)
 	var ctx9 := _make_ctx(target, 4)
 	var six: Array[Dictionary] = []
@@ -357,8 +371,8 @@ func _test_mult_guards() -> void:
 		six.append({"pool_id": StringName("big_%d" % i), "source_uid": i + 1, "contrib": 1.0, "cap_pool": 2.0})
 	ctx9.mult_pools = six
 	var r9: DamageResult = pipe.resolve(ctx9)
-	_check("F9 整体钳制：∏=64 → 8.0 → 800",
-		r9 != null and is_equal_approx(r9.final_value, 800.0), "got %s" % str(r9.final_value if r9 != null else null))
+	_check("F9 整体钳制：∏=64 → 12.0 → 1200",
+		r9 != null and is_equal_approx(r9.final_value, 1200.0), "got %s" % str(r9.final_value if r9 != null else null))
 	_check("F9 触发记审计 compressed", r9 != null and r9.audit != null and r9.audit.compressed)
 
 
@@ -388,11 +402,12 @@ func _test_local_pools() -> void:
 	_check("Local 独立连乘：1.08×1.2 → 129.6",
 		r2 != null and is_equal_approx(r2.final_value, 100.0 * 1.08 * 1.2),
 		"got %s" % str(r2.final_value if r2 != null else null))
-	# 不占名额：10 乘区（top-8 截断）+ 2 local → pool_count 仍 8，L 独立连乘
+	# 不占名额：12 乘区（top-10 截断）+ 2 local → pool_count 仍 10，L 独立连乘
+	#（R253 帽 8→10——原 10 乘区截断版翻案）
 	pipe.begin_frame(3)
 	var ctx3 := _make_ctx(target, 3)
 	var ten: Array[Dictionary] = []
-	for i in range(10):
+	for i in range(12):
 		ten.append({"pool_id": StringName("m_%02d" % i), "source_uid": i + 1, "contrib": 0.05, "cap_pool": 10.0})
 	ctx3.mult_pools = ten
 	ctx3.local_pools = [
@@ -400,11 +415,11 @@ func _test_local_pools() -> void:
 		{"local_id": &"other", "contrib": 0.2, "cap_local": 0.5},
 	]
 	var r3: DamageResult = pipe.resolve(ctx3)
-	_check("Local 不占名额：10 乘区截断后 pool_count=8", r3 != null and r3.audit != null
-		and r3.audit.pool_count == 8)
+	_check("Local 不占名额：12 乘区截断后 pool_count=10", r3 != null and r3.audit != null
+		and r3.audit.pool_count == 10)
 	_check("Local 不受 cap_prod：L=1.1×1.2 独立连乘生效",
-		r3 != null and is_equal_approx(r3.final_value, 100.0 * pow(1.05, 8.0) * 1.1 * 1.2),
-		"got %s expect %s" % [str(r3.final_value if r3 != null else null), str(100.0 * pow(1.05, 8.0) * 1.1 * 1.2)])
+		r3 != null and is_equal_approx(r3.final_value, 100.0 * pow(1.05, 10.0) * 1.1 * 1.2),
+		"got %s expect %s" % [str(r3.final_value if r3 != null else null), str(100.0 * pow(1.05, 10.0) * 1.1 * 1.2)])
 
 
 # ── 7. 目标侧（抗性 × 易伤 + duck-typing 回退） ───────────────────
@@ -634,7 +649,7 @@ func _test_alarm() -> void:
 	print("── R_alarm ×500 ──")
 	var pipe := DamagePipeline.new()
 	var target := _make_target()
-	# 构造超限：M=8（6 区 ×2 钳 8.0）× L=1001（local cap 2000）→ ratio = 8008 > 500
+	# 构造超限：M=12（6 区 ×2 钳 12.0——R253 帽调参）× L=1001（local cap 2000）→ ratio = 12012 > 500
 	var alarm_ctx := func(p_frame: int, p_target: Node2D) -> DamageContext:
 		var ctx := _make_ctx(p_target, p_frame)
 		ctx.base_atk = 100.0
@@ -647,9 +662,9 @@ func _test_alarm() -> void:
 	pipe.begin_frame(1)
 	var r1: DamageResult = pipe.resolve(alarm_ctx.call(1, target))
 	_check("R_alarm 触发：audit.alarm=true", r1 != null and r1.audit != null and r1.audit.alarm)
-	_check("R_alarm 口径（抗性前）：ratio = 100×8×1001/100 = 8008",
-		r1 != null and is_equal_approx(r1.audit.ratio, 8008.0), "ratio=%s" % str(r1.audit.ratio if r1 != null else null))
-	_check("保险钳制：raw=800800 → base×500 = 50000",
+	_check("R_alarm 口径（抗性前）：ratio = 100×12×1001/100 = 12012（R253 帽 8→12）",
+		r1 != null and is_equal_approx(r1.audit.ratio, 12012.0), "ratio=%s" % str(r1.audit.ratio if r1 != null else null))
+	_check("保险钳制：raw=1201200 → base×500 = 50000",
 		r1 != null and is_equal_approx(r1.final_value, 50000.0), "got %s" % str(r1.final_value if r1 != null else null))
 	_check("damage_alarm 广播一次", _probe_get("alarm_hits") == 1)
 	# 第二次超限（新目标）：audit.alarm 仍记 + alarms 计数，但广播一局一次
@@ -660,8 +675,8 @@ func _test_alarm() -> void:
 	_check("第二次超限：audit.alarm 仍记（遥测口径）", r2 != null and r2.audit != null and r2.audit.alarm)
 	_check("alarms 计数累计 = 2", int(pipe.stats()["alarms"]) == 2)
 	_check("damage_alarm 一局一次：广播不重复（仍 1）", _probe_get("alarm_hits") == 1)
-	_check("易伤不影响抗性前 ratio（仍 8008）",
-		r2 != null and is_equal_approx(r2.audit.ratio, 8008.0))
+	_check("易伤不影响抗性前 ratio（仍 12012）",
+		r2 != null and is_equal_approx(r2.audit.ratio, 12012.0))
 	_check("易伤只放大 raw 后仍被保险钳制（50000）",
 		r2 != null and is_equal_approx(r2.final_value, 50000.0))
 

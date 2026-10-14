@@ -1,0 +1,36 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R218 模拟绑定三刀（帽1/分组N+他键/跳键） 回归 ══════════
+── ① 追赶帽 2→1 ──
+  PASS | ①帽 2→1 源级锚（fps≥60 无操作；螺旋段单步减半）
+  PASS | ①headless 运行时缺省 8 不动（桌面零扰动）
+── ② 分组N ──
+  PASS | ②diag_counts 新键 tint_groups 在位（MENU 空场=0，敌入场≥1——下方 +1 用例证）
+  PASS | ②3 只同状态敌 → 分组 +1（同值同批——真合批分组语义）
+  PASS | ②对照：断N 计 3（非白敌数——高计口径，分组才是断批上限）
+  PASS | ②异档敌入场 → 分组 +1（distinct 元组=分组上限）
+  PASS | ②归还后分组回基线
+  PASS | ②闪白混合场：强/弱/本体 三敌 → 分组恰 +1（modulate 全白同键）+ 贴图三态分明（R237 契约迁移）
+── ③ 他键 ──
+  PASS | ③PLAYING 帧他键在位且 ≥0（全函数−段和）
+  PASS | ③他峰值通道在位（秒内尖峰口径）
+  PASS | ③十五段段序：popup 在 ui 前、other 殿后
+── ④ 跳键拆分 ──
+  PASS | ④PLAYING 帧跳键在位且 ≥0（popup_manager.tick 独立计时）
+  PASS | ④跳/他标签映射在位
+  PASS | ④跳键源级锚：⑧ 段写点 = 总量−跳 双处（UI 键扣除跳字耗时）
+  PASS | ④满载跳字帽源级锚：40→24（mobile 高档门内 fullload_dim；R220 调速器档帽接线改 return→cap 变量形态）
+  PASS | ④桌面高档帽不变（80——满载 24 只在 mobile 门内）
+  PASS | ④余值求和跳过 移/火 两子集键，popup 已入减项（他已含未捕获部分——R268 P2 后口径）
+────────────────────────────────────────
+汇总：PASS 17 / FAIL 0（共 17 项）
+验收汇总：17/17 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 130 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

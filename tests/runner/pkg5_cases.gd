@@ -31,6 +31,7 @@ func run(p_tree: SceneTree) -> void:
 	_test_ranged_enemy_pool()                     # B.3
 	_test_wave_first_hit()                        # B.4
 	_test_separation_force()                      # B.5
+	_test_separation_shard_wheel()                # B.5b R256 序2：分片轮摊平
 	_test_duck_tightening()                       # B.8
 	_test_ac_core_subset()                        # AC 核心子集
 	_test_battlefield_reset()                     # 审查 Fix 1：重开清场 + 重生无敌回归
@@ -69,6 +70,12 @@ func _boot_game_loop() -> void:
 	Meta.upgrades = {}
 	Meta.crystals = 0
 	Meta.character_id = &"sentinel"
+	# R252 迁移：祝福池空 → start_requested 直达战斗（设计 §2.4-1/B2 合规退化口径）。
+	# 环境存档残留 codex_traits/祝福记忆会让 _on_menu_start 弹面板挂起 start_run
+	#（game_loop.gd:1773），AC-16.1 的「信号→PLAYING」同步断言整链变红——与上行
+	# upgrades/crystals 同族套件隔离，boot 前归零。
+	Meta.codex_traits = {}
+	Meta.blessing_trait_id = ""
 	var scene: PackedScene = load(MAIN_SCENE)
 	_gl = scene.instantiate() as GameLoop
 	_gl.name = "GameLoopUnderTest"
@@ -180,7 +187,7 @@ func _test_full_chain_smoke() -> void:
 		_gl.state == GameConst.GameStatus.PLAYING and not _gl.card_select_ui.is_open)
 	var applied := false
 	match kind:
-		0:                                      # MASTERY：武器 +boosts 级（白/蓝 +1，紫/金 +2——卡池每局随机，断言跟卡面 boosts 走）
+		0:                                      # MASTERY：武器 +boosts 级（R245 三档分化 白/蓝/紫=+1/+2/+3——卡池每局随机，断言跟卡面 boosts 走）
 			applied = w.level == wlevel0 + maxi(int(card.get("level_boosts", 1)), 1)
 		1:                                      # TRAIT：词条挂载生效
 			applied = w.trait_stack.traits.size() > traits0
@@ -472,7 +479,7 @@ func _test_xp_chain() -> void:
 func _test_relic_handler() -> void:
 	print("── 遗物处理器 ──")
 	var h := _gl.relic_handler
-	_check("遗物注册表：18 件加载（R72 增 6 + R186 增 1）", _gl.registry.relics.size() == 18)
+	_check("遗物注册表：40 件加载（R72 增 6 + R186 增 1 + R252 扩容 16 + R253 防御六件）", _gl.registry.relics.size() == 40)
 	# REL_MIDAS：经验倍率
 	_check("REL_MIDAS：激活 + 经验 ×1.2",
 		h.activate(&"REL_MIDAS") and is_equal_approx(h.xp_mult(), 1.2))
@@ -513,19 +520,43 @@ func _test_relic_handler() -> void:
 	_gl.player.invuln_left = 0.0
 	EventBus.emit_level_up(2)                     # PLAYING → LEVEL_UP（发牌走遗物参数）
 	_gl.call(&"_consume_deferred_level_open")     # R215 刀A：开窗延迟帧尾（驱动等价一帧）
-	_check("REL_GAMBLER：货架 4 张 + 末位诅咒标记",
+	# 货架末位类别是随机 roll（卡池 start_run randomize）——R246 收紧后仅 TRAIT 末位可
+	# 被打诅咒标记，非词条末位不带标记属业务正确。原无条件 cursed 断言在末位 roll 出
+	# 非词条批必红（QA 报告的预先存在 flaky 根因）→ 改条件式语义锁：末位为词条卡 ⇒ 必带
+	# 诅咒标记（货架发牌数/开窗态恒断言，不随机化）
+	var last4: Dictionary = _gl.current_candidates[3]
+	var last4_trait: bool = int(last4.get("kind", -1)) == CardGenerator.CardKind.TRAIT
+	_check("REL_GAMBLER：货架 4 张 + 末位词条卡必带诅咒标记（R246 仅 TRAIT 可诅咒）",
 		_gl.state == GameConst.GameStatus.LEVEL_UP
 		and _gl.current_candidates.size() == 4
-		and bool(_gl.current_candidates[3].get("cursed", false)))
+		and (not last4_trait or bool(last4.get("cursed", false))),
+		"kind=%s cursed=%s" % [str(last4.get("kind")), str(last4.get("cursed"))])
 	var w: WeaponBase = _gl.player.weapon_slots[0]
 	var traits0: int = w.trait_stack.traits.size()
-	_gl.card_select_ui.choose(3)                  # 选诅咒卡 → 附加 ATK −10% 诅咒词条
+	_gl.card_select_ui.choose(3)                  # 选末位卡出窗（类别随机——效果断言走下方确定性链）
+	_check("REL_GAMBLER：选卡出窗恢复 PLAYING",
+		_gl.state == GameConst.GameStatus.PLAYING and not _gl.card_select_ui.is_open)
+	# 诅咒应用链确定性锁：原「选诅咒卡→GAMBLER_CURSE 挂载」断言依赖末位恰好 roll 成
+	# 词条卡（同上 flaky 根因）→ 手工拼 cursed 词条卡直入 apply_choice——apply 侧
+	# cursed 分支（GAMBLER_CURSE 挂主武器）不再依赖随机，恒测得到
+	var curse_host: Dictionary = {
+		"kind": CardGenerator.CardKind.TRAIT,
+		"id": &"PKG5_CURSE_HOST",
+		"rarity": 0,
+		"data": _gl.registry.get_trait(&"AFF_ATK_UP"),
+		"display_name": "赌徒代价",
+		"description": "",
+		"target_weapon": w,                       # 锁宿主（防 _pick_attach_target 随机漂移）
+		"cursed": true,
+	}
+	_gl.card_generator.apply_choice(curse_host, _gl.player)
 	var has_curse := false
 	for tb in w.trait_stack.traits:
 		if (tb as Object).get("data").id == &"GAMBLER_CURSE":
 			has_curse = true
-	_check("REL_GAMBLER：诅咒卡应用 → GAMBLER_CURSE 词条挂载",
-		has_curse or w.trait_stack.traits.size() > traits0)
+	_check("REL_GAMBLER：cursed 卡应用 → GAMBLER_CURSE 词条挂载（apply 侧确定性锁）",
+		has_curse and w.trait_stack.traits.size() > traits0,
+		"traits=%d base=%d" % [w.trait_stack.traits.size(), traits0])
 	# REL_BOSS_TROPHY：精英/Boss 独立乘区 ×1.25（命中时点注入）
 	_check("REL_BOSS_TROPHY：激活", h.activate(&"REL_BOSS_TROPHY"))
 	var elite3: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
@@ -811,6 +842,67 @@ func _test_separation_force() -> void:
 	_gl.spawner.active.erase(b)
 	(_gl.pools[&"enemy"] as EnemyPool).release(a)
 	(_gl.pools[&"enemy"] as EnemyPool).release(b)
+
+
+# ── E-10 分片轮（R256 序2：10Hz 单帧全量尖峰 → 每帧 1 片摊平） ─────
+func _test_separation_shard_wheel() -> void:
+	print("── 敌间分离分片轮 ──")
+	var data := _make_enemy_data(&"E_SEPW", 1.0)
+	data.spd_base = 0.0                           # 静止（位移唯一来源=分离力）
+	data.hitbox_r = 14.0
+	var foes: Array[Enemy] = []
+	for i in 12:
+		var e: Enemy = (_gl.pools[&"enemy"] as EnemyPool).acquire()
+		e.spawn(data, 1, 0)
+		e.position = Vector2(360, 640)
+		_gl.spawner.active.append(e)
+		foes.append(e)
+	_gl.enemy_grid.rebuild(_gl.spawner.active)
+	_gl._reset_separation_wheel()
+	var max_moved := 0
+	var total_moved := 0
+	for f in 7:                                   # 7×0.016s ≈ 0.112s：六片各到期一次
+		var before := PackedVector2Array()
+		for e in foes:
+			before.append(e.global_position)
+		_gl._tick_separation(0.016)
+		var moved := 0
+		for i in foes.size():
+			if foes[i].global_position != before[i]:
+				moved += 1
+		max_moved = maxi(max_moved, moved)
+		total_moved += moved
+	_check("E-10分片：单帧无全量（最大单帧位移敌 %d < 12）" % max_moved,
+		max_moved < foes.size())
+	_check("E-10分片：一轮轮转全员服务（累计 %d == 12）" % total_moved,
+		total_moved == foes.size())
+	var before2 := foes[0].global_position
+	_gl._apply_enemy_separation()
+	_check("E-10分片：全量口径保留（直调全场仍有位移）",
+		foes[0].global_position != before2)
+	_gl._reset_separation_wheel()
+	_check("E-10分片：重置清空轮相位", _gl._sep_due.is_empty())
+	_gl._tick_separation(0.016)
+	_check("E-10分片：惰性重建恰 6 片", _gl._sep_due.size() == 6)
+	# 相位保持（R256 修轮 QA-R256-02）：≥interval 长帧追赶批一次结清后不并相——
+	# 正常帧续推无单帧全量回归（首版 snap-to-now 长帧后相位散布归零=周期性 12/12 锁步）
+	_gl._tick_separation(0.3)                    # 长帧：六片各结一次（追赶批，允许全量）
+	var max_after := 0
+	for f in 12:                                 # 长帧后 12 正常帧：错峰网格应保持（≤4/帧）
+		var before3 := PackedVector2Array()
+		for e in foes:
+			before3.append(e.global_position)
+		_gl._tick_separation(0.016)
+		var moved3 := 0
+		for i in foes.size():
+			if foes[i].global_position != before3[i]:
+				moved3 += 1
+		max_after = maxi(max_after, moved3)
+	_check("E-10分片：长帧后相位保持（12 正常帧最大位移敌 %d ≤ 4）" % max_after,
+		max_after <= 4)
+	for e in foes:
+		_gl.spawner.active.erase(e)
+		(_gl.pools[&"enemy"] as EnemyPool).release(e)
 
 
 # ── duck 收紧回归（B.8） ──────────────────────────────────────────

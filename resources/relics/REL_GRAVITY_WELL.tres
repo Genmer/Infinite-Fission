@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_GRAVITY_WELL"
+display_name = "引力井"
+description = "每次选卡货架的第一张词条卡必从当前已装备武器可装备的词条中抽选（无适配词条则回落全池）"
+rarity = 3
+listen_events = []
+effect_id = &"REL_EF_GRAVITY_WELL"
+params = {"first_slot_bias": true}
+unique = true

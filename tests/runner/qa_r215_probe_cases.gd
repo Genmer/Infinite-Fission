@@ -319,23 +319,35 @@ func _test_c_knife_c_menu_prewarm() -> void:
 	# E3：快速开局（队列未消化）不崩溃
 	_enter_play(_gl2)
 	_check("E3 快速开局（队列未清）→ PLAYING", _gl2.state == GameConst.GameStatus.PLAYING, "")
-	# E4：PLAYING 帧不消化预热队列
+	# E4：PLAYING 帧不消化预热队列（R244 后物理/渲染两轴同锁）
 	_gl2._physics_process(DT)
 	var size_play: int = (_gl2.get("_tex_prewarm_queue") as Array).size()
-	_check("E4 PLAYING 帧不消化（队列原样）", size_play == q2.size(),
-		"%d → %d" % [q2.size(), size_play])
+	_gl2._process(DT)
+	_check("E4 PLAYING 帧（物理+渲染轴）不消化（队列原样）",
+		size_play == q2.size() and (_gl2.get("_tex_prewarm_queue") as Array).size() == q2.size(),
+		"%d → %d（渲染轴 %d）" % [q2.size(), size_play,
+			(_gl2.get("_tex_prewarm_queue") as Array).size()])
 	# E5：回 MENU 预算消化清队（记录单帧墙钟）——R215 修：boss 双面挂机门（dwell<3s
 	# 暂停队首 boss 项，门行为由 r215_defer ③ 专测），此处置 dwell 放行验预算消化路径
+	# R244 冲刷桶批迁移：预热消费在渲染轴 _process——MENU 物理帧不消化（反向锁）
 	_gl2.state = GameConst.GameStatus.MENU
+	var size_menu_phys: int = (_gl2.get("_tex_prewarm_queue") as Array).size()
+	_gl2._physics_process(DT)
+	_check("E4b R244 MENU 物理帧不消化（预热迁渲染轴，物理窗零预热成本）",
+		(_gl2.get("_tex_prewarm_queue") as Array).size() == size_menu_phys,
+		"%d → %d" % [size_menu_phys, (_gl2.get("_tex_prewarm_queue") as Array).size()])
 	_gl2.set("_menu_dwell_s", 99.0)
 	var frames := 0
 	var max_frame_us := 0
-	while not (_gl2.get("_tex_prewarm_queue") as Array).is_empty() and frames < 400:
+	# R253 帧帽重标定：400→1600——R252D P5 预热预算 12000→4000µs 后每帧消化量 ÷3，
+	# 旧帽 400 帧清不完全量菜单贴图队（qa_r215 不在 R252 门禁清单=预算刀滞后暴露
+	# 非回归）；1600×4000µs≈6.4s 对全量队留 3× 裕量
+	while not (_gl2.get("_tex_prewarm_queue") as Array).is_empty() and frames < 1600:
 		var ft := Time.get_ticks_usec()
-		_gl2._physics_process(DT)
+		_gl2._process(DT)
 		max_frame_us = maxi(max_frame_us, int(Time.get_ticks_usec() - ft))
 		frames += 1
-	_check("E5a MENU 帧序消化清队", (_gl2.get("_tex_prewarm_queue") as Array).is_empty(),
+	_check("E5a MENU 渲染轴消化清队（R244 迁 _process）", (_gl2.get("_tex_prewarm_queue") as Array).is_empty(),
 		"frames=%d" % frames)
 	# E5b 上限标定（R229 修轮迁移，原 250ms 误标定）：产品契约=12ms 预算事后检查
 	# （game_loop._process_tex_prewarm 做完一项才查超支 break）+ 单项原子不可分，boss

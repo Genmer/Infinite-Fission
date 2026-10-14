@@ -18,6 +18,7 @@ const SUCCESS := Color("2ed573")              # 成功 = 薄荷绿
 const SHOCK := Color("af8ec1")                # 感电 = 柔电紫（R192 原神色系收敛；8b5dff 葡萄紫让位 RARITY_EPIC 专属，后者独立常量不动）
 const ENEMY_DEEP := Color("ff4040")           # 爆虫充能警示（更深的红）
 const GOLD := Color("ffc93c")                 # 精英皇冠/传说金
+const ORANGE := Color("ff8c1a")               # 二db 橙盾（躲雷奖励）——HUD 橙条/填充专属
 
 # ── 描边/文字 ─────────────────────────────────────────────────────
 const OUTLINE := Color("22254a")              # 统一深藏青描边（实体/UI 3~4px）
@@ -90,25 +91,35 @@ const ELEMENT_COLORS := {
 	7: Color("a5c83b"),                         # DEN 草 嫩草绿
 }
 
-# ── 稀有度（普通灰蓝 / 稀有天蓝 / 史诗葡萄紫 / 传说柠檬金） ─────────
+# ── 稀有度（普通灰蓝 / 稀有天蓝 / 史诗葡萄紫 / 辉煌柠檬金 / 升华传说玫绯红） ──
 const RARITY_NORMAL := Color("8a90b8")
 const RARITY_RARE := Color("3fa9ff")
 const RARITY_EPIC := Color("8b5dff")
 const RARITY_LEGEND := Color("ffc93c")
+# R246 D2：升华红（红色传说档 [4] 专属「技能升华」卡）——独立常量入表（视觉层取色
+# 单源纪律），三重避让既有红：ENEMY #ff5d5d（绿分量 0x5d 偏品红冷调）/ENEMY_DEEP
+# #ff4040（爆虫充能）/碎裂描边 #e0483e（低明度暖红）——色相与载体双区分；
+# 禁复用警示红 ENEMY（诅咒染名语义钉同源，不得混流）
+const RARITY_SUBLIME := Color("ff2e63")
 
-const RARITY_COLORS: Array[Color] = [RARITY_NORMAL, RARITY_RARE, RARITY_EPIC, RARITY_LEGEND]
-const RARITY_NAMES: Array[String] = ["普通", "稀有", "史诗", "传说"]
+# R246 D1：红档=「传说」（用户原话「红色（传说级）」），金档 [3] 改名「辉煌」——
+# 只换字：金色值 #ffc93c / 数值缩放（RARITY_VALUE_SCALE 不扩档，红品质不参与词条
+# 缩放）/稀有度顺序全不动
+const RARITY_COLORS: Array[Color] = [RARITY_NORMAL, RARITY_RARE, RARITY_EPIC,
+	RARITY_LEGEND, RARITY_SUBLIME]
+const RARITY_NAMES: Array[String] = ["普通", "稀有", "史诗", "辉煌", "传说"]
 
 # ── 彩纸屑（Boss 死亡签名瞬间；多色小矩形/圆） ────────────────────
 const CONFETTI: Array[Color] = [PLAYER, ENEMY, XP, SUCCESS, SHOCK, Color("ff9f43")]
 
-# ── 经验碎片分档（R196：面值/基线比 <3 白 <8 绿 <20 金 ≥20 七彩；基线=exp_base×
-#    exp_inflation_per_wave^(w-1)，通胀真源 balance_tables.gd——阈值/公式单源在 XpShard） ──
-# [3] 白色仅为类型占位不被直读：七彩档不走本表，着色走 XpShard._tick_visual_anim 尾部
-#     from_hsv 色相回环（Color 值类型零堆分配，R188 合规）
+# ── 经验碎片分档（R208 五档：面值/基线比 <2.5 白 <5 蓝 <12 紫 <40 金 ≥40 七彩；
+#    阈值/公式单源在 XpShard.XP_TIER_THRESHOLDS，基线=exp_base×通胀^(w-1)） ──
+# [3] 七彩档不走本表：R216 起彩档着色=6 色相步进烤进贴图变体（XpShard._baked_tier_color），
+#     非彩档档色亦改烤贴图（modulate 恒白保合批）；白档色 [0] 被直读（含预热队列）
 const XP_TIER_COLORS: Array[Color] = [
 	Color("fff1b8"),                            # 白档 淡柠檬白（近现行 XP 观感）
-	Color("2ed573"),                            # 绿档 薄荷绿（SUCCESS 同值）
+	Color("3da9fc"),                            # 蓝档 天蓝（R208 五色递进第 2 档）
+	Color("b06ef7"),                            # 紫档 兰紫（R208 五色递进第 3 档）
 	Color("ffc93c"),                            # 金档 柠檬金（现行 XP 同值）
 	Color("ffffff"),                            # 七彩占位（不直读）
 ]

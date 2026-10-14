@@ -96,16 +96,19 @@ func _test_3_playing_frames_no_bake() -> void:
 		_gl._tex_prewarm_queue.size() == q_before)
 
 
-# ── ④ continue_endless 不挂补烤（F：非新局口径） ────────────────────
+# ── ④ continue_endless 补烤执行（R227-L1 显式挂口；R267 修轮1重锚） ──
 func _test_4_continue_endless_no_bake() -> void:
-	print("── ④ continue_endless（GAME_OVER→PLAYING 无尽续打）零补烤 ──")
+	print("── ④ continue_endless（GAME_OVER→PLAYING 无尽续打）补烤执行（R267 修轮1重锚） ──")
 	_gl.change_state(GameConst.GameStatus.GAME_OVER)
 	var ok: bool = _gl.continue_endless()
 	_check("④a continue_endless 成功（GAME_OVER→PLAYING 无尽态）",
 		ok and _gl.state == GameConst.GameStatus.PLAYING and _gl._endless_mode,
 		"ok=%s state=%d" % [str(ok), _gl.state])
-	_check("④b 无尽续打口零补烤（built 仍 0、未 ready——门开着也没烤）",
-		PopupGlyphAtlas.built_count() == 0 and not PopupGlyphAtlas.ready(),
+	# R267 修轮1（授权重锚）：④b 原断「零补烤」写于 R227-L1 补挂之前——L1 刻意把
+	# continue_endless 的隐式安全不变量变结构（game_loop.gd:1406 显式挂
+	# ensure_runstart_bake），门开着冷图集即在续打口补烤。重锚为断补烤执行。
+	_check("④b 无尽续打口补烤执行（built 0→%d、ready——R227-L1 显式挂口后的现实）" % GLYPH_N,
+		PopupGlyphAtlas.built_count() == GLYPH_N and PopupGlyphAtlas.ready(),
 		"built=%d" % PopupGlyphAtlas.built_count())
 
 
@@ -120,8 +123,12 @@ func _test_5_restart_run_bakes_and_idempotent() -> void:
 		ok and _gl.state == GameConst.GameStatus.PLAYING
 			and PopupGlyphAtlas.built_count() == GLYPH_N and PopupGlyphAtlas.ready(),
 		"ok=%s built=%d" % [str(ok), PopupGlyphAtlas.built_count()])
-	_check("⑤b 补N 计数入账（Δµs>0，实测 %dµs≈%.1fms）" % [bake_us, float(bake_us) / 1000.0],
-		bake_us > 0, "Δus=%d" % bake_us)
+	# R267 修轮1（授权重锚）：⑤b 原断「补N 计数 Δ>0」以 ④ 不烤为前提（restart 是
+	# 首个补烤口）——④b 重锚后 continue_endless 已烤完（ready），restart 的 ensure
+	# 就绪短路零增量。重锚为断就绪幂等（Δ==0）；补N>0 首烤入账面由 qa_r227_bake_a
+	# ②d（continue_run 冷链 Δ>0 且 ≤60ms）单源覆盖。
+	_check("⑤b 就绪幂等（补N Δµs==0，实测 %dµs——④ 已烤，restart ensure 短路）" % bake_us,
+		bake_us == 0, "Δus=%d" % bake_us)
 	# 多次重开幂等：再走一轮 PAUSED→restart_run，就绪后零增量
 	var pre_us2: int = DebugStats.get_counter(&"bitmap_bake_us")
 	_gl.change_state(GameConst.GameStatus.PAUSED)

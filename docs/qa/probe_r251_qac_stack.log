@@ -1,0 +1,18 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+════════ QA丙探针①：首遇卡 × 暂停/选卡窗/红卡门 同帧叠加 ════════
+OBSERVE-PASS | P1-1 卡 UI 已挂载且为 GameLoop 直接子 | parent=QACStackProbeLoop
+OBSERVE-PASS | P1-2 GameLoop.process_mode == ALWAYS(3) | mode=3
+OBSERVE-PASS | P1-3 卡 UI 声明 process_mode == INHERIT(0) | mode=3
+OBSERVE-PASS | P1-4 卡 layer == 50（高于默认层弹窗 dim/面板） | layer=50
+OBSERVE-PASS | P2-0 播放态卡可见 | open=true pending=0
+OBSERVE-PASS | P2-0b tree.paused 置位成功 | paused=true
+OBSERVE-PASS | P2-1 暂停期卡片自行消散帧（>=0 = _process 暂停期照跑=设计契约破；-1 = 冻结=契约成立） | advanced_frame=469 pending=0 is_open=false
+OBSERVE-PASS | P3-1 暂停态空白点击是否被卡吞（open true→false = 吞点+消散=暂停态输入面打开） | waited=21 before=true after=false
+OBSERVE-PASS | P3b-1 INHERIT 子在 ALWAYS 父下的解析 process_mode | under_always=0 under_default=0（0=INHERIT 1=PAUSABLE 3=ALWAYS）
+OBSERVE-PASS | P4-1 暂停 340 帧后队列变化（pending 递减 = 暂停期照放行=设计契约破） | showing false→true pending 3→2
+════════ 探针①结束（OBSERVE 行为观测数据，不作验收门） ════════
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

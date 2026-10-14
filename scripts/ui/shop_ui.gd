@@ -151,10 +151,14 @@ func _reroll_wares(p_paid: bool) -> void:
 	})
 	var relics := card_generator._unowned_relic_ids()
 	if not relics.is_empty():
+		# 品质单源 RelicData.rarity（与卡架 _make_relic_card 同源钳制）——
+		# 原写死 2 令遗物行名恒紫、与卡面金档脱钩（二cv#7 接线补点）
+		var rd: RelicData = card_generator.registry.get_relic(
+			relics[randi() % relics.size()])
 		_wares.append({
-			"kind": "relic", "data": card_generator.registry.get_relic(
-				relics[randi() % relics.size()]),
-			"rarity": 2, "base": 90.0, "mult": market_mult(_wave, 5),
+			"kind": "relic", "data": rd,
+			"rarity": clampi(int(rd.rarity), 0, 4) if rd != null else 3,
+			"base": 90.0, "mult": market_mult(_wave, 5),
 		})
 	_append_black_market_gold_card()
 	# R188-B 终兜底常青货（buyable_count()==0 = 连武器强化都补不进/买不了的真终局）：
@@ -202,18 +206,19 @@ func _make_trait_ware(p_t: TraitData, p_target: WeaponBase, p_rarity: int,
 			var td_e: Variant = tb.get("data")
 			if td_e != null and StringName(str(td_e.get("id"))) == p_t.id:
 				cur_layers = int(tb.get("layers"))
+	# R226 评审 L2：预告语义收紧——只有「本卡恰触发质变」（cur+1==stack_max）才预告
+	# （与卡架同口径）；已质变态后续卡不重复承诺 ×1.6
 	var milestone: bool = (MechanicGate.milestone_unlocked() and data.stack_max >= 2
-		and cur_layers + 1 >= data.stack_max)
-	var overcap := cur_layers >= data.stack_max
+		and cur_layers + 1 == data.stack_max)
 	if milestone:
 		data.description += "\n◆ 满层质变：该词条全部层数数值 ×1.6！"   # 卡架 :685 原文
-	if overcap:
-		data.description += "\n" + GameConst.OVERCAP_NOTE
+	# R226 有意契约变更：R196 超帽注记（OVERCAP_NOTE「收益降低 30%」）随超帽衰减一并
+	# 退役——满层后继续叠全额，商店货架与选卡架同口径无注记（overcap 字段恒 false）
 	return {
 		"kind": "trait", "data": data, "rarity": p_rarity, "target": p_target,
 		"base": 40.0 * scale,
 		"mult": market_mult(_wave, p_slot),
-		"milestone": milestone, "overcap": overcap,
+		"milestone": milestone, "overcap": false,
 	}
 
 
@@ -280,6 +285,10 @@ func _ware_stocked(p_ware: Dictionary) -> bool:
 			# 夜间R6 满血禁购口径（与 _make_ware_row 行内特殊分支同阈值）
 			return float(_player.get("hp")) < float(_player.get("max_hp")) - 0.5
 		"trait":
+			# R262d：常青货走全局授予（player.add_fallback_atk），无宿主无挂载——
+			# 恒真货（原「可挂复验」判定随挂载语义退役）
+			if bool(p_ware.get("evergreen", false)):
+				return true
 			return _can_mount_trait(p_ware.get("data"), p_ware.get("target"))
 		"weapon_up":
 			var w: Variant = p_ware.get("target")
@@ -301,8 +310,9 @@ func _ware_buyable(p_ware: Dictionary) -> bool:
 
 func _can_mount_trait(p_t: TraitData, p_weapon: Variant) -> bool:
 	# 词条可挂载复验（与 TraitStack.attach 拒绝线同口径，堵「先扣金 + attach 静默拒」）：
-	# ① 形态/武器适配门（R187 mount_gate_allows 统一真源）；② 同 ID 层<stack_max，
-	# 或新条目时栈内条目<12（TraitStack.MAX_TRAITS——_trait_candidates 不查这道帽）
+	# ① 形态/武器适配门（R187 mount_gate_allows 统一真源）；② R226 起同 ID 无限叠
+	#（用户拍板「肉鸽别搞上限」——原 stack_max/+5 帽拆除）；新条目时栈内条目<12
+	#（TraitStack.MAX_TRAITS 构筑宽度帽保留——与同种叠层不同轴）
 	if p_t == null or p_weapon == null or not (p_weapon is WeaponBase) \
 			or not is_instance_valid(p_weapon):
 		return false
@@ -315,11 +325,7 @@ func _can_mount_trait(p_t: TraitData, p_weapon: Variant) -> bool:
 	for tb: Variant in entries:
 		var td: Variant = tb.get("data")
 		if td != null and StringName(str(td.get("id"))) == p_t.id:
-			# R196 有意契约变更：ADD 池帽放宽至 stack_max + OVERCAP_EXT_MAX（超质变叠层，
-			# 与 TraitStack.attach 拒绝线同口径）；非 ADD 池保持原帽
-			var cap: int = p_t.stack_max \
-				+ (TraitStack.OVERCAP_EXT_MAX if p_t.pool == GameConst.PoolClass.ADD else 0)
-			return int(tb.get("layers")) < cap
+			return true                              # R226：同 ID 无限叠，恒可挂
 	return entries.size() < TraitStack.MAX_TRAITS
 
 
@@ -366,19 +372,16 @@ func _append_black_market_gold_card() -> void:
 
 func _append_evergreen_fallback() -> void:
 	# 终兜底常青货：运行期构造 stack_max=99 应急强化（仿 card_generator._fallback_stat_card
-	# 的 FALLBACK_ATK——同 id 同池，与升级卡池的保底卡天然同层叠加；E-08 纪律：
-	# 内存对象，不落 .tres 不进注册表）。宿主容量感知：选可挂武器。
-	# R189 死角修复（评审#9）：全武器栈 12/12 满且无 FALLBACK_ATK 层时任何宿主都
-	# 挂不上——原「回退 _primary_weapon 照样上架」会造出置灰死行（buyable 依旧 0，
-	# 且非空行使刷新钮可点 → 死架纯烧金）。改为：无任何可挂宿主 → 不上架死货；
-	# 此时货架若整体无货真价实行（has_stock()==false）刷新钮一并禁刷（R195 起置灰改
-	# 原位隐藏），金币不烧。
+	# 的 FALLBACK_ATK——同 id 同池；E-08 纪律：内存对象，不落 .tres 不进注册表）。
+	# R262d 全局化：购买走 player.add_fallback_atk（全武器生效），不再挂武器栈——
+	# 原 R189「全栈饱和 12/12 无宿主→不上架死货」死角自然消解（恒可上架恒可买，
+	# 无宿主探测/复验链）。宿主容量感知与挂载复验判定随挂载语义一并退役。
 	if _player == null:
 		return
 	var data := TraitData.new()
 	data.id = &"FALLBACK_ATK"
 	data.display_name = "应急强化"
-	data.description = "攻击力 +5%"
+	data.description = "全武器攻击力 +5%"
 	data.pool = GameConst.PoolClass.ADD
 	data.pool_id = &"add_atk"
 	data.effect_id = &"EF_STAT"
@@ -387,19 +390,8 @@ func _append_evergreen_fallback() -> void:
 	data.params = {"stat": "atk_pct"}
 	data.stack_max = 99                           # 终兜底：永不满层（应急通道）
 	data.rarity = 0
-	var host: WeaponBase = null
-	for w in _player.get("weapon_slots"):
-		if w is WeaponBase and is_instance_valid(w) and _can_mount_trait(data, w):
-			host = w
-			break
-	if host == null and card_generator != null:
-		var primary: WeaponBase = card_generator._primary_weapon(_player)
-		if primary != null and _can_mount_trait(data, primary):
-			host = primary                          # 兜底宿主必须复验可挂——不可挂不虚设死行
-	if host == null:
-		return                                      # R189：全栈饱和真终局——宁缺毋滥（死行=烧金入口）
 	_wares.append({
-		"kind": "trait", "data": data, "rarity": 0, "target": host,
+		"kind": "trait", "data": data, "rarity": 0,
 		"base": 25.0, "mult": 1.0,               # 常青保底一口价（全货架最低位）
 		"evergreen": true,                       # 购买走 CardKind.FALLBACK 通道（不入词条图鉴）
 	})
@@ -587,7 +579,8 @@ func _make_ware_row(p_index: int, p_ware: Dictionary) -> Control:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var name_l := Label.new()
 	StickerTheme.label_sticker(name_l, 17, PopPalette.rarity_color(rarity)
-		if kind == "trait" or kind == "gold_card" else PopPalette.INK, 0, Color.WHITE, true)
+		if kind == "trait" or kind == "gold_card" or kind == "relic" else PopPalette.INK,
+		0, Color.WHITE, true)
 	var display := ""
 	var desc := ""
 	match kind:
@@ -628,7 +621,8 @@ func _make_ware_row(p_index: int, p_ware: Dictionary) -> Control:
 	name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(name_l)
 	var desc_l := Label.new()
-	StickerTheme.label_sticker(desc_l, 13, PopPalette.INK_SOFT)
+	# R203 真机二次反馈「buff 的字又变小了」：13→15（1.5K-2K 屏可读档）
+	StickerTheme.label_sticker(desc_l, 15, PopPalette.INK_SOFT)
 	desc_l.text = desc
 	desc_l.position = Vector2(16.0, 38.0)
 	desc_l.size = Vector2(400.0, 34.0)

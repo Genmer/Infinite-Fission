@@ -499,11 +499,11 @@ func _test_tips_detail_card() -> void:
 		if idx == 0 and note_label != null:
 			# 布局契约（autowrap 行高引擎按行数强制最小——高断言取不小于请求行高）
 			var head := section.get_child(0) as Panel
-			_check("A13 机制句行 (58,62) 宽 508 + WORD_SMART + 13pt INK_SOFT + IGNORE + head 100（R203 12→13）",
+			_check("A13 机制句行 (58,62) 宽 508 + WORD_SMART + 15pt INK_SOFT + IGNORE + head 100（R253 13→15）",
 				note_label.position == Vector2(58.0, 62.0)
 				and note_label.size.x == 508.0 and note_label.size.y >= 34.0
 				and note_label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART
-				and int(note_label.get_theme_font_size("font_size")) == 13
+				and int(note_label.get_theme_font_size("font_size")) == 15
 				and note_label.get_theme_color("font_color") == PopPalette.INK_SOFT
 				and note_label.mouse_filter == Control.MOUSE_FILTER_IGNORE
 				and head != null and head.custom_minimum_size == Vector2(576.0, 100.0),
@@ -1137,7 +1137,8 @@ func _test_achv_all() -> void:
 	_check("F16 存档结构零改动：achievements 段仍仅 done 键（id 数组口径）", struct_ok)
 	# —— F17 [R192] run_reactions 成就族（run 作用域接线；直调 handler——F6-F10 模式）——
 	# ACH_TIER_TABLE +1 条 type=run_reactions targets=[10,25,50] rewards=[0,0,30]：
-	# 中间档 0💎（隐性通胀口封死）、仅终档 +30💎；全表条数仍在 F1 区间、总奖励 ≤1500💎；
+	# 中间档 0💎（隐性通胀口封死）、仅终档 +30💎；全表条数仍在 F1 区间、总奖励 ≤1600💎
+	#（R247 无尽深度族 +100 并入后全表 1565，封顶 1500→1600 同步调）；
 	# 零存档键（计数不入 _save 九段；F16 结构断言上方已验）。注意 F11 已先行对账还原，
 	# 本段在新窗内自备份/自还原——不回灌 F11 的 fired_families 神谕。
 	var bk2_done: Dictionary = Meta.achievements_done.duplicate()
@@ -1165,7 +1166,8 @@ func _test_achv_all() -> void:
 	var reward_sum := 0
 	for a8 in Meta.ACHIEVEMENTS:
 		reward_sum += int(a8.get("reward", 0))
-	_check("F17d 全表总奖励 ≤1500💎（经济封顶随新族复核）", reward_sum <= 1500, "sum=%d" % reward_sum)
+	_check("F17d 全表总奖励 ≤1850💎（经济封顶随新族复核——R245 内容扩容批并入后 1800，封顶 1600→1850 同步）",
+		reward_sum <= 1850, "sum=%d" % reward_sum)
 	Meta._settle_run_result()                     # 结算 → 单局计数复位（_reset_run_counters）
 	var rr_val: Variant = Meta.get("_run_reactions")
 	_check("F17e 结算复位：_run_reactions 字段在且归零（run 作用域零存档迁移）",
@@ -1218,12 +1220,13 @@ func _test_codex_reaction_page() -> void:
 	var menu := _gl.menu_screen
 	menu._on_lobby_pressed("codex")
 	var tabs: Array = menu._codex_tabs.keys()
-	_check("X1 图鉴页签恰 4 枚 = 怪物/武器/词条/反应",
-		tabs.size() == 4 and tabs.has("怪物") and tabs.has("武器")
-		and tabs.has("词条") and tabs.has("反应"))
-	_check("X2 页签几何：宽 126 ·「反应」末沿 486+126=612（右距 36 不变）",
-		(menu._codex_tabs["反应"] as Button).size.x == 126.0
-		and (menu._codex_tabs["反应"] as Button).position.x == 486.0)
+	_check("X1 [R252 迁移·祝福改名] 图鉴页签恰 5 枚 = 怪物/武器/祝福/反应/遗物（R245 +遗物页）",
+		tabs.size() == 5 and tabs.has("怪物") and tabs.has("武器")
+		and tabs.has("祝福") and tabs.has("反应") and tabs.has("遗物"))
+	_check("X2 页签几何：宽 108 ·「遗物」末沿 504+108=612（右距 36 不变——R245 五枚重排）",
+		(menu._codex_tabs["反应"] as Button).size.x == 108.0
+		and (menu._codex_tabs["反应"] as Button).position.x == 387.0
+		and (menu._codex_tabs["遗物"] as Button).position.x == 504.0)
 	menu._on_codex_tab("反应")
 	var rows: Array = []
 	for c in menu._panel_list.get_children():
@@ -1286,12 +1289,14 @@ func _test_codex_reaction_page() -> void:
 	var rt: Dictionary = GameConfig.balance.reaction_table
 	var coef0 := float(rt["RXN_FIR_ICE"]["coef"])
 	rt["RXN_FIR_ICE"]["coef"] = 3.5
+	menu._invalidate_codex_cache()          # R254-1 页级行缓存：改表=行文案源变，先失效再切
 	menu._on_codex_tab("反应")
 	var mult0 := _reaction_mult_label(menu)
 	_check("X5 倍率跟随表值：coef=3.5 → 碎裂行倍率文本含 3.5",
 		mult0 != null and (mult0 as Label).text.contains("3.5"),
 		"txt=%s" % ((mult0 as Label).text if mult0 != null else "-"))
 	rt["RXN_FIR_ICE"]["coef"] = coef0           # 还原（防进程内数值表污染）
+	menu._invalidate_codex_cache()          # R254-1：还原后失效，复原断言仍走重建路径
 	menu._on_codex_tab("反应")
 	var mult1 := _reaction_mult_label(menu)
 	_check("X6 还原 coef 后倍率复原（含 %.1f 不含 3.5）" % coef0,

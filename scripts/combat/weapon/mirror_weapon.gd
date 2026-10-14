@@ -77,14 +77,16 @@ func _on_tick_post(p_game_delta: float) -> void:
 func sync_mirrors(p_force: bool) -> void:
 	# 组合签名门（非 force 时仅在武器组合/镜数/实体失效/玩家容器被外部清空时重排
 	# ——驱动 11s 指向不变；clear_mirrors 重开口由注册表同步检查感知）
+	# R220 刀7：门检查提前（惰性签名）——capacity/实体存活/容器同步三快速门全过才
+	# 构建组合签名串（原每帧先建后比，稳态 30-50µs 字符串构建税清零；短路重排语义等价）
 	if data == null or player == null or not is_instance_valid(player):
 		return
 	var capacity := desired_mirror_count()
-	var sig := _composition_signature()
-	if not p_force and sig == _composition_sig and mirrors.size() == capacity \
-			and _all_sources_alive() and _player_registry_in_sync():
+	if not p_force and mirrors.size() == capacity \
+			and _all_sources_alive() and _player_registry_in_sync() \
+			and _composition_signature() == _composition_sig:
 		return
-	_composition_sig = sig
+	_composition_sig = _composition_signature()
 	var picks := _assign_sources(_candidate_sources(), capacity)
 	_reconcile(picks, capacity)
 
@@ -118,7 +120,12 @@ func mirror_ratio() -> float:
 
 # ── 发射预算 Keeper（镜面组滚动窗；MirrorImage 逐拍问询/计费） ─────────────
 func budget_per_s() -> float:
-	# 镜面组发射预算（laser.mirror_budget_per_s，缺省 600 发/s——镜面预算键落 W5 数据）
+	# 镜面组发射预算（laser.mirror_budget_per_s，缺省 600 发/s——镜面预算键落 W5 数据）。
+	# R220 刀14：帧率优先代码内 override 165.0（主控决策#6 终值——.tres 保持 600 不改，
+	# 特效优先读 W5_prism.tres 原值；MIRROR_CAP=5/BUDGET_WINDOW_S=1.0 不动）。
+	# 帧率优先下 mirror_budget_skipped 可非 0（预算咬合可观测口）。
+	if PerfGovernor.frame_priority():
+		return 165.0
 	if data == null:
 		return 600.0
 	return maxf(float(data.laser.get("mirror_budget_per_s", 600.0)), 1.0)
@@ -252,6 +259,7 @@ func _reconcile(p_picks: Array[WeaponBase], p_capacity: int) -> void:
 	# 重建（make_mirror_image 白板构造 → MirrorImage 包装 → register_mirror 入册）；
 	# 裁剪冗余镜位；新指向播报「棱镜映照：镜面承接了 X」。
 	var wanted_ratio := mirror_ratio()
+	var prev_n := mirrors.size()                   # 重排前镜组数（相位分母是否漂移的判据）
 	var next: Array[MirrorImage] = []
 	var reuse_pool := mirrors.duplicate()
 	var fresh_names: Array[String] = []
@@ -289,6 +297,19 @@ func _reconcile(p_picks: Array[WeaponBase], p_capacity: int) -> void:
 	for stale in reuse_pool:
 		_retire_mirror(stale)
 	mirrors = next
+	if mirrors.size() != prev_n and not mirrors.is_empty():
+		# R220 修轮（刀6 相位分母）：镜组相位分母 = 重排后镜组数——容量增减（升级曲线/
+		# MIRROR_SPLIT 层变化/休眠镜位增减）后存量镜按终态 N 重推相位（mirror_image.
+		# setup_mirror 只在新镜构造时按当时容量赋相位，2→3 增量扩容时存量镜停在旧分母
+		# interval×1/2，终态不满足 cooldown_left==interval×(i/N)——相位聚集上半拍、
+		# 错帧削峰打折）。同容量重排（换源/签名变化）不重推——不打断在拍镜节拍；
+		# 确定性推导口径不变（deterministic_source_pick 同构重排同相位）。
+		for i in range(mirrors.size()):
+			if i > 0:
+				mirrors[i].cooldown_left = mirrors[i]._fire_interval() \
+					* (float(i) / float(mirrors.size()))
+			else:
+				mirrors[i].cooldown_left = 0.0
 	if not fresh_names.is_empty():
 		EventBus.emit_mirror_formed("棱镜映照：镜面承接了 %s" % "、".join(fresh_names))
 

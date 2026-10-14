@@ -18,6 +18,14 @@ class TelegraphCircle:
 	var progress: float = 0.0                    # 引导进度 0~1（宿主推进）
 
 	func _draw() -> void:
+		# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+		# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+		DebugStats.bucket_begin(&"draw")
+		_draw_r271()
+		DebugStats.bucket_end(&"draw")
+
+
+	func _draw_r271() -> void:
 		# 虚线警戒圈（亮底风格：虚线圆 + 淡填充 + 进度弧，爆虫 FuseRing 同款程序化绘制）
 		var fill := Color(color.r, color.g, color.b, 0.05 + 0.13 * progress)
 		draw_circle(Vector2.ZERO, radius, fill)
@@ -45,6 +53,14 @@ class TelegraphLine:
 		rotation = p_dir.angle()                 # 起角锁定（带内不追踪，§2 B7）
 
 	func _draw() -> void:
+		# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+		# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+		DebugStats.bucket_begin(&"draw")
+		_draw_r271()
+		DebugStats.bucket_end(&"draw")
+
+
+	func _draw_r271() -> void:
 		# 矩形长带（端点起自施法者）+ 边线 + 沿带充能亮斑（进度=充能流动）
 		var fill := Color(color.r, color.g, color.b, 0.08 + 0.12 * progress)
 		draw_rect(Rect2(0.0, -width * 0.5, length, width), fill, true)
@@ -71,6 +87,14 @@ class TelegraphFan:
 		rotation = p_dir.angle()
 
 	func _draw() -> void:
+		# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+		# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+		DebugStats.bucket_begin(&"draw")
+		_draw_r271()
+		DebugStats.bucket_end(&"draw")
+
+
+	func _draw_r271() -> void:
 		var half := deg_to_rad(arc_deg) * 0.5
 		# 扇面淡填充（随读条渐亮）
 		var fill := Color(color.r, color.g, color.b, 0.05 + 0.10 * progress)

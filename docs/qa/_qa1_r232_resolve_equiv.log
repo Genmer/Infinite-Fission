@@ -1,0 +1,37 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R232（刀1b/1c 开关双跑整局等价） 回归 ══════════
+── 腿1：override=2 饱和 + 新星/分裂嵌套复合（结构带） ──
+    臂构筑：W2 L2 + PIERCE×2/MULTI×3/BOUNCE×2/NOVA×2/FRACTAL×2（挂载 11/11——新星/分裂嵌套源）
+    臂构筑：W2 L2 + PIERCE×2/MULTI×3/BOUNCE×2/NOVA×2/FRACTAL×2（挂载 11/11——新星/分裂嵌套源）
+  PASS | 腿1(帽2) 命中事件计数 |Δ|≤15
+  PASS | 腿1(帽2) 命中事件非空（对拍有效载荷）
+  PASS | 腿1(帽2) 伤害值谱 distinct 集合逐位（披露带——熵偏移面，硬墙在腿3）
+  PASS | 腿1(帽2) 值桶计数漂移合计（≤15·结构带）
+  PASS | 腿1(帽2) 管线计数桶（≤max(15,10%%)/键·结构带）
+  PASS | 腿1(帽2) 击杀总数 |Δ|≤4（小样本轴容差）
+  PASS | 腿1(帽2) 末帧活弹数 |Δ|≤12（回收时序漂移容差）
+  PASS | 腿1 饱和面真实在位（A 臂顺延+冲刷 >0——复合场景非空转）
+── 腿2：override=-2 无预算整局（统计带） ──
+    臂构筑：W2 L2 + PIERCE×2/MULTI×3/BOUNCE×2/NOVA×2/FRACTAL×2（挂载 11/11——新星/分裂嵌套源）
+    臂构筑：W2 L2 + PIERCE×2/MULTI×3/BOUNCE×2/NOVA×2/FRACTAL×2（挂载 11/11——新星/分裂嵌套源）
+  PASS | 腿2(帽-2) 命中事件计数 |Δ|≤5
+  PASS | 腿2(帽-2) 命中事件非空（对拍有效载荷）
+  PASS | 腿2(帽-2) 伤害值谱 distinct 集合逐位（披露带——熵偏移面，硬墙在腿3）
+  PASS | 腿2(帽-2) 值桶计数漂移合计（≤6·统计带）
+  PASS | 腿2(帽-2) 管线计数桶（≤max(2,5%%)/键·硬带）
+  PASS | 腿2(帽-2) 击杀总数 |Δ|≤2（小样本轴容差）
+  PASS | 腿2(帽-2) 末帧活弹数 |Δ|≤2（回收时序漂移容差）
+── 腿3：直驱管线定长 ctx 序列 A/B（逐位硬等价墙） ──
+  PASS | 腿3 值序列逐位硬等价（52 结 · 容差 0）
+  PASS | 腿3 管线计数逐位相等（容差 0）
+  PASS | 腿3 饱和面真实在位（A 臂顺延>0 且 冲刷>0）
+  PASS | 腿3 零死亡零级联（弃/亡/复用/超载全 0）
+  PASS | 套件总项数（EXPECTED=19——R231 假绿教训：总项数也要断言）
+────────────────────────────────────────
+汇总：PASS 20 / FAIL 0（共 20 项）
+验收汇总：20/20 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

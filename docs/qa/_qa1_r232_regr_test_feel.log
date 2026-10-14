@@ -1,0 +1,33 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 打击质感/技能演出自测 ══════════
+── 技能演出 / 时长条 ──
+PASS | 前置：技能可释放
+PASS | 前置：未释放时 ratio = 0
+PASS | 技能演出：激活后 ratio≈1（时长条满）
+PASS | 技能演出：中段 ratio 递减（0.2~0.6）
+PASS | 技能演出：效果结束 ratio = 0（结束可读）
+PASS | 技能演出：瞬发型角色也有施放闪光（0.8s）
+PASS | 技能演出：瞬发闪光归零
+── 施放广播（FX 层金环） ──
+PASS | 技能施放：skill_cast 广播（FX 层金环消费源）
+── 精英击杀顿帧 ──
+PASS | 打击质感：精英击杀触发 CRIT 档顿帧
+── 死亡弹爆 ──
+PASS | 打击质感：击杀落场死亡弹爆件（连杀计数 +1）
+── 枪口闪光 ──
+PASS | 打击质感：枪口闪光可见（弹道武器开火）
+PASS | 打击质感：闪光计时推进（0.05s 自熄）
+── 音调微随机 ──
+PASS | 打击质感：命中音调微随机（±6% 内）
+── R184 音效重做（boom 干脆爆破 / bounce 反弹 tick） ──
+PASS | 音效重做：boom 流存在且时长 ≤0.25s
+PASS | 音效重做：bounce 流存在（0.04~0.06s 短 tick）
+PASS | 音效重做：_apply_bounce 派发 bullet_bounced（探针 +1）
+PASS | 音效重做：bounce 节流生效（THROTTLE_MS 内第二次被吞）
+────────────────────────────────────────
+汇总：PASS 17 / FAIL 0（共 17 项）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

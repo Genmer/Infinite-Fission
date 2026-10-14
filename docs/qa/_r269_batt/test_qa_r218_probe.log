@@ -1,0 +1,63 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R218 QA 独立探针（帽语义/分组N/他键/跳键/满载帽/契约/回归面） ══════════
+── ② 分组N 红线 ──
+  PASS | ②pre 静场空表（MENU 零帧驱动——分组断言零背景噪声）
+  PASS | ②pre 新键 tint_groups 在位且空场=0
+  PASS | ②pre 池容量夹具：可取 120 敌（容量 128）
+  PASS | ②a 120 只同相位点燃敌 → 分组恒 +1（组=合批上限，与敌数无关）
+  PASS | ②a2 高计对照：断N=120 vs 组N=1（断N 逐敌计数≠断批分组——R218 补口径）
+  PASS | ②a3 归还回落：分组回基线 0
+  PASS | ②b 点燃 2 档+冻结+白 = 恰 4 组（=distinct 元组数精确断言）
+  PASS | ②c1 渐显 4 档 α 网格齐现 {0,1/3,2/3,1}（tick 量化前置）
+  PASS | ②c2 同 tint 异根 α → 4 组（α 入键——渐显敌独立成批）
+  PASS | ②c3 α=0.5 首个入新组（+1）、孪生同值不增组（α 通道同值同组）
+  PASS | ②d 满载强闪敌 → 分组 +1（modulate.to_html 通道参与元组键）
+  PASS | ②e 归还回落（全用例终态）：分组回基线 0
+── ① 帽语义 ──
+  PASS | ①a 源级锚：Engine.max_physics_steps_per_frame = 1（fps≥60 无操作/螺旋段单步减半）
+  PASS | ①a2 赋值唯一性：max_physics_steps_per_frame 全文件恰 1 处赋值（无 =2 残留）
+  PASS | ①b headless 运行时：max_physics_steps_per_frame==8 且 max_fps==0（缺省不动）
+  PASS | ①c Meta._apply_fps_cap() 后仍 8/0（桌面分支零写点）
+  PASS | ①d 10 帧连续驱动：探针段逐帧重建（哨兵键每帧被 clear——无残留无累积）
+  PASS | ①d2 每帧恒 17 键（R244 +entry 帧入口键——卡/特/跳/派/entry 键不缺位不增键；R235 ③ 派发段常驻后 15→16，R244 16→17）
+  PASS | ①d3 帧序契约：frame_order 七步序（①输入→②玩家→④网格投射→⑤敌→⑥波→⑦感→⑧UI）
+  PASS | ①d4 长跑他键非负：10 帧恒 ≥0（段和不得超全函数）
+── ③ 他键 ──
+  PASS | ③a PLAYING 帧他键在位且 ≥0（①d 末帧原样——逐帧重建语义）
+  PASS | ③b 他键 peak 通道在位（秒内尖峰口径）
+  PASS | ③b2 diag_reset_stage_peaks 后无 other（清零钩——DebugStats 读取后清口径）
+  PASS | ③b3 次帧他键 peak 再现（钩后继续采样）
+  PASS | ③c MENU 帧：探针字典原样（哨兵仍在、无 other/popup 键——_probe_active 旗未置位）
+── ④ 跳键 ──
+  PASS | ④a PLAYING 帧 popup/ui 两键分立在位且 ≥0
+  PASS | ④a2 包含关系：popup ≤ popup+ui 且原⑧段总量为正（跳字是⑧子集）
+  PASS | ④a3 同源：popup 键 == _ui_popup_us 成员（独立计时直写，非事后分摊）
+  PASS | ④b LEVEL_UP 帧 popup 键在位且 ≥0（第二写点——选卡期跳字归因不盲区）
+  PASS | ④b2 源级锚：popup/ui 扣除写点 PLAYING+LEVEL_UP 各一处（双写点=2）
+  PASS | ④c 探针关：PLAYING 帧零写（stage_probe_us 空、peak 空——诊断关闭零成本契约）
+── ⑤ 满载跳字帽 ──
+  PASS | ⑤a 源级锚：cap = 24 if Enemy.fullload_dim() else 40（mobile 高档门内满载帽；R220 调速器档帽接线改 return→cap 变量形态）
+  PASS | ⑤b 桌面/headless 恒定：80/40/20（帽改动零扰动）
+  PASS | ⑤c fullload_override=1 不影响桌面分支（mobile 门先决——override 只改 mobile 门内读数）
+── ⑥ 契约 ──
+  PASS | ⑥a DIAG_STAGE_ORDER 十六段序锁死（popup 位次 fx<popup<ui、other 殿后）
+  PASS | ⑥b tags 全 16 键映射 + 跳/他/开/消 对位
+  PASS | ⑥c 合成探针帧：十五段逐标签落行（玩1/移2000/火2000/跳2000/UI2/他3）
+  PASS | ⑥c2 余值含 popup（R268 迁移）：余=489 == 帧预算−11ms（popup 5ms 入段和、移/火仍排除）
+  PASS | ⑥d 空探针帧：十六段零值全串逐位落行（段序+标签一体锁）
+  PASS | ⑥d2 diag 行含 组N 且与 diag_counts 同源（组1）
+  PASS | ⑥e 源级锚：余值求和跳过 移/火 两子集键（popup 已出表入段和——R268 记账三表）
+── ⑦ 回归面 ──
+  PASS | ⑦a 前置：40 张活跃弹字全置脏（merge 置脏链不受拆键计时影响）
+  PASS | ⑦a2 限批生效：首帧排版刷新 ∈ (0,6]（R212 刀5 口径原样）
+  PASS | ⑦a3 轮转收敛：40 张脏字 ≤7 帧全清（ceil(40/6)=7——帽改动后节奏不变）
+  PASS | ⑦a4 不限批对照（覆写 0）：一帧 40 张全量刷新（桌面行为不变）
+  PASS | ⑦b 探针帧后 peak 有机值在位（other 通道采样仍挂）
+  PASS | ⑦b2 尖峰标记：行含「尖峰UI30ms」（R206 口径 + 新他键峰值同表）
+  PASS | ⑦b3 读取后清零：diag_reset_stage_peaks 钩随采样触发（峰值不跨秒残留）
+────────────────────────────────────────
+汇总：PASS 48 / FAIL 0（共 48 项）
+验收汇总：48/48 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

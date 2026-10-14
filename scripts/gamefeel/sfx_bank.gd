@@ -34,6 +34,8 @@ const BGM_LOOP_S := 16.0                       # 循环长（4 和弦 × 4s）
 const BGM_PAD_DB := -18.0                      # pad 层音量（-18dB 级别）
 const BGM_BOSS_DB := -16.0                     # Boss 脉冲层音量（略高于 pad，仍在环境级）
 const SFX_BASE_DB := -14.0                     # 音效基准音量（既有 -14dB 档；设置音量 1.0 = 此档）
+const SILENT_DB := -60.0                       # R230：master_mute 总静音档（linear_gain_db 零档同值——
+                                               # 数学下限即听感静音，不动总线/stream_paused）
 # 和弦进行（I–V–vi–IV，C 大调暖色进行；频率真源：C3=130.81 G3=196.00 A3=220.00 F3=174.61，
 # 上方声部按纯律三度/五度近似取值——听感为准的圆整值）
 
@@ -76,7 +78,8 @@ func _ready() -> void:
 
 func _on_settings_changed(p_key: String) -> void:
 	# 设置段音量键变更（P3）→ 立即换算应用（写即存链路的播放侧落点）
-	if p_key == "sfx_volume" or p_key == "bgm_volume":
+	# R230 二cb：master_mute 同触发（静音药丸即时生效/恢复）
+	if p_key == "sfx_volume" or p_key == "bgm_volume" or p_key == "master_mute":
 		apply_settings_volumes()
 
 
@@ -89,6 +92,11 @@ static func linear_gain_db(p_linear: float) -> float:
 func apply_settings_volumes() -> void:
 	# 设置页音量接线（P3）：音量 1.0 = 既有基准档（sfx -14 / pad -18 / boss -16），
 	# 相对基准叠加增益——线性→响度近似，零档全播放器统一 -60dB 静音档
+	# R230 二cb：master_mute=1 → 全播放器（sfx 全族+bgm 七轨）统一 SILENT_DB 数学静音档
+	# （关静音即回两滑条音量；测试侧另有 --audio-driver Dummy 旗标=驱动级静音，两者独立）
+	if bool(Meta.settings("master_mute")):
+		_apply_all_db(SILENT_DB)
+		return
 	var sfx_db := SFX_BASE_DB + linear_gain_db(float(Meta.settings("sfx_volume")))
 	for key: Variant in _players:
 		(_players[key] as AudioStreamPlayer).volume_db = sfx_db
@@ -107,6 +115,16 @@ func apply_settings_volumes() -> void:
 		_bgm_boss_player.volume_db = BGM_BOSS_DB + bgm_db
 	if _bgm_menu_player != null:
 		_bgm_menu_player.volume_db = BGM_MENU_DB + bgm_db
+
+
+func _apply_all_db(p_db: float) -> void:
+	# R230 二cb：master_mute 落点——sfx 全族 + bgm 七轨统一压同一 db（-60 即听感静音）
+	for key: Variant in _players:
+		(_players[key] as AudioStreamPlayer).volume_db = p_db
+	for p: AudioStreamPlayer in [_bgm_player, _bgm_bass_player, _bgm_arp_player,
+			_bgm_hats_player, _bgm_arp_high_player, _bgm_boss_player, _bgm_menu_player]:
+		if p != null:
+			p.volume_db = p_db
 
 
 func play(p_name: StringName, p_pitch_mult: float = 1.0) -> void:

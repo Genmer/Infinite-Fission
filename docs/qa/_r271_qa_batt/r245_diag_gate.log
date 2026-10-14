@@ -1,0 +1,34 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R245 诊断门（物步µs 状态门）自测 ══════════
+── G 组：源码锚 ──
+  ok | G1 源码锚：物理侧状态门在 _diag_accumulate_window（仅 PLAYING 累计）
+  ok | G2 源码锚：渲轴累计先行全态（render 累计在状态门之前）
+  ok | G3 源码锚：state_changed 订阅 → 秒窗复位（辅修·切态重开秒窗）
+  ok | G4 源码锚：_diag_maybe_sample LEVEL_UP 跳采样不复位逻辑保持照旧
+  ok | G5 源码锚：导出头串含 R245 口径词条（R244 修B 先例同位追加）
+  ok | G6 源码锚：行格式零改动（物步µs 键仍在 _diag_format_line 拼装）
+── A 组：MENU/GAME_OVER/PAUSED 态物理侧三累计器零累计 ──
+  ok | A1 MENU 态多帧累计后 _diag_phys_samples==0（离场深载尾样本/冻结期跨界携带根除）
+  ok | A2 MENU 态渲轴照常全态累计（render_frames>0——菜单 fps/渲ms 诊断力保留）
+  ok | A1 GAME_OVER 态多帧累计后 _diag_phys_samples==0（离场深载尾样本/冻结期跨界携带根除）
+  ok | A2 GAME_OVER 态渲轴照常全态累计（render_frames>0——菜单 fps/渲ms 诊断力保留）
+  ok | A1 PAUSED 态多帧累计后 _diag_phys_samples==0（离场深载尾样本/冻结期跨界携带根除）
+  ok | A2 PAUSED 态渲轴照常全态累计（render_frames>0——菜单 fps/渲ms 诊断力保留）
+  ok | A3 离场切 MENU 后样本不回吐（samples 保持 3 不增）
+── B 组：PLAYING 态物理侧照常累计 ──
+  ok | B1 PLAYING 态照常累计（samples>0）
+  ok | B2 monitor/段和累计非负且段和含 entry 键（R244 修B 口径不回退）
+── C 组：M 行拼装（物步µs==0·键在格式不变）──
+  ok | C1 M 行拼装 物步µs==0（无样本守卫天然出 0——非读数）
+  ok | C2 M 行状态字 M（拼装走 stub state）
+  ok | C3 r229 尾锚正则仍匹配（R269/R271 行尾增长迁移后——行结构冻结原意保持，物步µs0）
+── D 组：切态重开秒窗 ──
+  ok | D 前置：PLAYING 窗内有样本（samples=2 frames=7）
+  ok | D state_changed 后秒窗五累计器归零（渲ms/帧/mon/gd/samples）
+── E 组：导出头串 R245 口径词条 ──
+  ok | E1 导出头串含「R245 起物理侧仅 PLAYING 态采样」词条
+  ok | E2 词条全文在位（恒 0=无样本·不可对拍·伪影根除）
+  ok | E3 R244 修B 先例词条仍在（递进口径共存）
+────────────────────────────────────────
+验收汇总：PASS 23 / FAIL 0（共 23 项）

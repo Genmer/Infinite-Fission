@@ -563,20 +563,21 @@ func _group_e_w13_guard() -> void:
 		return
 	w13.data.melee["block_chance"] = 1.0           # 1.0 桩（先于首拍——窗快照同值）
 	var c := _gl.player.global_position
-	_spawn_e(c + Vector2(300.0, 0.0))              # 敌 +X 定 facing（在场防 R33 不开火门）
+	_spawn_e(c + Vector2(120.0, 0.0))              # 敌 +X 定 facing（二cx#2：须进 149.5 交战圈才开窗——R245 新表）
 	_step(w13, 1)                                  # 首拍：try_fire 开窗 + facing 缓存
 	_check("E1 _guard_facing 缓存自 aim（敌 +X → ≈0）+ 斩击窗激活（_slash_window_active）",
 		w13.arc_slash != null and absf(wrapf(w13._guard_facing, -PI, PI)) < 0.01
 		and w13._slash_window_active(),
 		"facing=%s" % str(w13._guard_facing))
-	# 斩击窗全弧域：±60° 弹（窗弧 ±70° 内、guard 域 0.6R×±45° 外）——只能由 ArcSlash 口消
-	var w1 := _spawn_bullet(c + Vector2(75.0, 129.9))     # 150∠+60°
-	var w2 := _spawn_bullet(c + Vector2(75.0, -129.9))    # 150∠-60°
-	var rear := _spawn_bullet(c + Vector2(-80.0, 0.0))    # 180°（窗弧外 + guard 停巡）
+	# 斩击窗全弧域：±60° 弹 55px（窗弧 ±70° 内 + R245 挡弹域 L1=60 内；窗内 guard 停巡
+	# ——弹仅窗通道可达）——只能由 ArcSlash 口消
+	var w1 := _spawn_bullet(c + Vector2(27.5, 47.63))      # 55∠+60°
+	var w2 := _spawn_bullet(c + Vector2(27.5, -47.63))     # 55∠-60°
+	var rear := _spawn_bullet(c + Vector2(-80.0, 0.0))     # 180°（窗弧外 + 挡弹域外）
 	_rebuild_bullet_grid()
 	var parry_w0: int = DebugStats.get_counter(&"bullet_parry")
 	_step(w13, 1)                                  # 窗内 tick → _nullify_enemy_bullets
-	_check("E2 斩击窗全弧同受掷骰（±60° 1.0 桩全消——guard 半角 45°/半径 0.6R 域外）"
+	_check("E2 斩击窗全弧同受掷骰（±60° 1.0 桩全消——R245 挡弹域 L1=60 内、窗内停巡仅窗通道）"
 		+ "+ 窗内正后 180° 弹不受",
 		(w1 as ProjectileBase).is_clean and (w2 as ProjectileBase).is_clean
 		and rear != null and is_instance_valid(rear)
@@ -592,11 +593,11 @@ func _group_e_w13_guard() -> void:
 	_step(w13, 44)                                 # 窗耗尽（0.34s≈41 帧）+ 待机空巡
 	_check("E3 待机警戒域：正面 90° 扇形 3 弹全消 + 侧后 90° 外不受 + 涟漪逐弹",
 		_guard_front_check(w13, c))
-	# 帽 4/检查 + 节拍 0.1s（C 组 melee 同式双轮推进）
+	# 帽 4/检查 + 节拍 0.1s（C 组 melee 同式双轮推进；R245 挡弹域 L1=60——burst 40+1.5i 最远 58.6 域内）
 	w13._guard_left = 0.0                          # 同步节拍：下一 tick 即检查
 	var burst: Array = []
 	for i in range(10):
-		burst.append(_spawn_bullet(c + Vector2(60.0 + 4.0 * float(i),
+		burst.append(_spawn_bullet(c + Vector2(40.0 + 1.5 * float(i),
 			12.0 * float(i % 3))))
 	_rebuild_bullet_grid()
 	_step(w13, 1)
@@ -605,7 +606,7 @@ func _group_e_w13_guard() -> void:
 	_clear_bullets()
 	var burst2: Array = []
 	for i in range(10):
-		burst2.append(_spawn_bullet(c + Vector2(60.0 + 4.0 * float(i),
+		burst2.append(_spawn_bullet(c + Vector2(40.0 + 1.5 * float(i),
 			12.0 * float(i % 3))))
 	_rebuild_bullet_grid()
 	_step(w13, 8)                                  # 节拍余量 0.0917−0.0667 > 0 → 未到检查拍
@@ -625,7 +626,7 @@ func _group_e_w13_guard() -> void:
 		_clear_enemies()
 		return
 	w13z.data.melee["block_chance"] = 0.0
-	_spawn_e(c + Vector2(300.0, 0.0))              # 敌在场（开火门）
+	_spawn_e(c + Vector2(120.0, 0.0))              # 敌在场（二cx#2：R245 新表 149.5 交战圈内才开火）
 	_step(w13z, 46)                                # 开窗 + 窗耗尽（敌在场防 R33 抖动）
 	var bz: Array = []
 	for i in range(3):
@@ -652,7 +653,7 @@ func _group_e_w13_guard() -> void:
 	var okp1: bool = _attach_card(w13p)
 	var okp2: bool = _attach_card(w13p)
 	var okp3: bool = _attach_card(w13p)
-	_spawn_e(c + Vector2(300.0, 0.0))              # 敌在场（R33 开火门）
+	_spawn_e(c + Vector2(120.0, 0.0))              # 敌在场（二cx#2：R245 新表 149.5 交战圈内才开火）
 	w13p.try_fire()                                # 开窗（旧口径：快照 0.0 短路——挂卡无效）
 	var win_chance: float = 0.0 if w13p.arc_slash == null \
 		else float(w13p.arc_slash._bullet_block_chance())
@@ -666,12 +667,12 @@ func _group_e_w13_guard() -> void:
 
 
 func _guard_front_check(p_w13: WeaponBase, p_c: Vector2) -> bool:
-	# E3 断言体：正面 3 弹（80∠0° / 80.6∠29.7° / 80.6∠-29.7°——guard 域 114px×±45° 内）
+	# E3 断言体：正面 3 弹（55∠0° / 52.8∠±24.6°——R245 挡弹域 L1=60 名义域内）
 	# 全消 + 侧后弹不受 + 涟漪 3。
 	p_w13._guard_left = 0.0
-	var f1 := _spawn_bullet(p_c + Vector2(80.0, 0.0))
-	var f2 := _spawn_bullet(p_c + Vector2(70.0, 40.0))
-	var f3 := _spawn_bullet(p_c + Vector2(70.0, -40.0))
+	var f1 := _spawn_bullet(p_c + Vector2(55.0, 0.0))
+	var f2 := _spawn_bullet(p_c + Vector2(48.0, 22.0))
+	var f3 := _spawn_bullet(p_c + Vector2(48.0, -22.0))
 	var rear := _spawn_bullet(p_c + Vector2(-80.0, 0.0))
 	var bullets: Array = [f1, f2, f3, rear]
 	_rebuild_bullet_grid()

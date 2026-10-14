@@ -1,0 +1,75 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R230 K2c DeathPop 并发帽自测 ══════════
+  PASS | 前置：套件起点演出件注册表为空
+── ① 哨兵四态 + 三重门 8 组合映射（直读 _deathpop_cap_on） ──
+  PASS | ①缺省 -1（真值门）：headless 非 mobile → 恒关（桌面零扰动前提）
+  PASS | ①真值路径 OS 门密封：-1 ∧ tier2 ∧ 帧率优先 → headless 仍关
+  PASS | ①真值路径 OS 门密封（fullload=1 同置）→ 仍关（mobile 门在前）
+  PASS | ①-2 用户否决档 → 恒关（压过 -3/tier/mode/fullload 全注入）
+  PASS | ①1 强制开 → 恒开（探针档，压过最敌对组合 tier3/特效优先/敌<80）
+  PASS | ①-3 模拟 mobile：mode=0 tier=2 fullload=1 → 开
+  PASS | ①-3 模拟 mobile：mode=0 tier=1 fullload=1 → 开
+  PASS | ①-3 模拟 mobile：mode=0 tier=2 fullload=0 → 关
+  PASS | ①-3 模拟 mobile：mode=0 tier=3 fullload=1 → 关
+  PASS | ①-3 模拟 mobile：mode=1 tier=2 fullload=1 → 关
+  PASS | ①-3 模拟 mobile：mode=1 tier=3 fullload=1 → 关
+  PASS | ①-3 模拟 mobile：mode=1 tier=2 fullload=0 → 关
+  PASS | ①-3 模拟 mobile：mode=1 tier=3 fullload=0 → 关
+── ② 门开普通敌按帽 + 最老抢占语义 ──
+  PASS | ②前置：强开门开读数
+  PASS | ②帽内 10 连发全放行（注册表=10、零帽N）
+  PASS | ②帽内全新建实例（news+10，复用零）
+  PASS | ②超帽第 11 发：抢占放行（注册表仍=10、帽N+1）
+  PASS | ②最老先收：注册表队头=第 2 老件、队尾=被抢占后复用的最老件
+  PASS | ②抢占-复用闭环：hits+1（被抢占件让位入池即被新申请复用，news 仍=10）
+  PASS | ②连超帽 4 发：注册表恒=10、帽N 累计+5、新建数不增（零实例churn外溢）
+  PASS | ②到期自清销册：注册表归零、live 归零、件全隐
+── ③ Boss 全保留 / 精英 1/2 采样 ──
+  PASS | ③前置：普通件帽满（注册表=10、零帽N）
+  PASS | ③Boss 全保留：帽满下 3 连发全过（帽N 不增）
+  PASS | ③Boss 不占帽位（Boss 件不入册——注册表仍=10、live=+13）
+  PASS | ③抢占永不落 Boss 件：帽N+1（普通件让位）且 Boss 件仍全活
+  PASS | ③精英 8 连发 → 放行 4（1/2 采样，相位确定）
+  PASS | ③精英被采样拒发计帽N+4（拒发可观测非静默吞）
+── ④ PoisonSplash 同帽同册 ──
+  PASS | ④跨类合账帽=10（注册表恰帽值、帽N+2=两次最老抢占）
+  PASS | ④抢占按创建序跨类取最老（先 6 弹爆后 6 毒环→队头 2 弹爆被收：余 4+6）
+  PASS | ④双池到期自清归零
+── ⑤ 帽N 秒差分 + 诊断行插入位 ──
+  PASS | ⑤秒差分：count+3 → delta=3
+  PASS | ⑤重复拉取增量=0（结N 同规）
+  PASS | ⑤诊断行含「帽1」（当秒被帽演出件数）
+  PASS | ⑤帽N 插入位=弃N 之后、位图R 之前（行内序 弃N < 帽N < 位图R）
+  PASS | ⑤行尾「补N 裁N 快N 结µsN 插µsN 插模拟µsN 派deferredN 派dropN 物步µsX 派µs0 渲msX.X」冻结断言不变位（r229_pool_valve 断言兼容——R231 快N/R232 T1b 结µs/R233 T1 插µs/R233 修轮 插模拟µs+派deferred/派drop/R235 搭车③ 物步µs+派µs+渲ms 追加在派drop 后；DiagStub 空 counts → 新键 0 确定值）
+  PASS | ⑤重复拉取行帽N=0（差分基线推进）
+── ⑥ 结算零触碰：门开连杀 4 精英——死亡链路照走 ──
+  PASS | ⑥4 精英击杀 → enemy_killed 全数派发（掉落/经验链零触碰）
+  PASS | ⑥4 击杀 dead 全置位（E-06 死亡短路照走）
+  PASS | ⑥被采样拒发的死亡演出不影响结算：帽N+2=纯精英采样（注册表未满零抢占）
+── ⑦ 负锚：桌面缺省 / tier3 / 敌<80 门关零扰动 ──
+  PASS | ⑦桌面缺省（全真值）：门关读数
+  PASS | ⑦桌面缺省（全真值）：帽+20 连发全放行（注册表=20 无帽）、零帽N
+  PASS | ⑦tier3 锚（-3+mode0+tier3+fullload1）：门关读数
+  PASS | ⑦tier3 锚（-3+mode0+tier3+fullload1）：帽+20 连发全放行（注册表=20 无帽）、零帽N
+  PASS | ⑦敌<80 锚（-3+mode0+tier2+fullload0）：门关读数
+  PASS | ⑦敌<80 锚（-3+mode0+tier2+fullload0）：帽+20 连发全放行（注册表=20 无帽）、零帽N
+── ⑧ 悬空引用 purge + 源级锚 ──
+  PASS | ⑧admit 前置 purge：悬空引用出册、注册表恰 1 活件
+  PASS | ⑨源级：R230 K2c 契约注释在位
+  PASS | ⑨源级：许可口恰两处调用（仅 DeathPop.pop/PoisonSplash.pop——甲板/护甲/结算零触碰面）
+  PASS | ⑨源级：入册/销册各恰两处（两内嵌类对称，ArmorPlate/甲板路径零引用）
+  PASS | ⑨源级：帽块零甲板代码引用（甲板必显红线——DEATHPOP_FX_CAP 在位）
+  PASS | ⑨源级：绘制序不动（DeathPop/PoisonSplash 段无 move_child/z_index）
+  PASS | ⑨源级：debug_stats 帽N 键在位（秒差分助手+行插入）
+  PASS | ⑨源级：帽常量=断言真源 CAP
+────────────────────────────────────────
+汇总：PASS 54 / FAIL 0（共 54 项）
+验收汇总：54/54 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 98 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

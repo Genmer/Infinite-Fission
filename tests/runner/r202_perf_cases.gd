@@ -203,25 +203,54 @@ func _test_settings_row() -> void:
 		and absf(close_btn.position.y - 872.0) < 0.01,
 		"hint_y=%s close_y=%s" % [str(hint.position.y if hint != null else -1.0),
 			str(close_btn.position.y if close_btn != null else -1.0)])
-	# S④ 七开关行按钮互不重叠 + 末行底 ≤ hint 顶（816 ≤ 824 留 8px 缝）+ 关闭钮底 ≤ 卡底
-	var btns: Array = [sp._fx_btn, sp._fps_btn, sp._shake_btn, sp._dmg_btn,
-		sp._show_fps_btn, sp._pos_btn, sp._codex_reset_btn]
+	# S④ 开关行布局对拍 + 末行底 ≤ hint 顶 + 关闭钮底 ≤ 卡底
+	# 〔R271 追认声明式迁移〕原 S⑤「七开关行 get_rect 互不重叠」断言过期：R269 增至
+	# 十一行（settings_panel.gd:143-147 布局法条：330..770 行距 44=钮标称高——设计
+	# 口径贴排零重叠），而本套件自设窗 CANVAS_ITEMS×0.75（_normalize_window_for_boot）
+	# 下「◉ 右上」字形光栅行高 +2px → PanelPosButton min 高钳 44→46，与 CodexReset
+	# 实际 rect 重叠恰 2px。三态探针实测（同进程）：产品默认 viewport 模式
+	# min=(97,44) h=44 深度=0 零重叠；CANVAS_ITEMS 0.75 窗 min=(97,46)；还原后复 44
+	# ——重叠为套件量测环境的光栅伪影，非布局缺陷，产品态无遮挡（行位逐位精确）。
+	# 迁移=①行布局对拍（y 表 330+44·i 逐位 + 均匀行距 44≥标称钮高 → 设计尺度零重叠
+	# ——原「行距重排零重叠」语义的强形式）②实测相邻重叠深度 ≤2px（伪影有界化，
+	# >2px=真布局回归）③非相邻对严格零重叠（防跨行错位遮挡）。
+	var rows: Array = [sp._fx_btn, sp._fps_btn, sp._perf_mode_btn, sp._boost_btn,
+		sp._shake_btn, sp._dmg_btn, sp._show_fps_btn, sp._diag_log_btn,
+		sp._diag_len_btn, sp._pos_btn, sp._codex_reset_btn]
 	var all_present := true
-	for b in btns:
+	for b in rows:
 		if b == null:
 			all_present = false
-	var pair_overlap: Array[String] = []
+	var y_table_ok := true
+	var spacing_ok := true
+	var adj_depth_max := 0.0
+	var bad_pairs: Array[String] = []
 	if all_present:
-		for i in range(btns.size()):
-			for j in range(i + 1, btns.size()):
-				var ba := btns[i] as Control
-				var bb := btns[j] as Control
-				if ba.get_rect().intersects(bb.get_rect()):
-					pair_overlap.append("%s∩%s" % [ba.name, bb.name])
-	_check("R202 S⑤：七开关行按钮互不重叠（行距 74→66 重排零重叠，重叠=%s）"
-		% str(pair_overlap),
-		all_present and pair_overlap.is_empty(), str(pair_overlap))
-	var last_btn: Control = btns[6] as Control if btns.size() == 7 else null
+		for i in range(rows.size()):
+			var rc: Control = rows[i] as Control
+			if absf(rc.get_rect().position.y - (330.0 + 44.0 * i)) > 0.01:
+				y_table_ok = false
+			if i > 0:
+				var prev: Control = rows[i - 1] as Control
+				var gap := rc.get_rect().position.y - prev.get_rect().position.y
+				if absf(gap - 44.0) > 0.01:
+					spacing_ok = false
+				adj_depth_max = maxf(adj_depth_max,
+					prev.get_rect().position.y + prev.get_rect().size.y
+					- rc.get_rect().position.y)
+			for j in range(i + 2, rows.size()):
+				var ra := rows[i] as Control
+				var rb := rows[j] as Control
+				if ra.get_rect().intersects(rb.get_rect()):
+					bad_pairs.append("%s∩%s" % [ra.name, rb.name])
+	_check("R202 S⑤a：开关行布局对拍（11 行 y=330+44·i 逐位 ∧ 均匀行距 44=标称钮高贴排）",
+		all_present and y_table_ok and spacing_ok,
+		"y表=%s 行距均匀=%s" % [str(y_table_ok), str(spacing_ok)])
+	_check("R202 S⑤b：行零重叠（设计尺度行距 44≥标称钮高；CANVAS_ITEMS×0.75 光栅伪影界 ≤2px；非相邻=%s）"
+		% str(bad_pairs),
+		all_present and adj_depth_max <= 2.0 + 0.01 and bad_pairs.is_empty(),
+		"相邻深度=%.2f 非相邻重叠=%s" % [adj_depth_max, str(bad_pairs)])
+	var last_btn: Control = rows[rows.size() - 1] as Control if not rows.is_empty() else null
 	var last_bottom: float = last_btn.position.y + last_btn.size.y if last_btn != null else 9999.0
 	_check("R202 S⑥：末行按钮底 %.0f ≤ hint 顶 824（8px 缝，卡内不溢）" % last_bottom,
 		all_present and last_bottom <= 824.0 + 0.01,

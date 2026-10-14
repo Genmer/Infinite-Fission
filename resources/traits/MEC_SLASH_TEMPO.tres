@@ -6,13 +6,13 @@
 script = ExtResource("1_td")
 id = &"MEC_SLASH_TEMPO"
 display_name = "刀势如风"
-description = "周期挥砍的出手间隔 -15%，可叠 2 层（需持有『周期挥砍』武器）"
+description = "挥砍系武器出手间隔 -15%，可叠 2 层"
 pool = 0
 pool_id = &"add_cdr"
 effect_id = &"EF_STAT"
 value = 0.15
 value2 = 0.0
-params = {"required_weapon": &"W9_arc_slash"}
+params = {"required_weapon": [&"W9_arc_slash", &"W13_great_sword"]}
 event_hooks = []
 stack_max = 2
 decay_delta = 0.85

@@ -18,6 +18,7 @@ var _fail: int = 0
 var _failures: Array[String] = []
 var _gl: GameLoop = null
 var _intro_last: String = ""
+var _intro_all: Array[String] = []                # R253 QA BUG-1：全事件流（同帧多条不丢）
 var _intro_cb: Callable = Callable()
 
 
@@ -35,7 +36,9 @@ func run(p_tree: SceneTree) -> void:
 	# 跨武器聚合/降级落位用例需要）
 	if _gl.player.weapon_slots.size() < 2 or _gl.player.weapon_slots[1] == null:
 		_gl.player.add_weapon(_gl.player.weapon_slots[0].data)
-	_intro_cb = func(t: String) -> void: _intro_last = t
+	# R253 QA BUG-1：记全事件流（last 会被同帧后到的祝福解锁播报覆写——显示层已改
+	# hud 同帧合并拼接，事件面语义=「两条都发了」，④c 改读集合）
+	_intro_cb = func(t: String) -> void: _intro_last = t; _intro_all.append(t)
 	EventBus.mechanics_intro.connect(_intro_cb)
 	_reset_fixture()
 	_test_1_h4_first_instant()
@@ -91,6 +94,7 @@ func _reset_fixture() -> void:
 	player.shield_interval = 0.0
 	player.shield_timer = 0.0
 	player.shield_ready = false
+	player._shield_units.clear()                # R253：独立计时单元真源清空（视图随后续 apply 重置）
 	player.max_hp = 100.0
 	player.hp = 100.0
 	player.invuln_left = 0.0
@@ -98,6 +102,7 @@ func _reset_fixture() -> void:
 	player.dr_left = 0.0
 	player.dr_value = 0.0
 	_intro_last = ""
+	_intro_all.clear()
 
 
 func _shield_params() -> Dictionary:
@@ -142,9 +147,9 @@ func _test_2_h1_geometric_layers() -> void:
 	_reset_fixture()
 
 
-# ═══ ③ H3 跨武器聚合 ══════════════════════════════════════════
+# ═══ ③ H3 跨武器（R253 翻案：聚合 → 独立计时） ════════════════
 func _test_3_h3_cross_weapon() -> void:
-	print("── ③ H3 跨武器全槽聚合（原宿主单栈低卡覆写） ──")
+	print("── ③ 跨武器独立计时（R253 用户口径取代 H3 聚合——各武器一份单元） ──")
 	var p := _gl.player
 	var w1: WeaponBase = p.weapon_slots[0]
 	var w2: WeaponBase = p.weapon_slots[1]
@@ -155,18 +160,26 @@ func _test_3_h3_cross_weapon() -> void:
 	gold.value = 2.6
 	w1.attach_trait(gold)
 	w1.attach_trait(gold.duplicate() as TraitData)     # W1 金 2 层
-	_check("③a W1 金 2 层 → interval≈2.1154（5.5/2.6）",
+	_check("③a W1 金 2 层 → 独立单元 interval≈2.1154（5.5/2.6）",
 		absf(p.shield_interval - 5.5 / 2.6) <= 0.01,
 		"i=%.4f" % p.shield_interval)
 	var white: TraitData = _gl.registry.get_trait(&"MEC_SHIELD")
 	w2.player = p
-	w2.attach_trait(white)                             # W2 后挂白 1 层（旧行为=覆写回 8s）
-	_check("③b W2 白 1 层后 → 3 层聚合≈1.4543（非 8s 覆写回退）",
-		absf(p.shield_interval - (8.0 * pow(5.5 / 8.0, 2)) / 2.6) <= 0.01,
-		"i=%.4f" % p.shield_interval)
-	_check("③c 层数=全槽之和（2+1=3——档位随聚合层数上升）",
-		absf(p.shield_interval) < absf(5.5 / 2.6),
-		"i=%.4f < %.4f" % [p.shield_interval, 5.5 / 2.6])
+	w2.attach_trait(white)                             # W2 后挂白 1 层（独立单元，非覆写）
+	_check("③b W2 白 1 层后 → W1 单元保持 2.1154 + W2 独立单元 8.0（独立计时不聚合不覆写）",
+		absf(float(p._shield_units[w1.uid].interval) - 5.5 / 2.6) <= 0.01
+			and absf(float(p._shield_units[w2.uid].interval) - 8.0) <= 0.01
+			and p._shield_units.size() == 2,
+		"units=%d w1=%.4f w2=%.4f" % [p._shield_units.size(),
+			float(p._shield_units[w1.uid].interval), float(p._shield_units[w2.uid].interval)])
+	p.invuln_left = 0.0
+	var hp0: float = p.hp
+	p.take_contact_damage(50.0)
+	_check("③c 挡一次只消耗一份（间隔最大 W2 单元先挡：W2 重充 8s、W1 仍就绪、HP 不掉）",
+		not p._shield_units[w2.uid].ready and p._shield_units[w1.uid].ready
+			and absf(p.hp - hp0) <= 0.01,
+		"w2ready=%s w1ready=%s hp %.0f→%.0f" % [
+			str(p._shield_units[w2.uid].ready), str(p._shield_units[w1.uid].ready), hp0, p.hp])
 	_reset_fixture()
 
 
@@ -183,16 +196,18 @@ func _test_4_h2_fallback_banner() -> void:
 		w1.attach_trait(_gl.registry.get_trait(tid).duplicate() as TraitData)
 	_check("④a W1 栈 12 种类帽满", w1.trait_stack.size() == 12,
 		"size=%d" % w1.trait_stack.size())
+	# R262d 迁移：fb 走全局授予（player.add_fallback_atk 全武器累计）——原「落 w1/下一
+	# 空位武器栈」口径退役；MEC_SHIELD 蓝卡（rarity=1）转化值=5%×1.4=7%
 	var cg := _gl.card_generator
-	var card: Dictionary = cg._make_trait_card(&"MEC_SHIELD", 1, w1)
-	cg.apply_choice(card, p)
+	var fb_pct0: float = float(p.get("run_fallback_atk_pct"))
+	cg.apply_choice(cg._make_trait_card(&"MEC_SHIELD", 1, w1), p)
 	var shield_gone: bool = not _stack_has(w1, &"MEC_SHIELD")
-	var fb_landed: bool = _stack_has(w1, &"FALLBACK_ATK") \
-		or _stack_has(p.weapon_slots[1], &"FALLBACK_ATK")   # w1 帽满 → fb 落下一个空位武器
-	_check("④b 护盾未落栈+FALLBACK 落位（降级发生）", shield_gone and fb_landed,
+	var fb_landed := is_equal_approx(float(p.get("run_fallback_atk_pct")) - fb_pct0, 0.07)
+	_check("④b 护盾未落栈+应急强化入全局（蓝卡转化 +7% 全武器）", shield_gone and fb_landed,
 		"shield_gone=%s fb=%s" % [str(shield_gone), str(fb_landed)])
-	_check("④c 横幅明示「词条栏已满…应急强化」（R238 新增——不再静默）",
-		_intro_last.contains("应急强化"), "banner=%s" % _intro_last)
+	_check("④c 横幅明示「词条栏已满…应急强化」（R238 不再静默；R253 QA BUG-1 改读全事件流——同帧后到祝福播报不再吞断言）",
+		_intro_all.any(func(t: String) -> bool: return t.contains("应急强化")),
+		"events=%s" % [str(_intro_all)])
 	_reset_fixture()
 
 

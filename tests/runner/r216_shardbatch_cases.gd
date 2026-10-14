@@ -75,10 +75,11 @@ func _teardown_game_loop() -> void:
 
 func _drain_prewarm_queue() -> void:
 	# 消化完预热队列（dwell 置 99 放行 boss 挂机门）
+	# R244 冲刷桶批迁移：预热消费在渲染轴 _process（原 _physics_process MENU 臂）
 	_gl.set("_menu_dwell_s", 99.0)
 	var guard := 0
 	while not (_gl.get("_tex_prewarm_queue") as Array).is_empty() and guard < 400:
-		_gl._physics_process(DT)
+		_gl._process(DT)
 		guard += 1
 
 

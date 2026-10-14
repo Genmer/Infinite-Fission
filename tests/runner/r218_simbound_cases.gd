@@ -225,8 +225,13 @@ func _test_4_popup_split() -> void:
 			and PopupManager.max_active_for(0) == 20,
 		"hi=%d mid=%d lo=%d" % [PopupManager.max_active_for(2),
 			PopupManager.max_active_for(1), PopupManager.max_active_for(0)])
-	# 他键段和口径：余值求和须跳过 移/火/跳 三子集（debug_stats 源级锚）
+	# 他键段和口径：余值求和跳过 移/火 两子集（debug_stats 源级锚）
+	# R268 追认迁移（主会话授权窄迁移）：R268 P2 有意把 popup 移出排除表（tick 归我方
+	# 段和入减项——debug_stats.gd「R268 性能刀 P2：popup 出排除表」注释在案，勿按旧
+	# 「三子集」口径改回）；锚文本重锚 R268 后现状，意图不变=锁排除表成员语义
+	#（两子集跳过门在位 + popup 出表语义锚在位，防任一侧静默回退）。
 	var ds_src: String = FileAccess.get_file_as_string("res://autoload/debug_stats.gd")
-	_check("④余值求和跳过 移/火/跳 三子集键（他已含未捕获部分）",
-		ds_src.contains("if key != &\"player_mv\" and key != &\"player_wp\" and key != &\"popup\":"),
-		"缺三子集跳过门")
+	_check("④余值求和跳过 移/火 两子集键，popup 已入减项（他已含未捕获部分——R268 P2 后口径）",
+		ds_src.contains("if key != &\"player_mv\" and key != &\"player_wp\":")
+			and ds_src.contains("R268 性能刀 P2：popup 出排除表"),
+		"缺两子集跳过门或 popup 出表语义锚")

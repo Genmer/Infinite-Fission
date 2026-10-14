@@ -69,17 +69,20 @@ func try_fire() -> bool:
 		proj.spawn({
 			"position": origin,
 			"velocity": dir.rotated(spread) * speed0 * spd_mult,
-			"lifetime": 6.0,
+			# R220 刀13④：自导主弹寿命模式分支（帧率优先 3.5——末速 720px/s×3.5s≈2520px
+			# 全场覆盖，稠场命中即爆不受影响；特效优先旧值 6.0，回滚=切回 6.0）
+			"lifetime": 3.5 if PerfGovernor.frame_priority() else 6.0,
 			"pierce": 1,
 			"bounces": 0,
 			"hitbox_radius": data.hitbox_r * size_mult,
 			"element": _shot_element(),
+			"attach_elements": _element_pool().duplicate(),   # R243 §6.3：本发附着元素全集（弹侧填 tctx.host_elements——多元素全效果并发守卫输入）
 			"attach_value": 0.0,
 			"generation": 0,
 			"weapon_uid": uid,
 			"weapon_ref": self,
 			"panel_snapshot": build_panel_snapshot(),
-			"trait_stack": trait_stack.copy_runtime() if trait_stack != null else null,
+			"trait_stack": trait_stack.acquire_runtime() if trait_stack != null else null,
 			"team": 0,
 			"target_uid": int(target.get("uid")),
 			"turn_rate": float(data.homing.get("turn_rate", 480.0)),
@@ -122,7 +125,8 @@ func _launch_sub_warheads(p_pos: Vector2) -> void:
 		proj.spawn({
 			"position": p_pos,
 			"velocity": Vector2.RIGHT.rotated(angle) * sub_speed,
-			"lifetime": 5.0,
+			# R220 刀13④：子弹头寿命模式分支（帧率优先 3.0 / 特效优先旧值 5.0）
+			"lifetime": 3.0 if PerfGovernor.frame_priority() else 5.0,
 			"pierce": 1,
 			"bounces": 0,
 			"hitbox_radius": data.hitbox_r * _proj_size_mult(),
@@ -132,7 +136,7 @@ func _launch_sub_warheads(p_pos: Vector2) -> void:
 			"weapon_uid": uid,
 			"weapon_ref": self,
 			"panel_snapshot": build_panel_snapshot(),
-			"trait_stack": trait_stack.copy_runtime() if trait_stack != null else null,
+			"trait_stack": trait_stack.acquire_runtime() if trait_stack != null else null,
 			"team": 0,
 			"target_uid": 0,                   # 子弹头：重索敌通道（初速散射延时后寻的）
 			"turn_rate": float(data.homing.get("turn_rate", 480.0)),
@@ -153,7 +157,8 @@ func _sub_count() -> int:
 
 func _leveled_param(p_key: String, p_default: float) -> float:
 	# 逐级形态参数（形态段新增键 <key>_levels: Array[float]——AC-02.1 仅新增键）
-	var levels: Variant = data.homing.get(String(p_key) + "_levels", null)
+	# QA-heal r1：键串拼改 WeaponBase._leveled_key 静态键缓存（常量税——spawn 链触达）
+	var levels: Variant = data.homing.get(WeaponBase._leveled_key(p_key), null)
 	if levels is Array and level >= 1 and level <= (levels as Array).size():
 		return float((levels as Array)[level - 1])
 	return p_default
@@ -199,23 +204,39 @@ func _is_summon_copy() -> bool:
 
 
 func _acquire_volley_targets(p_count: int) -> Array[Node2D]:
-	# 第 i 近目标分配：圆查询全候选按距离升序取前 p_count（exclude 语义=累计排除已锁定
-	# 目标——单参 exclude 链会回选更近目标；与基类 acquire_target 同口径 1600 半径）
+	# 第 i 近目标分配：圆查询候选中前 p_count 最近（exclude 语义=累计排除已锁定
+	# 目标——单参 exclude 链会回选更近目标；与基类 acquire_target 同口径 1600 半径）。
+	# R220 刀7：单趟 O(n) 前 K 最近选择替换全量 sort_custom（K=volley_eff+子母弹 ≤9，
+	# 桌面微基准全量排序 568µs/拍 → ~80µs）；并列按 uid tie-break（小者先）保确定性
+	# ——旧 sort_custom 非稳定，并列序本就未定义，改确定性选择后同构两次运行同选
+	#（距离互异时与旧全量排序结果逐位一致）。
 	var targets: Array[Node2D] = []
 	if enemy_grid == null or p_count <= 0:
 		return targets
 	var origin := muzzle_position()
-	var candidates: Array[Node2D] = []
-	candidates.append_array(enemy_grid.query_circle(origin, 1600.0))
-	candidates.sort_custom(func(a: Node2D, b: Node2D) -> bool:
-		return a.global_position.distance_squared_to(origin) \
-			< b.global_position.distance_squared_to(origin))
-	for cand in candidates:
-		if targets.size() >= p_count:
-			break
+	var dists: Array[float] = []                # 与 targets 平行（插入序=距离升序、并列 uid 升序）
+	var uids: Array[int] = []
+	for cand in enemy_grid.query_circle(origin, 1600.0):
 		if cand == null or bool(cand.get("dead")):
 			continue
-		targets.append(cand)
+		var d := origin.distance_squared_to(cand.global_position)
+		var tuid := int(cand.get("uid"))
+		# 前-K 插槽（K ≤9 常数小——插入排序成本可忽略）
+		var j := targets.size()
+		while j > 0:
+			var prev_d := dists[j - 1]
+			if prev_d < d or (is_equal_approx(prev_d, d) and uids[j - 1] <= tuid):
+				break                            # 排在 j-1 之后——插槽定
+			j -= 1
+		if j >= p_count:
+			continue                            # 挤不进前 K
+		targets.insert(j, cand)
+		dists.insert(j, d)
+		uids.insert(j, tuid)
+		if targets.size() > p_count:
+			targets.remove_at(p_count)          # 挤出第 K+1 名
+			dists.remove_at(p_count)
+			uids.remove_at(p_count)
 	return targets
 
 

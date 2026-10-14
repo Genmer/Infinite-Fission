@@ -16,6 +16,7 @@ var stats_source: Node = null                 # 注入（HUD：kills/wave/total_
 var _root: Control = null
 var _card: Panel = null                       # 战报白卡（出现时果冻 pop）
 var _summary_label: Label = null              # 战报行（测试锁定：summary_text 含「击杀」）
+var _stardust_label: Label = null             # R263：星尘产出行（统计行下——死亡/胜利共用）
 var _quote_label: Label = null                # 随机引言
 # R188-3 挂机重开倒计时（idle）：HUD _toast_label 在 GAME_OVER 被状态覆盖期强制收起，
 # 倒计时文案须自有落位——卡面内 Label（MenuButton 下方 y≈470）。GameLoop 每帧
@@ -83,6 +84,7 @@ func show_summary() -> void:
 		_summary_label.text = "击杀 %d　波次 %d　总伤害 %d%s" % [kills, wave, int(dmg), combo_part]
 	else:
 		_summary_label.text = "击杀 -　波次 -　总伤害 -"
+	_refresh_stardust_line()                     # R263：星尘产出行（死亡=结算已入账，余额为真值）
 	_quote_label.text = Lore.game_over_quote()
 	_root.visible = true
 	StickerTheme.squash_pop(_card)
@@ -96,9 +98,40 @@ func show_victory(p_allow_endless: bool = true) -> void:
 	cancel_auto_countdown()                       # 同 show_summary：结算起步清残留
 	_refresh_title()
 	_refresh_exit_buttons()
+	_refresh_stardust_line()                      # R263：胜利屏走 stardust_for 纯预览（settle 待决——
+	                                              # 预览==选重开时 settle_now 兑现值；无尽继续终值更高）
 	_quote_label.text = Lore.game_over_quote()
 	_root.visible = true
 	StickerTheme.squash_pop(_card)
+
+
+func _refresh_stardust_line() -> void:
+	# R263 星尘产出行（死亡/胜利两入口共用拼装——通关屏统计行由 show_summary 先写、
+	# show_victory 覆写标题，星尘行两处同刷保证任一入口可见）：死亡=「◆ 星尘 +N
+	#（余额 M）」精确口径；胜利=「至少 +N（当前余额 M）」预览口径（修轮评审-3）。
+	# 数值走 Meta.stardust_for 公式单源（不改状态）：死亡屏结算先于屏显（autoload 订阅序
+	# 在前）——余额已含入账；胜利屏 settle 待决——余额为入账前值（预览口径，设计 §3.6）。
+	# 每日局零星尘（结算分流提前返）→ 不显示该行。
+	if _stardust_label == null:
+		return
+	if Meta.is_run_daily():
+		_stardust_label.text = ""
+		return
+	var kills := 0
+	var wave := 0
+	if stats_source != null and is_instance_valid(stats_source):
+		kills = int(stats_source.get("kills"))
+		wave = int(stats_source.get("wave"))
+	var diff := maxi(Meta.run_gate_difficulty(), 0)   # 无局态兜底普通档（防御——结算屏恒在局内）
+	# R263 修轮（评审-3）：胜利屏 settle 待决——+N 是「若此刻结算」下限（选无尽继续
+	# 深打终值更高）、余额为入账前值——文案改「至少」防「预览≠终值」误读；死亡屏
+	# 结算先于屏显（已入账），维持精确口径。
+	if _victory:
+		_stardust_label.text = "◆ 星尘 至少 +%d（当前余额 %d）" % [
+			Meta.stardust_for(wave, kills, diff, true), Meta.stardust]
+	else:
+		_stardust_label.text = "◆ 星尘 +%d（余额 %d）" % [
+			Meta.stardust_for(wave, kills, diff, false), Meta.stardust]
 
 
 func _refresh_exit_buttons() -> void:
@@ -129,6 +162,11 @@ func hide_screen() -> void:
 func summary_text() -> String:
 	# 测试观测口
 	return _summary_label.text
+
+
+func stardust_text() -> String:
+	# R263 测试观测口（星尘产出行——每日局为空串）
+	return _stardust_label.text if _stardust_label != null else ""
 
 
 func is_endless_offer_visible() -> bool:
@@ -239,6 +277,17 @@ func _build_ui() -> void:
 	_summary_label.size = Vector2(580.0, 30.0)
 	_summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_card.add_child(_summary_label)
+
+	# R263 星尘产出行（统计行 178 与装饰星行 208 间空带——暖金色与星尘图标同源；
+	# 文案由 _refresh_stardust_line 两入口共用刷新，每日局置空）
+	_stardust_label = Label.new()
+	StickerTheme.label_sticker(_stardust_label, 15, PopPalette.GOLD, 0, Color.WHITE, true)
+	_stardust_label.text = ""
+	_stardust_label.position = Vector2(0.0, 180.0)
+	_stardust_label.size = Vector2(580.0, 22.0)
+	_stardust_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stardust_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_card.add_child(_stardust_label)
 
 	# 战报装饰分隔（柠檬星行）
 	var stars := Label.new()

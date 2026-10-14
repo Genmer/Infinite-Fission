@@ -61,6 +61,15 @@ func setup_mirror(p_prism: WeaponBase, p_source: WeaponBase, p_ratio: float,
 	set("copy_tint", TINT)
 	position = Vector2.from_angle(TAU * float(p_slot) / 6.0) * RING_RADIUS
 	apply_state(p_ratio)
+	# R220 刀6（折中方案）：镜面初始相位错开——cooldown_left = 节拍 × (镜位序/镜组数)。
+	# 本体武器组保留波首同拍（保齐射爽感——主控决策#7），镜面/副本/僚机三组按序错帧，
+	# 削「镜节拍=源节拍同相位」对齐帧根因；确定性推导（deterministic_source_pick 先例
+	# ——同构重排同相位，零存档键；i=0 相位 0 保持首镜即射，i=N-1 至多延一拍内差）。
+	var n := 0
+	if prism.has_method(&"desired_mirror_count"):
+		n = int(prism.call(&"desired_mirror_count"))
+	if n > 1 and p_slot > 0:
+		cooldown_left = _fire_interval() * (float(p_slot) / float(n))
 	queue_redraw()
 	return true
 
@@ -218,6 +227,14 @@ func _estimate_shots() -> float:
 
 
 func _draw() -> void:
+	# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+	# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+	DebugStats.bucket_begin(&"draw")
+	_draw_r271()
+	DebugStats.bucket_end(&"draw")
+
+
+func _draw_r271() -> void:
 	# 棱形镜子标记（银白/冰青——镜像描边读感；常驻无金色剪影）
 	draw_colored_polygon(_diamond(DIAMOND_R), Color(TINT.r, TINT.g, TINT.b, 0.28))
 	draw_polyline(_diamond(DIAMOND_R), EDGE, 1.6, true)

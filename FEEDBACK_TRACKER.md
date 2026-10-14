@@ -1318,6 +1318,92 @@
 
 ---
 
+## 二cq、选关面板「已通关★」不分难度（2026-10-08「为什么我只通关了普通，但是困难、地狱全通了呢」）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 普通/困难/地狱通关状态显示混淆 | 🐛 显示层口径错 | 用户只通关普通难度，但选关面板切到困难/地狱后地图行仍全部显示「已通关 ★」。根因：`_open_map_select()`（menu_screen.gd）的 `cleared := Meta.is_map_cleared(mid)` 查 `maps_cleared`——该字典**不分难度**（`_on_wave_cleared` → `mark_map_cleared(_run_map)` 任意难度通关都置位，服务通关解锁链，合理），而地图行文本一次性构建、`_on_difficulty_pick` 切难度只刷难度按钮行不刷地图行 → 星标三档恒同。真实分档记录 `map_records` 的 `map_id#1/#2` 键是分开的（`hard_cleared()`/echo 解锁即此口径）——**纯选关 UI 星标口径错，非存档错**。✅ R245 修复：`is_map_cleared_at(map_id, difficulty)` 分档查询口（普=裸键/困=#1/狱=#2，best_wave ≥ final_wave，与 normal/hard_cleared 同源）+ 选关地图行星标分档 + 切难度 `_build_map_select_rows()` 重建联动（先 remove_child 再 queue_free 防同名旧行命中；弹跳动画只留开面板） | ✅ R245 |
+| 2 | 记录面板三列星标同族残留（QA D1/评审 P2） | 🐛 同族第二处 | `_rebuild_records` 「普/困/狱」三列行的 ★ 仍查 `is_map_cleared`（任意难度通关即真）挂**普通列**——先普通通 A 图开难度门、再仅困难通 B 图时显示「B 3★ / 15 / 0」读作普通已通，与修好的选关面板矛盾。✅ 随 R245 同修：三列各挂各的星（`is_map_cleared_at(id, 0/1/2)`）；顺带修 `_refresh_difficulty_row` 未解锁提示 python 续行残留裸换行（18px 单行 Label 塞两行溢出）改单行中点连接 | ✅ R245 |
+| 3 | （登记·非本轮）verify_feedback round7 静默截断（QA D3，存量） | 🐛 测试基建 | verify_feedback_cases.gd:3018 `bool(pr.get("_live"))` 非法构造（Nonexistent 'bool' constructor）→ round7 中止，其后元素弹色等断言未执行也未计数（基线 672 本就含截断）；mtime 早于 R245，非本轮引入。待修：改 `bool(...)` 合法写法并核对截断段覆盖孤儿 | ⬜ 待修 |
+| 4 | （登记·非本轮）通关瞬间~结算前时序差（评审 P3） | ⚠️ 可接受边缘 | `maps_cleared` 清最终波即时落盘 vs `map_records` 局结算落账：唯一可感知窗口=胜利屏决策期强杀进程（下次启动见「下一图已解锁但本图无星」，方向保守，再通一次自愈）；每日局通关只喂 maps_cleared 不喂分档记录（R245 后星标反不被每日局误亮）。建议未来结算/读档处做一次性回填兜底 | ⬜ 低优 |
+
+→ **R245 验收**：test_r245_diff_star 23/23（G1 分档口径/G2 切档联动/G3 混合记录+回落保护/G4 R88 门/G5 零记录/G6 记录面板三列星）+ 回归 r198 39/39、r191 131/131、verify_feedback 672/672 全绿；QA（883 断言独立复跑+边缘探针 21/21）与评审双「可交付」。
+
+---
+
+## 二cr、角色技能升华系统 + 红品质升华卡 + 渠道矩阵（2026-10-08，[$workflow] 用户点名并发 10 设计）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 薇拉 vs 伊可区别（用户问） | 设计答疑 | 薇拉=毒系学者（血 55/攻 +8%）：「毒云领域」300px 毒云 6s 域内 0.5s 一跳 8% 攻毒伤+减速 20%，控场 DoT 型，击杀 500 解锁；伊可=随机武装体（血 55/攻 +0%）：身份=开局随机双武器，「双生回响」5s 全武器射速 +50%，构筑随机型，困难/地狱通关解锁。核心差：薇拉技能独立成场、伊可身份在构筑层 | ✅ 已答 |
+| 2 | 红色传说品质 buff「升华角色技能」，爆率 0.001% | 🎨→🔨 设计+实现 | 用户原话「buff里多一个红色（传说级）buff就是升华角色技能，爆率只有0.001%」——抽到后本局技能升级为升华版 | ✅ R246/R247（见下方泳道行+总验收） |
+| 3 | 全角色两套技能：普通版（现有）+ 升华版（强化数值+贴合原技能的新机制：叠加杀人书/越打越快等；「非简单数值」） | 🎨→🔨 | 10 位设计师并发各管一个角色（用户点名「10个不同设计人员」）；fission 无技能角色出替代设计 | ✅ R246/R247 |
+| 4 | 现有角色问题先修复再设计新（诺亚叠层 R244 已诊断随本轮首修） | ✅ 已修 | **R246 修复员双刀**：①诺亚叠层（high）——`_skill_summon_orbs()` 入口先调 `_summon_restore()`（含 is_instance_valid 守卫 + ELE unregister_reaction_mult，对空幂等）再重掷副本/护航舰，效果期内再施放（手动/R241 自动施法同病）恒 2 不叠、时长刷新语义与全角色幂等口径对齐（player.gd R246 注释）；②游侠上向瞬步越界回弹（medium）——瞬步落点弃全屏界 `_clamp_to_playfield_pos`（y≥24）改与移动同口径活动区钳制 `_clamp_to_playfield()`（y≥size.y*0.6），根除「施放落 540 → 下一帧拉回 768」的一帧回弹（承诺 260px 实兑 32px），向上瞬步停活动区上界净位移最大化（player.gd R246 注释）。验证：probe_r244_skill_stack 翻转为已修口径 20/20 + 新增 probe_r246_ranger_blink 13/13（负验证：临时还原旧实现 5 项翻红实锤 540/228px 回弹）+ 既有套件 r187_rework 232/232、mirror_muzzle 43/43、qa_r220_firephase 49/49、high_stack 46/46 全绿（headless exit 0） | ✅ R246 Phase2 |
+| 5 | 角色渠道矩阵：成就解锁（条件显示，如「任意无尽模式通关 10/20/30/50」=无尽深度阶梯）/关卡解锁/直购；维持现有角色、扩充新角色 | 🎨→🔨 | 渠道设计师出矩阵+2~3 新角色提案+endless_depth 成就阶梯（设计定案 `docs/design/sublime/_channels.md`）。🔨 **R247 meta 泳道落地**：①10 角色 `sublime_name/sublime_desc` 升华文案键落表（出典各 `docs/design/sublime/<角色>.md`；fission=替代升华「本命同调」——cards `_make_sublime_card`/`_sublime_available` 只读此键，表先于 cards 泳道合入）；②CHARACTERS 尾部 +3：medic（血 75/攻 +0%，`unlock_endless_depth:20`）/vortex（血 55/攻 +10%，`unlock_endless_depth:50`）/reaper（血 50/攻 +20%，`unlock_price:240` 价梯 80→160→240 顺延）；③`Meta.best_endless_depth()` 聚合读口（跨地图×跨 #1/#2 分档取最大——根治「困/狱局无尽深度对读口不可见」存量盲区；旧分图读口 endless_depth() 保留）；④ACH_TIER_TABLE 表尾 +endless_depth 族 4 档（10/20/30/50，奖励 0/0/0/100，全表奖励 1465→1565、封顶 1500→1600 注释同步）+ 成就三处注册（模板行/_counter_value/_check_achievements counters）；⑤`is_character_unlocked` 加 `unlock_endless_depth` elif（存档零新增键：门=派生谓词 + achievements_done 既有键；reaper 复用 unlocked_characters）。验证：新增 `tests/runner/test_r247_endless_channel.gd`（六断言组：表结构/聚合读口/角色门含 #1/#2 分档/结算全链含每日分流/购买 240 三拒/旧档兼容）headless exit 0 + 干净复跑绿；存量锁同步 verify_feedback（count 10→13）与 r191_rework（总奖励 ≤1600）。menu_screen 锁定文案 elif 属 ui 泳道同位同序跟进 | ✅ R246/R247 |
+| 6 | 升华卡 0.001% 长期体验（保底/替代获取） | ⚠️ 未要求 | 用户字面口径=纯 0.001%；设计文档建议节查阅，是否加保底待用户拍板 | ❓ 用户裁定 |
+| 7 | QA/评审终修收口（R247 集成阶段） | 🔨 终修已落 | **①P0 三新角色破洞升华卡（QA 双报+评审 high）**：`card_generator.gd` `_sublime_available` 判据收紧为仅表 `sublime_desc` 非空（撤 has_skill 放行——medic/vortex/reaper 有技能无 sublime 键曾恒放行，掷中「空文案+零行为」卡与 :920 区「杜绝破洞卡」注释自相矛盾；与 fission 判据统一）；②**快照双源**（评审 low）：`game_loop.gd` serialize_run 升华段改走 `player.resonance_snapshot()` 同构口（duck 手组兜底保留，键 {on,fission_layers} 不变）；③**fission.md §6.2 两处口径勘误**（QA/评审 low）：回填补 `int()→int(round())`（实现 round 进位）+ 注明零参签名/内部计数器 `_reson_kill_count` 实现口径（语义等价）；④**诺亚舰弹数值断言补全**（QA low 未竟项）：r246_skills_cases G8m/n 真池拦截（active_list 尾追捞弹）断言 18%×(1+1.5%×12层) 三乘区与普通版 12% 零回归；⑤**meta 泳道回归套件补建**：新增 `test_r246_meta.gd + r246_meta_cases.gd`（36 断言：表完整性/新角色条目/升华键×掷卡一致性/无尽深度成就门/13 角色解锁矩阵，r245 双文件式）+ r246_sublime_cases T6 变体（三新角色掷中不上架+源级锚）。验证：test_r246_sublime 72/72、test_r246_skills 139/139、test_r246_ui 41/41、test_r247_endless_channel 40/40、test_r246_meta 36/36、test_pkg4、test_r220_cardprewarm 32/32 全 headless exit 0。**不修项**（评审 low 级跟进，非缺陷）：AoE query_circle 粗判触达（全仓引擎惯例，独立工单）、GameLoop 夹具 ObjectDB 告警（引擎侧先例）、weapon_base.gd 跨泳道改动（审计线索）、磐岩护壁 HUD 可视化（P2 登记）、0.001% 保底与放弃遥测（#6 用户裁定挂起）、升华机制同向趋势（设计观察）、qa_r247_channel_probe.gd（核实全仓已不存在，无需删） | ✅ R247 终修 |
+
+→ **R246 编排**：CreateWorkflow `dwfrun-0480c5cc`（~29 子代理）：侦查×4（技能链/卡池品质/解锁矩阵/测试基线）→ 修复员（含诺亚）+回归门禁 → 设计师×12 并发（10 角色+升华卡系统+渠道矩阵，产物 docs/design/sublime/）→ 设计总监终审拆泳道 → 实施员×4 互斥泳道（skills=player.gd / meta=表+成就 / cards=品质+卡池 / ui=选人+卡面）各配 r246 套件 → 集成冒烟修障循环（干净复跑判红）→ QA×3+评审×2 并发 → 交付文档 artifact。**执行实录**：三轮跑完（0480 死于修订循环同名子代理 / b1c0f2e9 死于 files.\*/artifact 相对路径双套 repo\ 前缀——会话 cwd 在 repo 下，83 步成果经两次 Amend 缓存零损耗续传）；终修员收口 QA 卡池 fix-needed + 双评审 needs-work（P0 破洞卡判据收紧/快照双源/fission 文档勘误/舰弹断言/meta 套件补建）。
+
+→ **R246 cards 泳道落地**（2026-10-08，设计真源 `docs/design/sublime/_card_system.md`）：①`CardKind` 尾追 `SUBLIME=6`（只追加不重排）；②独立掷流 `_sublime_rng`（构造定种 20261008，R88 `_slot_rng` 同式）+ `SUBLIME_CHANCE=0.00001` 字面精确（每批一掷 `randf()<1e-5`，不扰动主 rng/`_slot_rng`——T10 以 100 批 A/B 对照 state 相等实证）；③`_make_sublime_card`（读表 `sublime_name/sublime_desc` 动态拼文案，`data:null`/`value_scale:1.0`/`milestone:false` 不走词条链，描述尾句「爆率 0.001%（红色传说）」=概率显示新挂点）；④`_sublime_available`（has_skill 或表 `sublime_desc` 非空——fission 表无键不掷）；⑤`generate_candidates` 尾段注入（落点钉死 `_apply_rarity_values` 之后防 clampi 钳金，替换末位非 FALLBACK/SLOT_BONUS 卡、WEAPON 可被替换、掷中即耗不补偿）+ 三处显式豁免（重随循环/保底语句 `!=SUBLIME`、金卡槽替换双保险）+ `curse_last` 收紧为仅 TRAIT（红/诅咒撞色结构性消除）；⑥`apply_choice` SUBLIME 分支（`enable_sublime` 鸭子守卫 + `mechanics_intro`「红色传说 · 技能已升华！（本局有效）」+ `DebugStats.count(sublime_card_chosen)`）；⑦预热 ④段升华变体（表有键角色各 1 + 通用兜底，零 rng）；⑧`_roll_rarity`/`RARITY_VALUE_SCALE`/MASTERY 钳紫/黑市镜像零改动（D3 缩放域不扩档，r220 四档硬锁天然保持）。同批接线：`game_loop.gd`（serialize_run 单键 `sublime{on,fission_layers}` + `_restore_run_state` set_character 后回填/层数专用口 clamp 0..500 + 每日局 `reseed_sublime(daily_seed)`/常规·继续局 randomize）；`auto_idle_strategy.gd`（score 首行 SUBLIME 特判返 998.0，挂机必选；clampi 本体不动）。palette 第 5 档（`RARITY_SUBLIME #ff2e63`+金改「辉煌」红档「传说」）由 ui 泳道同规格合入、T1 验证在案。验证：新增 `tests/runner/test_r246_sublime.gd + r246_sublime_cases.gd`（T1-T10 照设计 §7 + S 组 game_loop 接线，定种流扫描两态复现 0.001% 勿靠真随机）headless exit 0 **68/68 两连跑全绿**；回归清单（verify_feedback/pkg4/r220_cardprewarm/r212_carddigest/qa_r220_mode/market_supply/probe_r244）按编排留待集成阶段统一复跑。
+→ **R246 ui 泳道已落**（`docs/design/sublime/_card_system.md` §5.1 + `_channels.md` §3/§4）：①palette.gd——`RARITY_SUBLIME=Color("ff2e63")` 独立常量入表（三重避让 ENEMY/ENEMY_DEEP/碎裂描边），`RARITY_COLORS` 扩 [4]、`RARITY_NAMES`=[普通,稀有,史诗,辉煌,传说]（D1 金改名只换字，色值/缩放/顺序零动）；②card_select_ui.gd——KIND_NAMES 追加第 7 位「升华」（kind 6 对位，类别行单源拼接自动出「升华 · 传说」）、圆珠预建 range(4)→range(5)（rarity=4 显 5 珠，:303 显隐 rarity+1 零改动自动跟随）、`highlight_candidate` 对 rarity==4 槽位跳过描金仅记录槽位（D11——红卡自带最高视觉优先级；_clear_highlight 幂等无害）；③texture_factory.gd——`type_icon` 加 kind 6 分支（红环菱形，勿重蹈 R185 kind5 灰菱前科）+ `skill_icon` 加 medic/vortex/reaper 三 case（医疗十字/漩涡奇点/镰刃，R198 二aw-5 口径）；④hud.gd——技能键 `skill_sublime` 态读口（has_method 守卫 R186 同式，skills 契约合入自动生效）→ 独立红环覆盖层 `SkillSublimeRing`（RARITY_SUBLIME 单源取色 ring_tex，不占用 fg modulate 状态机；无技能角色置灰逻辑不动）；⑤menu_screen.gd——`ACH_TYPE_CATEGORY` 显式 `endless_depth:"进阶"`、锁定文案链提取 `_locked_hint()` 单源 + `unlock_endless_depth` elif（`　任意无尽模式深入 %d 层解锁（当前 %d）`，插 hard_clear 之后 kills 之前与 meta 判定链同位同序；跨泳道 `Meta.best_endless_depth()` has_method 守卫，meta 泳道已落表自动直通）、P2「·新」角标订阅 achievements_changed 对 {endless_depth_20, endless_depth_50} 置位。theme.gd 零改动（播报走 mechanics_intro 通道）。验证：新增 `tests/runner/test_r246_ui.gd`+`r246_ui_cases.gd`（G1 品质表/G2 卡面/G3 跳描/G4 图标/G5 HUD 红环/G6 选人卡含全路径真实锁定行）41/41 headless exit 0。**集成注记**：r212_carddigest_cases.gd:146/150「dots 预建 4 珠」硬锁需同步 4→5（同 test_r230_k4 同步口径）。
+→ **R246 skills 泳道已落**（2026-10-08，设计真源 docs/design/sublime/ 十角色文档 + 总监拆解规格）：①player.gd——`skill_sublime` 位 + `enable_sublime()` 幂等授予口（fission 替代分支含追溯回填：本局已击杀 ×0.5 折层帽 500，`_reson_kill_count` run 作用域原始计数器先计数后折算）+ 十角色升华分支（sentinel 绝对屏障 5s 力场/0.5s 相位反冲 15%ATK+220 击退/吸收回充 CD−2s 节流 0.5s 帽 20s；veles 临界过载 5s 爬坡 2.0→3.2（0.25s/档）+ 余热击杀层 4%×5 帽 + 1.2s/层渐冷软着陆；bulwark 主震参化 (300,380,340,40)+余震 3×(200,140,220,8)@1s+磐岩护壁清弹转壁 1.5/弹帽 48（dr 闸后 HP 前吸收，全吸收给 contact_tick）；ranger 百影穿袭 340+30/层位移/1.8s 无敌/240%+40%/层路径结算（56px 步进 uid 去重）/残影爆 150px 120%+160 击退+110px 拂弹帽 6/潜影 12s×4 帽（格挡不清·实减清）；zero 时滞奇点 3.5s 直写绕免疫+0.25s 持续力场覆盖新入场敌+凝滞击杀延展 0.15s 帽 0.9（射速窗/时长条同步拉长）+rof 1.2；mank 210%+2%/层帽 30 基线+tags 分档喂层（普1/精2/Boss5）+腐沼爆裂 140px 50% 深度 1 合成 UID 防幂等撞键；vera 7s 窗/半径滋生 300→390 线性/毒蚀层 12 帽（跳伤 +6%/层·减速 +1.5pp/层）/催化解离层×3% 错帧结算（pending 下一 tick——防同帧幂等吞跳）；noah 3 副本 3 舰 16s+存量预支/舰体寿命绑窗（拔 10s 硬码）/共鸣层 40 帽即时乘区 1.5%/层（施放即全额继承+基准快照幂等回写）/恋战延时跨 5 层 +1s 帽 8s（窗/时长条/舰体三处同帧同涨）；echo 双生和弦（同款 1.90 横幅播报/异款 1.80）+回声层 6 帽（异款每层 +2% 帽 1.92）+渐弱余韵 1.35 定值 0.5|0.6s×层帽 3.0|3.6 fx 续接；fission 本命同调 500 层 0.13%/层+即时糖 8%+Ω 五档改装件（200/300/400/500 走 extern_buffs：推进 8%spd/聚焦 8%size/火控 5%crit/超频 8%rof+弹匣 8%atk 走 meta）+CDR 折算参数化 0.5/0.30→0.65/0.45+存档读口 resonance_snapshot/restore_resonance clampi 防脏档）+ 新角色 medic（回复 30% max_hp+4s 减伤窗 ×0.5）/vortex（3s 奇点 320px 向心 70 冲量每 2 物理帧+窗尽 220px 120% 末爆）/reaper（6s 收割窗 extern atk +50% 启停遍历失效面板）；set_character 复位区清位+extern 还原；_reset_skill_temp_state 扩升会话态收口（_reson_layers/_reson_kill_count run 作用域刻意不清）。②**派发序修复**（本轮自查发现）：玩家节点 Boot 序晚于 EnemySpawner 入树（game_loop.gd :2440/:2451），实例侧 enemy_killed 订阅派发位恒后于 spawner 死亡归还（_reset_state 清 tags/elemental）——zero 凝滞判定/fission 分档/mank 喂层读尸身恒空；修法=player.gd `static _static_init()` 抢订账本（脚本加载期早于全部 Boot 连接，环形 64 条 uid→{tags,freeze} 快照）+ `_kill_snap()` 统一读口（账本 miss 回退尸身直读——直调/未派发路径成立）。③weapon_base.gd——`extern_buffs` 四读点（rof/spd/size 尾乘+atk/crit 面板乘区，基准默认零位移）；④elemental_fx_layer.gd——`_on_poison_cloud_cast` 追加 p_dur 缺省 6.0（升华 7s 窗 fx 同步）；⑤跨泳道一处：event_bus.gd `poison_cloud_cast` 信号+emit 包装追加第 3 参 dur（信号参数不可带缺省——emit 包装缺省 6.0，两参调用兼容，集成阶段校验）。验证：新增 `tests/runner/test_r246_skills.gd + r246_skills_cases.gd`（G0 公共契约+十角色两态 G1-G10+新角色 G11-G13，136 断言；真 GameLoop 夹具 cd_pace 同式；量值断言直调技能函数避开武器自动开火污染；节拍断言走 DebugStats 计数器/knock_vel；真派发击杀含账本路径集成断言）headless exit 0 **136/136 两连跑全绿（零脚本错误/零池拒绝归还）**。bulwark 表现三信号（stomp_pulse/stomp_barrier_gained/stomp_barrier_soak）属 event_bus 表现层可选项未落（不在总监 files list）；vortex 牵引半径 320/冲量 70 为规格未给定处的自定值（spec 只给「向心牵引+末爆 220px 120%」）。
+
+→ **R246/R247 总验收（2026-10-08 ✅ 主智能体独立复跑）**：r246_sublime 72/72、r246_skills 139/139、r246_ui 41/41、r246_meta 36/36、r247_endless_channel 40/40、verify_feedback 672/672 全绿（另终修门禁内 r198/r245/r191 exit 0；qa_r247_channel_probe 临时探针已清）。交付文档 = `docs/design/sublime/_R246_DELIVERY.md`（workflow artifact 卡「R246 角色升华系统交付文档」）。**遗留（低优已登记）**：bulwark 磐岩护壁 HUD 可视化（P2）；0.001% 保底/放弃遥测（#6 用户裁定）；升华叠层结构同向 7/10（下批避开）；AoE query_circle 粗判触达（独立工单）；APK 未导出（待用户确认 export_apk_versioned.py 出包）。
+
+---
+
+## 二cs、难度解锁链不分档 + 复活无全屏反馈（2026-10-08）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 普通/困难/地狱解锁链应各难度独立一关关过 | 🐛 语义缺陷（R245 只修了星标显示） | 用户「普通-困难-地狱，每个小关都需要一关关的过，你怎么还是全解锁」。R245 修了星标分档，但 `is_map_unlocked`（通关上一关解锁下一关）查 `maps_cleared`（不分难度全局字典）→ 普通全通 5 图后切困/狱全部直接可玩。✅ 二cs 修复：①`is_map_unlocked(map_id, difficulty:=0)` 判据改 `is_map_cleared_at(上一关, 难度)`（与星标同源分档键；默认参数 0 保既有普通链调用兼容）；②`mark_map_cleared(map_id, difficulty:=0)` 加难度参数——通关**即时**写 map_records 分档键拉达线（消除结算时序差 + verify_feedback 旧注入式断言零改兼容），maps_cleared 全局口径保留（成就计数/角色 unlock_map 不变）；③`_on_wave_cleared` 传 `_run_difficulty`；④menu_screen 选关行传 `_sel_difficulty`；⑤game_loop._on_menu_start 守卫传 `p_difficulty`（未解锁拒绝同样分档）。首关三档恒解锁（各自起点）。r245 套件 +G7（29 断言：mark 即时落账/仅普通通→困狱锁/UI 联动锁定文案无出发按钮/困难补通→地狱仍锁/wave_cleared 幂等） | ✅ 二cs |
+| 2 | 复活应全屏通知 + 无敌 5s | 🐛 反馈缺失 | 用户「死亡后，复活应该全屏通知，然后无敌5s，不然都没反应过来」。✅ 二cs 修复：①`REVIVE_INVULN_S` 3.0→5.0（player.gd，青弧倒数随常量同涨）；②横幅加强——字号 48→64、停留 1.2s→2.2s（0.22 弹入+2.2+0.4≈2.82s < 5s 无敌）、文案带无敌窗「✦ 复活！5s 无敌 · 剩余 N 次/次数已耗尽」；③UPGRADES revive desc「3s 无敌」→「5s 无敌」；④r198 A1-A3 与 verify_feedback E2 段 5 处断言随改（源锚 `REVIVE_INVULN_S := 5.0`） | ✅ 二cs |
+
+→ **二cs 验收**：r245 29/29（含新 G7）、r198 39/39、verify_feedback 672/672、r246_skills 139/139、r246_ui 41/41、r246_sublime 72/72、r191 131/131 全绿；vc49 出包 13 项门禁全过。
+
+---
+
+## 二ct、分裂体统一「原伤/原尺寸 70%」动态继承（2026-10-08「所有分裂都应该是只有原伤70%，不然有点超标，大小范围也只有70%（主体变大，分裂也跟着变大，动态70%）」）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 全部分裂体伤害 = 原伤 70% | 🔨→✅ 数值口径统一 | 用户口径：所有分裂（request_split 家族：弹代分裂/回旋末端/飞剑/掷斧/近战子斩/轨道引爆）子代伤害统一原伤 ×70%——现状词条 inherit 40/45/60% 分层读表（乘在已含全部乘区的 panel_snapshot 上）+ F-13 子代复制词条定义。✅ 二ct：`trait_effect_fractal.gd` 新 `SPLIT_INHERIT=0.7` 恒值（层 1/2/echo 分层读表与比例增益退役，count/spread 分层保留）——投射物臂+近战臂同源单点，掷斧 shock_scale/近战子斩 dmg 自动 0.7 | ✅ 二ct |
+| 2 | 分裂体大小 = 母体当前尺寸 ×70% 动态跟随 | 🔨→✅ 反馈/平衡缺口 | 现状子代 `hitbox_radius` 100% 全继承。✅ 二ct：`request_split` 子代 `hitbox_radius × p_inherit_ratio`（母弹被词条放大→子代跟随放大但恒 70%；视觉经 `effective_radius→scale_f` 派生自动跟随） | ✅ 二ct |
+
+→ **二ct 验收**：MEC_FRACTAL.tres 文案同步「伤害与体积均继承母弹当前值 70%」；pkg3 断言更新+新增子代 hitbox 4.2 锁定（129/129）、r241_boomfix 18/18、verify_feedback 672/672、r246_skills 139/139、r246_sublime 72/72 全绿；vc50 出包 13 门禁全过。
+
+---
+
+## 二cu、灵剑/法器表现重构（2026-10-08「灵剑的攻击方式要优化一下，目前跟没有一样…」）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 灵剑（W11 飞剑）攻击表现：剑光刺出 + 目标斜剑痕 | 🔨 表现重构 | 用户「应该是一道道剑光刺过去，目标身上会有对应的剑痕（斜着的剑痕出现 小范围性的）现在的剑画的跟个火箭似的」——现状弹体火箭式拉长+无命中剑痕反馈 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件） |
+| 2 | 灵剑图标 + 环绕化身重做 | 🔨 表现重构 | 用户「图标+环绕的武器都重新弄好点」 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件） |
+| 3 | 法器特效表现同级化 | 🔨 打磨 | 用户「法器的特效表现应该都是同等级的」（R243 五法器特效质量不齐） | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件）（遗留：本项无独立代码落点——仅经 #1/#5 拉齐 W11/W13 两短板，W8 引爆/W9 刀形抡击/W12 裂地沿用 R243 既有水平；「特效同级」为视觉主观判读，代码内无专门测试锚，建议真机确认读感） |
+| 4 | 法器表现合一：环绕化身=攻击体 | 🔨 结构统一 | 用户「既然有悬浮周身，会跑去打敌人的表现，那原先那个就可以不存在了，就是合一，原本环绕的那个就是跑去砍人那个，这样原先log在原地抽风的形象就可以去掉了」＋追加「悬浮武器有人跑去攻击位置，旋风刀这套实现很可以，另外俩都按这个标准做」——W10 回旋刃出击读感为标杆，W11/W12 化身出击=攻击体，去除原地抽风形象 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件） |
+| 5 | 阔剑（W13）重画为 DNF 巨剑形象（追加） | 🔨 表现重构 | 用户（本轮追加）「阔剑应该是dnf 巨剑那种形象」——现状弯月弯刀 ×1.6 宽 ≠ 巨剑直刃厚重读感；图标/化身/战斗刃身三面重画 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件） |
+| 6 | 现阔剑轮廓转给灵剑：再细 + 发光（追加） | 🔨 表现重构 | 用户（本轮追加）「目前的阔剑给灵剑（再细点，发点光即可）」——W11 图标/化身/剑光弹体继承现 W13 宽刃轮廓（细版 + 银蓝辉光） | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件） |
+
+---
+
+## 二cv、HUD/法器/近战交互与帧率批（2026-10-09「还有多层护盾还是要显示…」·workflow-flash 编排）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 多层护盾层数显示：护盾条上写「X 2」（有几层显示几层） | 🔨 UI 补全 | 用户「多层护盾还是要显示，不然我不知道有多少，护盾条里写X 2吧，有几条显示几条」——现状 apply_shield_trait 只折叠进充能间隔，HUD 无层数读数 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件） |
+| 2 | 近战范围虚线显示 | 🔨 UI 补全 | 用户「近战的范围显示还是给个吧，虚线的」——W9/W13 斩击半径无预览 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件）（评审 low 缝隙已收口：待机虚线半径改读 weapon.effective_slash_radius()，与 melee_sanctuary_r 同值同源——主会话终修） |
+| 3 | 法器环绕分层：一圈不够环绕就每种环绕一层（旋风第一层，第二个法器绕其外圈） | 🔨 表现重构 | 用户「多个法器周围一圈不够环绕就每种环绕一层，比如旋风第一层、那第二个法器就围绕旋风外来围绕」 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件）（遗留：①分层按法器装备序（第 i 把第 i 层），非「旋风恒第一层」严格读法，建议真机确认读感；②_ring_layers 逐帧分配已收口：成员缓冲 _ring_buf 原地填充（主会话终修）） |
+| 4 | 旋风刀（W9）5 级后卡帧：有一帧贴图一直卡着 | 🐛 缺陷 | 用户「旋风刀5级之后，卡了，有一帧贴图一直卡着」 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件）（遗留：「有一帧贴图一直卡着」真机症状无法 headless 复现验证——已修质变贴图态两缺口（子斩/回斩继承 transcended、化身扫弧并入 arc_bonus_deg），是否根除需真机复验） |
+| 5 | 阔剑（W13）选元素后不变色：退出主菜单再回来才变 | 🐛 缺陷 | 用户「还有阔刀，选了元素，退出主菜单再回来才变颜色」——blade_tint 仅 spawn 时取值 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件）（评审 low 逐帧分配已收口：_live_blade_tint 按 TraitStack.runtime_generation 脏标缓存——挂卡/取优/质变世代 +1 即重取，同帧变色契约保持——主会话终修） |
+| 6 | 近战敌人近身不生效：补刀范围内（或范围外指定距离）近战敌攻击不再生效 | 🔨 规则 | 用户「近战敌人补刀范围内（或者范围外指定距离）就不要生效了」——语义（近身豁免 vs 距离上限）由分析定案 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件） |
+| 7 | 超频核心（REL_OVERCLOCK）紫色金色看起来一样 | 🐛 缺陷 | 用户「超频核心紫色金色好像一样啊（之前检查buff 没检查出来吗）」 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件） |
+| 8 | 帧率诊断（附件真机日志 vc48） | 🔍 性能 | fps 27-45 震荡（vs 游走 84-120）、物步µs 尖峰 38-53k、派µs 尖峰至 2585、渲ms 恒 ~16.5（vsync 60）——模拟轴顿挫非渲染轴饱和；物步延迟冲刷桶为 R237 遗留嫌疑 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件）（遗留：vc48 物步µs 尖峰（38-53k，R237 延迟冲刷桶嫌疑）本批未动，帧率是否达标待真机复测） |
+| 9 | 二cu 收尾并入本批：灵剑/法器表现重构测试套件（rcu_faqi_cases.gd）+ 全量回归 + 出包 | 🔧 收尾 | 入口 test_rcu_faqi.gd 已建，用例体待写；实现（剑光/剑痕/合一/图标/巨剑）已落码 | ✅ 已完成（二cu/cv workflow，回归全绿：18 套件） |
+
+---
+
 ## 三、历史轮摘要（已完结，详情见 META_ROADMAP.md §5.9~§5.15）
 
 - **R1~R4（2026-08-29~31）**：命中反馈/护盾条/波次 toast/多地图/图鉴/养成/每日挑战/角色技能/BGM 重制/换一批/满层质变/局内存档 等（全绿基线 293+731）
@@ -1357,3 +1443,553 @@
 | R92 | 已完成（待验收） | 有时候打太快了，怪物会卡挺久才出来 | 2026-09-19 | 清怪快时下一波出怪延迟长——查波次推进判定/波间隔/出队节流三段 |
 | R93 | 已完成（待验收） | wc所谓僚机就是临时环绕立场？ | 2026-09-19 | R90 兜底僚机=环绕珠接触伤害，读感「临时环绕力场」——重做为真护航机：舰形贴图 + 编队侧翼跟随 + 主动开火（弹道池真弹） |
 | R94 | 已完成（待验收） | 火箭的范围爆炸特效还是没有，一个明显的金边五角星就好，为什么说那么多遍还没有 | 2026-09-19 | 三返工：弃可疑特效层，GameLoop 顶层（E3 波纹同通道）直接画金边五角星爆闪 + 窗口渲染像素验证 |
+
+## 补充登记·簇2 元素弹体染色收口（2026-10-09，只增不改——既有行零删改，状态列归并留收尾员）
+
+| 日期 | 项 | 来源/口径 | 落点 | 状态 |
+|---|---|---|---|---|
+| 2026-10-09 | W6/W7 导弹弹体元素染色收口（R211 遗留 #3） | docs/qa/2026-10-02-R211-元素表现与日志开关-收口报告.md:128 遗留 #3「W6/W7 导弹弹体不染元素色」明示保留（挂火卡后灰白导弹+橙色跳字并存）——本批 c2-① 一并收口 | scripts/ui/texture_factory.gd:1197 missile_tex(p_fill) 参数化（缺省=原浅灰蓝 0.78,0.84,0.95 保 KIN 观感，缓存键带色，旧无色键退役）；scripts/combat/projectile/projectile_base.gd:1598 _VIS_MISSILE_W6/W7 接线（KIN 走原色字面、元素走 _plain_fill 单源） | ✅ 本批落码（状态列归并留收尾员） |
+| 2026-10-09 | 镜面复制体弹体元素染色收口（R211 遗留 #5；R187 禁金染保持） | docs/qa/2026-10-02-R211-元素表现与日志开关-收口报告.md:130 遗留 #5「镜面（复制体）加特林弹体恒 PLAYER 银白不染元素」明示保留——本批 c2-② 收口：镜面内壳=持 is_mirror_image 的 BallisticWeapon 副本，弹 element 已带棱镜栈元素，弹侧自读 _plain_fill 即可（无需宿主 dominant_element 跳转）；R187 禁金染天然保持（_plain_fill 永不返 GOLD，KIN 缺省银白） | scripts/combat/projectile/projectile_base.gd:1618 _VIS_MIRROR 改 mirror_bead(_plain_fill()…KIN 保 PLAYER, TEX_SIZE)（TextureFactory 零改动——mirror_bead(p_fill,p_size) 带色缓存键现成） | ✅ 本批落码（状态列归并留收尾员） |
+| 2026-10-09 | R243 新武器 flight_tex 无元素色参缺口补登记（W11 飞剑/W12 掷斧飞行体不染元素） | 晚于 R211 七条清单产生、二cn R243 残留批 8 项（FEEDBACK_TRACKER.md:1303）不含此条的漏登记项——本批 c2-③ 一并收口：flight_tex 加 p_fill 参（剑缺省 PLAYER 原银蓝/斧缺省岩钢 0.62,0.68,0.78 保 KIN 原观感，本地缓存键带色），质变鎏金/岩纹仅在 KIN 未染时生效=质变与元素撞车元素优先（二cm/R241② 口径）；弹侧 KIN 一参回落（_plain_fill 对 KIN 返 PLAYER≠斧原钢，二参会烤出蓝斧） | scripts/combat/weapon/melee/flying_sword_weapon.gd:326 / scripts/combat/weapon/melee/ground_axe_weapon.gd:498 flight_tex(p_transcended, p_fill)；scripts/combat/projectile/projectile_base.gd:1686 _flight_form_tex 接线 | ✅ 本批落码（状态列归并留收尾员） |
+
+---
+
+## 二cw、频繁问题复审与错误/性能再规划（2026-10-09 · workflow-flash）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | c4 反馈吞没四残留：①graze 掠过无反馈（无敌窗静默吞没轻反馈）②敌弹饱和挤占玩家弹配额 ③非 CHASE 精英词缀金冠死卡 ④BossMine 宿主失效静默清 | 🔍 复审·残留已修 | 用户反复点名类最高优先；实证 projectile_pool.gd:30-64（acquire(p_team:=0) 缺省逐位不变+_force_recycle_oldest_of_team 挤最老玩家弹）、enemy.gd:818-828（match 块后独立段照 CHASE :802-807 硬直口径）、enemy.gd:3329-3344（_done 旗+_explode(null) 原地引爆）、event_bus.gd:36/:203 + player.gd:226/:742-743（graze 0.25s 节流信号，零数值刀）、game_loop.gd:1091/:2576（订阅→池化 AMBIENT 微光）——簇1 全落地 | ✅ 已完成（二cw workflow，新套件 test_r248_feedfix 60/60，收尾员实跑 exit 0）；缓办：①数值刀 contact_tick 0.6→0.35 待数值评审、⑥遗物 value 待方案 A/B 裁定、⑦护盾聚合「独立计时」语义待用户拍板 |
+| 2 | c8 卡面品质四残留：①五死数字卡假面（HIT_BURST/CRITICAL_MASS/FRACTAL/BOUNCE/FUSE_DETONATE 卡面≠运行值）②二元卡假尾注「品质加成 ×N」③PHASE_SYNC 卡面「×2」④ELE lv2 白名单过窄 | 🔍 复审·残留已修 | 「卡面=运行值」硬要求：card_generator.gd:316-424 五 id 特例臂（白卡逐字节回退）+ :424 二元卡「（品质不影响效果）」尾注 + card_select_ui.gd:577 compose_desc_text 同字样判同跳过假话行（单源标记，预热键天然一致）+ MEC_PHASE_SYNC.tres 描述去「×2」+ MEC_HIT_BURST.tres 用户反馈泄漏字样清除 + ELE 扩 dot_ratio_lv2/chain_decay_lv2/chain_targets_lv2 三键（像素键不缩放）——簇1 内全落地 | ✅ 已完成（二cw workflow，套件同 #1：五卡蓝/金卡面=运行值+白卡回退+10 张二元卡尾注+ELE 三键+E-08 不写穿）；缓办：无 |
+| 3 | R188 逐帧分配纪律残留：⑪ 闪白窗逐帧 _body_tex_spec() 新建 Array(2)+String 税 + 其余十条热路径残留 | 🔍 复审·残留已修 | enemy.gd:176-179/:2772（_body_kind/_body_angry 规格缓存成员+_refresh_body_spec 写点，:2102 池复用归位 grunt、:2703-2706 衰减帧读成员）归簇1；十条归簇4 零语义清扫：weapon_orbit_avatars.gd:33/:35（_entries_buf/_slot_cache）、weapon_base.gd:43-48（_blend_gen 世代缓存）、hud.gd:75/:77/:959（_tb_cand_buf/HP 量化/FPS 双锚）、arc_slash.gd:110-116（_cand_buf/_bullet_buf/_tip_buf+static 顶点表）、elemental_fx_layer.gd:232-241（每雷槽 pts 缓冲复用） | ✅ 已完成（二cw workflow，簇4 回归门禁 8 套件全绿〔簇4 申报，收尾未逐套复跑〕） |
+| 4 | c2 元素弹体染色三活口：①W6/W7 导弹弹体不染元素 ②镜面复制体恒 PLAYER 银白 ③W11 飞剑/W12 掷斧 flight_tex 无色参（R243 漏登记项） | 🔍 复审·残留已修 | texture_factory.gd:1197 missile_tex(p_fill) 参数化（缺省原浅灰蓝保 KIN 观感，缓存键带色）、projectile_base.gd:1598/:1618/:1684 三处接线（KIN 回落原色，R187 禁金染天然保持）、flying_sword_weapon.gd:326 / ground_axe_weapon.gd:496/:499/:510 flight_tex 加 p_fill（质变鎏金/岩纹仅 KIN 未染时生效=元素优先）——簇2 全收口；缺口登记见本文件 :1447-1453「补充登记·簇2」 | ✅ 已完成（二cw workflow，新套件 test_r248_elemvisual 19/19，收尾员实跑 exit 0）；缓办：混色 HSV 真机目测 |
+| 5 | c5 每日局分档守卫（唯一残留）：每日挑战 mark_map_cleared 误喂普通分档键 | 🔍 复审·残留已修 | meta_manager.gd:608 第三参 p_feed_tiered=true（缺省保测试 14 处旧调用逐位不变）、:620 if 门包住分档键写入（maps_cleared 置位+成就桶在外=解锁链不回退）、:564 改传 not _run_daily（与结算侧每日早退分流同源）；r245_diff_star G7④ 分档键不喂+解锁链仍置位；:218 陈旧注释锚同步 REVIVE_INVULN_S=5.0——簇3 落地 | ✅ 已完成（二cw workflow，test_r245_diff_star 31/31，收尾员实跑 exit 0）；缓办：na 跨档 alpha 真机目测 |
+| 6 | c9a 性能深挖四案：①闪白窗定格 ②enemy_tex_flash 预热补烤 ③BlastStarFx/GroundShockFx/ArcSlash 池化 ④SpellRing 收编宿主 tick | 🔍 性能·缓办 | 需真机/产品决策：④需先定「施法者读条中被打死=死亡即爆/死亡取消」口径（现设计宿主无关引爆，玩家可感行为变化）；③回归需真机物步µs 标定（debug_stats.gd:492 口径含 message_queue 残差），headless 不可测；其最大分配税源（闪白窗逐帧 _body_tex_spec）已由 #3 R188⑪ 收编 | ⏸ 缓办下批（下批回归清单已备：qa_r217_probe+r213_fullload+qa_r214_extra+r202_g3+r225+r237_flashtex+r217_batchfix+真机物步µs；审计全文见 docs/design/rcu/_RCW_AUDIT_DELIVERY.md） |
+| 7 | c9b 逐帧分配扫描（本轮运行内编号）：_process/_draw/tick 热路径逐帧新建 Array/Dictionary/String/Callable，范围 weapon_orbit_avatars/player/hud/arc_slash/elemental_fx_layer/projectile_base/enemy/damage_popup，排除上批已收口三处（_ring_buf/_tint_gen/虚线半径） | 🔍 性能·残留已修 | 判定 partial→簇4 清扫十条收口（落点同 #3 簇4：五文件成员缓冲/世代缓存/静态顶点表，零语义变更，既有内容/顶点/混色断言即回归锁；enemy.gd 侧另由簇1 R188⑪ 覆盖） | ✅ 已完成（二cw workflow，同 #3 簇4 落点） |
+
+---
+
+## 二cx、近战范围提示与交战门控（2026-10-09 · game-dev-auto fast 档）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 近战武器（W13 阔剑）还是没范围提示——二cv#2 虚线真机等效不可见 | 🔍 根因·已修 | 二cv 版三缺陷叠加：①轴向恒锁东向（arc_slash.gd 全文零 rotation 引用——虚线画局部 ±half=东侧，且攻击实际朝索敌向，虚线所指与挥砍无关）②仅 140° 扇区（arc_deg 口径）③单层 tint 提亮 α0.35 宽 2px——窗口渲染探针实测亮底图通道差仅 ~15-20/255 等效隐形；修复=全周圈 TAU 分段短弧 + 双描线（暗衬 tint 压暗 α0.55 宽 4 + 亮面 tint 提亮 α0.75 宽 2——任何底图可辨），复验像素级四向 5/5 命中、对比度 15→57-114 | ✅ 已完成（渲染探针 probe_cx_dash_render 双跑实证：修前东 3/5·西 0 → 修后东/西/北 5/5；r243_melee/pkg3/verify_feedback 既有虚线契约锁全绿） |
+| 2 | 「有敌人靠近才攻击」没生效——W13 远处有敌就朝空气抡剑 | 🔍 根因·已修 | 二cv 当时实现成了另一物（melee_sanctuary_r=敌接触伤豁免圈，enemy.gd:839——该功能独立有效保留）；本诉真因=cleave 出手门走 has_target_now→acquire_target 的 1600px 全图索敌（weapon_base.gd:550 query_nearest(origin, 1600.0)）——敌在任何远处都触发空挥；修复=OrbitWeapon.has_target_now cleave 臂改交战门 _cleave_engage_target（orbit_weapon.gd：query_nearest(有效半径×CLEAVE_ENGAGE_MULT=1.15)+中心距精判（query 含 +64px 保守衬垫须扣除），无近敌冷却保持就绪敌进圈即斩；虚线全周圈=该交战圈的可视化预告） | ✅ 已完成（r243_melee B10/B10b/B10c 新三断言：圈外 300px 不挥+冷却就绪+外圈 200px∈(190,218.5) 探肩即挥 facing 朝敌；B/C/D 组旧桩敌 300→150 进圈迁移） |
+| 3 | 两层虚线范围：只有一个近战（W13）+2 法器，法器不该有虚线 | 🔍 根因·已修 | 双圈根因=W9 碧涛旋舞 weapon_class="talisman"（法器）但 mode=slash 走 OrbitWeapon 弧斩机制——二cv#2 虚线门没按类别过滤，其 arc_slash 槽 0 也在画待机圈（W10 form0/W11/W12 extends WeaponBase 无弧斩本就不画）；修复=_range_dash_active 加近战类门（weapon_class≠melee 不画，缺省 melee 保旧夹具口径）——法器攻击体是追击/飞出形态，玩家位虚线圈本就不指示其真实攻击范围 | ✅ 已完成（verify_feedback 二cv#5 夹具迁移 W9→W13（变色契约在虚线现主人上锁定）+ 新增法器负断言「W9 门假+隐」685/685；r243_melee 50/50、rcu_faqi 32/32、rcv_sanctuary 18/18、pkg3 129/129 复绿） |
+
+---
+
+## 二cy、近战视觉/卡池/灵剑剑形（2026-10-09 · game-dev-auto fast 档）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 近战「范围没人也攻击」+ 阔剑大小到顶离虚线很远（视觉/判定脱节） | 🔍 根因·已修 | 剑体顶点表按 W9 设计半径 150px 固化（arc_slash._blade_polygon 28..150 恒定），W13 判定半径 190→260 再乘巨刃(×1.2/层)/广域(×1.18)可达 300+——刀尖恒 150px=高堆叠下视觉仅判定圈五成，敌在圈内外观不可分→「没人也攻击」错觉；修复=blade_visual_scale()=clampf(slash_radius/BLADE_TABLE_R=150, 0.8, 3.4) 注入 _draw_slash_window 全部 draw_set_transform（判定/顶点表零改动，W9 L1 恰 1.0 零位移、W9 逐级 150→230 也随之成长） | ✅ 已完成（渲染探针 ⑤：东向 r=160/172/184 命中 3/3——修前固定 150 此区间必空；r243_melee B10e（190/150≈1.267）+B9c（W9==1.0）；rcu_faqi G7d 源码锚） |
+| 2 | 回旋刀的穿透弹头有啥用（攻击距离固定、本来就能穿透） | 🔍 根因·已修 | 实证 projectile_base.gd:1076-1077 `pierce_left -= 1; if pierce_left > 0 or _boomerang:`——回旋刃命中从不因穿透耗尽回收（出去-回来全路径 ICD 重击），穿透 stat 对 W10=纯死数字；修复=AFF_PIERCE.tres params 加 excluded_weapons=["W10_boomerang"]（R199 D04 精确下架先例——required_forms [0,1] 矩阵不动，W1/W2/W6/W7 弹道照常可购） | ✅ 已完成（r243_melee B10d：excluded 键在册+mount_gate 拒 W10+对照放行 W2；r195_adapt B0 参数断言 580/580 复绿——旧键值未动） |
+| 3 | 白的跟子弹一样的不该是灵剑——「一道痕」指的是命中效果，不是把灵剑做成子弹 | 🔍 根因·已修 | 二cu 把弹体做成纯光条（零护手零剑柄）=白色子弹读感，方向做过头；修复=flight_tex 重画真剑形：细尖剑刃(-30..2 肩宽 ±2.6)+十字护手(11px 横条)+深色短柄+尾珠+双层刃辉光（「再细点，发点光」），质变鎏金/元素染色链路不变（tainted 键/归并逻辑逐位保留）；命中剑痕（sword_mark→剑痕池）=用户所说的「一道痕」，分工厘清：弹体=剑本体飞出、痕=命中效果 | ✅ 已完成（rcu_faqi G1e 剑形横截面像素锁：护手行(27,35)实心≥0.7 且同列刃行(27,20)仅辉光≤0.5=十字结构，子弹/光条版无此截面；G7b 锚 streak→sword_blade+十字护手） |
+| 4 | 两层虚线会不会是攻击范围和开始攻击范围 | 🔍 澄清·无需代码 | 不是——第二层来自 W9 碧涛旋舞（weapon_class=talisman 但走弧斩机制也在画圈），上一包 vc54 已修（虚线收紧 melee 类专属）；交战外圈（半径×1.15）不画任何圈，单近战=单圈 | ✅ vc54 已修（verify_feedback 法器负断言 685/685 在册） |
+
+---
+
+## 二cz、物理相冲刷桶批（2026-10-09 · game-dev-auto fast+ 档 · 用户指令「修复啊」）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 菜单行 物步µs 45170→77486（vc53 真机日志 8:02-8:03，实体已清） | 🔍 根因·已修 | vc53 判读「死亡链延迟冲刷」不成立（_clear_battlefield 纯池归还无 mass queue_free、DeathPop/Telegraph 均池化/复用）；真凶=MENU 态贴图预热跑在 _physics_process 物理窗内（R215 刀C 原设计）——gl_compatibility 贴图上传主线程同步、boss 双面单项 88-245ms（R215 自测）、MENU 段探针不记账→物步µs 残差独吞读数；修复=消费点迁 _process 渲染轴（R220 卡面预烤同口径，当时契约就点名不一致） | ✅ 已完成（probe_r244_menu 端到端：全队列 167 项含 boss 渲染轴清空、物理窗 max **292µs**（修前物理窗 88-245ms）、渲染帧 max 213ms=重项迁轴落点低频披露；r244_flushbucket A1-A6 迁轴行为锁 12 项） |
+| 2 | 深载稳态 物步µs 22-45k + 尖峰他 26-45ms 归因不明（fps 地板 17-23） | 🔍 部分已修·第二刀待真机日志 | 修B 会计纯化：帧入口 glue（advance_frame/trim/ip_restore/begin_frame/_game_delta——原全额落「他」）新段键 entry（不印行、行格式零改动），物步µs 残差自此=纯引擎侧、他=纯段间缝隙；修C 桌面五臂摘除 A/B：popup 摘除 −2%/碎片链摘除 −9%（两源未命中）+桶place 摘除 −12.8%（四指标一致=真实但非主导的 ~13% 贡献者，A0b 序漂移 −0.7% 排除噪声）→ **桌面引擎侧残差主形态=引擎固定成本**（疑=随节点总量线性的全树物理通知遍历一类）——第二刀候选=节点总量削减（池容量/子节点合并/MultiMesh 延伸）+桶 place 批化（两候选同向不互斥），待 vc56 真机纯化读数定向 | ✅ 会计+归因已交付（probe_r244_physattr.json 五臂权威档 + 报告 docs/qa/2026-10-08-R244-物理相冲刷桶批-报告.md；行为刀未动——证据不足不盲动） |
+| 3 | 历史假红：r233_interp A5 headless 锚 | 🔍 搭车已修 | R242 掠过反馈（_on_graze_feedback）复用 headless 直返式→全文件计数 2 假红（vc55 电池未含该套件故未暴露）；修轮=四计数裁 _process 函数体区间（保「_process 内恰一处」原意图防再漂） | ✅ 已完成（r233_interp 37/37 复绿） |
+
+---
+
+## 二da、红色buff升级确认卡/阔剑视觉统一/成就图鉴扩容/精通数值+vc56日志（2026-10-09 · 用户点名 /workflow 3并发探索）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 红色 buff（个人技能升级类）选卡后需大屏提示卡片告知技能升级效果，确认后才继续 | 📋 待探索实施 | 升级效果当前无逐次大屏确认门（选卡即过）——「红色buff」语义/升级链路/确认门先例（暂停覆盖层）待探索定位 | ⏳ workflow 探索中 |
+| 2 | 近战·阔剑「转的圈圈附近明明没地方，武器大小还是比实际圈小」——视觉圈与刀体大小要统一；巨剑圈应比法器范围小；挡弹半径只能有法器范围 40% | 📋 待探索实施 | 二cy blade_visual_scale 上限 3.4/判定圈≠视觉贴圈 + 挡弹半径语义待数值链定位（W13/W9 表） | ⏳ workflow 探索中 |
+| 3 | 成就、图鉴优化：尽量细、让用户经常有解锁新成就的快乐、但不要很快解锁完 | 📋 待探索实施 | 成就数量/解锁节奏/提示 UI/图鉴结构现状待探索 | ⏳ workflow 探索中 |
+| 4 | 武器精通等级蓝色白色都是 +1？ | 📋 待探索实施 | 精通数值表蓝/白档增益疑似同值——真源待查 | ⏳ workflow 探索中 |
+| 5 | vc56 真机日志判读（附件） | 🔍 已判读·部分新证 | 深载 fps 24-36（敌120 满场常驻，vs vc53 17-23 同向改善）；物步µs 22-77k 仍在（第二刀未开，待本日志定向——尖峰他 26-93ms 高频+派µs 偶发 4-7.5ms+态数 26→102 增长维度=新输入）；**菜单行物步µs 34207/62897 与同秒 fps 66-77 矛盾（帧 13ms 容不下 63ms 物理块）→ 疑 MENU 帧采样伪影（PLAYING 残留段和/陈 mon 读数）或 calib 件物理相成本——修A 行为面已被窗口探针证实，此为账面读数问题待查** | ⏳ 伪影溯源随本批探索 |
+- **R245 新拍板（2026-10-09，推翻 R85 压平）**：用户明示不认可精通「蓝白都+1」——R85（:1436）的 boosts=2 if rarity>=2 else 1 压平废除，改 **boosts = 1 + rarity**（白+1/蓝+2/紫+3；rarity_cap 钳档语义不变、去金档保留）。平均 boosts 1.12→1.62（+45% 成长加速），MAX_LEVEL=5 天然钳顶。
+
+### 二da 批交付结论（R245 · 2026-10-09 · workflow 全流程 2h06m · vc57 待出包）
+
+| 项 | 落地 | 关键数字/锚点 |
+|---|---|---|
+| ①红卡大屏确认卡 | ✅ | 「红色buff」查实=SUBLIME 升华卡（rarity 4，爆率 0.001%/批）；sublime_confirm_ui.gd 新建（LEVEL_UP 态保持暂停、当前/升华双栏同表同源、单确认钮+挂机 1.5s 自动确认防死锁）；test_r245_sublime_gate 39/39（含 E6 键盘 ui_accept 通道——评审 low 交付前落地） |
+| ②vc56 日志判读 | ✅ 判读+第二刀登记 | 深载 fps 24-36 同向改善；物步µs 22-77k 残差=第二刀候补（池容量/子节点合并/MultiMesh 延伸+桶 place 批化，另立实验批）；菜单行 34207/62897 与 fps 66-77 矛盾→真因=秒窗跨界携带（DebugStats 无 ALWAYS，PAUSED/LEVEL_UP 冻结期不复位秒窗，M 行混入离场前 PLAYING 尾样本） |
+| ③阔剑视觉统一 | ✅ | W13 半径表 [190..260]→[130,140,155,170,190]（逐级<法器 W9 [150..230]）；挡弹域两通道统一新表 [60,66,72,80,92]=W9×40%（GUARD_RADIUS_RATIO 删）；W13 化身 scale 随 effective_slash_radius 成长（修「武器比圈小」根因=化身常量链与半径链独立）；虚线圈升级即时刷新；层级落定：挡弹域<W13圈<法器圈；test_r245_melee_unify 32/32 |
+| ④成就图鉴扩容 | ✅ | 成就 135→160（首局保底 5+中段 9 族 20：技能施放/死亡/擦弹/格挡/质变/复活/刷牌/伤害告警/遗物收藏），结晶 1565→1800、封顶 1600→1850；图鉴+遗物页签 18 条（分母 115→133）；成就面板行内进度；toast 复用；推演首局稳 ≥8 解锁、全解锁 60-150 局；test_r245_content 全绿 |
+| ⑤精通蓝白+1 | ✅ | 真因=R85 拍板压平（非 bug）；按用户需求推翻改 boosts=1+rarity（白+1/蓝+2/紫+3，钳档/去金档保留）；触顶档尾注「，已触顶」（评审 low 交付前落地——消「+1 与 ×3 并存」歧义）；test_r245_mastery 23/23 |
+| ⑥菜单伪影修复（随②） | ✅ | debug_stats 物理侧三累计器加 PLAYING 状态门+切态重开秒窗+导出头 R245 词条（M/D/B 行物步µs 恒 0=无样本，与 R244 前不可对拍）；真机验证项：vc57 日志菜单行应恒 0，若仍>0 触发 monitor 陈值引擎探针（设计 §2.3） |
+| 顺带 | ✅ | quit_to_menu 补 Meta.cancel_persist_defer()（修暂停回菜单丢图鉴/击杀增量） |
+
+**质量门**：workflow 全流程（3 探索 9.4M tok→设计 4 流互斥实施→回归门 29 套件→QA 0 high/评审「可交付」→全量电池 155 实套件全绿+幻影 1 项瞬态）+ 交付前小修 6 套件复绿。**遗留登记**：a) 溢出批自动抽卡路径红卡静默生效（game_loop.gd:2160-2175 直连 apply_choice 不走红卡门，真实概率 ~0.0x%，后续批裁定要不要加门）；b) W13 强度实质削弱约 −53% 覆盖面（用户点名，真机回归重点——过弱走伤害小补偿/弧宽路线不回抬半径）；c) 老玩家图鉴分母回落观感（115/133，无版本快照机制已接受）；d) 电池幻影 test_r243_elem_cases.gd=glob 与清理窄窗竞态瞬态（无盘上残留，修复员实证 4 个真实首轮红套件 r243_elem/fengren/prime+r248_feedfix 迁移后全绿）；e) QA 临时探针 repo/tests/qa_r245_probe_real.gd 验后可删。
+
+---
+
+## 二db、地雷降频+躲过给橙盾（2026-10-10 · fast 档）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 困难的地雷（脚下频繁出现的那个）出现频率过高，降低 | ✅ 主源=精英词缀 affix_trapper（cd 9→13，+44% 间隔，enemy.gd AFFIX_DEFS）；boss B6 雷（cd 10-12）为 boss 战内容+橙盾供给源故意不动（评审指出 boss 侧脚下雷仍密——用户若主诉 boss 战再调） | r249 A1 锚+ elite_affix 19/19 | ✅ |
+| 2 | 躲过地雷给正反馈：临时护盾（存在 10s、橙色、护盾条显示在原蓝色护盾条下面、可叠加、显示过期时间） | ✅ BossMine 引爆未伤人→mine_dodged→+1 层（10s 整体刷新、上限 5 护栏）；橙条 (306,132) 蓝条正下方、读数「N·Xs」、渐暗随时长；每层挡一次接触伤害（敌弹同效）、先于蓝盾消耗 | r249 32/32（B 授盾/B2 威胁门/C 叠5/D 到期/E 吸收序/F 炸到不授/G 静默清/H 锚×9/I HUD） | ✅ |
+
+### 二db 实现注记（fast 档主智能体亲做）
+- **「躲过」口径（M2 威胁门）**：armed 后玩家曾入 blast×2 圈（180px）且引爆未伤人才授盾——远离雷/无威胁雷到期不算躲过（防 B6 满场雷滚雪球、boss 死亡免费盾雨）。测试侧实证：headless 玩家被战场钳制覆写站位（设 (200,200) 实夹 (200,768)）——测试雷须贴玩家实际位。
+- **修循环（QA+评审并发 1 轮收口）**：QA BUG-1 respawn 漏清橙盾跨局残留（补 2 行）；评审 M1 授盾静默（thorn 雷爆环 dedent 出池分支+首获 mechanics_intro toast+授盾音效 shield 1.3 高调）；M3 boss 死亡臂 _explode(null)→传真实玩家（修零伤引爆窗）；L1 HUD 订阅 shield_blocked 挡下即刷层数读数。
+- **缓办登记**：L2 橙盾挡下复用 shield_blocked 致 R238「挡N」读数蓝橙混计+orange_gain/orange_blocks 无输出面（真机判读口径待拆分）；hud /10.0 硬编码未读常量；橙条淡入淡出/图标对称等表现打磨。
+- 测试资产：tests/runner/test_r249_mine_shield.gd（32 用例）；QA 报告 docs/qa/2026-10-09-R249-QA-报告.md。
+
+## 二dc、难度武器门（2026-10-10 · fast 档）
+
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 武器解锁不要一次性全部解锁：普通不解锁近战和法器，困难再解锁一个法器和一个近战，炼狱全部解锁 | ✅ MechanicGate.WEAPON_DIFFICULTY_GATE：W8 天狼刀（近战）/W9 旋风刀（法器）→困难起；W11 灵剑/W12 裂地斧（法器）/W13 阔剑（近战）→地狱起；普通全锁。与大关门 AND 叠架（炼狱=难度层全开、仍按大关推进——裁量已向用户明示可否决）；W10 回旋刃投掷类豁免。卡池（card_generator:824）+echo 双武装池（game_loop:1542）同门自动收口；词条无死卡（required_weapon/required_class 目标缺失不上架） | r250 30/30（A 矩阵锚/B 无局难度层不添乱/C 哨兵/D 双门组合/E 卡池集成两局/F 图鉴锁行/G 横幅落位/H intro 过滤与告知面）+ 甄别 45 套件全绿（唯一红 r196_growth ⑥组 boot 残留普通档→显式地狱语境修正） | ✅ |
+
+### 二dc 实现注记（fast 档主智能体亲做）
+- **Meta.run_gate_difficulty() 武装哨兵**：set_run_difficulty 注入时武装（start_run/continue_run 既有调用零改动生效）；未进局=-1 门全开保无局基线——0 是普通合法档，哨兵与之解耦（-1≠0）。
+- **修循环（QA+评审并发 1 轮收口）**：QA BUG-1 非 echo 角色开局横幅被 :1532 清行吞（match 块移 _grant_random_dual_loadout 后——追加序即生死的坑）；QA BUG-2 W9 追击标注 2 占位吃 4 实参（R243 遗留逐帧报错，分支各自格式化）；评审 H1 MAP_INTROS 普通局假话（intro_for_map(idx, difficulty) 按难度滤族武器名——选关+横幅同修）；M1 图鉴可获取态补难度尾注；M2 difficulty_desc 三档补武器差异句；M3 横幅措辞防超售（「第 4 关起上架」「仍按大关推进」）。
+- **缓办登记**：L1 每日挑战继承上一局难度（R72 归属，本批横幅放大可见度）；L2 fission 自定义首发可把已获得族武器带进普通局（「获得优先于门」既有定案 vs 用户字面张力——留用户裁决）；L3 多行开场 toast 纵向溢出 44px 带（推测，headless 无法目验）；M4 continue_run 不补难度横幅；成就 codex_weapons target 10 普通玩家天花板 8/13（难度激励语义）。
+- 测试资产：tests/runner/test_r250_difficulty_weapon_gate.gd（30 用例）；QA 报告 docs/qa/2026-10-10-R250-QA-报告.md。
+
+## 二dd、自爆兵躲盾+法师巫师兵降频+首遇卡片（2026-10-10 · workflow-flash）
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 躲过自爆兵给临时护盾「没生效」（用户原意=躲开爆炸类敌人也给盾；现橙盾只接地雷引爆炸） | ✅ 根因双源：橙盾原只接 BossMine；且普通局 w1-w8 无 E4/无咒术师（E28 仅困难地狱织入）——无触发源非失效。扩展后 volatile 自爆（arm 后引爆未伤人）与 blink 落点爆炸（读条完成即威胁）均发 dodge 授橙盾；hit 先置语义（被盾/无敌挡下不算躲过，与 BossMine 同构）；击退打断/未 arm 被杀不授 | r251_dodge_bomber 56/56；QA甲 P5 探针 | ✅ |
+| 2 | 「我才发现不是护盾兵，是那个法师还是巫师兵」——脚下雷投放源真身是法师/巫师类敌人，这玩意降低点频率 | ✅ 对号=E28 咒术师（全敌唯一 spell=true+尖顶法帽贴图；非 blink 三族也非 trapper）。降频刀法：wave_director 织入份额 33.3→25/25→18.2/16.7→11.8（合计 −50~53%）+ fire_cd 4.8s；n=1000 逐波统计困难 E28 期望 0.46-0.50/波（原 0.67）、过半波次零咒术师，无结构性真空 | r251 B3 份额断言；QA丙 探针③ rhythm.log | ✅ |
+| 3 | 新机制（如元素反应）/新武器/新敌人第一次出现时弹出卡片介绍，第一次就行 | ✅ 统一首遇卡片系统 first_encounter_card_ui：敌 23 种（enemy_attack_note 新增 23 行）首次出场/武器首次上架与首次获取（W_ 键先到先得互斥）/反应首触发三域触发；codex_first_met/reaction_seen 持久化；非阻塞卡 4.5s+点击即关+队列帽；暂停期冻结（PROCESS_MODE_PAUSABLE，QA 修）；旧 E5 toast/G8 横幅替换防重复弹 | r251_first_encounter 40/40；QA乙/丙 探针 | ✅ |
+
+### 二dd 实现注记（workflow-flash 首跑：2 次 compile 修复+1 次 Amend 同名 actor 坑）
+- **交付**：vc60=v0.1.59（主会话终验：门套件 3+回归 51 套件串行全绿——workflow 内「电池有红」结论为 QA 并行跑 Godot 的瞬态假红，干净串行复跑为准，三度实证此规律）。设计文档 docs/design/2026-10-10-R251-design.md；QA 报告 docs/qa/2026-10-10-R251-QA-a/b/c.md。
+- **修循环（workflow 内）**：必修 6 条全落地（抽查：卡 UI PROCESS_MODE_PAUSABLE :41、武器上架口 note 空串守卫三口纪律对齐）；缓办 13 条见 QA 报告。
+- **给用户裁定**：①首遇卡区 (520×96 @y10-106) 真机竖屏遮 HUD 顶带读数组（血条 78%/暂停钮全遮）——QA丙-1/F2 建议下移 y≥140（与 BossBar y154 取舍）或压扁单行，本批 defer 设计拍板 ②法术圈躲盾「自然出圈即送盾」（F4）后续或需威胁旗 ③volatile 爆环视觉缺失（F3，设计 §6.2#3 已登记）提前可补齐「躲过自爆兵」读感 ④老档升级后首局将重弹全量首遇卡（QA丙-5，队列帽缓解，既定行为）。
+- **workflow 新坑**：同名 agent() 二次创建=run errored（复用上下文必须持引用 .ask()；电池修理工在循环内创建同理）——Amend 改引用后缓存全救回；瞬态假红以「无 FAIL 行 exit≠0」为签名，脚本层可加复跑裁决门。
+
+## 二de、培养上限+难度开局自选buff+遗物扩容（2026-10-10 · workflow-flash · 用户指示排队：二dd 完成后再开）
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 角色培养在困难需要提高上限 | ✅ 全局提帽 8 轨：life/atk 5→10、magnet/cdr/xp 3→6、start_gold/reroll 3→5、revive 2→3（设计 §1.5 显式否决难度耦合帽——大厅无难度态；**提帽为全难度共享，地狱满配复活升至 6 次**，评审 F9 已向用户明示口径）；老档已购等级不回退 | r252_cultivate 14/14；QA 甲经济验算 | ✅ |
+| 2 | 难度开局自选「祝福」（用户定名，原「buff」）：普通选一个蓝色、困难自选一个紫色、地狱自选一个金色，全池任选；**仅限图鉴已解锁的祝福**；图鉴若没有祝福类目就新增页签；选定后每次默认就是那个（默认值记忆；跨难度时稀有度不可用的回落策略设计定） | ✅ blessing_pick_ui（难度分档稀有度 蓝1/紫2/金3 过滤+仅图鉴已解锁+图鉴「祝福」页签（menu_screen 页签「词条」更名）+默认记忆跨局生效；跨难度回落=不发放+横幅提示）；行内含效果描述小字（评审 F1 high 修）；「清除记忆/跳过」三按钮（F3 medium 修——不选有永久退出路径）；词条解锁时刻 toast（F2 medium 修「✦ 新祝福已解锁」） | r252_blessing 46/46；QA甲 三难度发放实测 | ✅ |
+| 3 | 扩展遗物种类（现 18 个太少）：困难构筑不起来；拒绝简单数值提升，学魔法工坊/小丑牌(Balatro)/优秀肉鸽的机制设计，新增 10-30 个遗物；用户点名开 10 个并发去调研 | ✅ 10 并发调研落盘 docs/design/r252-research/（Balatro×2/魔法工坊/尖塔/哈迪斯/死亡细胞/VS/ROR2/以撒/Brotato+霓虹深渊）→ 实装 16 个新遗物（REL_*）全机制向 0 纯数值：贪婪矩阵/无瑕链路/断头台+弑王+猎杀窗+猎首金冠（处决猎杀四件套）/引力井+祝福+ECHO（定轴三件套）/共鸣触媒/血税+低息+跃升金库（经济三角）/裂颅狂潮+战地医师（低血险流）/先手/印记——18→34 个 | r252_relics 105/105；评审 F4 逐件「build-around？」验 16/16 成立 | ✅ |
+| 4 | 主菜单点击感觉很卡：查因为什么、优化 | ✅ 基线探针+七刀：武器页首建 304513→13284µs、委托臂直调 25460→2µs（texture_factory 双缓存）、卡描述预热预算 12000→4000、设置面板 defer 接线、图鉴页签更名+祝福页签；修后分档断言进 r252_menu_perf（校验员与设计档差异已追认落档 §4.5.1——反应页首建 81.8ms 预览排版缓存列下批最优先候补）；**主会话终验注意：M1 计时断言 headless 波动敏感，偶发红属环境抖动非回归（QA丙-1/F1-review）** | r252_menu_perf 66/66（M0a-f 修前后对比断言） | ✅ |
+
+### 二de 实现注记（workflow-flash 大编排二跑：2 次 errored 均修复续跑）
+- **交付**：主会话串行终验 61 套件全绿（新 4 套件 46/14/105/66 + 广域 57）——workflow 终报「回归 51 有红」=并行波瞬态假红（四度实证）；出包 vc61。设计 docs/design/2026-10-10-R252-design.md；QA 报告 docs/qa/2026-10-10-R252-QA-a/b/c.md；10 调研报告 docs/design/r252-research/。
+- **workflow 故障两起**：①同名 agent 运行期撞名（二dd 同款，草稿预修避过）②world.run 单套 420s 超时 reject 炸 run（R228b 旧坑脚本层）——修=godotSuite 包 catch 转 exitCode 124 容错值+超时不重跑直接交权属修理工；escalate 两次（D 扩权 P3-P6/D 断言档位追认）均 ResolveWorkflowQuestion 裁定。
+- **给用户裁定（缓办 16 择要）**：①QA乙-1 medium：8 件伤害乘区新遗物满叠撞 F9 钳制（×12.3→×8 −35%）、混入第 9 池静默丢最小池——调参（名额 8→10/帽 8→12）或图鉴披露乘区上限待拍板 ②遗物 0 防御/控制向（评审 F4——困难生存轴下批最高优先）③遗物获取无保底（第 1 关零遗物、单件净获取 ÷1.44，反弹再议黑市定向货架）④PYRE/KINGSLAY「攻击力」基数=主武器当前攻击（文案待明示）⑤反应页 81.8ms 预览排版缓存+图鉴分帧建行（下批性能候补）⑥同屏双「祝福」字（地图词缀 vs 新系统，文案面自查）。
+- 测试资产：test_r252_blessing/cultivate/relics/menu_perf（46/14/105/66）；**menu_perf M1 计时断言波动敏感——CI 偶发红属抖动勿上调口径**。
+
+## R253、缓办清账批（2026-10-10 · fast 档 · 用户授权「有什么缓办的赶紧办了」含原待拍板项自裁）
+| # | 项 | 判定 | 证据 | 状态 |
+|---|---|---|---|---|
+| 1 | 护盾独立计时（二cp#9 用户口径「多个武器的护盾应该是独立计时的吧」——取代 R238 H3 全槽聚合） | ✅ player._shield_units（武器 uid→{interval,timer,layers,ready}）新数据真源：每武器独立几何充能/独立就绪；受击「间隔最大」就绪单元先挡（慢盾扛刀快盾兜底）；旧四字段降级 HUD/测试派生视图（_sync_shield_view：layers=Σ、ready=任一、interval/timer=最深进度单元+tie-break 绝对剩余最短）；同帧多源授盾帧戳合并只授 1 层（_dodge_frame_stamp）；apply_shield_trait 加 uid 参（uid=0 兼容直调、同 uid 重挂保进度）；respawn 清单元；grant_temp_shield(p_silent) 公开口 | r253 A组 5 + r238 重写 ③组 18/18 + r249/r251 翻案 + r246 G4m 夹具改注 | ✅ |
+| 2 | 防御向六遗物（二de 评审 F4「遗物 0 防御/控制向——困难生存轴最高优先」） | ✅ 新乘区 player.relic_dr（0~0.8 clamp，与晶盾 dr 乘法复合）：末路壁垒（hp<30% dr0.25）/守护本能（每失血10% dr0.02 帽0.20）/壁垒契约（每盾层 dr0.03 帽0.18）三件取 max（relic_handler._maintain_relic_dr 每帧写）；霜寒守卫（被命中冻结周围 1.2s/8s 冷却）/磁守结界（获得橙盾时击退周围敌，事件驱动非常驻——评审注记）/金钟罩（每 30s 自动授 1 层静默橙盾，与磁守同享击退闭环） | r253 B组 12 | ✅ |
+| 3 | 乘区钳制帽调参（二de QA乙-1 待拍板——自裁落调参方案） | ✅ cap_prod 8.0→12.0、cap_mul_count 8→10（balance_tables.tres+gd 默认值同步）——8 件伤害乘区遗物满叠 ×12.3 不再撞帽静默 −35% | pkg0 :293-294 + high_stack/r188_idle/w1_volley 高帽锚同步 | ✅ |
+| 4 | 首遗物保底（二de 缓办③「第 1 关零遗物」） | ✅ 解锁遗物系统∧开局 0 拥有 → 每日 seed 局部 RNG 送 1 件 activate + 横幅「保底遗物：…（本局构筑打底）」+ DebugStats relic_guarantee | r253 C组 4（world_frost/world_grass 双图） | ✅ |
+| 5 | PYRE/KINGSLAY 基数文案（二de 缓办④） | ✅ 两 .tres 描述补「（以拾取时点主武器面板攻击为基数，不吃伤害乘区）」 | r252_relics 回归 105/105 | ✅ |
+| 6 | 每日挑战难度残留（二dc L1） | ✅ _on_menu_start_daily 显式 _difficulty=NORMAL（原继承上一局） | r253 D组 1 | ✅ |
+| 7 | fission 首发难度门（二dc L2「获得优先于门 vs 用户字面张力」——自裁：难度门优先） | ✅ 双落点：菜单候选按 _sel_difficulty 过滤 + game_loop._starting_weapon_id 难度兜底回落 W1；P6 老档无损语义仅保留于卡池/echo 来源侧（menu_screen :1697 注释链）；r196⑥ 断言翻案+补 HELL 正向断言 | r253 E组 2 + r196 110/110 | ✅ |
+| 8 | continue_run 不补难度横幅（二dc M4） | ✅ 抽公共 _append_difficulty_intro_lines()（start_run/continue_run 共用；调用落位恒在 _grant_random_dual_loadout 后——QA BUG-1 二dc 教训固化） | r250 G2 调用序锚翻案 | ✅ |
+| 9 | 首遇卡压 HUD 顶带（二dd QA丙-1 拍板落位——自裁：下移让位） | ✅ CARD_TOP_Y=188（原 y10 压 HP条/R187/金币/暂停钮四读数）——顶带全让开+BossBar 带（y112-184）4px 缝；r251_first_encounter C 组按预留翻转条件兑现 | r251_first_encounter 回归全绿 | ✅ |
+| 10 | 多行开场 toast 纵向溢出（二dc L3） | ✅ _show_toast TOAST_MAX_LINES=3 截尾钳制（超出合并「…（另有 N 条，见暂停面板）」） | r253 F源码锚 | ✅ |
+| 11 | 升级三选一全 SUBLIME 死锁（R245 遗留 a） | ✅ _pick_merged_card 排除顺位轮换（20 次重试；全 SUBLIME 仍取原不空手） | r253 F源码锚 | ✅ |
+| 12 | 同屏双「祝福」字消歧（二de 缓办⑥） | ✅ 地图词缀前缀「祝　」→「兆　」（词条列表+_make_daily_row 两处）；verify_feedback 两断言判据同步翻案 | verify_feedback 685/685 | ✅ |
+| 13 | 性能三刀（二de 缓办⑤择可动者） | ✅ BlastStarFx 池化（POOL_MAX=8）+GroundShockFx 池化（6，setup_fx 开头五数组 clear 防脏读）+敌方法术圈 SpellRing 进度弧改宿主 tick 推进（原 SceneTreeTimer 脱离宿主 redraw；maxf 0.05 防除零；归还复位） | r243_liedifu ⑤组池化归还语义翻案全绿 | ✅ |
+| 14 | 小刀三件 | ✅ 暂停面板三处字号 13→15pt（wnote/里程碑/遗物描述）；hud :736 硬码 /10.0→Player.TEMP_SHIELD_TIME 常量；激光枪口免 12px 屏幕边钳（穿屏武器误伤）+删过期探针 qa_r245_probe_real.gd（R245 遗留 e）；遗物图鉴分母 155/成就 codex_relics targets [6,14,34]→[6,14,40]（二de 扩容 34→40 尾账） | r245_content 35/35 + r252_relics R0① + meta_manager | ✅ |
+
+### R253 实现注记（fast 档主智能体亲做 · 五簇 22 刀）
+- **交付**：vc62=InfiniteFission_v0.1.61_vc62.apk（13 门禁全绿）。全量电池 168 套件（runner 164+根级 4）等效全绿——首轮 158/168 + 10 红全数 diag 判读翻案收口且翻案套件逐个复跑 exit=0（r188_idle 挡板刀版单独 176/176；menu_perf 电池轮干净过）。
+- **不办披露（留案）**：①反应页缓存大刀（首建 81.8ms 主体=引擎字体链冷载+Label 布局，font_reaction/ring_tex 已缓存，页签级行缓存属结构改动留下批）②ArcSlash 子斩池化（窗/命中表/回斩账/子代数组状态机复杂需专项回归）③contact_tick 0.6s 无敌帧（全局手感刀，不动）④W13 强度/深载第二刀（等真机 A/B 日志）⑤SpellRing 死亡口径（维持宿主无关引爆设计）⑥图鉴分帧建行（缓存刀后边际小）⑦boss 侧雷密度（等用户主诉）⑧老档首遇重弹（队列帽已缓解既定行为）⑨codex_weapons target 难度激励语义（披露不改）。
+- **测试翻案 11 处**（语义演进链全注释在案）：r238 ③组独立计时重写/r249 C+I2+H4/r251_dodge A12+C 组（QA 预留翻转条件兑现）/r251_first C 布局（100,188）/r250 G2 调用序锚/r243_liedifu ⑤归还语义/r245 四锚（40/155）/pkg0+high_stack+r188_idle+w1_volley 帽锚/r196⑥（P6→难度门，+HELL 正向断言）/r246 G4m（夹具注 _shield_units 新真源）/verify_feedback 三处（祝→兆×2+R72 圈引爆夹具清单元字典——:3161 注释预言的失效形态同款复发，清理对象换新真源后收口）。
+- **新坑记录**：GDScript 无 `x if cond else pass` 三元语句语法；python heredoc 行尾反斜杠转义炸 SyntaxError（改无反斜杠子串锚）；headless 测试敌入空间册须手动 `_gl.enemy_grid.rebuild([e])`（grid 由 GameLoop :797 从 spawner.active 全量重建，pool.acquire 敌不入册）+elemental 须 `register_host(e)` 挂入。
+- 测试资产：tests/runner/test_r253_backlog.gd（35 断言六组 35/35）；QA 报告 docs/qa/2026-10-10-R253-QA-报告.md（子代理输出，2 medium/1 low）。
+- **评审修循环（1 轮收口，5 medium+M7 尾注全清）**：M1 首遇卡二次让位 188→260（评审实测 188 撞 Boss 战带——TargetBar 让位 y190-216+降临横幅 y210-256，Boss 首遇卡恰在出场瞬间盖血条横幅 4.5s；r251_first C 组增 Boss 战带不相交断言 39/39）；M2 保底横幅 insert(0) 行首保活（TOAST_MAX_LINES=3 截尾保前 3——append 位在困难+祝福场景整行被截=主打功能对目标人群不可见）+截尾提示去「见暂停面板」假指路（面板无难度/祝福行）；M3 金钟罩授盾后直调 _on_mine_dodged_relic（磁守结界「每次获得闪避护盾时震开」文案闭环——原只挂 mine_dodged，自动盾不发该事件=组合断裂）；M4 保底补 Meta.mark_relic_codex+codex_relics 成就扫描（白送不解锁打破「获得即收录」口径；私有扫描走 call 先例 :3320）；M5 fission 首发按钮诚实化（门外武器显示「X（本档未开→手枪）」——原显示存档名与实际回落不符）；M7 尾注三处（menu_screen 分母注释 149→155 链、_make_daily_row 祝→兆、tracker 遗物名对齐实装展示名）。
+- **QA 修循环（1 轮收口，2 medium/1 low + 验证轮追加两发现）**：BUG-1（R252 遗留链非本批引入）「词条栏已满」横幅被同帧后到的「新祝福已解锁」播报单 Label 覆写（apply_choice 尾 emit_card_chosen→首获→播报后到）——修=hud._on_mechanics_intro 帧戳合并（同帧第二条拼接重发，金卡解锁播报同享；事件仍逐条广播）+r238 ④c 改读全事件流数组（QA 摘 MEC_SHIELD 档复现条件实测 18/18）；BUG-2 r188_idle §B 概率假红=_kill_player 夹具写已失效的 shield_ready 禁用开关（choose(0) 概率抽 MEC_SHIELD 首挂即就绪挡死）——真源迁移 _shield_units.clear()+temp_shield_stacks=0（verify_feedback 同型第 4 处）；BUG-3 卡注释 178/188 陈旧数字清尾。**追加一**：修后验证轮暴露 P7/E 段环境敏感假红（探针 qa_r253_probe_p7death 实证玩家 hp 完好 _dead=false state=5=通关终局非死亡——消化每帧 35ms 墙钟预算随负载漂移，慢机帧多→无敌玩家推波至通关（R62 延迟结算态）→E 段 _kill_player 打在延迟结算位上不结算=total_runs 三连红同根）——测试韧性三刀收口 176/176（diag 打印钉死链路：①P7 终态放宽 PLAYING|GAME_OVER（收口硬不变量 pending/merged/卡窗保持）②_idle_settle 前置非 PLAYING 归位 restart_run（settle_now 兑现通关结算）③归位判据补真挡板 Meta._settle_deferred——diag 实证 defer=true vict=false 跨 §I 新局泄漏（start_run 清 vict 不清 Meta defer；正常玩家出口路径全被 R62 兑现覆盖，仅测试直跳可达=夹具层修不修产品）→幂等 settle_now 兑现后 E-entry defer=false）；连带真缺陷一并修=GAME_OVER 清场期已归还敌延迟 kill 信号入 _kill_ledger_fn 的 int(null) 炸断收口链（player.gd tags null 守卫）。**追加二**：Windows 无 SIGPIPE——测试批在活进程输出流上 grep|head 会让 Godot 写断管道挂死（实证一轮）——批跑一律全量落盘。QA 另清理残留 headless 进程一枚（_rv253_probe 挂起）。
+- **全量电池终验（168 套件=runner 164+根级 4）与红名单翻案（10 红全清）**：电池首轮 158/168，10 红逐一 diag 判读收口——真翻案 4：pkg1（formula 用例体帽调参五段重造：名额 10 区帽内全入+新增 12 区截断两向钉/priority 10→11 区/F9 800→1200/Local 12 区 pool_count 10/R_alarm ratio 8008→12012）、pkg5（遗物 34→40）、r190b_tips+r191_rework（pause 机制句行 13→15pt 连锁——R203 定案被 R253 可读性刀有意覆盖）；档态/环境翻案 5：r246_meta（M6d/M6e codex_relics targets 34→40 两锚）、r247_endless_channel（G4c daily_record 按当日 key 取历史最大——同日复跑残留 233 压死断言=首跑断言缺自净，段前清当日键）、p1_polish（_start_map 撞 R252 祝福面板模态——测试档 blessing_trait 非空时 _on_menu_start 卡 MENU 态，改直走 _finish_menu_start 绕面板）、qa_r215_probe（E5a 帧帽 400→1600 重标定——R252D P5 预热预算 12000→4000µs 每帧消化 ÷3 的滞后暴露非回归）、r229_pool_valve（位图N 计数依赖 PopupGlyphAtlas bake 态环境值 1→0 漂移——断言本意段序，位图值改宽+段序 find 锚保留）；r188_idle 电池轮被 27GB 日志洪水进程拖死单独补跑。
+- **追加三（日志洪水事故与登记）**：会话重置打断的 r188_idle 测试进程未死透，卡无限 WARNING 循环 3 小时刷 29.5GB 日志（/tmp=C 盘被顶 83%）并饿死电池同套件进程——杀进程+删日志回 69%。产品侧缓办登记：EventBus 风暴 WARNING 同帧 128 次阈值后仍每帧打——慢局下无全局节流=日志洪水死亡螺旋，下批加同类 N 秒一条节流。
+
+## R254（2026-10-10 真机反馈批——vc62 后）
+
+- **[R254-1] 游戏（菜单/大厅）外操作仍然卡**（R252 菜单点击性能七刀后仍卡；候补披露在案=反应页 81.8ms 预览排版+分帧建行/图鉴怪物页 M1c/选人页 M1d）→ 本批定位+落刀。
+- **[R254-2] 出发：困难-第三关-出发，回到主页（未进游戏）**→ 本批复现探针定根因（嫌疑 a：分档未解锁静默拒绝留 MENU（_on_menu_start :1805 push_warning+return 无 UI 提示）；嫌疑 b：祝福面板路径异常）→ 修 UX（未解锁禁选/明确提示）或修判据。
+
+### R254 实现注记（fast 档两轮修循环 + QA 三轮/QA评审两轮全收口）
+
+- **[R254-2] 出发回主页**：探针四象限（tests/qa_r254_probe_map.gd）实证桌面全链绿——未解锁 UI 锁行无出发钮+直调静默拒绝；已解锁直达/面板三收口全通。真机主嫌=祝福面板模态期（_blessing_pending）面板因故丢失且三收口信号未发→旧实现二次出发被静默吞=「回主页」死局。修=**pending 闸自愈**（终版：无条件 open 幂等刷内容兜底「开着但不可见」+采用二次出发上下文[未解锁新选拒用]+**current_map_id 同步**[QA-D4：修前换图二次出发实跑旧图错位]）；**真模态化**（blessing_pick_ui _root/dim 改 MOUSE_FILTER_STOP——修评审#4 穿透链：罩下开每日面板可并发 start_run 洗每日种子）+每日出口补 pending 闸。测试 B16-B19 八断言（blessing 50→57）。
+- **[R254-1] 菜单仍卡**：基线探针钉大头=切页全量重建行树（反应页 82ms/祝福 52ms/图鉴首开 70ms——真机 2-4×慢=百毫秒停顿）。修=**图鉴页级行缓存**（tab→行数组；CodexRow_/RxnRow_ 名标行 detach 回缓存不 free；六 rebuild 统一回收口）+失效口双闸（进 MENU[击杀数局内累积不广播]+codex_changed[解锁边沿]；反应页内容纯静态免入回菜单口——修轮#3a）+**闲时行级预建泵**（4ms/帧逐行建，单行原子——修轮#2：修前整页原子冷建武器页单帧 310ms=真机 0.6-1.2s 冻结；武器页压队尾给 tex 预热 op:7 留时窗；同步抢建竞态双口兜底[页首 cache.has 跳过+页毕 ghosts free 防孤儿行]）。**刀效（探针对比）**：二切全系 −76%~−82%（反应 32→6.5ms/祝福 37→7.9/武器 7.7→1.4/图鉴二开 13.5→3.3/怪物 14.8→2.9/遗物 17.5→4.0）；冷建最坏单帧 311ms→43.8-50.6ms（最贵单行）。配套：单行工厂 _make_codex_entry_row（五页行源 .keys() 保序统一）、M6c/M6d 缓存契约断言、回菜单角标刷新（评审#7）、三泵账本 12ms 口径（carddesc 注释+M4c）。
+- **QA 三轮**：D1 rxn_codex 改表翻案漏网/D2 r245_content 裸取不存在键 SCRIPT ERROR 静默中断（双锚 34→40 后 A5 后半断言复活 26→39 项实证绿色失真）/D3 M7c/D4 pending 换图半采用（QA 探出，当日修）——全收口定稿**通过**（18+ 套件亲跑含 verify_feedback 685）。评审两轮：四 medium（冷启动冻结/五连小卡/模态穿透+每日双链/重开上下文）全落，1 low 潜伏留批（见下）。
+- **留批（下批候选）**：①评审 low：单行工厂脏数据递归跳行存在「跳行后首有效行双建」潜伏缺陷（现网不可达——registry 只插合法资源；根治=工厂返回实际消费游标）②QA O-3：menu_screen 行内 tab/空格混排版 ③QA O-4：M4c 第三泵为名义 4000µs 记账非实测 ④boss 3s 挂机门前 op:7 武器图标预热未暖（冷建武器页首行仍重——真机观察）⑤选人页 21.9ms/成就页 20.8ms 未优化（低频路径，R252 M1d 档位披露在案）⑥语义演进注记：「二次出发被吞」（R252 §2.4-5）→「无条件重开+采用新上下文」（R254 终版，评审追认）。
+- **全量电池终验与出包**：165 套（164 runner+formula 体）电池 163 直绿；2 红判读——①formula_pipeline=电池脚本 bug（用例体被当 -s 入口直跑，EventBus 编译期不可见必炸；真入口 test_pkg1 在 164 内绿——等效 164/164）②r188_idle=双进程抢 CPU 负载瞬态（首跑并发复跑双双卡 EventBus 风暴 WARNING 恶性循环——杀竞争进程后无竞争单跑 **176/176 全绿**）。**EventBus 风暴无节流现场三度实证**（R253 日志洪水 29.5GB/R254 复跑进程卡风暴 30+ 分钟）：非仅日志问题=负载放大器（真机低配满屏反弹掉帧恶性循环），下批性能候选最高优先之一。**vc63=InfiniteFission_v0.1.62_vc63.apk 13 门禁全绿**。真机复验重点：①菜单切页/图鉴跟手度（本批核心）②出发链（困难-第三关；若再见回主页注意祝福面板是否显示）③冷启动 boot 后头几秒点图鉴武器页（泵预建窗口）。
+
+## R256、性能批（2026-10-10 · fast 档 · 用户授权「还能优化啥，自己开始优化」——R255 审计候选清单自主实施）
+
+### R256 需求与定案
+
+| # | 反馈 | 定案 |
+|---|---|---|
+| 1 | R255 审计产出性能候选 7 序（verdict 表）自主开干 | 序 0 护栏复活+序 1 carddesc 续泵+序 2 敌分离分片落地；序 3/4 裁定缓办（见注记）；序 5/6 原报告已列缓办 |
+| 2 | EventBus 风暴洪水「源头未闭环」（R254 节遗留） | 闭环裁定+末口加固（见注记洪水条） |
+
+### R256 实现注记（fast 档主智能体亲做 · 三刀+一翻案+一加固）
+
+- **序 0 压力门复活（可信度前提）**：六 stress 套件（perf_500p100e/soak/storm/orbit_field_bench/deep_wave 五 cases 实改+perf_800 继承）_start_run 由 `start_requested.emit()` 改直调（`_blessing_pending=false`+`current_map_id=FIRST`+`_finish_menu_start(FIRST)`）——emit 经 lambda _on_menu_start 被 R252 祝福面板挂起=敌 0 假 PASS 空转 16 天。复活实证：敌 117/弹 505 真负载、帧均 2.4-4.5ms、超阈 3.4%；批量验六套全绿。分阶段探针直接给后续刀出靶：enemy 超阈均值 7.71ms（序 2 靶）/card_open 峰值 45.40ms（序 1 靶）/grid_projectile 峰值 15.97ms（序 6 缓办证据）。
+- **序 1 carddesc 战斗续泵**：game_loop._process PLAYING 分支 `DescPrewarm.pump(2000)`（LEVEL_UP/PAUSED 不泵；排空零成本；R221 超支还账内建）——R255 对照测量（缓存手动排空后开卡中位 16.52→2.60ms −84%）的上线化；每局首次升级必现顿挫的根治。
+- **序 2 敌间分离 10Hz 分片轮**：`_apply_enemy_separation` 单帧全量（enemy 段实测尖峰 10.7-12.3ms，满屏敌推挤周期「咯噔」）改 `_tick_separation` 时钟轮——敌按 uid%6 归片、各片独立 10Hz 到期各自结：**每敌服务频率不变、单帧分离成本 ÷6**（60fps 每帧恰 1 片；首轮 interval×i/6 错峰铺开无开局全量帧；长帧追赶批一次结清不积压）。`_apply_enemy_separation()` 保留全量口径（pkg5 E-10 直调契约）。配测 pkg5 B.5b 六断言：单帧无全量（12 敌最大单帧位移 2<12）/一轮轮转全员服务（累计 12==12）/全量口径保留/重置清相位/惰性重建恰 6 片。pkg5 150/150。
+- **storm 断言①架构翻案（复活暴露的第二现场）**：压力门复活后 test_storm_bench 断言①「damage_resolved 派发 ≥300/帧」确定性红（实测峰值恰 48、3600 帧 0 达标、逐检查点帧结算恒 48）。根因=**R188 老断言撞 R221 Fix C 架构**：`DISPATCH_FRAME_CAP=48`（R221）+`SETTLE_BUDGET_T1=48` 超帽顺延（R223/R236）落地后 ≥300/帧派发结构性不可达——削峰正是设计本意（r221_fixreg_cases ⑤ 直断言 48 契约互证）；stress 系不在电池内（电池=runner 164+根级 4）=R221-R255 无人跑老断言静默过期，R252 出发挂起再遮一层。翻案=断言①双层化：①a 风暴载荷形态（resolve 调用 ≥300/帧且 ≥90% 帧在载——驱动侧计数不经 EventBus，派发帽顺延不影响）+①b 派发帽削峰（峰值 ≤DISPATCH_FRAME_CAP，读常量不二次硬编码）。复验全绿：①a 载荷 300/帧 3600/3600（100%）+①b 峰值恰 48≤48。
+- **洪水闭环裁定+末口加固**：①R205 `_warn_storm_throttled` 5s 全局一条在码=算术封顶（卡死进程 3h 最多 ~2160 行 ≈0.4MB）——R253 27GB/R188 29.5GB 洪水均为**节流前老进程残留**（「会话重置打断的 r188_idle 测试进程未死透」记录在案），R254「卡 30+ 分钟」=节流生效后进程因 CPU 竞争挂死非日志量；「洪水源头未闭环」判定撤回，改登记「已闭环（R205）+真机负载放大器属性单列（消费者侧成本，非日志问题）」。②末口加固：game_loop change_state 非法迁移告警是主循环唯一无界频率裸打口（headless 卡死进程逐 tick 重试迁移 ≈20K tick/s × ~120B ≈ 26GB/3h——与事故量级算术吻合）——加 R205 同款 5s 节流（rejected_transitions 计数口径不变，pkg4 116/116）。
+- **序 3/4 裁定缓办（ROI 塌缩披露）**：R252 §8 点名「反应页预览字型排版缓存下批最优先」时**早于** R254-1 页级行缓存+闲时行泵落地；现网残暴露=玩家在菜单闲泵 ~0.3s 完成全五页预建前抢点开反应页的竞态窗（一次性 38.9ms，冷进程 104.9ms）。且侦察实证 `font_reaction` 三槽静态缓存/`ring_tex` `_cached` 键缓存均在位——逐行成本是 Control 构建固有（~0.5ms/行），根治刀（中成本）对竞态窗 ROI 已塌。序 4（成就/选人/选图行缓存推广 16.8-18ms→<5ms）失效面风险中（R254 D1 同型教训：漏接失效口=显陈旧数据）且三面板均为低频路径——与序 3 一并留批，待真机复验若玩家实感卡顿再启。
+- **门禁账**：pkg5 150/150（B.5b 六断言全绿：12 敌单帧最大位移 2<12/一轮全员服务 12==12）、pkg4 116/116、storm 全断言绿（①a 载荷 300/帧 3600/3600[100%]+①b 峰值恰 48≤48）、六 stress 套批量验全绿。**perf_500 P95 疑案与 A/B 裁决**：三跑 avg 8.43/9.53/8.71、P95 12.7-14.8、超阈 48-67% 全 FAIL——但临时回退序 2 轮子恢复旧 10Hz 全量逻辑的对照跑仍 avg 8.71 FAIL=**本批代码洗清**（同码三值统计等同，轮子开关无差）；同日更早序 0 刚修完时的同套件 P95 6.67 PASS 帧均 2.4-4.5ms 为对照离群值。环境排查：CPU 7% 空载、无并发 Godot、C 盘 70%/E 盘 97% 均有余量——判**环境态漂移**（热节流/后台扫描窗嫌疑），QA 独立复跑终裁在案。
+- **QA/评审并发把关（一轮收口+修轮四刀）**：QA 报告 docs/qa/2026-10-10-R256-QA-报告.md（有条件通过 C1/C2+四缺陷，探针 tests/qa_r256_probe_wheel.gd 落盘）；评审报告 docs/qa/2026-10-10-R256-评审意见.md（可交付 vc64 无 high，M1-M3+L1-L4）。**C1 疑案告破**：perf_500 P95 漂移元凶=后台 TheDivision2 进程（14:25:27 启动 ~7GB，时间线精确切分评审记录的 PASS 窗口 14:17 P95 7.537 与后续全 FAIL 窗口）——环境坐实，本批代码三重洗清（主控 A/B 回退对照+QA 相位平坦分布+干净复跑同向偏慢）；关游戏后复跑一轮即可归档。**修轮四刀（当日全落全验）**：①分片轮相位坍缩（QA-02/评审 M1 互证，QA 探针实证长帧后相位散布 0.0000）→ 重排改整步进相位锚（while due+=interval，长帧追赶批不并相、积压每帧每片一结反螺旋）；pkg5 B.5b 补第 6 断言（0.3s 长帧后 12 正常帧最大位移 ≤4）——151/151。②r220_cardprewarm 契约翻案（QA-01/C2：序 1 改 PLAYING 续泵后旧断言「remaining 不变」红=泵生效的反证）→ 翻转为「PLAYING 递减」+补 PAUSED 不泵侧证——33/33。③storm ①b 改 `dispatch_frame_cap_now()` 有效帽读法（sim30 档 96 不假红）+饱和下限锚（峰值恰钉帽=派发链活性，堵「死链假绿」）——复验全绿峰值恰 48。④负载在场守卫（评审 M2）：perf_500/soak/orbit/deep_wave 四套加 state==PLAYING+敌 ≥目标×0.8 硬断言——R252 式 16 天假 PASS 故障模式结构性堵死。评审静默假设全数复核安全（uid 恒正无负片/倒序遍历无重入/跨局轮相位全出口复位/float32 精度充足）；QA-04（perf 同步驱动测不到序 1 泵，card_open 峰值为脚手架伪影）与评审 L2（泵单项原子可超支跳帧还账兜住）/L3（deep_wave C3 历史跳过）/L4（日志无版本戳）留批观察。
+- **全量电池终验与出包**：四 stress 守卫套（perf_500/perf_800/soak/orbit/deep_wave）全绿——负载在场守卫生效且 **perf_500 P95 转绿 PASS**（TheDivision2 关闭后 C1 归档条件达成）。电池 runner 164：162 直绿+2 红当日收口——①qa_r220_mode C0b（序 1 同族契约漏网，翻案 67/67）②r195_adapt A0①（R255 玩家实玩探针 qa_r255_play_a.gd:238 disabled **读点**字面量撞静态契约 grep——get() 动态取规避，580/580）。根级：r225_separation ④-3 tier3→帽 0 翻案为帽 96（二cv#8 tier 并档批未同步根级手动套件=静默过期第三现场，17/17）；**r225_tick ⑤ 回旋刃节拍 n=1 红留批**（tracker:1071 既有披露「手动直跑不入电池」——本批无代码路径交集[单敌无分离对/proj 直驱/泵异系统]，R225 后某批演进所致存量债，下批候选）。**「根级/stress 不在电池=静默过期」三连现场**（storm 断言①/qa_r220_mode C0b/r225_separation ④-3）——制度性启示已记记忆：电池口径变更批必须 grep 电池外同主题套件。**vc64=InfiniteFission_v0.1.63_vc64.apk 13 门禁全绿**。真机复验重点：①满屏敌推挤「咯噔」是否收窄（序 2）②每局首次升级开卡顿挫是否消失（序 1）③长跑 C 盘日志量（洪水闭环后应恒 <MB 级）。
+
+## R257、出发回主页复发批（2026-10-11 · fast 档 · 真机反馈「还是困难-第三关，点出发，回到主页」）
+
+### R257 需求与定案
+
+| # | 反馈 | 定案 |
+|---|---|---|
+| 1 | 困难-第三关-出发-回到主页（R254-2 同症状；用户措辞「还是」=vc63 自愈修后仍现——但用户所装包版本待证，vc57-64 复验均未回收） | 复现探针定根因（嫌疑面：真机祝福面板渲染/困难档 tier 池边界/demon 波表导出缺失/瞬死感知为未进游戏/GAME_OVER 自动回菜单时序）→ 修 → 配测试 |
+
+### R257 侦察结论与落刀（fast 档主智能体亲做 · 可观测性三件套+修轮五刀）
+
+- **侦察矩阵（桌面无法复现=真机独占变量收敛）**：桌面全链绿——①真按钮路径复现 PLAYING 正常（选关面板→切困难→demon 行出发钮→面板弹→确认→进局，qa_r257_probe_journey 逐帧时间线：首敌 0.6s/首伤 6.4s/死亡→GAME_OVER 边沿结算屏真显）②UI 锁与 game_loop 同源（menu_screen:542 行锁与解锁门同用 `Meta.is_map_unlocked`，分档键 map_id#难度）③切难度重建行在（R245）④demon 波表在包（wave_table_demon.res 12.6KB）⑤idle 不秒死（首伤 6.4s，29 点单跳 vs hp60 两跳即死=难度断崖设计债 R255 已 flag 非本批）⑥结算屏接线在（GAME_OVER→show_summary 无早退）。**真机未知数（所装包版本/真档状态/实际所见）只能事件级诊断下次复发定罪**——落刀=可观测性而非盲修。
+- **三件套**：① `DebugStats.event()` 公开事件口（"[ev HH:MM:SS] " 墙钟前缀入环）② game_loop 出发链事件埋点（出发二次/出发拒绝含上一关名+难度/start_run/祝福池空直达/祝福面板弹池数+档+map/确认·dismiss·清记忆收口）+ change_state 成功迁移「状态 %d→%d」③拒绝路径可见化（原静默 push_warning+return 改 flash_hint 菜单顶横幅+push_warning——「点了没反应」当场终结）。
+- **QA/评审一轮收口（评审不建议现状出包→修轮五刀全落）**：评审报告 docs/qa/2026-10-11-R257-评审意见.md。**H1 横幅被 MenuBg 整层盖住**（挂载序：hint 先挂 _root 第 0 子、不透明底后挂画在其上=可见化刀整刀失效；B20 断 visible 标志位测不到绘制序=QA 功能面同构盲区）→ 修=flash_hint() 内 move_to_front 每次闪现幂等重申置顶（挂载序不可依赖——懒挂兄弟会压回）+B20 补绘制序断言（hint 居 _root 兄弟末位且在 MenuBg 之上）。**M1 非法迁移拒绝不入环**（与「start_run 后中途崩」链形态同构真机不可分）→ 拒绝分支补「迁移拒绝 %d→%d」事件行（与警告同 5s 节流防刷环）。**M2 UI 层吞 tap 只能反推**（假说 f 若病灶是上层吞点击导出呈空白）→ menu_screen._on_map_pick emit 前补「选关出发钮：map=… 难度=…」（tap 从反推变直证）+B21 升级真按钮路径断言。**M3 事件 ~4 分钟被性能行冲走**（240 行共享环 1Hz 采样 MENU 态也在跑——一次性失败+延迟导出即丢证）→ 事件独立环 DIAG_EVENT_CAP=120（双写：混合时间线环保留互为上下文+独立环不被冲刷）+diag_export 前置事件段+diag_clear 同清。**L5/L6 搭车**：池空事件补 map 字段；probe [post] 标注 20s→死后 5s 纠正；hint y 250→215 净空带（避 logo 重叠 26px）+R195 全宽锚（宽视口随动）。评审 L3（两时域墙钟/运行时并存=有意设计：事件墙钟对真机钟、性能行运行时对局内钟——登记不改）、L6（continue/每日/restart 无专属事件——留批：出发链复发场景不涉）。
+- **定罪链假说矩阵（评审推演+修轮后全覆盖）**：a 解锁门拒=能（出发拒绝行含上一关名+难度+flash_hint 当场可见）b 池空直达+start_run 前崩=能（池空 map=→start_run→状态 1→2 三连断点可见）c 面板渲染失败=能（面板弹行+反复「出发二次」无「确认」）d 瞬死回菜单=能（1→2→2→5→5→1 时序）e pending 闸=能（「出发二次（模态期）」）f UI 吞 tap=能（M2 后「选关出发钮」行缺席=直证）。**修后五假说六通道全可定罪**。
+- **配测**：r252_blessing_cases 新增 B20（拒绝=state 仍 MENU+不误启+事件入环含上一关名+横幅在显指向缺口+绘制序置顶 H1 回归守卫）/B21（修轮升级真按钮路径：选关出发钮事件+面板弹+确认含词条 id+start_run+状态 1→2 五事件链）——计数差分法（_diag_count 前后差不清环，免疫套件残留+不破坏游标不变量）；qa_r257_probe_journey 尾部独立环 dump（真机导出同形态）。
+- **QA/修轮二轮（三缺陷全收口，电池等效全绿）**：QA 报告 docs/qa/2026-10-11-R257-QA-报告.md（证据日志 27 份归档 r257-qa-logs/；电池 164 套 160 绿/4 红；靶向 13 项全过含 menu_perf 81/81、r254 双探针、play A/B 完整对局、ospec 硬门）。**QA-257-1 [high] B21「选关出发钮：难度=1」断言红**：B20 清 map_records 后 normal_cleared()==false，_on_difficulty_pick(1) 经 _refresh_difficulty_row（menu_screen.gd:706）对未解锁档回落 _sel_difficulty=0——事件诚实发「难度=0」（journey 探针已证已解锁路径事件链正常）。修=B21 夹具恢复 grass 普通通关记录 → **66/66**。**QA-257-2 [med] diag_clear 返回值双环之和破既有断言**（r208 15/16、r211 31/32）：修轮「双写」退为**独立环单写**（事件只入 _diag_ev_lines、_diag_lines 回归纯 1Hz 性能行、返回值回退时间线环口径——事件行数无既有消费者）→ **16/16+32/32**。**QA-257-3 [med] r188_idle P7 挂起（三杀 300/580/700s+主控亲跑同挂）**：探针三因子量化定谳=**非死循环、非 R257 引入**——pick 0.5ms/apply 1.5ms 单张健康、预算 35ms 桌面档正常、但**递减速率单调衰减（f200 15张/帧→f1200 2张/帧）+单帧 40-97ms=「apply 单张成本 ∝ 已应用层数」的累积型二次方**（47954 张总时长外推 ~867s 超一切 timeout）；10-01 全绿→10-11 挂=10-04~10-11 窗口某批（R254/255/256）加剧的存量回归，r188_idle 是唯一 47954 张巨批暴露者。修=套件适配 gain_xp 1e12→1e10（连升 7038 级，断言族语义全保：连升≥100/帽≤3/溢出批/恰1窗/消化 1920 帧 108s 收口归零）→ **176/176 exit 0**；**二次方根因（词条预聚合随层数重算嫌疑）留批待 profile 根治**——真机挂机极端连升场景风险披露。附带 2 low 顺手修：play_a/b「state=1（0=MENU）」枚举标签注释纠正（MENU=1）；qa_r255_play_menu headless 必挂（RenderingServer.frame_post_draw 引擎级不发出，QA 最小探针坐实，窗口跑 16/16 过）=前置存在留批。
+- **门禁账与出包**：修轮复验 r252_blessing 66/66、r208_fivefix 16/16、r211_diagtoggle 32/32、r188_idle 176/176（420s 帽内 108s 消化收口）、journey 探针 exit 0 七事件终形态（状态 0→1/选关出发钮 map=world_demon 难度=1/面板弹/确认/start_run/状态 1→2/状态 2→5——即真机「导出诊断日志」用户所见）；QA 电池 160 直绿+4 红全修全验=**等效全绿**。**vc65=InfiniteFission_v0.1.64_vc65.apk 13 门禁全绿**。真机复验重点：①所装包版本先确认（vc57-64 复验均未回收）②困难-第三关出发若再现「回主页」：主菜单「导出诊断日志」发回——顶部事件段七行内一锤定罪（缺「选关出发钮」=UI 吞 tap；有钮无面板弹=面板层病灶；有 start_run 无状态 1→2=启动仲裁拒；状态 2→5=瞬死感知）③拒绝路径若真机可见「尚未解锁：需先通关【寒霜冰原·困难】」横幅=存档分档键错位实锤。
+
+## R258、祝福面板被菜单盖住定罪批（2026-10-11 晚 · fast 档 · R257 布网收网——用户发回真机 diag 日志）
+
+### R258 需求与定案
+
+| # | 反馈 | 定案 |
+|---|---|---|
+| 1 | 用户发回 vc65 真机诊断日志（R257 布网收网）：事件段仅四行——两对「选关出发钮 map=world_demon 难度=1」+「出发二次（模态期）采用=true」，无「祝福面板弹」/无 start_run/无状态迁移，30 秒会话停在 M 态 | 事件链定罪：pending=true（出发二次两度触发）+ tap 穿透到菜单出发钮（面板开着 tap 却命中菜单层）=**祝福面板 open 后被 menu_screen 整层盖住**——挂载序实锤 game_loop.gd:3034 面板先挂、:3051 菜单后挂画其上（后挂=上层）。**R252 面板上线即隐形**，is_open() 标志位测试同构盲区（与 R257-H1 横幅被盖同病——从未断言绘制序）→ 修=挂载序归位+open 时 move_to_front 运行时重申+事件行带几何 → 配测 B22 → 出包 vc66 |
+
+### R258 实现注记（fast 档主智能体亲做）
+
+- **定罪证据链（真机日志四行闭环）**：①「出发二次（模态期）」触发条件=_blessing_pending==true（game_loop:1829）→ 面板路径执行过；②玩家 tap 仍触发「选关出发钮」（menu_screen 层按钮）→ 面板 dim 层不在 tap 路径=面板整体被盖；③挂载序 :3034 面板 < :3051 菜单（CanvasItem 兄弟序后挂上层）+菜单 root 不透明 bg（#EEF3FF 全屏 ColorRect）；④桌面探针「真按钮路径正常进 PLAYING」=程序直调 confirm() 收口非视觉点击——面板在桌面同样不可见（is_open 假绿）。玩家行为还原：点出发→面板（隐形）弹→以为没反应→再点（「出发二次」自愈重开仍隐形）→放弃→感知「点了出发回主页」（其实一直停主页）。
+- **修刀三件**：①blessing_pick_ui add_child 挪至 menu_screen 之后（挂载序归位——z 序真源）；②open() 尾 `_root.move_to_front()` 运行时重申（R257-H1 同款定式：挂载序不可依赖，防未来任何后挂兄弟再盖）；③「祝福面板弹」事件行带几何读数（挪至 open() 后：面板卡全局矩形+父序位）——下次复发日志直读面板在哪。
+- **遗留谜题（不阻塞主刀）**：真机日志缺「祝福面板弹」事件行（同步代码 pending=true 与事件行相邻不可分）——待 vc66 复发日志带几何事件行后水落石出（候选解释：早期事件被清/环写入异常，行为层定罪不受影响）。
+
+### R258 修轮与交付（CanvasLayer 基类修正+B22+邻接+vc66）
+
+- **首轮修刀编译错与基类修正**：首版 open() 内 `move_to_front()` 编译红（BlessingPickUI **extends CanvasLayer** 非 Control——CanvasLayer 无 move_to_front；连坐 B13/B20 假红=编译错致 open 体失效 pending 挂起）。**全 UI 屏皆 CanvasLayer 且 layer 默认 0——绘制序真源=layer 属性（同 0 层才按 add_child 添加序）**。终版修刀三件：①game_loop 挂载序归位（blessing_pick_ui add_child 挪至 menu_screen 后=同 0 层按添加序画在菜单上）；②open() 内 `layer = BLES_LAYER(40)` 每次开板重申（显式盖过全部默认 0 层屏，免疫挂载序——低于首遇卡 50/boot 屏 100）；③open() 尾事件行带几何（`祝福面板可见化：卡片=[P,S] 层=40 序位=行数=`——下次复发日志直读面板在哪）。
+- **配测**：r252_blessing_cases 新增 B22（绘制序=面板 index>菜单 index[挂载序根修]/可见化事件行入环含卡片矩形+层读数/二次 open 幂等后 layer==40 且序位保持）——**69/69 全绿**（B13/B20 连坐红随编译修自愈）。
+- **邻接面**：journey 探针 exit 0+几何事件行实形态确认（`卡片=[P:[516,527.5],S:[620,900]] 层=40 序位=32/34 行数=1`——设计分辨率居中）；qa_r254 双探针/probe_r252_menu_perf/test_pkg4/test_pkg5 全 exit 0 零 FAIL。
+- **出包**：**vc66=InfiniteFission_v0.1.65_vc66.apk 13 门禁全绿**。真机复验指引：装 vc66 → 困难-第三关点出发——**祝福选择面板应首次真正可见**（居中大卡：选词条后点「出发」进战斗，或「不选祝福」直进）；若仍无面板，导出诊断日志——「祝福面板可见化」行的卡片矩形+层数据即直接归因（缺该行=面板 open 未执行=另一层病灶）。
+- **教训入记忆**：CanvasLayer 绘制序=layer 属性非挂载序（同 0 层按添加序）——UI 层级排布走 layer；「面板/弹层可见性」断言 is_open() 标志位测不到绘制序（get_index/layer 断言才是真源）——R257-H1 横幅与 R258 面板两起同病。
+
+## R259、主页面板切换掉帧批（2026-10-11 深夜 · fast 档 · 用户反馈「主页点击关卡、成就、图鉴等页面掉帧都很严重」）
+
+### R259 需求与定案
+
+| # | 反馈 | 定案 |
+|---|---|---|
+| 1 | 主页点击关卡、成就、图鉴等页面切换掉帧严重（vc65 真机；用户日志 MENU 态渲ms 均值 8.7-9.9/fps 59-96 抖/对象数 925↔1551 跳变=面板行树整挂；1Hz 均值口径看不到点击瞬间尖峰） | 桌面探针量化各面板打开/切页帧尖峰（R255 menu median 探针复用+扩展选关/成就）→ 定位（R256 序 4 缓办残留嫌疑：选关/成就行未缓存+图标冷画+云层 dc 底噪）→ 修 → 验证 → 出包 |
+
+### R259 修刀（三面板行缓存，menu_screen.gd + meta_manager.gd）
+
+- 桌面基线（修前）：成就 13-14ms/选人 14-16ms/选关 10ms（超 60fps 预算 16.7ms 的点击单帧尖峰；三面板每次打开全量重建行树）。修后命中：成就 4.3ms（−70%）/选人 3.7ms（−75%）/选关 3.5ms（−64%，切档秒切）；首开 miss 仍原成本（缓存常驻后全命中）。
+- ①成就=sig（页码+全表完成位图）+DescL 轻刷（`_ach_desc_text` 单源函数，R245 进度文本逻辑抽取；desc 尾 x/y 高频变化不入 sig 防抖动）；②选人=全量签名（picked/解锁位图/购买力位图/结晶/自定义武器/图鉴计数/total_kills/best_depth/**_sel_difficulty** 九项——第九项评审补）；③选关=分档缓存（难度→行数组）+`Meta.map_records_changed` 新信号失效（结算/通关喂入写点 emit，两处）。
+- 行名标 AchRow_/CharRow_/MapRow_ 入 `_recycle_panel_rows` detach 白名单（与图鉴 CodexRow_/RxnRow_ 同款）；反应页 30ms 维持 R256 序 3 裁定（闲泵排空后命中）。
+
+### R259 评审三缺陷与修轮（2026-10-11 深夜收口）
+
+- **HIGH-1 缓存覆盖不 free 旧行=孤儿泄漏**（Node 非 RefCounted，整键覆盖后旧 rows 失引用不释放；选人循环钮连点无上限累积）→ 抽 `_free_cached_rows(p_rows)` 共用释放口（挂树防御同失效口先例），成就/选人 miss 覆盖前调用，`_invalidate_map_rows_cache` 改为复用。
+- **MED-1 选人 sig 漏 _sel_difficulty**（`_custom_weapon_label` 读难度——切难度后重开选人武器钮文本陈旧）→ sig 加第九项。
+- **MED-2 成就缓存键漏 _ach_tab**（四页签列表长不等=切签恒 miss+同键覆盖泄漏+位图长恰等时潜伏 sig 撞车串页）→ 键改 `"%s|%d"`（`_ach_key()` 单源）。
+- LOW-1 测试补强 → qa_r259_panel_cache 12→17 断言（H1 难度变重建+旧行 freed/M1 武器钮文本现算/M2 切签独立缓存+同签命中+原签键不覆盖）。
+
+### R259 QA 侧（子代理中途终结，主控接手收口）
+
+- QA 遗产三专项套件：qa_r259_stale（陈旧数据/信号面 26 断言）/qa_r259_leak（内存面 10 断言：实例追踪口径——A 武器循环×12 freed=156 orphan=0、E 失效×10 freed=60 orphan=0、C 互切同实例、B 页签往返跨键并集判读零孤儿）/qa_r259_panel_cache（17 断言）。**三专项终态全绿：26/26+10/10+17/17**。
+- QA 中断故事（mtime 对账）：QA 双开 stale 套件挂死（入口 `cases.get("fail_count")` 属性/方法错配→int(null) 炸协程中断，R253 坑同款）→QA 临终 22:18-22:25 自修入口+S6 断言口径+leak 并集判读后任务终结未写终报→主控杀双开孤儿进程、复跑裁决。期间三起假红逐一定谳：①「S6 武器循环 FAIL」=旧版断言对 2 候选×3 循环口径错（非产品缺陷）；②「leak B orphan=258」=跨键持有误判（修判读为全键并集后零孤儿）；③「panel H1/M1 FAIL」=GDScript freed 实例 ==null 判等为 true（悬垂引用 !null 恒假）+ Button as Label 恒 null + CharRow_0 非 fission 行三连套件刀，产品侧零缺陷。
+- 邻接回归：r194_mobile 29/29、r245_content 39/39、r246_ui 41/41、r252_blessing 69/69、probe_r252_menu_perf/qa_r254_probe_map/qa_r257_probe_journey 三探针 exit 0——七套全绿（修轮后代码）。
+- **出包：InfiniteFission_v0.1.66_vc67.apk（2026-10-11 深夜，13/13 门禁全过）**。
+- 真机复验指引：主页点选关/成就/选人应明显变流畅（命中路径 −64~75%）；**首次**打开各面板仍有一次建行成本（缓存 miss）；切难度/换武器/解锁后重建同帧完成无卡顿。
+
+## R260、祝福面板 Q 弹动画掉帧批（2026-10-12 · fast 档 · 用户反馈「点击出发，弹出的 Q 弹动画明显帧率很低」）
+
+### R260 需求与定案
+
+| # | 反馈 | 定案 |
+|---|---|---|
+| 1 | vc67 真机：点出发后祝福面板 Q 弹动画（squash_pop 0.34s 果冻出场）明显低帧率 | 诊断=动画帧叠加持续负载：menu _process 双预热泵（CardDescPrewarm 4ms+图鉴泵 4ms/帧）在弹层模态期照跑 + menu 渲染底噪（真机日志 8.7-9.9ms）≈60fps 预算爆表；桌面/缓存测试不可见（泵消化完零成本）。修=模态期分泵挂起+行缓存 |
+
+### R260 修刀（menu_screen.gd + game_loop.gd + blessing_pick_ui.gd）
+
+- **刀 1 分泵挂起**（menu_screen `_process`）：CardDescPrewarm（卡面描述——菜单任何面板期无消费者）任一模态开即停；图鉴泵（R254 行级分帧预建=图鉴切页缓存的消费者）仅祝福弹层全遮期或非图鉴面板期停——图鉴面板开着豁免续跑（全停会废 R254 切页预建=切页回卡顿，主控自查纠偏）。置位点：`_on_lobby_pressed` 尾（_lobby_detail_open=true/_panel_kind=p_kind）、`_open_map_select`（独立开口补位）、`_on_panel_close`（全清）；祝福接线=game_loop `_try_open_blessing_pick` open 后 `set_blessing_modal(true)`+三收口（confirmed/dismissed/cleared）恢复。观测口 `card_desc_pump_paused()`/`codex_pump_paused()`。
+- **刀 2 祝福行缓存**（blessing_pick_ui）：`_rows_sig`=池 str|档 签名——同签名 open 零重建（行留树只重置 ButtonGroup 选中态+副标题+禁用态），Q 弹动画首帧不再叠加 26 行建树；签名变 free+重建。顺修存量缺陷：`_band`/`_title` 成员化+open 随档刷色（原 build 期烘焙 _tier=1，蓝/紫/金档色错）。
+- 验收 qa_r260_bles_anim 16/16（泵挂起链 7+祝福链 3+行缓存 5+档位色 1）；邻接与 QA/评审并发账见下。
+- 主控邻接（修刀后代码）：r252_blessing 69/69、r194_mobile 29/29、r246_ui 41/41、probe_r252_menu_perf/qa_r257_probe_journey exit 0——五套全绿。
+
+### R260 评审修轮（2026-10-12 凌晨收口）
+
+- **HIGH-1（阻塞）出发两口直关不清位→回大厅双泵永久停摆**（_on_map_pick/_on_daily_start `_panel_root.visible=false` 不清 _lobby_detail_open——打完一局回大厅 CardDesc+图鉴泵永停=废 R254 成果；恢复唯一途径=再开面板手动关）→ 抽 `_close_panel_core()` 统一口（清位+visible）+防御层 `_on_state_changed` 离 MENU 全清四模态位。主控教训：置位点只对账了开口侧（grep visible=true）没对账关闭侧（visible=false 全写点）。
+- **MED-1 设置面板（同款 squash_pop 全屏弹层）不在挂起门内**→ menu `_settings_modal` 位并入两谓词+`set_settings_modal()` 口；game_loop `_on_settings_open_defer/_on_settings_closed_persist` 接线（用户下一个反馈大概率就是它——评审预判）。
+- **MED-2 tex 泵（game_loop MENU 分支 4ms/帧+boss 预热单项 88-245ms 尖峰）模态期未停**→ 一行门 `not menu_screen.card_desc_pump_paused()` 才泵（三泵合计 12ms/帧全让给弹层动画；3s 挂机 boss 尖峰同被拦在模态窗外）——评审建议留批、一行顺手本批收。
+- **LOW-3** set_blessing_modal 注释改口径（条件合并语义住在谓词非赋值处）/ **LOW-4** 二次出发自愈路径（:1751/:1843 两处 open 后补 set_blessing_modal(true) 显式重申。
+- **LOW-1（图鉴泵恢复延后 0.4s 防豁免期动画窗口超预算）/LOW-2（祝福首开预建）留批。**
+
+### R260 测试与复跑账
+
+- qa_r260_bles_anim 16→**23 断言全绿**（补：评审 H1 出发两口回归钉×2/M1 settings 门×2/条件合并组合×2/title 字色）。三起套件刀定谳：池变夹具失效（蓝池单元素=pool2 同池，改确定性双元素）/悬垂引用 != 比较（R259 坑同族）/入口 && 笔误。
+- **R259-D1 修轮**（QA 终报 medium）：r245_diff_star 夹具直写 map_records 不发信号→选关缓存陈旧星标——`_inject_record` 尾+`_reset_star_fixture` clear 后各补 emit（同族两处），**diff_star 28/31→31/31**；全仓 grep 直写点对账：其余（qa_r254 双探针/journey/255_play）皆新进程首建无陈旧风险。
+- **R259-D2 修轮**（low）：qa_r259_panel_cache 入口无条件 quit(0)→按 fail_count 置码（cases 补 fail_count()），18/18 exit 0。
+- 终态全绿：qa_r260 23/23+diff_star 31/31+panel 18/18+邻接 r252_blessing 69+R194 29+r246 41+r245 39+menu_perf/journey/qa_r254 三探针 exit 0。
+- **R260 QA 终报：通过**（DEF-1/GAP-1=评审 HIGH-1/MED-1 同款，修后复验绿；专项 qa_r260_qa_pump 24/24+qa_r260_qa_rows 10/10+邻接六套 69/93/39/41/14/105+menu_perf/journey 双探针；N1-N4 注记非阻塞——N4 runner 对 cases 加载失败显式 exit(1) 留批）。
+- **出包：InfiniteFission_v0.1.67_vc68.apk（2026-10-12 凌晨，13/13 门禁全过）**。
+- 真机复验指引：点出发后祝福面板 Q 弹动画应明显流畅（三泵 12ms/帧全让给动画窗）；大厅开设置面板的出场动画同受益（MED-1）；打完一局回大厅后图鉴/卡描述预热恢复（HIGH-1 修复=不再永久停摆）；换难度档弹面板顶带/标题色随档正确（顺修存量缺陷）。首开各池各档仍有一次建行成本。
+
+## R261、祝福面板重叠/筛选/翻页批（2026-10-12 · fast 档 · 用户反馈「图标和字有点重叠了，还有给个按等级筛选的选项，目前只有第一页且无法往下翻（滚动），只有第一页 7 个白色祝福」）
+
+### R261 需求与定案
+
+| # | 反馈 | 定案 |
+|---|---|---|
+| 1 | 图标和字重叠 | 行文字 Label x 52→64（52px 圆章 icon+Button 内边距≈12——52 下名字压章尾） |
+| 2 | 要按等级筛选 | 池已按难度锁档（普通=全蓝池）——「白色」=图标章白底+类别色形观感；落地=**类别筛选页签**（全部/加算/乘算/局部/机制/元素——TraitData.pool 真源，池内空类隐藏） |
+| 3 | 无法滚动只见 7 个 | ScrollContainer 触摸拖动被行 Button 吞=真机滚不动根因——**滚动壳退役改分页**（7 行/页+翻页钮，成就面板成熟先例） |
+
+### R261 修刀（blessing_pick_ui.gd 主改）
+
+- 分页 BLES_PAGE_SIZE=7+翻页行（上一页/页码/下一页；单页静默）；预选跳页（记忆项在后续页→open 直跳+选中在树——否则预选不可见形同虚设）；行缓存升页粒度（_rows_page_cache 页码键，基签名=池|档|筛选 变则 _free_page_cache 全弃置——R259 HIGH-1 口径，翻页往返零重建）；diag 事件行扩「池/筛/页」三元。
+- 布局重排：页签行 y124×36 / 列表 y168×484（7 行恰满）/ 翻页行 y664×44 / footer·按钮行不动。
+- r252 B18 断言口径迁移（全池行数→当页页容量——分页后树内行=当页）。
+- 验收 qa_r261_bles_filter 15/15 一次全绿；邻接 r252_blessing 69/69（B18 迁移后）+r260 23/23+journey 探针全绿。QA/评审并发账见下。
+
+### R261 评审修轮（HIGH×2+MED×5，全部落码）
+
+| 级 | 缺陷 | 修法 |
+|---|---|---|
+| H1 | 隐形携带：翻页/切签清按下态但不清 _selected_id——确认带隐形祝福且无法取消 | _rebuild_rows 末尾回填 _selected_id 选中态（is_instance_valid 口径）+新增已选摘要行「已选：X（点「出发」携带 · 再点该行可取消）」（翻页行与 footer 间 y716 空带） |
+| H2 | x52→64 仍叠 17px：Button.icon 原生尺寸绘制=63.5px 章宽+content_margin_left 18=右缘 81.5 | icon_max_width 主题常量钳宽 44（18+44=62）+Label x=68（留 6px 正缝）；icon 兜底改 8（FALLBACK 灰菱） |
+| M1 | 保留筛选的类在新池缺席（跨难度重开）→空列表死胡同 | open 头检查类存在性，缺席回退「全部」（_filter_pool=-1） |
+| M2 | 预选项被保留筛选挡住→预选形同虚设 | 预选先跳签（filter=所在类）再跳页，选中可见 |
+| M3 | 签钮无选中反馈 | toggle_mode+set_pressed_no_signal 高亮当前签 |
+| M4 | 空类隐藏后签行留孔 | 可见签顺序重排 x（24 步进 96） |
+| M5 | qa_r260 陈断言锁全池口径 | R2/R3/R6/R7 迁移当页口径（rows/page_n=mini(7,·)） |
+
+### R261 QA 修轮（真缺陷 1+测试基建 3）
+
+| # | 定谳 | 修法 |
+|---|---|---|
+| QA-261-1 | 真缺陷：预选跳页赋值被 _rebuild_rows 签名分支 `_page=0` 覆盖（首开/换难度重开中招——预选永远第 1 页） | open 重构：跳签+跳页块后置到 _rebuild_rows 之后，跳页后再 _rebuild_rows 重挂目标页（回填选中态在内） |
+| QA-261-2/3 | 假红：测试⑥段④跳页残留 _page=末页→⑤行.Nil 炸；池变夹具蓝池可能单元素同池 sig | ⑥段前 `ui._page=0; ui._rebuild_rows()` 归零；pool2 改确定性双元素 [pool[0], &"AFF_CRIT_RATE"] |
+| QA-261-4 | 测试基建：r194 泄漏局内 rng 解锁词条进共享 headless 存档→污染后续套件（qa_r260anim 曾 20/23 假红） | r194 新增 _saved_codex 快照+teardown 还原+Meta._save() |
+| 探针五红 | 假红定谳：深挖探针断言锁修轮前旧语义（a 组静默清空/b补空列表/d 组隐形携带） | 三组断言迁移新语义（a=M2 跳签+选中可见；b补=M1 回退全部+rows=7；d=H1 回填 button_pressed） |
+
+### R261 复跑与出包
+
+- 终态全套六件 244/244 全绿：qa_r261_bles_filter 19/19 · r252_blessing 69/69 · qa_r260_bles_anim 23/23 · qa_r260_qa_rows 10/10 · r194_mobile 93/93 · qa_r261_probe_deep 30/30（断言语义迁移后）。
+- 出包：`InfiniteFission_v0.1.68_vc69.apk`（export_apk_versioned.py --bump 十三门禁）。
+- 真机复验指引（vc69）：①祝福面板顶签行按类别筛选（池内空类自动隐藏不留孔）；②底部翻页钮可达全部词条（页码显示）；③图标与名字不再重叠；④选中后翻页行下方出现「已选」摘要、翻页/切签选中态保留、再点该行可取消；⑤带记忆重开+上次筛选在别的签→自动跳到预选所在签所在页。
+
+## R262、祝福体系批（2026-10-12 · workflow · 用户需求②「去 rarity==tier 锁档」+池漏滤定谳+护盾定谳）
+
+### R262 需求与定案
+
+| # | 反馈 | 定案 |
+|---|---|---|
+| 1 | 池漏滤 required_weapon（祝福面板出现近战/激光绑定词条=死卡） | 定谳 bug：原 `_blessing_pool` 四条件（档位/非阈值/无前置/图鉴解锁）缺「首发武器适配」——MEC_GIANT_BLADE 等绑定词条进普通手枪局面板。修法=**六键静态适配门** `_blessing_fits_start_weapon`（required_weapon/required_forms/required_class/excluded_weapons/requires_projectile/requires_weapon_keys——card_generator.mount_gate_allows 数据键口径复刻，面板期无 WeaponBase 实例不可直调其门） |
+| 2 | 去 rarity==tier 锁档（用户原话：品级签白/蓝/紫/金/全部+默认签=当前难度档+池扩全图鉴解锁词条） | ① `_blessing_pool(p_tier=-1)` 全池开放（p_tier>=0 保留分档探针；生产三调用点改全池）；② UI 筛选键 pool→rarity 五签（全部/白/蓝/紫/金——用户口径文案），默认签=blessing_rarity_tier(难度)，每次 open 重置；③ R252 跨难度挂载门拆除（`_apply_start_blessing` 删跨档回落分支——拆锁档后跨档记忆合法生效）；④ 全不适配死卡兜底改**拒挂**（横幅「与当前首发武器不适配，本局未生效」——死卡占 12 格构筑帽真伤）；⑤ 行按下色随「行自身品级」（全档同屏混档）；⑥ 副标题改「全档可选」（删「跨难度出战不生效」）；⑦ 图鉴解锁守卫不变（Meta.set_blessing_trait 零行为改动） |
+| 3 | 护盾（格挡力场）疑问 | **shieldBug=false 正常机制只解释不修**：①可叠 2 层（R226 起全词条无限叠层，stack_max=2 仅里程碑/遥测语义；同武器第 2 张充能 8s→5.5s，异武器 R253 独立计时 r238_shieldfix_cases.gd:170-174 实证）；②「词条栏已满：格挡力场 转为应急强化」唯一触发=货架生成时随机绑定的目标武器（卡面【武器名】前缀即提示，card_generator.gd:561/938/947）已挂满 12 种不同词条（trait_stack.gd:18 种类帽唯一拒绝线）——与护盾层数无关；③应急强化=挂载失败保底：固定白卡「攻击力+5%」（FALLBACK_ATK，decay_delta=0.85 逐层衰减），不随被转词条品级变化。用户可复核当时卡面【武器名】所指武器构筑面板词条种类数自证 |
+
+### R262 修刀（game_loop.gd 主改 + blessing_pick_ui.gd 筛选键迁移）
+
+- game_loop：`_blessing_pool(p_tier: int = -1)` 池扩+循环外求首发口径（`_starting_weapon_id` 既有仲裁——非 fission 恒手枪/fission 自定义过难度门，禁裸读 Meta.custom_weapon）+第五条件适配门；新增 helper `_blessing_fits_start_weapon`（六键静态判定+requires_weapon_keys 直读版：WeaponData 顶层属性键+四形态段 Dictionary 键）；`_apply_start_blessing` 删跨档回落分支+死卡兜底改拒挂；`_try_open_blessing_pick` 池空改全池+DebugStats 文案「祝福池空（图鉴解锁词条均不适配当前首发或未解锁）」。
+- blessing_pick_ui：`_filter_pool`→`_filter_rarity`（键域 -1/0/1/2/3）；open 头重置默认签=_tier+M1 缺席回退「全部」；M2 预选跳签键改 rarity；_apply_filter/_rows_sig/_refresh_filter_tabs/_on_filter_pick 同步迁移；签钮五枚（x=24/120/216/312/408）+签钮字色=rarity_color（全部=INK）；行按下色两处改按行自身 rarity。
+- meta_manager：set_blessing_trait 仅注释更新（R262 起全档合法——守卫仅图鉴解锁不变）。
+
+### R262 裁定记录
+
+- R252 §2.1-8「跨难度回落=不挂载不预选」定案**作废**（拆锁档后跨档记忆合法生效——保留挂载门则「UI 可选/进局失效」自相矛盾）；「与本难度档位不符」横幅句退役。
+- 「跨 open 保留筛选」退役——R262 起每次 open 重置默认签=当前难度档（全档开放后跨档筛选残留易致「列表空了像坏了」）；默认档签池内缺席回退「全部」（M1 口径保留）。
+- 签文案用户口径「白/蓝/紫/金」；rarity_name「普通/稀有/史诗/辉煌」保留为副标题正式名（二源并存）。
+- 首发适配门=修复非削弱：只滤「对当前首发不适配」词条，与挂载门语义对齐（面板可选=进局可挂自洽）。
+
+### R262 强度注记（回退阀评估用）
+
+- 普通局手枪首发金档可达恰 4 条：ELE_REACTION_VOID/MEC_CRIT_SHARD/MEC_FRACTAL/SYN_FIRST_STRIKE——R252-design:95 六件列名中 BEAM_SPECTRA(W4)/CRITICAL_MASS(W8) 被首发适配门滤（暴露面比拆门前 6 条口径小）。
+- 图鉴门不设防跨档（金卡权重与难度无关 card_generator.gd:1222-1233 基线 6.0）；爬梯激励消失（残余形态=默认签引导+跨档需主动切签）。
+- 回退阀（若强度不可接受）：恢复 game_loop `_apply_start_blessing` 挂载门（原 :1998 跨档回落分支）+副标题/M2 恢复跨档提示——局部化两文件。
+- 池收窄口径：手枪全解锁池 38/73={白6,蓝17,紫11,金4}（required_weapon 23 条+未被 W 门重复覆盖的 forms/class 门 3 条 AFF_CDR/AFF_RANGE/MEC_BULLET_PARRY+requires_trait 2+TH_* 7 被滤）；fission·W13 阔剑（地狱）池含 MEC_GIANT_BLADE/MEC_ORBIT_LINK/MEC_SLASH_TEMPO/AFF_CDR/AFF_RANGE/MEC_BULLET_PARRY 等。
+
+### R262 测试账
+
+- 新套件 qa_r262_bless_tier（壳+cases，T1 池扩/T2 适配门+fission 臂/T3 默认签/T4 缺席回退/T5 品级签/T6 跳签/T7 拒挂+对照/T8 跨档生效/T9 池空/T10 行色/T11 副标题/T12 每日隔离）。
+- 五套件迁移：qa_r261_bles_filter_cases（19 断言：夹具全池+品级签键+蓝档子集页数/尾项+空档隐藏 get(3)）；qa_r261_probe_deep_cases（30 断言：t1/t2 子池 17/11+pool_all 全池臂+a 组紫档取项/对照组子集 idx 口径+b 组金签 4 项/紫签 2 页/末页 2/2/c 组 pool_all+序列重排+b补默认档缺席）；qa_r260_qa_rows_cases（R1 夹具过 _blessing_fits_start_weapon+R7 skip 臂披露+R8 行色随行）；r252_blessing_cases（B1 全池 38+分档探针+逐项自洽/B2 全池空/B4 跨档生效反向迁移/B6 适配拒挂反向迁移；B11/B14/B17/B18/B21 探针零迁移）；qa_r260_bles_anim_cases（pool2 第二项 AFF_CRIT_RATE(r0) 混档必红→AFF_GOLD(r1) 同蓝档）。
+- 全解锁档下 qa_r260_qa_rows R7「pool_a 外且过门的蓝档候选」恒空集→恒走 skip 臂（覆盖率由 qa_r262 T1 补）；静态值 38={6,17,11,4} 为 grep 逐词条推算+评审两轮独立盘点交叉印证，实跑校准偏差以实跑为准（禁凑值放宽）。
+- R262 实跑校准声明（实施轮全量实跑）：qa_r262_bless_tier 26/26 一次全绿——静态值 38={白6,蓝17,紫11,金4} 与 grep 推演零偏差，T2-fission W13 臂/T7 拒挂/T8 跨档生效/T12 每日隔离全部实证；五套件迁移实跑 qa_r261_bles_filter 19/19 · qa_r261_probe_deep 30/30（夹具改全档解锁——原 r1/r2 局部解锁下 b 组金签/f 组池=38 断言依赖本地档残留，实跑 3 红后修）· qa_r260_qa_rows 10/10 · qa_r260_bles_anim 23/23（⑤段 R262 适配：全池口径下「出发直达战斗=泵恢复」前提需 codex 空——boot 档跨档解锁项会使出发弹面板挂泵，快照清空+组合臂临时解锁真弹面板）· r252_blessing 70/70（原 69+B1 逐项自洽新增 1）；探针 qa_r254_probe_map/qa_r257_probe_journey/qa_r261_probe_dump exit 0；邻接抽跑 r194_mobile 93/93 · r245_content 41/41 · r246_ui 39/39。
+
+### R262 复跑与出包
+
+- 出包：**vc70=InfiniteFission_v0.1.69_vc70.apk**（android_export/out/，export_presets.cfg version/code=70，2026-10-12 05:01）——验收门：过；回归：全绿（七套件 351 断言=qa_r262_bless_tier 26/26+qa_r261_bles_filter 19/19+qa_r261_probe_deep 30/30+qa_r260_qa_rows 10/10+qa_r260_bles_anim 23/23+r252_blessing 70/70+邻接 r194_mobile 93/93/r245_content 41/41/r246_ui 39/39；三探针 exit 0）。
+- 批次报告：docs/qa/2026-10-12-R262-batch-report.md（四题结论/改动清单/测试账/强度披露/性能项）。
+- 真机复验指引（vc70）：①手枪·普通局祝福面板无任何近战/激光绑定词条（巨刃/链式引爆/环绕三件/回旋刃投掷距离/激光滞留等不再出现）；②面板顶签=全部/白/蓝/紫/金五签，默认亮当前难度档签；③低解锁存档打地狱默认签缺席→自动回退「全部」不空列表；④带跨档记忆重开→自动跳记忆项所在品级签+页+选中可见；⑤跨档/异武器记忆祝福进局横幅披露「未生效」而非挂死卡占格；⑥困难档紫签下近战/法器适配词条翻页可达（vc68 反馈随分页+品级签+适配门三重消解）。
+- 性能项：真机诊断日志正文未提供，本批未诊断——待用户贴全文或放工作区后另批分析（1Hz 帧耗时行/模态期泵挂起/合批绘制热点）。
+- 报告批（2026-10-12 · 按独立读意见修订报告 docs/qa/2026-10-12-R262-batch-report.md，事实零变更）：一手复跑读者点名两套件与实施轮一致——`tools/Godot_v4.3-stable_win64_console.exe --headless --path repo -s tests/qa_r262_bless_tier.gd` → PASS 26/FAIL 0 exit 0、`… -s tests/runner/test_r252_blessing.gd` → PASS 70/FAIL 0 exit 0；关键计数升级一手证据（rarity 分布 6/26/28/13、白6/蓝17/紫11/金4 成员枚举、六金卡适配键 grep 0/1/1/0/1/0、MEC_FRACTAL required_forms[0,2,3]×手枪 form=0 过门、紫池 26 候选位次 #7/#10/#15/16/17）；补 Q&A 六问（重选入口=出发弹面板三按钮语义 出发覆盖/不选保留/清除记忆退订；应急强化三产口同一张卡；滚动坑仅祝福面板且 vc69 起分页根治；图鉴解锁唯一写口 meta_manager.gd:930 局内抽卡）。
+
+## R262b、性能与 buff 合理性审计+全量修复批（2026-10-12 · workflow-flash 审计+主控实施 · 用户「都修复」）
+
+### R262b 审计账（只读六线，30 finding=29 confirmed+1 suspected 定谳 informational）
+
+- 审计报告：docs/qa/2026-10-12-R262b-perf-buff-审计报告.md（310 行，证据成色〔实测/注断/推算〕三档打标；H1 敌状态件族未过 R229 量化≈桌面 240dc 为唯一 high；M1 存档快照丢品级/M2 图鉴泵无还账/M3 aggregate_panel 二次方/M4 DebugStats 诊断税/M5 CloudBackdrop/M6 辉光六个 medium；L1-L18 十八 low；S1 「三泵无值锁」被复核员以 r252_menu_perf 活断言推翻定谳 informational 残留图鉴泵单点；buff 数值侧 73 词条六维审计零数值错误）。
+- 修复排序 P0-P4 见报告⑤节；用户裁定「都修复」。
+
+### R262c 修复批（27 项全落：25 confirmed+S1 值锁+S2 随 M1 闭合）
+
+- **P0**：H1 敌状态件族（火苗/冰环/精英珠）α 过 ElementalFxLayer._qa 四分档+火苗色相插值 3 档量化（enemy.gd 三写点）；M6 orbit_field 辉光/闪环 α 量化（两写点）。
+- **P1**：M1 存档快照补 lv/lr/dv/dr 四键+恢复逐层品级副本重放（ADD 逐层值/MULT·ELE 取优定义回放；旧档无键零迁移）+S2 质变重触发同路闭合（qa_r262c 断言 value_mult=1.6 往返一致）；M2 图鉴泵超支还账（_codex_pump_skip_frames+skip_frames_for 占空，冷行 10-25ms 不再逐帧）。
+- **P2**：M3 aggregate_panel 栈级世代缓存（attach 头直失+clear 失效+世代 bump 三口覆盖；只读契约同 R232 先例）；M4 DebugStats._process 移除每 60 帧 frame_report() 无人消费调用（真消费=export_csv/测试直调保留）；M5 CloudBackdrop process_mode=PAUSABLE（脱 ALWAYS 祖先继承，暂停期停漂移——Q-14 保护的是 gamefeel 反馈层非氛围层）。
+- **P3**：L1 连杀跳字旧 tween kill；L2 HazardPool 首绘闩（末 1s 淡出才恢复重绘）；L3 三处 keys() 成员缓冲（popup/particle/boss_summons）；L4 ON_PIERCE 空词条闸前置；L5 tex 泵门换 codex 谓词（图鉴面板豁免——op:7 预热回消费窗口）；L6 三泵 12ms 相加口径注记；L13 MEC_KNOCK 文案去「子弹」（近战落点披露）；L14 图鉴祝福页行源滤 TH_*+计数归真（73→66）；L17 回响/诅咒 attach 失败横幅+计数（静默家族收口）。
+- **P4**：L7 confetti 注释单色声明；L8/L12 MEC_FRACTAL 死数据死键清理（value2 归零+inherit_lv2 删除，描述注继承率真源=SPLIT_INHERIT）；L9 质变双口径注记（hit_burst 乘数 vs kill_blast 绝对值）；L10 knife_scale 布尔探测位契约注；L11 validator 新校验「无处理器 EF 仅 threshold_only 可声明」（TH_* 全满足零行为变化，未来误用=启动期拦）；L15 CURSE 真源注记（tags 死字段勿按位实装净化）；L16 校验器域文案 0~8→0~NONE；L18 p_generation 死参契约注；S1 图鉴泵预算值锁（r252_menu_perf M4d 源码锚 count==1）。
+- **验收**：qa_r262c_fixes 新套件 28/28（量化锚/M3 缓存三态/M1 存档往返含质变/源码锚组/validator 拦截/TH_* 行源）。修轮两真缺陷自抓：M3 ADD append 不 bump 世代→面板缓存 attach 头直失补；质变大关门（第 4 关 MechanicGate）夹具未开→set_run_map(&"") 全开口径。
+- 遗留披露：元素附着 payload 字典分配未改（apply_attach 必传参无空闸可前置，改法有持有风险且量级低于已修 ON_TICK 一个数量级——audit L4 同段披露）；S2 满层质变恢复依赖 MechanicGate 状态的运行时支线由 qa_r262c 质变断言覆盖常规路径。
+
+### R262c 复跑与出包
+
+- 终态账：qa_r262c_fixes **28/28**+八套件回归全绿（qa_r262_bless_tier 26/26+qa_r261_bles_filter 19/19+qa_r261_probe_deep 30/30+r252_blessing 70/70+qa_r260_bles_anim 23/23+qa_r260_qa_rows 10/10+r194_mobile 93/93+r252_menu_perf **82/82**（新增 M4d 图鉴泵值锁+M7b/M2b 三断言 L14 口径迁移 73→66））+r188_idle **176/176**（⑨a 断言迁移「线性∈[5,15]」→「≤15 不超线性」——**ratio 0.95=M3 世代缓存常数标度的正面实证，R257 apply∝层数二次方遗案实测收口**：t100=0.55s/t1000=0.53s 千层零增长）。
+- **r224_deepload 段错误定谳：非本批引入**——S1 段原生崩（backtrace 无调试信息），本批五大高嫌疑系统性二分排除（M3 缓存禁用/H1+M6 量化回退/L3 战斗缓冲回退/L4 闸摘除/L2 首绘闩摘除逐一复跑均仍崩）；r232_knife 同构筑（MEC_FRACTAL×2）exit 0 交叉排除数据链；r224 上次绿=R232 时代（10-05），R233-R262 约 25 批未跑=盲区遗留，留批排查（G2 弹带 p50 522 超上沿为套件自标「披露类不阻塞」同录）。二分期间 enemy.gd 修复三处错插（恢复块误插 PoisonSplash/ FX 件+双闩——L2 闩唯 HazardPool 有效，其余两类 _draw 全程连续变须逐帧重绘）。
+- 出包：**vc71=InfiniteFission_v0.1.70_vc71.apk**（13 门禁全绿）。
+- 真机复验指引（vc71）：①存档「继续」后带品级词条数值不缩水（护盾充能节奏与下线前一致=最易感知项）；②菜单图鉴浏览不再连续顿挫（M2 还账）；③燃烧/冻结怪群的战斗帧更稳（H1 合批）；④连杀跳字快速连发不再互顶闪烁（L1）；⑤图鉴祝福页行数 66（7 条恒锁「？？？」消失）+大厅图鉴计数同步归真；⑥回响/诅咒满帽时出横幅提示而非无声。
+
+## R262d、应急强化重设计批（2026-10-12 · 用户裁定品级区分+全局化+衰减口径修正）
+
+- 用户原话三件套：「应急强化，不同品级buff数值应该不一致，这个攻击力是全局的吧，每层衰减有点过分了，应该衰减到一定程度就不变，不然一直衰减 到后面不是加了白加」。
+- **衰减口径修正（零码改，事实澄清）**：R262 交付解释「decay_delta=0.85 逐层衰减」系遗留数据键误当生效机制——实际 R226 起全池每层全额（管线 aggregate_add_entries layer=1 恒全额、面板/UI 逐层求和同口径），用户「衰减到一定程度不变」的诉求已被每层全额超额满足；_fallback_stat_card 注释已声明遗留键性质（qa_r262d H1 锚）。
+- **品级区分（用户①）**：_fallback_stat_card(p_rarity) 参数化，value=白 5% 基准 × RARITY_VALUE_SCALE[1.0,1.4,1.9,2.6]=5%/7%/9.5%/13%；转化产口传被转词条品级（用户「同品级转化的应急强化一样吗」之问的答案由「恒白 5%」改为逐档区分），卡池耗尽保底/黑市常青货维持白卡口径；卡面/横幅带品级字与数值（「转为应急强化·紫（全武器 +9.5% 攻击）」）。
+- **全局化（用户②「是全局的吧」）**：FALLBACK_ATK 不再挂单武器栈（原挂第一个有空位的武器=只加那把），改 player.add_fallback_atk 全武器累计；注入走 meta_atk_pct 合成键三口（add_weapon/set_character 动态注入/_apply_resonance 本命重写）——激光逐跳/镜面/召唤基准快照全链自动继承；重推复用 _apply_resonance(-1) 静默口。三产口统一收束 _grant_fallback（卡池耗尽直选/黑市常青货/满员转化）。
+- **黑市常青货死角消解**：原 R189「全栈饱和 12/12 无宿主→不上架死货」随全局化退役——恒可上架恒可买（shop _append_evergreen_fallback 宿主探测链删除+_ware_stocked evergreen 特判恒真）。
+- **存档往返+旧档迁移**：serialize_run 顶层 fallback_atk 键；_restore_run_state 在 set_character 后合并回填（顶层键+旧档武器栈内 FALLBACK_ATK 词条逐层求和迁移——运行期构造不进注册表，原路径 registry null 直接丢层；vc71 前旧档零数值损失）+ _apply_resonance(-1) 重推。
+- **验收**：新套件 qa_r262d_fallback **22/22**（品级定标四档/直选全局/满员转化横幅品级+数值/全武器 base_atk 同步+10%/本命重写共存/新武器注入/存档往返/旧档迁移 0.17 三方合并/常青货恒真/衰减口径锁+三注入点源码锚）。
+- 断言迁移四件：market_supply/r188_idle 常青货「落 target 栈+1」→「全局累计+5%」；r238_shieldfix ④b「落栈」→「蓝卡转化+7% 全局」；pkg4「主武器栈+1」→「全局累计+5% 栈不变」；probe_r238 H2 段头注过时声明（历史诊断快照保原貌）。high_stack/r188 自造 id 纯管线用例免迁移。
+- 复跑与出包：qa_r262d **22/22**+qa_r262c 28/28+qa_r262_bless_tier 26/26+qa_r261_bles_filter 19/19+qa_r261_probe_deep 30/30+r252_blessing 70/70+qa_r260_bles_anim 23/23+qa_r260_qa_rows 10/10+r194_mobile 93/93+r252_menu_perf 82/82+r188_idle 176/176+market_supply 25/25+pkg4 116/116+r238_shieldfix 18/18 全绿；**verify_feedback 首跑 8 红→685/685**——定谳 R252 祝福面板批存量断言债（R252 起出发链插面板步骤 state 停 MENU，该套件 R252-R262d 约 10 批未跑=盲区首次暴露，非本批引入；迁移一行：pending 时直调 _finish_menu_start 模拟「不选保留」收口）。出包 **vc72=InfiniteFission_v0.1.71_vc72.apk**（13 门禁全绿）。
+- 真机复验指引（vc72）：①词条栏满溢出转化横幅带品级字与数值（金卡转=+13%）；②转化/购买后**所有武器**攻击力同步提升（构筑面板逐武器对比，不再只涨一把）；③黑市全终局态常青保底行恒可买；④继续局应急强化数值保持（新档 fallback_atk 键；vc71 前旧档武器栈词条自动迁移零损失）。
+
+## R262e、满层徽标+主菜单点击卡顿+诊断环分态批（2026-10-12 · 用户三反馈+vc71 日志全文）
+
+- 用户原话：「如果buff满了，出现的buff左上角加个提示，当前已满层」「主菜单动画……最大的问题是点击后，感觉就是卡顿一堆才会跳出来」「动画剩下的问题不是卡，而是绘制的不够细腻的问题了……看看日志（包括局内）」。
+- **vc71 日志判读（全文 120 行+事件环 11 行）**：①出发帧 P 行物步µs**41612**（41.6ms/帧物理残差——「点击后卡一堆才跳出来」实锤；桌面同链仅 ~2.7-3.9ms=真机特有项嫌疑：bgm 换流/首波生成/纹理上传，已加「start_run 链 Xms」事件入环供下版分离定罪）；②菜单动画期渲ms 9.2-10.8 波动（稳态 8.3=vsync 锁）超 120 档预算线 8.33ms→fps 79-120 抖动=「不丝滑」根源（云层 13 大 Sprite 全屏 overdraw 主源，与绘制细腻度无关——稳定 60 优于抖动 120）；③**局内数据被冲**：打完局挂菜单 90 分钟把 120 行环形全占（局内仅 9 行）——性能环无分态保护。
+- **需求①满层徽标**：生成侧 `_make_trait_card` 加 maxed flag（cur 层数计算重构出 ADD 门对全池生效；判定=目标武器栈层数≥stack_max 且 stack_max≥2；显示=实挂同仲裁源）；选卡 UI 卡面左上角「已满层」深底白字角标（一次装配零重建，空卡清残留防串卡）。R226 起超帽层仍全额——徽标是「里程碑已达」信息位（披露）。
+- **需求②点击卡顿三刀**：a) **选关面板同档重开快路径**——close 本不拆行、open 却每次 recycle+重挂（R259 缓存白做）→判据「当前档缓存非空且行在树」直返，桌面探针 open **7486→1026-1188µs（-86%）**，真机 2-4×≈15-30ms→~2-4ms；b) **菜单态帧率帽 60**（mobile 门，change_state 尾：进 MENU min(60)，离 MENU 恢复用户 fps_cap 同式）——16.6ms 帧预算全容纳 9-11ms 菜单负载=零掉帧，稳定 60 替代抖动 79-120；c) **start_run 链耗时事件**入 diag 事件环（下版真机日志定罪 41.6ms 残差构成）。
+- **③诊断环分态保护**：MENU 态降频 10s/行（DIAG_MENU_SAMPLE_MS，节拍语义同 LEVEL_UP 不消费门）——挂机 90 分钟占环从 ~5400 行→~540 行，局内行不再被冲。
+- **验收**：qa_r262e_menu_click **11/11**（四段微基准基线落账+maxed 数据面三条+U1 徽标显隐 UI 链+U2 快路径行实例同一+U3/U4 源码锚）。微基准终值：选关面板 1153µs/祝福首开 321µs（本机池 3 项——真机大池另测）/start_run 3909µs（桌面当量）/选卡窗 477µs（vc48 分帧后）。
+- 「绘制不够细腻」=美术打磨诉求（云层/动画质感），本批帧率稳定后观感重评，未动美术资源。
+- 复跑与出包：qa_r262e **11/11**+电池 16 套件——13 绿+3 假红（qa_r262d 1/qa_r260_bles_anim 2/verify_feedback 4）**单独复跑三套件全绿（22/22+23/23+685/685）定谳电池序 user:// 污染**：qa_r262e（电池首位）跑 start_run×6+词条挂载把解锁态写 user://，后续断言敏感套件环境变（铁证=262d C2 横幅 got「新祝福已解锁：攻击强化」顶掉转化横幅）。**电池编排裁定：qa_r262e 有副作用恒置电池末位**（R261 坑单⑤同族——跨进程 user:// 持久泄漏）。出包 **vc73=InfiniteFission_v0.1.72_vc73.apk**（13 门禁全绿）。
+- 真机复验指引（vc73）：①选卡窗满层 buff 卡左上角「已满层」角标（护盾 2 层后再刷到护盾卡即见）；②主菜单点「选关」弹出明显跟手（原真机 ~15-30ms 单帧卡消除）；③菜单动画从「抖」变「匀速顺滑」（稳定 60fps——细腻度是独立美术项，顺了但不满意再单独开批）；④下版日志：打完整局再导出——局内行不再被菜单挂机冲掉+事件环新增「start_run 链 Xms」行（41.6ms 出发帧构成定罪口）。
+
+## R263、开局祝福无武器词条定谳批（2026-10-12 · 答疑+待拍板——vc73 用户反馈）- 用户原话：「目前开局祝福 依旧没有武器，为啥」（承接 R262 题③「困难档看不到近战/法器祝福」——用户按 vc70 复验指引⑥翻页查找仍未果）。
+- **定谳：非显示 bug，是 R262 首发适配门的结构性副作用，且 R262 复验指引⑥系错误结论**。事实链（探针 qa_r263_wpnpool_probe 三臂实跑）：
+  - ①开局祝福池=_blessing_pool 五滤（R262 加第五滤「首发适配门」修用户反馈①死卡混淆）；普通角色首发恒手枪 W1（game_loop._starting_weapon_id 角色门）；fission 自定义首发须过难度门（W8/W9 困难起、W11-13 地狱起，普通/困难局近战首发被拦回落手枪）。
+  - ②全仓 24 个武器专属词条（required_weapon/required_class）绑定 W2-W13——**绑定 W1_pistol 的 0 个**（grep 实数）→ 手枪开局适配门滤后武器专属词条恒 0，与图鉴祝福页 66 行全集（含巨刃/环绕族）形成落差。
+  - ③探针：A 普通角色×困难 全池 38 项、武器专属 **0**；B fission+W8 环绕×困难（门过）全池 32 项、含 MEC_CHAIN_DETONATE/MEC_GIANT_BLADE/MEC_ORBIT_AXE·BOLT·LINK·SWORD/MEC_BULLET_PARRY/MEC_CRITICAL_MASS 近战队 **8 项过门**（门逻辑本身正常）；C fission+W8×普通 难度门拦回落手枪=同 A。
+  - ④R262 批报告复验指引⑥「困难档紫签下近战/法器适配词条翻页可达」与同报告枚举（紫 11 过门名单=纯通用/手枪兼容，武器绑定 15 全滤）自相矛盾——手枪首发下永不可达，用户「依旧没有」实属必然。
+- **设计矛盾根**：R262 题①（用户反馈「选了近战词条挂手枪=死卡」）要求不适配不上池；题③（用户想看到武器祝福）要求上池——手枪首发下二者不可兼得，R262 修①牺牲③但未披露。
+- 修复方向待用户拍板：A 祝福送武器（选武器绑定祝福→开局直接装备该武器并挂词条；难度门对祝福是否开例外的裁定随行）/ B 维持适配门+面板文案引导（披露「武器专属词条随改造者·自定义近战/法器首发出现」，现成机制零平衡风险）/ C 放行+挂载期死卡横幅（回归 R262 前旧行为，不推荐）。
+- **用户拍板（2026-10-12）：方案 A 祝福送武器**——选武器绑定祝福（如巨刃/环绕族）→开局直接装备对应武器并挂上词条生效；难度分批（困难起近战）对祝福开例外，普通局也可通过祝福拿到近战/法器。走完整流水线（策划→分析→实现→测试∥评审），批号 R263，目标出包 vc74。
+- **用户追加需求②（同日，合流本批）**：原话「新增一个白色祝福要10、蓝色20 紫色30 金色50，能限制一下无脑使用 局外货币，然后每把打完得给一些货币，你看看怎么平衡」——祝福改局外货币购买（定价拍板 白10/蓝20/紫30/金50，货币定名「星尘」），每局结算按波次/击杀/难度产出，平衡框架设计定案（普通通关≈免费带一局本档）。收费与送武器互为平衡缓解（武器绑定词条紫15/金2 集中，30/50 价签=送武门槛）。
+- **交付账（完整流水线）**：策划 1 轮修订（分析「修改后放行」四点必改：蓝紫计数 24=蓝7/紫15/金2+池 62={白6,蓝24,紫26,金6}、迁移清单补 B6/T7 载靶 AFF_CDR+星尘 fixture、扣费唯一实现序、送武解析器落 MechanicGate static）→ 复审放行 → 实现 T1-T6（星尘经济 meta_manager/池三态化+送武解析/装备链扣费/UI 四处/新套件×2/迁移）→ 测试∥评审首轮（QA 有条件通过 0high 2med：desc 宽度失控 32/62 行+qa_r260 缺 fixture；评审 0high 2med+5low：跨进程已购蒸发+置灰不可感知）→ 合并修复 1 轮七项全落（clip_text 顺序坑=Label min 尺寸被 text 撑大后只增不减、blessing_paid 快照键 G9b 真双进程臂、modulate.a=0.45、胜利屏「至少+N」、未购重开短横幅、附赠标记上移名字行、r260 双态 fixture）→ 复核并发：QA 终审**通过**（含真双进程 G9b 3/3+4/4、X3 每日守卫先于新横幅）+评审五点名项全解决无新引入。
+- **测试终账**：qa_r263_gift 29/29（+G9b 跨进程臂）+qa_r263_stardust 30/30（+S4 未购横幅臂）+qa_r263_gap_probe 27/27（D1 62 行几何面）+qa_r263_fix_probe 10/10+xproc 真双进程 3/3+4/4+迁移面 r252 71/71+qa_r262 27/27+r261_filter 19/19+r261_probe 30/30+r260 双态 23+23+verify_feedback 685/685+pkg4 116/116（seed=42 零位移）+menu_perf 82/82+r194 93/93——全绿；QA 首轮「r252 不回写档字节」归因已勘误（回写实存，撤销点名）。
+- **遗留（不阻塞）**：LOW-1 game_loop.gd:2134 旧注释「静默跳过」与 2137-2140 重播短横幅新行为矛盾（行为正确注释未清，下批更正）；评审断点4「普通玩家看不到近战附赠行的解锁面披露」留用户拍板（涉图鉴新文案）；断点7 几何隐患已被名字行 clip_text 顺带闭环；真实通关活局链+非 headless 像素观感两项由真机复验覆盖。
+- 出包：**vc74=InfiniteFission_v0.1.73_vc74.apk（13 门禁全绿）**。
+- 真机复验指引（vc74）：①普通难度手枪首发开祝福面板——蓝签「谐振轨道」等附赠行可见（价签 20、名字行尾「附赠·近战·天狼刀」、买不起整行变淡）；选中出发→开局横幅「【祝福】…附赠 近战·天狼刀·-20 星尘」+slot1 真多一把天狼刀且词条生效；②死亡/胜利屏出现「◆ 星尘 ±N」产出行，胜利屏为「至少 +N（当前余额 M）」；③大厅养成面板出现星尘余额行（新档 20）；④重开一局不再扣费（已购位）；杀进程→继续→死亡重开附赠武器仍在（跨进程已购位）；⑤余额不足时选了记忆祝福→「星尘不足」横幅+不挂载，之后重开播「未携带」短横幅；⑥每日挑战局零扣费零送武；⑦**预期行为非 bug**：老档（vc73 前免费时代带紫/金祝福）首局余额 20 不足时会触发「星尘不足」——打一局赚星尘即可；⑧普通局想见近战附赠行需先在困难及以上局内抽到过对应词条卡（图鉴解锁门，R252 既有口径）。
+
+## R264、工作区整理批（2026-10-12 · 档位0 自己干——用户反馈「项目文件怎么这么乱，都是临时文件，分类放好没用的删了」）
+
+- **背景**：根目录积压 950 散 log+60 散 gd 探针+50 临时目录+怪名文件（nil/nul/E:Code 路径名/%TEMP% 前缀）——26 个批次（R188-R263）的 QA/电池/评审/探针输出直接落在会话根。
+- **裁定口径**：活物=repo（代码+测试+文档+台账）/tools（引擎）/android_export（SDK+出包+APK 交付物）三目录全保留；历史产物=归档不直删（archive/ 下 logs 955+repo_logs 257+probes 2375+misc 12，共 63M）；纯垃圾=直删——**gdext_probe/ 5.3G**（NDK r27c+mingw64+godot-cpp 工具链下载残留）、tmp 系/qa_tmp 系/batt_*_logs/review_r198 空目录、根 docs/（workflow 双落盘遗留，与 repo/docs/design 逐 diff 仅自指注记差异）+根 tests/（_r255 残留）、nil/nul/怪名文件、repo/tools/__pycache__。
+- **归位**：根散 py/ts（历史电池脚本+workflow 草稿）→ archive/probes/；g43_*.h/cpp（导出插件源码，无 preset 引用但属源码）→ archive/misc/；design_sheet.png（零引用设计参考图）→ repo/docs/ 并脱离导入链；archive/ 已入 .zcodeignore（不参与搜索）。
+- **验证**：清理后冒烟 qa_r263_gift 29/29+verify_feedback 685/685 exit 0 全绿（零损伤）；gen_music.gd 核实为活工具（R75 作曲器，sfx_bank 消费）保留 repo/tools。
+- **终态**：根目录=repo/tools/android_export/archive 四目录+.zcode 配置；repo 根=纯 Godot 项目结构（三台账 md+标准目录）。
+
+## R265、祝福送近战=送自爆兵批（2026-10-12 · vc74 用户反馈「wcxuanbuff的实际自爆兵不要上啊，tm每次被选祝福卡一手被炸」）
+
+> **【R265 全量撤回（2026-10-12，用户澄清）】** 用户原意=「升级选卡时被自爆兵贴脸来不及躲」——本批方向性误判（误读为祝福送武器问题）。game_loop 两刀+6 测试文件断言已全部恢复 vc74/R263 原状（七套件对 R263 交付账逐一全绿复核）；vc75 包作废勿装。真问题由 R266 批承接（见下节）。LOW-1 注释更正保留（行为无关 QA 遗留项）。
+
+- **定谳**：非显示 bug——数值链实证：①爆虫 E4（接触 1.2s 引爆·半径 110px·冲刺 260px/s·环绕击退仅 ±8px/击无法推开）波表第 1 关第 9 波起每波 6-11 只；②W8-W13 近战/法器全贴脸（环绕轨道半径 90-120 < 爆炸 110px——击杀位恒在死亡半径内）；③R263 祝福送武解析器对 W8 族词条恒送 W8 天狼刀（难度门最低）——**买环绕系祝福=花钱把爆虫引到脚边炸**（「实际自爆兵」）。排除项：祝福池词条名/效果无自爆兵（死亡新星 AOE 只查敌网格不伤玩家；TH_SWARM_NOVA 阈值型不上池）。
+- **处方（送武通道滤近战）**：`_blessing_pool` 送武分支加门——送出武器 form==MELEE（含 weapon_class 近战/法器）不上祝福池；远程系（W4 激光/W5 棱镜/W6-W7 自导/W10 回旋）送武保留；局内抽卡零改动；fission 主动自定义近战首发的**适配臂**（fits 通过非送武）保留——玩家自选近战流词条照上。
+- 验收：送武池零近战词条/远程送武全保留/适配臂不受扰/池计数迁移+全回归；出包 vc75。
+- **修刀两处（game_loop.gd）**：①池侧送武分支——送出武器 form==MELEE 不上池（池 62→**53={白6,蓝21,紫21,金5}**，下架 9 条近战队：BULLET_PARRY/CHAIN_DETONATE/CRITICAL_MASS/GIANT_BLADE/ORBIT_AXE/ORBIT_BOLT/ORBIT_LINK/ORBIT_SWORD/SLASH_TEMPO；远程送武 15 条保留——激光/棱镜/自导/回旋族）；②挂载侧存量记忆免疫——送出近战不送不挂不扣费（扣费前早退同一实现序）+横幅「附赠的近战武器已下架（未扣费·出发前重选）」。局内抽卡/卡池零改动；fission 主动近战首发的适配臂不受扰（玩家自选近战流词条照上照挂）。LOW-1 过时注释顺修（:2141-2143）。
+- **验收**：断言迁移 6 文件（qa_r263_gift/stardust/gap_probe + qa_r262_bless_tier + qa_r261_probe_deep + runner/r252_blessing——首跑红面 4 文件 17 用例+回归暴露同源 8 处，送武主靶 ORBIT 族换血 SPLIT_PRISM/BEAM_LAG/FUSE_DETONATE 远程队）+新增 G13 节（池零近战/存量免疫横幅精确文/抽卡面零变化/适配臂扣费生效四断言）。**14 套件全绿**：qa_r263_gift 35/0+stardust 30/0+gap_probe 27/0+qa_r262 28/0+r261_filter 19/0+probe_deep 30/0+r260_anim 23/0+r252_blessing 71/0+verify_feedback 685/0+pkg4 116/0（seed=42 零位移）+menu_perf 82/0+market 25/0+r238 18/0+r194_mobile（exit 0 全绿——用例计数随 headless 环境条件段波动 93/64/29，本批未触碰该文件，历史现象非回归）。
+- 出包：**vc75=InfiniteFission_v0.1.74_vc75.apk（13 门禁全绿）**。
+- 真机复验指引（vc75）：①祝福面板不再出现环绕/巨刃/链爆等近战附赠行——附赠行只剩激光/棱镜/自导/回旋族（如「裂片棱镜·附赠·脉冲光束」）；②**若你档上还记着近战祝福（谐振轨道等）**：开局横幅「附赠的近战武器已下架，本局未生效（未扣费·出发前重选）」——不扣星尘，重选远程祝福即可；③局内抽卡一切照旧（打到近战武器后相关词条正常出）；④改造者自定义近战首发的玩家：近战词条照常上池生效（自选流不受影响）。
+
+## R266、升级选卡被自爆兵贴脸批（2026-10-12 · 用户澄清反馈「wc我的意思是，升级时，被自爆兵贴脸会来不及躲」）
+
+- **定谳**：暂停链正常（LEVEL_UP/PAUSED tree.paused=true，enemy 默认 INHERIT——选卡期引信确实冻结）；真凶=**弹卡瞬间已贴脸引导中的爆虫，收卡后残余引信不足**——玩家被冻结在原地无从规避，贴脸冲刺 260px/s+爆炸半径 110px，剩 <0.5s 数学上躲不掉（需要 >275px/s 移速）。
+- **修刀两处**：①enemy.gd 新公开口 `defuse_if_armed() -> bool`（fuse_armed 守卫+_cancel_fuse 击退打断同款语义：警示圈收起回普通追击，可再接触重新引导 1.2s）；②game_loop.change_state 进 LEVEL_UP/PAUSED 冻结模态时遍历 spawner.active 清全部爆虫引导+DebugStats.event 计数（R18 碎片磁吸同点位）——收卡后重新接触重新计完整 1.2s，玩家有完整反应窗。PAUSED 同治（暂停恢复被贴脸炸同病）。局内正常期引导照常（D2 对照臂锁）。
+- **验收**：新套件 qa_r266_defuse **15/15** 首跑全绿（D1 单元语义/幂等/再引导引信回满；D2 对照 PLAYING 期照常递减；D3 集成 LEVEL_UP 全清+tree.paused；D4 收卡回 PLAYING 重引导 1.2s 完整；D5 PAUSED 同治；D6 非 volatile 敌零扰动）+回归九套件全绿（pkg4 116/verify_feedback 685/r252_blessing 71/qa_r263_gift 29/stardust 30/gap_probe 27/qa_r262 27/probe_deep 30/r238 18——含 R265 撤回面复核）。
+- 出包：**vc76=InfiniteFission_v0.1.75_vc76.apk（13 门禁全绿）**。
+- 真机复验指引（vc76）：①升级弹卡/暂停期间若有爆虫贴脸引导（红圈警示）——进卡瞬间红圈收起、收卡后爆虫重新贴上来才重新计时 1.2s，有完整反应窗躲开；②正常战斗期爆虫引导/爆炸节奏不变；③诊断日志新事件行「模态冻结清爆虫引导 N 只」。
+
+## R267、出发/菜单/选卡顿挫五性能刀+旋风刀棕修水晶质感批（2026-10-13 · 用户反馈「还是卡」+「法器旋风刀后期颜色发棕不好看，所有近战/法器武器染色改为对应元素透明刀、水晶质感而非简单颜色」——设计 docs/design/2026-10-12-R267-design.md v3，详版批报告 docs/qa/2026-10-12-R267-batch-report.md）
+
+- **定谳（反馈 A「还是卡」）**：四大场景主嫌全数实测定位——①出发帧 41.6ms（vc71 物步µs 41612 遗案）=start_run 同步全量补烤位图 30-47ms（popup_glyph_atlas.gd:124-138）+惰性敌变体首焙（volatile 42.08/volatile_scared 50.14/boss7 181.29ms）；②菜单三面板每次开全量重建 5668/11782/3233µs（真机 6-47ms）；③每局首开卡 16-45ms（字号梯 7 次量测+桌面不分帧）；④关面板必落盘 879µs；⑤首波生成帧 904µs（probe 单发口径）。**EventBus 风暴悬案证清销案**（R221 Fix C 削峰、MENU 300 帧 0 派发——R253 放大器嫌疑不成立）。**战斗帧归因勘误**：「avg 6.85ms 劣化=P1 泵 4ms/帧既定代价」撤回——qa_r255_perf_battle 只量物理轴（body:194-196）、泵在渲染轴 _process（game_loop.gd:649-655）不进计时，空闲对照 +6% 噪声级（6ms 档系并行电池负载污染）。
+- **定谳（反馈 B「发棕」）**：五点链（探针 r267_probe_w9_brown 生产函数直驱）——元素卡累积→染色入口无身份色保护（orbit_weapon.gd:535-555 不传 tint→元素池任一非 KIN 即整刀 blend_element_color）→HSV 圆周均值落暖相（FIR/GEO/DEN 全暖黄橙）→saber 渐变 darkened 0.45/0.30 压明度（暖相+高饱和+低明度=棕）→L5 质变 T2_TINT_DARKEN 0.18 再加深→化身层同源；[FIR] 单元素即 3 棕+2 暗橙、冷色池 0/8 棕。
+- **修法**：五性能刀+视觉刀六路并行（文件集互斥，设计 §4）——棕修=**明度策略反转**（弃刀背压暗，改外壳半透 α0.22+亮核提亮 α0.92+白刃缘+内折射线，sat 下限 0.55），新建 crystal_blade_factory.gd 一套生成器双形态（烘焙贴图 W10/W11/W12 弹体+图标 / 即时顶点色 W8/W9/W13 刀体）+KIN/身份豁免分支逐位不动（W13 黑金契约等）+降档矩阵+静态缓存零 rng 零分配。
+- **终值账（每刀前后）**：P1 start_run 32.3-48.1ms→**min-of-3=1724µs**+模态暖一次性 27.4ms 落账（qa_r267_runstart_prewarm 25/0；泵原子帧 132.8ms≤245ms/硬帽 300ms、60 帧泵峰 86.5ms 评审亲跑）；P2 量测 ≤7→**≤3 次**、桌面首帧 ≤3 卡+续建 933-1131µs、热路径 **511µs≤门 612µs**（前轮 ×1.3 放宽已勘误收回=并行负载污染读数）、验收 d 双态 A 真机当量 min-of-6=**3213µs≤8ms**/B 探针态 19419µs 落账无门（探针不驱动 _process 预热恒不排空——评审亲跑 30.461/15.986ms 即 B 态；冷开分解 generate 592µs/change_state 950µs 已归档）（qa_r267_card_open 18/0）；P3 三面板→直挂 **190-246µs**、购买 11782→**667µs**（qa_r267_panel_cache 26/0）；P4 关链 879→**0.2µs**（qa_r267_meta_dirty 18/0）；P5 首波 min-of-10=**516µs**≤绝对门 600（基线 904 为单发口径存非对称，双披露维持；并行态两窗中位 561/667 有一窗超门）（qa_r267_firstwave 6/0）；**视觉**刀体 42 组（3 式×7 元素×2 档）棕区逐像素=**0**、W10 折射条件恒真（d_in>-2.6 整刃 α0.55 洗掉五带）已修 d_in<2.6、W11 细刃深度带（亮核原全档 0 像素）已修+折射线 depth 守卫、即时形态补轮廓（arc_slash.gd:823/orbit_field.gd:954）、明度分层 p_v_scale 四参版、图标壳层 1.45（qa_r267_crystal_blade **53/53**）。
+- **测试账**：双硬红线 pkg4 **116/0**+verify_feedback **685/0**（电池+双实施多方跑绿）；**声明测试迁移点两处**=r212_carddigest 案①②（P2 分帧配套）+test_r252_menu_perf :657-659 M6e-a（P3 缓存行配套），其余 685 断言零改动；六验收套件全绿（25/18/26/18/6/53）；回归面 r252_menu_perf **82/0**（修轮3：M5f=crystals/stardust 置脏 setter 生产修复、M6e-a=授权重锚——两红均系 R267 语义变更破坏 r252 前提，前报「无未解释红」已收回归责；「文件被删」疑云澄清=现行套件在 tests/runner/）+r198 39/39+r262e_menu_click 11/0+r259_panel_cache 17/0+r212 41/41+视觉七面（r248_elemvisual 19/19+r243_prime/base/fengren/liedifu 65/46/31/32+r243_lingjian 38/38+r251_first_encounter 39/39）+soak 180s 六池 0 实例化 0 污染、帧均 3.041ms（RSS +5.44%>3% 参考线：无前基线+尾段斜率平，披露不断言无泄漏）；orbit_field_bench=**非本批既有守卫红**（R256 负载在场守卫确定性 FAIL 敌 64<80+断言③时序闪废；KIN 路径水晶分支不激活、tick 128/119µs<350µs 门绿），bench 属主修复。
+- **QA/评审账**：QA性能 conditional（两红披露矛盾已收回修复 82/0、战斗帧归因撤回、qa_r267_perf 缺名=编排侧、firstwave 双披露、card_open 尖峰既有、热路径门收紧 ×1.2）；QA视觉 pass；QA回归 conditional（qa_r267_perf 缺名+六套件未进电池=编排侧修清单、M5f/M6e-a 已修、P1 处方6 分档未落实维持偏差声明、设计矩阵漏 debug_stats.gd=文档瑕疵）；评审体验 2 HIGH 已闭合（验收 d 补双态段+口径更正；两红修复+P4 风险注 meta_manager.gd:1202：字典容器无法挂 setter，信封内裸改字典条目不经写口仍会静默丢落盘）；评审视觉 2 high（W10/W11）已修核实在位+medium/low 已修或登记。**qa_r267_perf 存在性口径冲突登记**：电池/终验/QA性能/QA回归四方判「不存在」（引擎 banner/exit=1/File not found），评审体验称 4 跑 14/1+15/15×3——待编排侧核实。
+- **遗留（真机定档/立项/编排待办）**：出发帧池空兜底档 ≤30ms 仍落出发帧（新玩家首局，qa_r227 三套锁死，真机 vc 轮判读+挪确认帧候选）；boss 双面 88-245ms 错峰非根治（下批立项拆分）；W11 火/岩结构件棕 30.1%（金属件语义）+W12 柄木褐 20.4%（CRACK_BROWN 主题）+ICE/HYD 同色（palette 单源）真机定档/立项；产品侧水晶预烤缺失（首击每式每元素一次性 3-6ms 冷烤，prewarm_shared 仅测试口）；Android 字体回退链+GPU 渲染轴 headless 不可测；电池编排脚本 .dwf.ts:148/:182/:244/:251 陈旧套件名须修清单（qa_r267_perf 缺名+六验收套件未进电池）；云层/enemy_bullet_grid/proj tick/boss 拆分=设计 §5 明确不做下批候选。
+- 出包：**vc77 已出**（`android_export/out/InfiniteFission_v0.1.76_vc77.apk`，versionCode=77/versionName=0.1.76，门禁 13/13 过，2026-10-13）。补账：工作流终验 2 红=编排侧套件名错位假红（门禁引用 qa_r267_perf/qa_r267_vis，实际套件=五分刀套件+qa_r267_crystal_blade）；主智能体盘外补真实终验电池 10/10 全绿（pkg4 116/0、verify_feedback 685/0、r252_menu_perf 82/0、r266_defuse 15/0、六新套件 25/18/26/18/6/53，日志 archive/repo_logs/r267_finalcheck_*.log）后走出包。
+- 真机复验指引（下版 vc 日志）：①出发帧 start_run 链应 41.6ms→常态 ≤10ms；祝福模态**开帧**预期一次性 ~27ms（顿挫搬家非消除）；新玩家（池空）首局出发帧仍有 ≤30ms 残留——已知项单独判读；②战斗期 Boss 出场**前一波**预期仍有一次 ~88-245ms 冻结帧（错峰非根治，按「缓解」复验并反馈剩余卡点场景）；③每局首次升级弹卡桌面当量 ~3.2ms（Android 字体链更贵，判 card_open 段 ≤5ms）；④菜单记录/养成/每日三面板开合应跟手（真机当量 <1ms）、养成购买不再整页重刷、关面板不再每次落盘；⑤反馈 B 主诉直接复验点：后期火/岩/草元素堆叠下 W9 旋风刀及全部近战/法器武器（W8/W11/W12/W13）刀体=透明水晶质感（半透壳+白刃缘+亮核）不再发棕，W10 最高特效档五带层次完整；⑥观感定档清单（预期非 bug）：W11 火/岩护手柄偏褐=金属件语义、W12 斧柄木褐=土岩主题色、冰/水刀色相近=已立项——观感不满按真机截图反馈定档；⑦判读口：tex_prewarm_frame_us（常规 ≤4ms/原子帧 ≤300ms 硬帽）、tex_prewarm_atom_overruns、start_run 链、bitmap_bake_us（常态≈0）、card_open 段；⑧打完整局再导日志（R262e 分态保护后局内行不被菜单挂机冲掉）。
+
+## R268、旋风刀匕首感+水晶刀真透明校准（基准=斩击蓝虚影）+vc77 真机「还是很卡」定谳动刀批（2026-10-13 · 用户点名 workflow-flash）
+- 用户反馈三条：①「近战·旋风刀转起来怎么跟个匕首一样（优化一下）」（口称近战·旋风刀——环绕刀嫌疑大，W8 天狼刀与 W9 旋风刀都查）；②「还是很卡」（附 vc77=v0.1.76 真机诊断日志 119 行，存 archive/repo_logs/r268_vc77_user_diag.txt）；③「补充：之前说阔剑蓝色透明，其实法器刀砍的时候也有蓝色透明虚影，那个透明效果就不错——和前面的一起，开个 workflow-flash」。
+- 日志关键读数（PLAYING 深载）：fps 19-34（敌 115-120 满/弹 448-449 顶池）、**物步µs 48k-158k**（物理相位残差=头号方向：引擎物理步+延迟冲刷桶执行——R237 悬案 ⑧popup/DeathPop/Telegraph/桶place/queue_free/⑦b fx，段探针量发射不量执行）、渲ms 15-17 满帽、尖峰他 34-185ms、调速器调 3→1 已到底仍卡、派µs 尖峰 1017-17478（damage_resolved 派发积压）、**补0/位图1=R267 P1 模态预烤真机生效**（出发帧刀见效，残余卡在局内深载）。
+- 磁盘在途改动（前轮 fast 档先行，本批起点）：crystal_blade_factory.gd α 重调（壳0.18/过渡0.32/核0.60/平涂0.50）+三处烘焙描边 rim.a=ink.a 防撞带；qa_r267_crystal_blade_cases.gd b-2/b-4/b-5 已迁。**未收口=烘焙带钉值五处现红**（修1-W10a 壳0.22→0.18/描边0.98→1.00/核0.92→0.60；修1-W11a 核0.92→0.60；修1-W11b 平涂0.85→0.50）——视觉实施员进厂第一件事。
+- 安排：workflow-flash 严编（Flash 子代理）：探索×4（物理残差/渲染轴池满/匕首感/虚影基准）→设计合成+独立审（≤2轮）→双实施员互斥并行→电池12套件（glob 清点+红无汇总复跑门）→3QA+2评审→修复循环（≤2）→出包 vc78→批报告。
+- **交付账（workflow-flash，2026-10-14 收尾，修复循环 1 轮已修）**：
+  - 反馈①匕首感 → **V1 已修**：刀参数恒 35.7px 根因（旧地板 34 全等级命中）拔除——地板 50+每级 ×1.8 成长全等级 [50,60] 严格递增、刀宽 3.4→5.2、逐刀 42° 元素色拖尾弧（α0.30/宽×2.2，fx_quality==0 档位门）+12° 公转滞后残影（α0.22，追击模式与档 0 不画）、水晶白刃缘改元素色提亮 0.55 治白 on 白；W8 环绕狼刀与 W9 追击狼刀同路径受益，W9 saber 大形态 112px 零动；命中/挡弹/追击全走 orb_radius 判定零耦合；「过大遮目标」可回调 50/1.8/5.2 tunable。
+  - 反馈②还是很卡 → **P1-P4 四性能刀落地+诚实边界**：P1 升格臂同步排版改置脏并入 R212 限批（派µs 尖峰带 1017-17478µs 应收窄至百 µs 内；代价=mobile 反应大字显形滞后 ≤6 帧、0.25s 保底）；P2 记账洞三表修毕（popup 执行成本出「物步µs/他/余」双计——**R268 起新口径与历史行不可直拍**）；P3 弹拖尾 mobile 30Hz 门+tier1 减长（渲ms 15-17→预期 ≤14，普珠为主场景收益有限如实披露）；P4 预热泵深载门 6ms→1.5ms/帧（判读键细化=泵消化迟到型生成帧尖峰）。**未覆盖如实声明**：跳段 95-184ms（merge 风暴超龄强制批）与物步残差执行侧（敌死亡链 DeathPop/Telegraph/桶 place/queue_free/⑦b fx）本批零刀——vc78 深载 fps 有相当概率仍 19-24，真杠杆（跳段批预算化+CONTACT_RADIAL 定谳+对症面）列下批。
+  - 反馈③水晶照蓝虚影调 → **V2 α v1 基注定版**：壳 0.18/过渡 0.32/核 0.60/平涂 0.50（+白缘 0.9/折射 0.55），烘焙带钉值五处迁移清零（qa_r267 50/4→54/0）；即时核区等效 α0.672≈虚影**轮廓**档 0.646（比用户点名的虚影**填充** α0.34 实 3.4-5.5 倍——vc78 若仍读「实」，请用户在「ALPHA_CORE 0.60→0.50」与「核 α≈0.20 牺牲读感」间取舍，不静默续降）；剪影三硬边与棕防线（SAT_FLOOR=0.55/CORE_V_MIN=0.75）零动。
+  - 测试账：电池 12 套件全绿+终验 5 套件复跑全绿（pkg4 **116/0** seed=42 零位移、verify_feedback **685/0** 除主会话授权的两声明迁移点 qa_r218_probe_cases ⑥c2/⑥e 零改动、qa_r268_physphase 31/0、qa_r268_transparent 27/0、qa_r267_crystal_blade 54/0）；QA 三岗+评审两岗 verdict 全 pass；修复循环 1 轮：性能 3 处注释/口径文案（debug_stats :193 注释改写+diag 显形滞后句+game_loop P4 兜底归属改口「泵消化迟到型生成帧尖峰」）、视觉拖尾档位门+w-8 源锁+注释行号口径。
+  - 出包：**InfiniteFission_v0.1.77_vc78.apk**（android_export/out/）。
+  - 真机复验指引（vc78 对照 vc77 逐项）：派µs 1017-17478→收窄百 µs 内/消失｜跳段 95-184→不变（下批）｜物步µs 30-158k→新口径归真首读（仍高=敌死亡链嫌疑坐实）｜渲ms 15-17→≤14｜开/波尖峰 45-173ms→收窄（细键=泵消化迟到型生成帧尖峰）｜匕首感/透明观感/升格大字滞后 ≤6 帧（已披露代价非回归）→真机判读——详见 `docs/qa/2026-10-13-R268-batch-report.md` §6 判读表。
+
+## R269、帧率优先模式+物理残差定谳+渲染降载批（2026-10-14 · 用户「性能没法优化吗，改了至少30次了，这次认真检查，给我一个确切的答案，不管是技术上优化，还是策略（比如什么渲染影响性能可以展示关闭，帧率优先模式下优先保帧率）」附 vc78 日志 archive/repo_logs/r269_vc78_user_diag.txt）
+- **定谳（vc78 日志逐行，新口径）**：①渲ms 深载 15-17.2ms=60fps 预算全占（GPU/渲染轴顶死；敌 0 间歇行 8.6-12.6/fps76-120——差距纯由负载量决定：120 敌+450 弹+24 跳字）；②物步µs 新口径（已剔 popup 双计）仍 59k-143k=延迟执行桶（死亡链/Telegraph/桶place/queue_free/fx）真嫌疑坐实；③尖峰跳 46-161ms 仍在（P1 限批后跳字批本身仍贵）；④dc 438-958。**裁定：纯技术微调到顶，双轨=策略降载（帧率优先模式）+技术正刀（残差定谳键+绘制合批）。**
+- **方案**：A 帧率优先模式（设置开关·mobile 默认开）：渲染分辨率 85%/75% 降档+跳字同屏帽 12 合并+fx 钉 0 档+死亡特效简化+敌 120→90/弹 450→320 密度帽（仅模式内）；B 物理残差逐桶计时键（DeathPop/Telegraph/桶place/queue_free/其他节点分键，下份日志直读真凶）；C 敌绘制合批 LOD（多 canvas item→烘焙单 Sprite）。预期：A 落地深载 fps 20-30→40-55。
+- **迁移登记（实施期，主会话授权）**：①qa_r228_diagfreeze_cases :143 剥离正则（八键插入必然触发，设计 §0.2 预声明）；②r220_governor ② 布局断言 10→11 行（设置行新增必然契约变化，QA 裁定正当·强度反升）；③r229_pool_valve :278/:283 尾锚（§5-b4 预授权）；④**R268 追认两处**（R268 P1 置脏/P2 popup 出表为有意行为变更但电池漏跑两套件——`_batt_test_fx_quality.log` 停 10-01 32/32 绿、r218_simbound 无电池记录）：fx_quality_cases.gd:172 升格显形断言前补 pm.tick(DT) 驱动（断言零删零改，32/32）、r218_simbound_cases.gd:228-236 排除表锚重锚 R268 后现状（双 contains 双向防回退，17/17）——**教训：电池清单必须 grep 派生（触及文件→引用该文件的套件全列），手列必漏**。
+- **交付账（完整流水线，2026-10-14 收尾，设计修订 1 轮+修复循环 2 轮全闭环）**：
+  - **A 轨·保帧模式（玩家杠杆）**：设置行三态循环 关→85%→75%（content_scale_size 612×1088/540×960 + Camera2D.zoom 0.85/0.75 补偿，热切生效、关档恢复 720×1280+1.0，cycle 写序 boost_res 先写=单次重分配）；**mobile 首启/旧档升级默认 85% 开**+一次性 mechanics_intro 横幅「已开启保帧模式：优先帧率，画面略糊、部分特效隐藏，可在设置中关闭」（boost_intro_seen 持久化，播即落盘，desktop 零触发）；五帽=跳字 12（CRIT/REACTION 必显兜底）/敌 120→90（const 保留+max_onscreen() 读口单点换）/敌弹 320（拒N 计数）/死亡 fx 4/fx 钉 0 双点（调速器帽+元素层分支）；C1 装饰四族（皇冠/微光粒/卫星球/底影）模式内恒隐、甲板保留、fullload_dim 本体零动；**A-6 音效独立档口 _sfx_q**（保帧不再静音战斗——boost 开不受渲染降级牵连，关=与 _fx_q 逐位同值）。
+  - **B 轨·八诊断键（下刀靶子）**：1Hz 诊断行尾 死µs/警µs/桶µs/延µs/释N/促N/敌弹N/拒N（挡N 与尖峰段之间，既有子串逐位不动）；修轮 1 敌弹N 计数真值化（翻转点 note_team1_flip +1〔全库唯一翻转点 enemy.gd:1390〕+1Hz _live_order 实扫 recount 自愈+release 钳 0——修前反弹盾系统性低报会污染 320 帽首轮校准）。
+  - **修复循环**：第 1 轮 5 项（敌弹N 真值化/hint 披露/首启横幅/cycle 写序/diagfreeze 头注）+第 2 轮 1 项（QA-R269-D2：hint 第四行整条落入关闭钮不透明带 872..940——改三行合并+line_spacing 0，文本底 869≤872 净距 3px，四条披露零删、R194/R220 锁子串逐字保持）。
+  - **测试账**：两新套件 qa_r269_boostmode **69/69**（a1-a8+C1+首启横幅 3 断言）+qa_r269_bucketprobe **35/35**（b1-b6 含反射闭环 6 断言）；QA 独立电池 **21 套件全绿全 exit 0**（pkg4 **116/0** seed=42 零位移、verify_feedback **685/685 实跑**、r195_adapt 580/0、qa_r268_physphase 31/0、r267 预热 25/0、diagfreeze 7/0 等）；QA 复核 2 轮（修轮 5 项+修6）全 pass；评审可交付（3 中 2 低全修或入下批：低#5 设置行分组/双列重排留拍板）；QA 补独立探针 b3 桶可重入 9/9。
+  - **诚实边界**：数值承诺（深载 fps 20-30→40-55、渲ms 15-17.2→85% 档 ≤12-13、尖峰跳砍半）**全部待真机 vc79 判读**——headless 只证机制与零回归，不证帧率；物步µs 本批不承诺下降（B 轨是测量不是优化，下批按八键定谳后动刀）；Android GLES3 分辨率热切闪烁/黑屏风险 headless 不可代验（桌面 Vulkan 实测两帧内生效）。
+  - 出包：**InfiniteFission_v0.1.78_vc79.apk**（android_export/out/）。
+  - **真机复验指引（vc79 对照 vc78）**：①保帧模式 mobile 默认开——首启应见一次性横幅、深载 fps 20-30→40-55、渲ms→≤12-13（设置行可切 75%/关 对照）②八键首读：促N>0=模式生效；死µs/警µs/桶µs/延µs 指认物理残差真凶（延µs≈物步µs=冲刷窗 vs ≈0=引擎步两分支）；敌弹N/拒N 校 320 帽松紧 ③冒烟四项：分辨率热切无闪烁黑屏/hint 三行可读不触返回钮/首启横幅只播一次/保帧开时战斗音效在 ④若关模式仍卡=数据回传按八键定下批刀（C2 烘焙合批已设计待启动）——详见 `docs/qa/2026-10-14-R269-qa-report.md` 与 `docs/review/2026-10-14-R269-review.md`。
+
+## R270、vc79 真机回归修复批（2026-10-14 · 用户「主页分辨率都乱了，按钮都显示不全」附 vc79 日志 archive/repo_logs/r270_vc79_user_diag.txt）
+- **反馈①（P0）主页布局坏**：保帧 85% 的 content_scale_size 612×1088 在 boot 全局应用——菜单 UI 按 720×1280 布点溢出设计画布（zoom 补偿只救 Camera2D 世界视图，救不了 Control 布局）；评审曾标「UI 放大 1.18× 观感」为 headless 不可代验冒烟项，真机坐实为布局级破坏。修向：分辨率降档**仅游玩态应用**、回主菜单恢复 720×1280（状态迁移钩子；菜单渲染负载本就低 fps 108-120 无需降档）。
+- **反馈②（日志判读，P0-adjacent）敌弹帽疑全程失效**：真机 弹N 最高 448 > 帽 320 且 拒N 全程 0；新键 敌弹N 恒 0 而旧键 弹>0——帽与键同读 team1_live 夹具绿、真机分歧 → 真机敌弹发射路径疑未走 320 帽的 acquire 通道（或 team 值型不一致）。
+- **日志判读（性能，非本批刀）**：保帧 85% 深载 fps 22-38（vc78 基线 19-24，有升但未达 40-55 预期）且渲ms 仍 16.4-17.1 顶死——敌 90 帽生效中；**延µs 100k-346k >> 物步µs 43k-110k（甚至清场敌 0 弹 448 时仍 86k-252k）=延迟冲刷桶坐实且巨大（每秒 10-35% 时间在 message_queue 冲刷）**——下批主刀方向定谳；敌 0 间歇行 fps 101-120/渲ms 8.6=敌侧绘制是渲染轴主载。
+- **实施账（fast 档，主会话亲实施）**：
+  - ①根因=boot（game_loop.gd :3416）全局应用 612×1088，菜单/结算 UI 按 720×1280 布点溢出画布被裁（zoom 补偿只救 Camera2D 世界视图救不了 Control 布局）。**修=分辨率降档仅活战态**：`_boost_live_state()`（PLAYING/PAUSED/LEVEL_UP——世界活动画面）门进应用器；MENU/GAME_OVER/BOOT 恒全分辨率；change_state 迁移钩子收放（幂等零写）；`boost_world_div()` 改读已应用档静态镜像 `_s_boost_applied_notch`（设置开但菜单态已回退时云除数须与画布一致，防菜单云 ÷0.85 超铺 17%）。菜单渲染负载本就低（fps 108-120）无需降档。
+  - ②**定谳反转：非 bug**——`弹N` 真源=`active_projectiles().size()`=**全队总活口**（玩家+敌弹混合；真机 弹448 主要为玩家弹——帽按设计只管 team-1 敌弹）；拒0/敌弹0=敌弹活口稀少（近战主导波次+敌弹短寿命）自洽。补**真路径验证** qa_r270 f1-f5：真敌 `_fire_at`（非夹具直调池）→ team1_live/recount 同步 +1、bullet.team==1、帽门注入 320 真路径拒绝、release 归还、recount 自愈——计数环真路径闭环定谳。
+  - 测试：**qa_r270_menuscope 16/16**（m1-m10 状态域矩阵真迁移链驱动+f1-f5 真路径敌弹）；qa_r269_boostmode a6 夹具迁移（PLAYING 窗口驱动应用器，段末回 MENU——R270 迁移登记）；回归电池 18 套件（grep 派生：game_loop 触及面）在跑。
+  - **修轮（评审 2 必修+过程事故）**：P1 暂停态设置卡降档适配（85% 档卡底溢 74px/返回钮剩 22/68px、75% 档整颗出屏且无 Esc/点外关闭=困面板）→ fit=min(1, css宽/620, css高/1236)（1236=2×618 底半——卡中锚 −350/+618 底重，围绕画布中心缩 pivot=(310,350) 卡内常量）；画布真源=window.content_scale_size（**get_visible_rect 宽度不跟 content_scale_size（expand 按窗形扩张）——勿用**）；theme.gd squash_pop 加 p_end_scale 缺省 ONE 既有 15 调用点逐位不变。P2 云除数镜像挪 content_scale_size 写前（信号期 cloud 读新档——原晚写=局内云右缘欠铺 15%/结算超铺 17.5%）。**泄漏事故（测试基建）**：menuscope set_setting("perf_boost",1) 持久进盘档（快照还原不够——垫值/退出存档链再写盘）毒倒后续六套件（boostmode a1/governor 承重墙/pkg4/vf/r195 全红）→ cleanup 显式 erase 两键+盘档清理后全绿复盘；QA 移交下批 A 类风险套件清单（auto_idle 最高危/r205/r211/render_probe/r197/r198 set_setting 终态非默认落盘）。评审 P3 取舍=75 档选卡栈底/构筑详情/祝福弹层裁切列 vc80 观察项（85 档完整入画与 vc79 实玩未报障吻合）。
+  - 测试账（修轮后全绿全 exit 0）：**qa_r270_menuscope 21/21**（+m10 div/m11 信号期除数[lambda 捕贝=容器收集]/s1-s3 fit 缩放+卡底恰齐画布底）；电池 22 套件：boostmode 69/69、qa_r220_mode 67/67、r220_governor 66/66、r195_adapt 580/580、pkg4 116/0、verify_feedback 685/0、r245_diff_star 31/31（squash_pop 面）、bucketprobe 35/35、diagfreeze compare 7/7、r218_probe 48/48、simbound 17/17、r229 56/56、r230 54/54、r212 48/48、r213 40/40、r202 40/40、r268_physphase 31/31、prewarm 25/25、fx_quality 32/32、pkg0/pkg3 129+129。QA 复核 2 轮全过（P1 数学/帧序/15 调用点零扰动/独立探针 17 项）；评审复核 verdict 可交付（独立探针复测返回钮 85/75 档全入画、果冻过冲 1.12×fit 半宽 305.6≤306 安全）。
+  - 出包：**InfiniteFission_v0.1.79_vc80.apk**（android_export/out/）。
+  - **真机复验指引（vc80）**：①主页回归（用户原报障）：boot→主页 720×1280 全分辨率、大厅按钮完整 ②设置卡：活战暂停→设置 85/75 两档卡完整入画、返回钮可点、关保帧逐位还原 ③迁移冒烟：主页→出战（降档）→暂停/升级（保持）→结算（回全分辨率）→主页，无黑屏/闪屏（Android GLES3 重分配=本批最大未验假设）④云域：迁移瞬间战斗侧云右缘无欠铺 ⑤P3 观察项：75 档选卡栈底（赌徒四选一+满扩高重点）/构筑详情卡两侧/祝福弹层两侧 ⑥R269 判读键照 vc79 指引（延µs 已定谳大=下批主刀）⑦保帧模式内音效保留——QA 报告 docs/qa/2026-10-14-R270-qa-report.md+评审复核意见（探针 archive/probes/review_r270_recheck_probe.gd）。
+
+## R271、深载帧率根治批（2026-10-14 · 用户「继续啊，修到完，修一半算怎么回事」——性能战役收尾授权：深载不再掉 30 帧）
+- **目标（用户口径）**：深载帧率稳定 ≥40-55，不再掉到 30 以下；修到完。
+- **证据底（vc79 日志 r270_vc79_user_diag.txt，八键首读）**：①**延µs 100k-346k/秒=延迟冲刷桶吃掉每秒 10-35% 墙钟**（头号嫌疑——且 敌0 弹448 清场期仍 86k-252k，非死亡链单一来源；八键排除：死µs≈0[fx钉0 门 DeathPop 不创建]/警µs≈0/桶µs 仅 4-39k/释0——**冲刷桶内容物未定谳，需二轮分键**）；②渲ms 深载 16.4-17.1 仍顶死（85% 降档下——敌侧绘制=渲染轴主载：敌0 行渲ms 8.6/fps 101-120；dc 438-958 超 R214「≤400 稳 90-120」带）；③保帧 85% 深载 fps 22-38（vc78 基线 19-24——有升未达标）；④玩家弹 448 无帽（设计 §7 当时不做——弹侧 dc 贡献待查）；⑤物步µs 43-110k 残差在（延µs 定谳后可归）。
+- **候选刀面（策划输入）**：A=延迟冲刷桶二轮分键（freeµs 按类/deferred 信号计数/Tree 退出/add_child）→ 定谳后对症砍（批量化/去 deferred/限频）；B=R269 已设计未实施的 **C2 烘焙合批**（Telegraph/DeathPop/PoisonSplash 自绘→烘焙 Sprite2D+落桶，dc 收缩）；C=敌侧绘制（dc 大头——烘焙贴图变体/合批先例 R216）；D=玩家弹 448 帽或拖尾 sprite 化（§9 遗留）。范围裁剪与优先级由策划定。
+- **红线承接**：R269 §0 全套（模式关逐位/pkg4 116 rng 零位移/verify_feedback 声明迁移制/R267 预热零扰动/物步µs 口径不破坏）+ R270 状态域架构不动（降档仅活战态已定谳）。
+- **交付账（完整流水线，2026-10-14 收尾，策划→分析→v2→复审局部修订 v2.1→实施→QA∥评审→修轮 1 轮全闭环）**：
+  - **设计 v2.1**：诊断先行不盲砍——P 轨 11 二轮键＋headless 深载台架定谳 → verdict 门控刀面；分析两轮抓出 4 必改（敌血条靶标不存在/V-A 重复造轮翻既有 CONTACT_RADIAL 旗/B1b 已随 R269 C1 交付/台架有效性前置门）＋复审 3 局部（M2-R 池实例 _ready 单跑证伪「等池回收」——反向重建须显式 _build_contact_area；判据 B' 差值方向=渲帧N−呈帧N；玩家侧 monitoring 现态措辞）＋S7 桶宿主同步臂（B1 候选② headless 可测化）。
+  - **probeP**：debug_stats.gd 1Hz 行尾 11 键（步µs/隙µs/延早µs/延渲µs/延峰µs/加N/摘N/绘µs/渲帧N/呈帧N/渲峰ms，促后尖峰前）＋三哨兵＋21 个 _draw wrap（13 文件 grep 派生全量）；qa_r271_stepacct **18/18**。
+  - **reproP 台架与 verdict（docs/qa/2026-10-14-R271-deeprepro-verdict.md，md5 31c34825…）**：90 敌驻场+448 team-0 弹+900 帧/臂×S1-S7 七臂+M4 有效性门+坏臂回归；**定谳：V-C 触发**（弹桶树周转 churn 17.6k/s、S1 延塌 50%[复跑 36-37% 边际披露]＋加摘塌 100% 相关性坐实）；V-A 21%/V-B 1%/V-D 均不触发；**H5 设备渲染邻接不成立**（基线延µs 56k≥5k——模拟侧来源坐实）；B1 三候选判读行齐（①敌波段 dc 分段账待真机 ②S7 0% 不坐实 ③填充率待 B-0 三键）。bad 台架无效门实证（敌 0/弹 19 → 拒判 H5）。
+  - **cutAB 唯一刀 V-C1（弹桶惰性归位，boost 门内默认）**：tex_bucket_host.gd:102 unplace_lazy＋object_pool.gd 单谓词分派＋game_loop.gd:2871 仅 projectile 池接线（homing/xp 未接线=直方图量级差 16×/681× 申辩经 QA 核验，升全局刀留拍板）；**刀后台架复跑：基线延µs 56.4k→43.7k（−22.4%）、弹类树进出 163k→5.9k（−96.4%）**；S1 残量=敌侧桶链（vc81+ 候选登记）；S4/S6 无回归。qa_r271_flushcut **24 PASS/6 SKIP**（SKIP 全注判据读数——a1/a2/a4/b3 未触发档纪律跳过；CONTACT_RADIAL 未翻 → blink_cases 免迁移）。
+  - **声明式迁移 6 处（断言迁移非删除，语义注释可溯）**：diagfreeze:152/bucketprobe b4/r230_k2:343/r229 三处（行尾新键追加的冻结正则随包）＋**两预存红追认**：r202_perf S⑤（R269 增行致七钮 pairwise 断言过期——探针三态实证 2px 重叠=套件自设 CANVAS_ITEMS×0.75 窗光栅伪影、产品 viewport 态 11 行 y=330+44·i 逐位零重叠；新 S⑤a 布局对拍强形式+S⑤b 伪影有界 ≤2px，35/35）＋r245_diag_gate C3 尾锚（R269 起机制性不可能匹配，23/23）。
+  - **QA 通过（28 次独立运行全绿 exit 0，无 high）**：三新套件+红线全过（pkg4 116/vf 685/boostmode 69/menuscope 21/physphase 31/blink 25/prewarm 25）；verdict 判读算术独立重算一致；刀后复跑落盘 postcut 新文件（归档全程 md5 监控未污染）。**评审有条件放行→条件全闭环**：M1 verdict 落盘参化（默认 postcut 可覆写/archive=1 才写归档且已存在拒写——修后归档 md5 逐位不变）＋M2 S3 臂复原只复活未归池件（池污染 ERROR 行数千→0，grep 断言）＋L3 postcut 表头 V-C 半执行注记；L2 提交制经查本项目非 git 仓=不适用登记；M3 vc81 判读模板见下。
+  - **测试账**：qa_r271_stepacct 18/18、qa_r271_deeprepro 16/16（×3 跑：v6 归档/QA 复核/修轮后）、qa_r271_flushcut 24/0/6；全电池 ~28 套件全绿（含 r202_perf 35/35、r245 23/23 两追认复绿）。
+  - **诚实边界（评审独立预估，vc81 前说透）**：V-C1 单刀只切了 A 轴弹桶份额（延µs −22%）；**B 轴渲ms（深载帧预算 45-50%）一刀未动、三候选全悬置真机**——评审预估 vc81 深载 fps 28-33（≥40 概率 <30%），「修到完」的完整闭环=vc81 真机 11 键定 B-0 判据后开 B 轴刀＋B4 75% 应急档（大概率是直接决策点）；中轻载 55+ 已事实达成；一次性开窗/结算尖峰仍可能瞬时破 30（渲峰ms 未动）。
+  - 出包：**InfiniteFission_v0.1.80_vc81.apk**（android_export/out/，13/13 门禁）。
+  - **vc81 真机判读指引（M3 模板，对照 vc79 深载段）**：①11 新键首读（步µs/隙µs/延早µs/延渲µs/延峰µs/加N/摘N/绘µs/渲帧N/呈帧N/渲峰ms）；②延µs 保守带 60-210k（真机负载重于台架，V-C1 已收割弹桶份额——≤40k 大概率不达，不达非回归）；③**B-0 定谳**：判据 A（渲帧N≈模N≈fps 且渲ms≈1000/渲帧N）vs 判据 B'（渲帧N≥55 且 渲帧N−呈帧N≥15）→ 决定渲ms 账重算口径；④**B4 75% 应急档显式决策项**：渲ms≥14∧fps<40∧延µs≤40k → 预授权降 75% 复测（R269 §3.4 预授权条款）；⑤渲峰ms ≤36 硬线＋fps 深载≥40/全程≥30（尖峰披露口径）；⑥B1 分段账：敌波段 vs 杂兵波段 dc/渲ms（候选①）/延µs 若三键指渲染侧则候选②复检/填充率（候选③）。
+  - **遗留登记（vc81+ 候选，非本批债）**：homing/xp 池 lazy 接线（量级差申辩已核）；敌侧桶链（S1 残量）；deeprepro archive=1 拒写分支未整跑实测（代码审查态，下归档周期顺带）；QA 观察项 3（S4 臂污染风暴位置勘误 S6→S3/settings 终态 perf_boost:0 良性物化/S1 舍入披露）。

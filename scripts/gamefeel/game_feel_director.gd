@@ -38,6 +38,39 @@ const CRIT_STOP_DENSE_ENEMY_MIN := 40          # R189c：密集场敌数门（§
 
 var _crit_stop_times: Array[float] = []        # CRIT 顿帧申请时刻滚动窗（raw elapsed；密集场判据）
 
+# ── R229 粒子满载门收口（CRIT/KILL/反应爆闪三路三重门减薄） ──────────
+# R228 绘制谱实锤：深载带（敌120 驻场、tier≤2）CRIT/击杀/反应爆闪流把 64 发射器
+# 池打满 = 64 独立 dc 地板（GPUParticles2D 逐发射器独立 multimesh 绘制 + GPU 填充）。
+# R213 满载门只盖非 CRIT 普命中；CRIT 仅吃 mobile 中档 1/2 隔次；KILL/反应路径完全
+# 无门。本刀三路接入同判据三重门（R223 _settle_cap_now 哨兵同款）：
+#   mobile ∧ 帧率优先 ∧ tier≤2 —— 门开时 CRIT 1/4 独立采样 / 普通 KILL 1/4、
+#   精英 KILL 1/2、Boss tag 全保留（死亡低频大反馈）/ 反应 1/2。
+# tier3/特效优先/桌面/headless 恒关 = 零扰动；顿帧/震屏/色差/跳字在粒子前施加，
+# 零触碰；particles.burst 调用点之后的 dropped_requests 遥测（particle_director）
+# 不动。R226 口径：本门是性能保险丝不是成长帽，-2 为用户否决档（可否决披露）。
+static var burst_thin_override: int = -1       # -1=真值自动门 / -2=强制关（用户否决档）/
+                                               # -3=模拟 mobile（跳过 OS 检查直入 tier 分支，
+                                               # headless 可测）/ 1=强制开
+var _crit_thin_tick: int = 0                   # 三重门 CRIT 1/4 采样计数器（R229）
+var _kill_thin_tick: int = 0                   # 三重门 KILL 爆闪采样计数器（普通/精英共用，
+                                               # 模按敌类取 4/2——任意连续 8 窗内通过数确定）
+var _rxn_thin_tick: int = 0                    # 三重门反应 1/2 采样计数器（R229）
+
+
+static func _burst_thin_on() -> bool:
+	# 三重门判定（R223 哨兵形状）：-3 模拟真机门=跳过 OS.has_feature("mobile")
+	# 直入 tier 分支（tier_override 注入即生效）——自动门真机语义与测试口径共用同一
+	# 条映射分支；真值路径 = mobile ∧ 帧率优先 ∧ tier≤2。
+	if burst_thin_override == -2:
+		return false
+	if burst_thin_override == 1:
+		return true
+	if burst_thin_override != -3 and not OS.has_feature("mobile"):
+		return false
+	if not PerfGovernor.frame_priority():
+		return false
+	return PerfGovernor.effective_tier() <= 2
+
 
 func _ready() -> void:
 	add_to_group(&"game_feel")                  # R74：复活演出等跨系统查找口
@@ -90,10 +123,26 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 	add_trauma_for_level(level)
 	_apply_chromatic(_ca_intensity_for(level))
 	if particles != null:
+		# R213 B案：满载门——普命中碎屑粒子关（敌≥80 满载高频命中下发射器池软限 64
+		# 恒满且每个独立 dc + GPU 填充；CRIT/击杀路径不走此处，反馈保留；顿帧/震屏/
+		# 色差在门之前已施加不受影响；敌数回落自动恢复）
+		if Enemy.fullload_dim() and not p_result.is_crit:
+			return
 		var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
+		# R204：mobile 门内高档降中档（命中粒子是每击都出的持续流——怪海×高频
+		# 武器下发射器池软限 64 恒满，与敌状态件同口径减半）
+		if OS.has_feature("mobile"):
+			q = mini(q, 1)
 		if q == 0 and not p_result.is_crit:
 			return                              # 低档：普命中不出粒子
-		if q == 1:
+		# R229 满载门收口：门开时 CRIT 走独立 1/4 采样（在 mobile 中档 1/2 隔次基础上
+		# 再收紧——深载 CRIT 流是发射器池饱和主源之一；非 CRIT 满载门/q 档语义逐位不动）
+		if p_result.is_crit and _burst_thin_on():
+			_crit_thin_tick += 1
+			if _crit_thin_tick % 4 != 1:
+				DebugStats.count(&"burst_thinned")
+				return
+		elif q == 1:
 			_thin_burst_tick += 1
 			if _thin_burst_tick % 2 == 1:
 				return                          # 中档：隔次削减
@@ -121,6 +170,14 @@ func on_enemy_killed(p_enemy: Node2D) -> void:
 		add_trauma_for_level(GameConst.FeelLevel.CRIT)
 	if particles != null:
 		var pos := p_enemy.global_position if p_enemy != null else Vector2.ZERO
+		# R229 满载门收口：门开时 KILL 爆闪采样——普通敌 1/4 / 精英 1/2 / Boss tag
+		# 全保留（Boss 死亡低频大反馈；on_boss_death_feel 顿帧/震屏路径零触碰）
+		if _burst_thin_on() and (tags & GameConst.TAG_BOSS) == 0:
+			_kill_thin_tick += 1
+			var kill_mod := 4 if (tags & GameConst.TAG_ELITE) == 0 else 2
+			if _kill_thin_tick % kill_mod != 1:
+				DebugStats.count(&"burst_thinned")
+				return
 		particles.burst(EMITTER_SCENE_ID, pos, ParticleDirector.PRIORITY_KILL)
 
 
@@ -130,6 +187,12 @@ func on_reaction_triggered(_p_rxn: int, p_pos: Vector2, _p_target_uid: int) -> v
 	add_trauma_for_level(GameConst.FeelLevel.CATALYST)
 	_apply_chromatic(_ca_intensity_for(GameConst.FeelLevel.CATALYST))
 	if particles != null:
+		# R229 满载门收口：门开时反应爆闪 1/2 采样（顿帧/震屏/色差在前已施加，零触碰）
+		if _burst_thin_on():
+			_rxn_thin_tick += 1
+			if _rxn_thin_tick % 2 != 1:
+				DebugStats.count(&"burst_thinned")
+				return
 		particles.burst(EMITTER_SCENE_ID, p_pos, ParticleDirector.PRIORITY_CRIT)
 
 
@@ -229,10 +292,14 @@ func _ca_decay_s_safe() -> float:
 func _push_chromatic_uniform() -> void:
 	# shader uniform 同步 + 零强度隐藏（无开销路径）。
 	# R188 档2：低档（fx_quality=0）全屏色差整体关（ca_enabled 缺省 true 不动——档内开关）
+	# R203 真机分辨率专项：mobile 门内整体禁用——全屏 hint_screen_texture 后处理是移动
+	# GPU 唯一逐像素全屏通道（R202 侦查定性），命中风暴期常开，1.5K-2K 屏上代价不可容；
+	# 震屏/跳字/顿帧等打击反馈不受影响（仅去色差一层）
 	if chromatic_rect == null:
 		return
 	var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
-	var enabled := (feel_config == null or feel_config.ca_enabled) and q > 0
+	var enabled := (feel_config == null or feel_config.ca_enabled) and q > 0 \
+			and not OS.has_feature("mobile")
 	chromatic_rect.visible = enabled and current_ca_intensity > 0.0001
 	if _chromatic_material != null:
 		_chromatic_material.set_shader_parameter(&"intensity", current_ca_intensity)

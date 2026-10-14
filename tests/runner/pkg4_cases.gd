@@ -504,10 +504,14 @@ func _test_card_flow() -> void:
 		if int(c["kind"]) != CardGenerator.CardKind.FALLBACK:
 			all_fallback = false
 	_check("卡池耗尽 → 全 fallback（AC-16.4）", fb.size() == 3 and all_fallback)
-	# fallback 应用：+5% 攻击入主武器栈
+	# R262d 迁移：fallback 应用走全局授予（player.add_fallback_atk）——原「主武器栈
+	# +1」口径退役（不再挂武器栈，全武器生效）
 	var stack_before: int = weapon.trait_stack.size()
+	var fb_pct0: float = float(player.get("run_fallback_atk_pct"))
 	empty_gen.apply_choice(empty_gen._fallback_stat_card(), player)
-	_check("fallback 应用：主武器栈 +1", weapon.trait_stack.size() == stack_before + 1)
+	_check("fallback 应用：全局累计 +5%（主武器栈不变）",
+		is_equal_approx(float(player.get("run_fallback_atk_pct")) - fb_pct0, 0.05)
+			and weapon.trait_stack.size() == stack_before)
 	weapon.level = lv_keep                          # 恢复等级（后续 MASTERY 用例需要未满级）
 	for w_v: WeaponBase in extra_weapons:
 		if w_v != null and is_instance_valid(w_v):

@@ -352,9 +352,15 @@ func _test_intro_new_reactions() -> void:
 
 func _test_intro_broadcast_once() -> void:
 	# 播报每局恰一次（选关开局 → mechanics_intro 单发；零新事件——防回环双增）
+	# R252 迁移：_on_menu_start 在祝福池非空时改弹面板挂起 start_run（game_loop.gd:1773
+	# _try_open_blessing_pick），直达广播收敛到 _finish_menu_start。本用例测 R192 既有通道，
+	# 走设计 §2.4-1/B2 合规退化口径——快照并清空 codex_traits 令池空 → 不弹面板直达战斗
+	#（套件收尾还原，防跨套件污染；环境存档残留解锁记录时旧写法会因面板挂起 count=0）。
 	print("── R192 播报：开局横幅每局恰一次 ──")
 	var bk_maps: Dictionary = Meta.maps_cleared.duplicate()
 	var bk_done: Dictionary = Meta.achievements_done.duplicate()
+	var bk_codex: Dictionary = Meta.codex_traits.duplicate()
+	Meta.codex_traits.clear()                   # 池空 → _on_menu_start 直达战斗（B2 口径）
 	Meta.mark_map_cleared(MapTable.MAPS[2].id)  # 解锁第 4 关（判据 = 上一关已通关）
 	var scene: PackedScene = load("res://scenes/main.tscn")
 	var gl = scene.instantiate() as GameLoop
@@ -380,6 +386,7 @@ func _test_intro_broadcast_once() -> void:
 	gl.free()
 	Meta.maps_cleared = bk_maps                # 还原（防跨套件污染）
 	Meta.achievements_done = bk_done
+	Meta.codex_traits = bk_codex
 	Meta.set_run_map(&"")
 
 

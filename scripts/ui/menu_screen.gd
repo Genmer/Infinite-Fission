@@ -10,6 +10,14 @@
 class_name MenuScreen
 extends CanvasLayer
 
+# R220 刀2（D3）：卡面描述预热器（preload——预热器不声明 class_name，防 headless
+# -s 模式全局类缓存不重扫）
+const CardDescPrewarm := preload("res://scripts/cards/card_desc_prewarm.gd")
+
+# R252D P2：图鉴行描述测量缓存（desc 全文 → get_multiline_string_size 高度）。进程级
+# static——codex 行 desc 为静态 .tres 字段或固定锁定句，跨局不变、无失效面。
+static var _row_measure: Dictionary = {}
+
 signal start_requested()                      # → GameLoop.start_run()（MENU → PLAYING，兼容口）
 signal start_map_requested(map_id: StringName, difficulty: int)   # 选图启动（M2 多地图 + R72 难度档 → GameLoop._on_menu_start）
 signal start_daily_requested()                # 每日挑战启动（P2 → GameLoop._on_menu_start_daily）
@@ -29,11 +37,82 @@ var _lobby_btns: Dictionary = {}              # 入口按钮（kind → Button�
 # 详情面板运行期
 var _sel_difficulty: int = 0                   # R72 难度三档（0 普通/1 困难/2 地狱；选关面板内切换）
 var _diff_btns: Array[Button] = []             # 难度三档切换按钮（选中态刷新）
+var _export_log_btn: Button = null            # R205：诊断日志导出（左下角）
+var _clear_log_btn: Button = null             # R208：诊断日志主动清空（导出右侧）
 var _panel_root: Control = null
 var _panel_title: Label = null
 var _panel_list: Control = null
+var _hint_label: Label = null                 # R257：菜单顶一次性提示（出发拒绝可见化）
+var _hint_left: float = 0.0                   # R257：提示剩余展示秒（_process 递减自隐）
+
+
+func flash_hint(p_text: String) -> void:
+	# R257：一次性可见反馈（出发被拒修前=静默 push_warning+return——真机「点了出发
+	# 没反应/回主页」形态的可见化；GameLoop._on_menu_start 拒绝分支直调）。
+	# 评审H1：move_to_front 每次闪现重申置顶——挂载序会被后续懒挂兄弟（面板/弹窗）
+	# 压回去，靠创建顺序不可靠；此处幂等置顶=绘制序恒兄弟末位（盖一切菜单内容）
+	if _hint_label == null:
+		return
+	_hint_label.text = p_text
+	_hint_label.move_to_front()
+	_hint_label.visible = true
+	_hint_left = 3.0
 var _codex_tabs: Dictionary = {}              # 页签按钮（页名 → Button）
 var _codex_tab: String = "怪物"
+# ── R254-1 图鉴页级行缓存（真机「菜单点一下卡一下」主源=切页全量重建行树：反应页
+# 82ms/祝福页 52ms/图鉴首开 70ms——真机 2-4×慢=百毫秒级停顿）。缓存 tab→行数组，
+# 切页只换挂树；失效口=回大厅（击杀数/解锁态每局变）+ codex_changed；菜单闲时
+# 分帧预建五页（_process 预热泵同 CardDescPrewarm 模式），首开/首切全变挂树 ──
+var _codex_page_cache: Dictionary = {}        # tab(String) → Array[Control]（缓存行）
+# ── R259 大厅三面板行缓存（真机反馈「点击关卡/成就/图鉴掉帧严重」——直调实测
+# 成就 13-14ms/选人 14-16ms/选关 10ms 超 60fps 预算 2-7 倍，真机渲染侧再 ×2-4。
+# R254-1 图鉴行缓存模式推广：①成就=页缓存+完成态签名+desc 进度轻刷（sig=页码+done
+# 位图；mark/name 色随 done 由 sig 涵盖，进度数字轻刷）；②选人=全量签名法（行内
+# 全部动态输入入 sig——picked/解锁/购买力/自定义武器/图鉴计数/击杀总数/无尽深度，
+# sig 同直挂、变则重建——无失效口=无陈旧数据风险）；③选关=分档缓存（难度→行数组，
+# 行内锁定态/星标/难度过滤 note 静态 per 档；失效口=map_records_changed——R259 Meta
+# 新信号，结算/通关喂入两写点 emit）。行名标 AchRow_/CharRow_/MapRow_ 入
+# _recycle_panel_rows detach 白名单（detach 回缓存不 free——图鉴 CodexRow_ 同款）──
+var _ach_page_cache: Dictionary = {}         # R259：成就行缓存（页码 → {sig, rows}）
+var _char_rows_cache: Dictionary = {}        # R259：选人行缓存（{sig, rows}——单页全量）
+var _map_rows_cache: Dictionary = {}         # R259：选关地图行缓存（难度 → Array[Control]）
+# ── R267 刀P3：选卡外三面板行缓存（记录/养成/每日——r267_menu_probe 基线：记录
+# 5668µs / 养成 11782µs / 每日 3233µs 每次开合全量重建行树，真机 ×2-4）。失效机制 =
+# 开面板时指纹快照比对（纯读 Meta 现有接口，零信号——每日结算分支提前 return 不发
+# 信号、结晶/星尘无货币信号，信号接线不可行＝设计 v2 评审④定谳）。指纹字段 = 面板
+# 实际显示字段全集（v3 评审⑴构造规矩：漏字段=陈旧行）：
+#   记录 = (best_wave/best_kills/best_level/total_runs/total_kills + 分图记录摘要 +
+#           通关图数——「累计击杀」逐杀累加即变，每日局结算早退也覆盖)；
+#   每日 = (daily_date_key + 当日 best_wave/best_kills)；
+#   养成 = (crystals + stardust + 已购 id→lv 映射——星尘独立变（祝福扣费放弃未结算）
+#           也命中，v3 评审⑴-② 字段级陈旧面)；行名标 RecRow_/UpgRow_/DlyRow_ 入
+#   _recycle_panel_rows detach 白名单（R259 同构）。──
+var _rec_rows_cache: Array = []              # RecRow_ 行缓存（records 面板全量行）
+var _rec_fp: String = ""                     # 记录面板指纹（上次重建时的显示字段快照）
+var _rec_row_seq: int = 0                    # RecRow_ 名标序号
+var _upg_rows_cache: Array = []              # UpgRow_ 行缓存（行序 = Meta.UPGRADES 序）
+var _upg_row_refs: Array = []                # R267 刀P3：行内动件引用（轻刷新用——
+                                             # {name_l, buy, u}，与缓存行同序）
+var _upg_fp: String = ""                     # 养成面板指纹
+var _upg_head: Label = null                  # 结晶头行引用（轻刷新货币角标）
+var _upg_sd: HBoxContainer = null            # 星尘行引用（轻刷新，其内 Label 刷文案）
+var _upg_row_seq: int = 0                    # UpgRow_ 名标序号
+var _dly_rows_cache: Array = []              # DlyRow_ 行缓存
+var _dly_fp: String = ""                     # 每日面板指纹
+var _dly_row_seq: int = 0                    # DlyRow_ 名标序号
+# ── R260 弹层/面板模态期预热泵挂起（真机「祝福面板 Q 弹动画帧率低」主源：动画帧
+# 叠加 CardDescPrewarm 4ms+图鉴泵 4ms 帧预算 + menu 渲染底噪 8.7-9.9ms ≈ 60fps 预算
+# 爆表——泵产出（卡描述/图鉴行缓存）在面板关闭前无消费者，模态期全停零损失）──
+var _lobby_detail_open := false              # 大厅详情面板开（成就/图鉴/选人/选关…）
+var _panel_kind := ""                        # R260：当前详情面板 kind（图鉴泵豁免判据）
+var _blessing_modal := false                 # 祝福弹层模态期（game_loop 面板 open/收口调）
+var _settings_modal := false                 # R260 评审 MED-1：设置全屏弹层期（game_loop 调）
+var _codex_prewarm_queue: Array[String] = []  # 待预建页序（闲时泵逐页消化；空=毕）
+var _codex_row_seq: int = 0                   # CodexRow_ 名标序号（缓存行回收判据）
+var _codex_pump_tab: String = ""              # R254 修轮#2：泵在建页（行级状态机——空=待取队首）
+var _codex_pump_rows: Array = []              # 在建页半成品行（页毕入缓存；被抢建则整体弃置）
+var _codex_pump_skip_frames: int = 0          # R262b M2：超支还账跳帧（冷行 10-25ms 后占空）
+var _codex_pump_i: int = 0                    # 在建页行游标
 # ── R191#6 成就面板类别页签 + 分页（成就扩容配套：页容量 24 控单页行构建成本） ──
 var _ach_tabs: Dictionary = {}                # 类别页签（页名 → Button）
 var _ach_tab: String = "全部"
@@ -48,10 +127,19 @@ const ACH_TYPE_CATEGORY := {
 	"total_kills": "猎杀", "boss_slain": "猎杀", "enemy_kills": "猎杀",
 	"run_wave": "进阶", "run_level": "进阶", "total_runs": "进阶",
 	"run_reactions": "进阶",                    # R192 反应族（单局触发反应数，run 域同进阶）
+	"endless_depth": "进阶",                    # R247 无尽深度成就阶梯（_channels.md §2.2；未知
+	                                           # type 兜底本就「进阶」，显式登记为可读性）
+	# R245 B 组技巧/经历族 8 族（累计施放/阵亡/擦弹/格挡/质变/复活/刷新/告警——全 run 外
+	# 累计口径归「进阶」；未知 type 兜底「进阶」，显式登记为可读性）
+	"total_skill_casts": "进阶", "total_deaths": "进阶", "total_graze": "进阶",
+	"total_blocks": "进阶", "total_milestones": "进阶", "total_revives": "进阶",
+	"total_rerolls": "进阶", "total_alarms": "进阶",
 	"run_weapons_drawn": "收集", "run_traits_drawn": "收集",
 	"codex_weapons": "收集", "codex_traits": "收集", "maps_cleared": "收集",
+	"codex_relics": "收集",                     # R245 遗物收集族（图鉴收录件数）
 }
 var _char_new_badge: bool = false             # R186：新角色解锁「·新」角标（打开选人面板清除）
+var _panel_defer_open: bool = false           # R252D P6：大厅面板作用域批落盘包络在开标志
 
 
 func _ready() -> void:
@@ -69,8 +157,16 @@ func _ready() -> void:
 	SafeAreaHelper.bind_reread(get_window(), _apply_safe_area)
 	EventBus.state_changed.connect(_on_state_changed)
 	Meta.codex_changed.connect(_refresh_lobby_counts)
+	Meta.codex_changed.connect(_invalidate_codex_cache)   # R254-1：解锁态变即失效（局内兑现边沿）
+	Meta.map_records_changed.connect(_invalidate_map_rows_cache)   # R259：通关记录变→选关行缓存弃置
+	_codex_prewarm_queue = _codex_tab_preset().duplicate()   # R254-1：闲时泵首次排程
 	Meta.fissioner_unlocked.connect(_on_fissioner_unlocked)   # R186：普通通关解锁角标
 	Meta.echo_unlocked.connect(_on_fissioner_unlocked)        # R198（二aw-6）：困难/地狱通关解锁角标（复用同处理器——两新角色「·新」角标统一）
+	# R246(P2)：无尽深度成就门角色角标——medic/vortex 门与 endless_depth_20/50 成就
+	# 同计数同阈值同刻兑现（_channels.md §2.4 等价性：结算 _check_achievements 边沿恰
+	# 在角色解锁时刻发信号），订阅 achievements_changed 置位即得解锁边沿，无需新专属
+	# 信号（noah 成就门现状亦无角标，行为一致仅新门补齐）
+	Meta.achievements_changed.connect(_on_endless_depth_char_ach)
 
 
 func _apply_safe_area() -> void:
@@ -99,12 +195,102 @@ func _on_fissioner_unlocked() -> void:
 	_refresh_lobby_counts()
 
 
+func _on_endless_depth_char_ach(p_ach_id: StringName) -> void:
+	# R246(P2)：无尽深度成就阶梯解锁边沿（endless_depth_20→medic / _50→vortex）
+	# ——门与成就同源同阈值，此刻即新角色解锁时刻，「角色」入口加「·新」角标
+	#（打开选人面板清除，_char_new_badge 既有口径复用）
+	if p_ach_id == &"endless_depth_20" or p_ach_id == &"endless_depth_50":
+		_char_new_badge = true
+		_refresh_lobby_counts()
+
+
+func _process(p_delta: float) -> void:
+	# R220 刀2（D3）：MENU 态驱动卡面描述预热器（CardDescPrewarm 12ms/帧分帧消化）。
+	# 门 = _root.visible（_on_state_changed 联动——仅 MENU 真）：离开菜单自动暂停、
+	# 回菜单继续（队列进度保留）；_built 幂等守卫使建队仅一次。选卡/战斗/结算期
+	# 本回调一读即返——预热不占 game_loop 物理帧预算（契约 §1-D3/§8 裁定#5）。
+	if _root == null or not _root.visible:
+		return
+	# R257：顶横幅提示自隐（flash_hint 3s）
+	if _hint_left > 0.0:
+		_hint_left -= p_delta
+		if _hint_left <= 0.0 and _hint_label != null:
+			_hint_label.visible = false
+	# R260：模态期泵挂起（弹层动画/面板操作的每帧预算让给前景）。分泵口径：
+	# CardDescPrewarm（卡面描述——菜单任何面板期无消费者）任一模态开即停；
+	# 图鉴泵（R254 行级分帧预建=图鉴切页缓存的消费者）仅祝福弹层全遮期或非图鉴
+	# 面板期停——图鉴面板开着时继续（切页预建不中断，目标页队首优先口径不变）
+	var card_desc_ok := not _lobby_detail_open and not _blessing_modal and not _settings_modal
+	var codex_pump_ok := not _blessing_modal and not _settings_modal \
+			and (not _lobby_detail_open or _panel_kind == "codex")
+	if card_desc_ok:
+		CardDescPrewarm.ensure_built(registry)
+		CardDescPrewarm.pump(CardDescPrewarm.BUDGET_US)
+	if not codex_pump_ok:
+		return
+	# R262b M2：冷图标行 10-25ms 单行必超 4ms 预算——超支帧后跳帧还账
+	#（对照 CardDescPrewarm.skip_frames_for 先例：ceil(成本/预算)−1 占空），
+	# 图鉴浏览期连续冷行不再逐帧 10-25ms 顿挫。
+	if _codex_pump_skip_frames > 0:
+		_codex_pump_skip_frames -= 1
+		return
+	# R254-1 刀B + 修轮#2：菜单闲时分帧预建图鉴五页行缓存——行级状态机（4ms/帧
+	# 预算逐行建，单行为最小原子）。修轮前整页原子：武器页冷图标一帧 310ms（真机
+	# 外推 0.6-1.2s 冻结）；行级后最坏帧=单行成本（图标冷画 ~10-25ms），摊销到
+	# 多帧。玩家同步路径（_rebuild_codex）若抢建了泵在建页：页毕发现缓存已有→
+	# 半成品行整体弃置（不入缓存即防覆盖，逐行 free 防泄漏）
+	if _codex_prewarm_queue.is_empty() and _codex_pump_tab == "":
+		return
+	var t0 := Time.get_ticks_usec()
+	while Time.get_ticks_usec() - t0 < 4000:
+		if _codex_pump_tab == "":
+			if _codex_prewarm_queue.is_empty():
+				return
+			_codex_pump_tab = _codex_prewarm_queue.pop_front()
+			_codex_pump_rows = []
+			_codex_pump_i = 0
+			if _codex_page_cache.has(_codex_pump_tab):   # 已被同步路径建好（竞态兜底）
+				_codex_pump_tab = ""
+				continue
+		var pumped := _make_codex_entry_row(_codex_pump_tab, _codex_pump_i)
+		if pumped == null:
+			if not _codex_page_cache.has(_codex_pump_tab):
+				_codex_page_cache[_codex_pump_tab] = _codex_pump_rows
+			else:                                       # 同步抢建已入缓存：半成品弃置
+				for ghost: Node in _codex_pump_rows:
+					ghost.queue_free()
+			_codex_pump_tab = ""
+			_codex_pump_rows = []
+			continue
+		_codex_pump_rows.append(pumped)
+		_codex_pump_i += 1
+	# R262b M2 还账：循环退出时若在建行中且本帧超支（帧耗时含末次冷行），按
+	# skip_frames_for 占空跳帧；行全热（桌面常态微秒级）恒不触发——零扰动。
+	if _codex_pump_tab != "":
+		var frame_us := int(Time.get_ticks_usec() - t0)
+		if frame_us > 4000:
+			_codex_pump_skip_frames = CardDescPrewarm.skip_frames_for(frame_us, 4000)
+
+
 func _on_state_changed(p_state: int) -> void:
 	# 仅 MENU 态显示（PLAYING/LEVEL_UP/PAUSED/GAME_OVER 均隐藏）；动效随可见性启停
 	var show := p_state == GameConst.GameStatus.MENU
 	_root.visible = show
+	if not show:
+		# R260 评审 HIGH-1 防御层：离菜单=一切面板/弹层模态作废（出发直关两口已清位，
+		# 此处兜底任何未来新增的绕关口——残留标志会让回大厅双泵永久停摆）
+		_lobby_detail_open = false
+		_panel_kind = ""
+		_blessing_modal = false
+		_settings_modal = false
 	if show:
 		_refresh_continue_btn()
+		_refresh_lobby_counts()               # R254 评审#7：新敌首杀无信号——角标回菜单即刷
+		if not _codex_page_cache.is_empty() or not _codex_prewarm_queue.is_empty() 				or _codex_pump_tab != "":
+			# R254-1：回大厅=击杀数/解锁态已变（局内累积不逐事件广播），图鉴行
+			# 缓存失效重备；反应页内容纯静态免重建（修轮#3a）。首进 MENU（缓存
+			# 空+队列已排）不触发——_ready 排程不空转
+			_invalidate_codex_cache(true)
 	if _pulse_tween != null:
 		if show:
 			_pulse_tween.play()
@@ -124,6 +310,23 @@ func _build_ui() -> void:
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_root)
+
+	# R257：菜单顶横幅提示（出发拒绝等一次性可见反馈——GameLoop 直调 flash_hint）。
+	# 评审H1：挂载序不可依赖（本块先挂、不透明 MenuBg 后挂画在其上=曾被整层盖住），
+	# 置顶由 flash_hint() 内 move_to_front 每次闪现时重申；y=215 净空带（logo 258 起，
+	# 修前 250 与其重叠 26px）+ R195 全宽锚（宽视口随动，同 logo 口径）；3s 自隐
+	_hint_label = Label.new()
+	_hint_label.name = "MenuHint"
+	StickerTheme.label_sticker(_hint_label, 16, PopPalette.INK, 2, Color.WHITE, true)
+	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_hint_label.offset_left = 0.0
+	_hint_label.offset_right = 0.0
+	_hint_label.offset_top = 215.0
+	_hint_label.offset_bottom = 249.0
+	_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hint_label.visible = false
+	_root.add_child(_hint_label)
 
 	# 淡云天空底（不透明 #EEF3FF，盖住战场）+ 漂移云层
 	var bg := ColorRect.new()
@@ -289,6 +492,103 @@ func _build_ui() -> void:
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_root.add_child(footer)
 
+	# R205 版本行（运行时真源 DebugStats.version_string——与 APK 文件名/诊断日志同口径；
+	# 真机排障先对版本再读日志，防老数据混流）
+	var vfooter := Label.new()
+	vfooter.name = "VersionFooter"
+	StickerTheme.label_sticker(vfooter, 13, PopPalette.INK_SOFT)
+	vfooter.text = DebugStats.version_string()
+	vfooter.anchor_right = 1.0
+	vfooter.anchor_top = 1.0
+	vfooter.anchor_bottom = 1.0
+	vfooter.offset_left = 0.0
+	vfooter.offset_right = 0.0
+	vfooter.offset_top = -86.0
+	vfooter.offset_bottom = -66.0
+	vfooter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_root.add_child(vfooter)
+
+	# R205「导出日志」按钮（左下角；用户点名：主页面一键导出诊断日志发开发者——
+	# 玩几分钟后返回大厅点此，全文已在剪贴板可直接粘贴发送）
+	_export_log_btn = Button.new()
+	_export_log_btn.name = "ExportLogButton"
+	_export_log_btn.text = "导出日志"
+	_export_log_btn.add_theme_font_size_override("font_size", 14)
+	_export_log_btn.add_theme_font_override("font", StickerTheme.font_bold())
+	_export_log_btn.anchor_top = 1.0
+	_export_log_btn.anchor_bottom = 1.0
+	_export_log_btn.offset_left = 14.0
+	_export_log_btn.offset_right = 126.0
+	_export_log_btn.offset_top = -108.0
+	_export_log_btn.offset_bottom = -80.0
+	_export_log_btn.pressed.connect(_on_export_log_pressed)
+	_export_log_btn.button_down.connect(func() -> void: StickerTheme.press_punch(_export_log_btn))
+	_root.add_child(_export_log_btn)
+
+	# R208「清空日志」按钮（导出右侧；用户点名主动清空——开局清一次，导出只带
+	# 怪多重载期的有效数据；按钮文字瞬时反馈「已清空N」1.5s 还原）
+	_clear_log_btn = Button.new()
+	_clear_log_btn.name = "ClearLogButton"
+	_clear_log_btn.text = "清空日志"
+	_clear_log_btn.add_theme_font_size_override("font_size", 14)
+	_clear_log_btn.add_theme_font_override("font", StickerTheme.font_bold())
+	_clear_log_btn.anchor_top = 1.0
+	_clear_log_btn.anchor_bottom = 1.0
+	_clear_log_btn.offset_left = 130.0
+	_clear_log_btn.offset_right = 242.0
+	_clear_log_btn.offset_top = -108.0
+	_clear_log_btn.offset_bottom = -80.0
+	_clear_log_btn.pressed.connect(_on_clear_log_pressed)
+	_clear_log_btn.button_down.connect(func() -> void: StickerTheme.press_punch(_clear_log_btn))
+	_root.add_child(_clear_log_btn)
+
+	# R212：「记录日志」采样开关按钮已迁入设置页（settings_panel「记录日志」+「日志
+	# 长度」两行——大厅设置按钮/暂停卡设置双入口，局中局外均可达，且每次 open 经
+	# _sync_from_meta 回填不会显过期 ✓/✗ 态）；底带回到 R208 导出（14-126）/清空
+	#（130-242）两枚。
+
+
+func _on_clear_log_pressed() -> void:
+	# R208：主动清空诊断环形缓冲（开局清一次——导出只带怪多重载期数据）
+	var n: int = DebugStats.diag_clear()
+	_clear_log_btn.text = "已清空%d" % n
+	get_tree().create_timer(1.5).timeout.connect(func() -> void:
+		if is_instance_valid(_clear_log_btn):
+			_clear_log_btn.text = "清空日志")
+
+
+func _on_export_log_pressed() -> void:
+	# R205：导出诊断日志（DebugStats 1Hz 环形缓冲 15 分钟）——写 user:// 文件 +
+	# 全文进剪贴板（微信/QQ 直接粘贴发送）+ 滚动预览对话框（尾部最关键：卡点在最后）
+	var res: Dictionary = DebugStats.diag_export()
+	var text := str(res["text"])
+	var copied := DebugStats.diag_copy_to_clipboard(text)
+	var dlg := AcceptDialog.new()
+	dlg.name = "DiagExportDialog"                # 定名（脚本建节点缺省 @类@id 名，测试/定位需稳定名）
+	dlg.title = "诊断日志 · %s" % DebugStats.version_string()
+	dlg.ok_button_text = "关闭"
+	var head := "文件: %s\n剪贴板: %s（去聊天框粘贴即可发送）\n%s\n────────\n" % [
+		str(res["path"]),
+		"已复制全文" if copied else "本机不可用",
+		"尾部 24 行（完整内容见文件/剪贴板）:",
+	]
+	var lines := text.split("\n")
+	var tail := "\n".join(lines.slice(maxi(lines.size() - 24, 0))) if lines.size() > 24 else text
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(600.0, 560.0)
+	var lbl := Label.new()
+	lbl.name = "DiagPreviewLabel"
+	lbl.text = head + tail
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.custom_minimum_size = Vector2(580.0, 0.0)
+	sc.add_child(lbl)
+	dlg.add_child(sc)
+	add_child(dlg)
+	dlg.popup_centered_ratio(0.8)
+	dlg.visibility_changed.connect(func() -> void:
+		if not dlg.visible:
+			dlg.queue_free())
+
 
 func _refresh_mascot() -> void:
 	# 大厅吉祥物 = 当前选中角色（R13 用户反馈「大厅应显示当前选中的角色」）
@@ -329,23 +629,58 @@ func _refresh_continue_btn() -> void:
 
 # ── 选关面板（出发按钮打开；通关链解锁——用户反馈「第一大关通关后打后面的」） ──
 func _open_map_select() -> void:
+	_panel_begin_defer()      # R252D P6：选关面板共用详情壳——同入批落盘包络
 	_panel_root.visible = true
 	_panel_title.text = "选择关卡"
+	_lobby_detail_open = true                # R260：选关面板独立开口（不经 _on_lobby_pressed）
+	_panel_kind = "map"
 	for kind: String in _codex_tabs:
 		(_codex_tabs[kind] as Button).visible = false
 	for kind: String in _ach_tabs:
 		(_ach_tabs[kind] as Button).visible = false
 	_set_ach_pager_visible(false)
-	for c in _panel_list.get_children():
-		(c as Node).queue_free()
+	_build_map_select_rows()
+	StickerTheme.squash_pop(_panel_root.get_node("LobbyPanel") as Control)
+
+
+func _build_map_select_rows() -> void:
+	# 选关列表体（难度行 + 地图行）：开面板与切难度共用重建——R245 星标随所选
+	# 难度分档（maps_cleared 不分难度，星标错亮三档）。同帧重建须先离树再释放，
+	# 防 get_node_or_null 命中未释放的同名旧行（DifficultyRow/DiffDesc）
+	# R262e ② 同档重开快路径：_on_panel_close 不拆行（行留树）、无
+	# map_records_changed 失效信号=解锁/星标数据未变——recycle+重挂+难度行重建
+	# 纯浪费（桌面探针 open≈7.5ms 大头；真机 2-4×=「点击后卡一堆才跳出」第一现场）。
+	# 判据=当前档缓存非空且行仍在树；切档（recycle 已拆旧行）/通关失效
+	# （缓存被弃置+行被 free）天然不命中走全量重建。
+	# R267 修轮1（r259 既有红「选关：切回复用首套实例」根因）：原判据只查
+	# MapRow_0 在树——切档后树上挂的是**另一档**的 MapRow_0（同名不同实例），
+	# 快路径误命中 → 切回旧档显示错档行（生产级陈旧显示 bug：选中档与地图行
+	# 星标/锁定态/解锁链不符）。补档位同一性：树上首行必须**就是**当前档缓存
+	# 首行（指针直比）才可直跳；否则走 recycle+分档缓存直挂（<2ms 正路）。
+	var _cur_cache: Array = _map_rows_cache.get(_sel_difficulty, [])
+	if not _cur_cache.is_empty() \
+			and _panel_list.get_node_or_null("MapRow_0") == _cur_cache[0] \
+			and _panel_list.get_node_or_null("DifficultyRow") != null:
+		return
+	_recycle_panel_rows()                   # R254-1：统一回收口（缓存行 detach 回缓存，其余照旧 free）
 	_build_difficulty_row()
+	# R259 分档行缓存：难度 → 行数组（行内锁定态/星标/难度过滤 note 静态 per 档）；
+	# 切难度=另一档缓存直挂（10ms→<2ms）。失效口=Meta.map_records_changed（通关
+	# 记录变化→锁定态/星标过期，全档弃置——结算/通关喂入两写点 emit）
+	var cached_maps: Array = _map_rows_cache.get(_sel_difficulty, [])
+	if not cached_maps.is_empty():
+		for r_v: Variant in cached_maps:
+			_panel_list.add_child(r_v)
+		return
+	var map_rows: Array = []
 	for i in range(MapTable.count()):
 		var def := MapTable.MAPS[i]
 		var mid: StringName = def.id
-		var unlocked := Meta.is_map_unlocked(mid)
-		var cleared := Meta.is_map_cleared(mid)
+		var unlocked := Meta.is_map_unlocked(mid, _sel_difficulty)   # 二cs：解锁链分档
+		var cleared := Meta.is_map_cleared_at(mid, _sel_difficulty)
 		var status := ("已通关 ★" if cleared else "可挑战") if unlocked else "通关上一关解锁"
 		var row := Panel.new()
+		row.name = "MapRow_%d" % i                   # R259：缓存行名标（回收口 detach 白名单）
 		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(14.0, 3, false))
 		row.custom_minimum_size = Vector2(576.0, 118.0)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -373,10 +708,11 @@ func _open_map_select() -> void:
 		desc_l.size = Vector2(500.0, 18.0)
 		desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(desc_l)
-		# 词缀二期：双词缀两行小字（祝 = 薄荷绿 / 诅 = 珊瑚红；数值真源 map_table.gd）
+		# 词缀二期：双词缀两行小字（兆 = 薄荷绿 / 诅 = 珊瑚红；数值真源 map_table.gd）。
+					# R253 消歧：词缀前缀「祝」→「兆」（吉兆）——「祝福」一词让位 R252 开局祝福系统
 		var bless_l := Label.new()
 		StickerTheme.label_sticker(bless_l, 12, PopPalette.SUCCESS)
-		bless_l.text = "祝　%s" % String(def.get("bless_name", ""))
+		bless_l.text = "兆　%s" % String(def.get("bless_name", ""))
 		bless_l.position = Vector2(64.0, 58.0)
 		bless_l.size = Vector2(500.0, 18.0)
 		bless_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -391,7 +727,7 @@ func _open_map_select() -> void:
 		# 大关新机制行（2026-09-13 解锁节奏表：MechanicGate 真源——选关即见本关主题）
 		var note_l := Label.new()
 		StickerTheme.label_sticker(note_l, 12, PopPalette.GOLD)
-		note_l.text = "✦ %s" % MechanicGate.intro_for_map(i)
+		note_l.text = "✦ %s" % MechanicGate.intro_for_map(i, _sel_difficulty)   # 二dc H1：选关行随所选难度过滤族武器名
 		note_l.position = Vector2(64.0, 94.0)
 		note_l.size = Vector2(500.0, 18.0)
 		note_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -408,7 +744,8 @@ func _open_map_select() -> void:
 			play_btn.button_down.connect(func() -> void: StickerTheme.press_punch(play_btn))
 			row.add_child(play_btn)
 		_panel_list.add_child(row)
-	StickerTheme.squash_pop(_panel_root.get_node("LobbyPanel") as Control)
+		map_rows.append(row)
+	_map_rows_cache[_sel_difficulty] = map_rows   # R259：入缓存（分档）
 
 
 func selected_difficulty() -> int:
@@ -458,7 +795,7 @@ func _build_difficulty_row() -> void:
 
 func _on_difficulty_pick(p_d: int) -> void:
 	_sel_difficulty = p_d
-	_refresh_difficulty_row()
+	_build_map_select_rows()   # R245：星标分档——切难度重建地图行（含难度行按钮态刷新）
 
 
 func _refresh_difficulty_row() -> void:
@@ -479,12 +816,16 @@ func _refresh_difficulty_row() -> void:
 	if desc_l != null:
 		desc_l.text = GameConst.difficulty_desc(_sel_difficulty)
 		if not unlocked_hard:
-			desc_l.text = "普通通关后解锁困难 / 地狱（当前：普通）
-" + desc_l.text
+			# R245 修裸换行（原 python 续行残留致 18px 单行 Label 塞两行溢出）——单行中点连接
+			desc_l.text = "普通通关后解锁困难 / 地狱（当前：普通）· " + desc_l.text
 
 
 func _on_map_pick(p_map_id: StringName) -> void:
-	_panel_root.visible = false
+	_panel_end_defer()        # R252D P6：落盘先于离菜单（§4.4-1——面板内出发钮路径）
+	_close_panel_core()       # R260 评审 HIGH-1：出发直关=挂起标志随清（防回大厅双泵停摆）
+	# R257 评审M2：UI 层 tap 直证——若病灶是上层吞点击（如祝福 dim 残留 MOUSE_FILTER_STOP），
+	# 玩家导出将呈「无此行」而非「有行但链断」，假说 f（吞 tap）从反推变直证
+	DebugStats.event("选关出发钮：map=%s 难度=%d" % [String(p_map_id), _sel_difficulty])
 	start_map_requested.emit(p_map_id, _sel_difficulty)
 
 
@@ -529,10 +870,23 @@ func _build_lobby() -> void:
 
 func _refresh_lobby_counts() -> void:
 	# 入口角标：图鉴解锁数 / 成就完成数（Meta 无档时显示 0）
+	# R245 §4.4-2：图鉴分母（115→133：29 怪 + 13 武 + 73 词条 + 18 遗物）；
+	# R252 需求③遗物扩容 18→34 件 → 分母 133→149（29 怪 + 13 武 + 73 祝福 + 34 遗物），
+	# 分子同口径 + codex_relics 收录数（获得口径与其余三页一致）。分母动态求和（:687）。
+	# R253 防御六遗物 34→40 件 → 分母 149→155（29+13+73+40——评审 M7 尾注同步）。
 	if registry == null:
 		return
-	var codex_total := registry.enemies.size() + registry.weapons.size() + registry.traits.size()
-	var codex_got := Meta.codex_kills.size() + Meta.codex_weapons.size() + Meta.codex_traits.size()
+	# R262b L14：图鉴计数剔除阈值型镜像词条（TH_* 永不可抽不入解锁面——与祝福页行源
+	# 同口径，7 条虚数归零）
+	var codex_traits_total := 0
+	for tid_v: Variant in registry.traits.keys():
+		var td_s: TraitData = registry.get_trait(tid_v)
+		if td_s != null and not bool(td_s.params.get("threshold_only", false)):
+			codex_traits_total += 1
+	var codex_total := registry.enemies.size() + registry.weapons.size() \
+		+ codex_traits_total + registry.relics.size()
+	var codex_got := Meta.codex_kills.size() + Meta.codex_weapons.size() \
+		+ Meta.codex_traits.size() + Meta.codex_relics.size()
 	var ach := Meta.achievement_count()
 	(_lobby_btns["codex"] as Button).text = "图鉴 %d/%d" % [codex_got, codex_total]
 	(_lobby_btns["ach"] as Button).text = "成就 %d/%d" % [ach.x, ach.y]
@@ -553,6 +907,7 @@ func _on_lobby_pressed(p_kind: String) -> void:
 		# 设置页为独立全屏面板（不占大厅详情壳；GameLoop 接线 SettingsPanel.open）
 		settings_requested.emit()
 		return
+	_panel_begin_defer()      # R252D P6：面板作用域批落盘开包络（写口即时生效、_save 抑制）
 	_panel_root.visible = true
 	var titles := {"codex": "图鉴", "ach": "成就", "records": "历史记录",
 		"char": "选择角色", "upgrade": "局外养成", "daily": "每日挑战"}
@@ -581,6 +936,8 @@ func _on_lobby_pressed(p_kind: String) -> void:
 		"daily":
 			_panel_title.text = "每日挑战"
 			_rebuild_daily()
+	_lobby_detail_open = true                # R260：大厅详情面板开=CardDesc 泵挂起（图鉴泵豁免见 _process）
+	_panel_kind = p_kind
 	StickerTheme.squash_pop(_panel_root.get_node("LobbyPanel") as Control)
 
 
@@ -622,9 +979,12 @@ func _build_panel() -> void:
 	_panel_title.size = Vector2(648.0, 42.0)
 	_panel_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card.add_child(_panel_title)
-	# 图鉴页签（仅图鉴模式可见；行 = [页名, x]。R191#5：+「反应」页共 4 枚，宽 160→126
-	# 重排——末沿 486+126=612 与右距 36 均不变）
-	var tabs := [["怪物", 36.0], ["武器", 186.0], ["词条", 336.0], ["反应", 486.0]]
+	# 图鉴页签（仅图鉴模式可见；行 = [页名, x]。R191#5：+「反应」页共 4 枚；R245 +「遗物」
+	# 页共 5 枚，宽 126→108 重排（步距 117）——末沿 504+108=612 与右距 36 均不变）
+	# R252D（需求②）：原「词条」页签改名「祝福」——开局祝福档位池数据读口不变（仍
+	# registry.traits 全量 + Meta.is_trait_unlocked 既有解锁标记），仅页签名与锁定态
+	# 文案换语义（几何 108/x 位置不动，rxn_codex A1b 数值锁保持）
+	var tabs := [["怪物", 36.0], ["武器", 153.0], ["祝福", 270.0], ["反应", 387.0], ["遗物", 504.0]]
 	for t in tabs:
 		var tab := Button.new()
 		tab.name = "Tab_%s" % String(t[0])
@@ -632,7 +992,7 @@ func _build_panel() -> void:
 		tab.add_theme_font_size_override("font_size", 18)
 		tab.add_theme_font_override("font", StickerTheme.font_bold())
 		tab.position = Vector2(float(t[1]), 84.0)
-		tab.size = Vector2(126.0, 54.0)
+		tab.size = Vector2(108.0, 54.0)
 		tab.pivot_offset = tab.size * 0.5
 		tab.pressed.connect(_on_codex_tab.bind(String(t[0])))
 		card.add_child(tab)
@@ -756,92 +1116,325 @@ func _build_panel() -> void:
 	card.add_child(close_btn)
 
 
+func _panel_begin_defer() -> void:
+	# R252D P6：大厅详情面板作用域批落盘——open → Meta.begin_persist_defer()（R189 既有
+	# 批收口 API），面板内点击路径写口（buy_upgrade/set_character_id/set_setting 等）
+	# 应用即时、_save 被深度门抑制；关闭/出发/退出树统一 end 一次落盘（设置滑条 14 步
+	# 拖动 = 1 次写盘）。标志守卫严格配对（end 在深度 0 也会强制落盘——绝不空 begin）。
+	if not _panel_defer_open:
+		Meta.begin_persist_defer()
+		_panel_defer_open = true
+
+
+func _panel_end_defer() -> void:
+	# R252D P6：包络收口（幂等——无包络时零副作用，不触 Meta.end_persist_defer 的
+	# 深度 0 强制落盘分支）
+	if _panel_defer_open:
+		_panel_defer_open = false
+		Meta.end_persist_defer()
+
+
+func _notification(p_what: int) -> void:
+	# R252D P6：带开包络销毁 → 强制结清（不许把 _save 抑制态带出面板作用域）
+	if p_what == NOTIFICATION_EXIT_TREE:
+		_panel_end_defer()
+
+
+func set_blessing_modal(p_open: bool) -> void:
+	# R260：祝福弹层模态期（game_loop 面板 open/三收口唯一调点）。
+	# 注：本函数只记模态位；「面板开着时仍挂起」的条件合并语义住在两个
+	# pump_paused 谓词里（R260 评审 LOW-3 口径）
+	_blessing_modal = p_open
+	# R267 刀P1：模态开帧位图暖——门开（mobile/测试 override）且图集未就绪时，
+	# layout+未烤 cell 一次性做掉（≈42ms 菜单过渡帧），出发帧 ensure 恒短路。
+	# 模态期 tex 泵被 R260 挂起（挂起谓词含 _blessing_modal）→ 暖必须在本帧同步。
+	# 桌面自动门恒关 → 零扰动；ready 后幂等零成本。
+	if p_open:
+		PopupGlyphAtlas.warm_runstart_cells()
+
+
+func set_settings_modal(p_open: bool) -> void:
+	# R260 评审 MED-1：设置全屏弹层期（game_loop 开面板/closed 信号调点）——设置卡
+	# 同款 squash_pop 动画，模态期双泵挂起口径与祝福弹层一致
+	_settings_modal = p_open
+
+
+func card_desc_pump_paused() -> bool:
+	# 测试观测口（R260）：CardDescPrewarm 挂起态（任一模态开=true）
+	return _lobby_detail_open or _blessing_modal or _settings_modal
+
+
+func codex_pump_paused() -> bool:
+	# 测试观测口（R260）：图鉴泵挂起态（祝福/设置弹层或非图鉴面板期=true）
+	return _blessing_modal or _settings_modal \
+			or (_lobby_detail_open and _panel_kind != "codex")
+
+
 func _on_panel_close() -> void:
+	_panel_end_defer()        # R252D P6：回大厅 = 面板作用域结束，统一落盘
 	_panel_root.visible = false
+	_lobby_detail_open = false   # R260：回大厅=泵恢复（模态全清）
+	_panel_kind = ""
 	_refresh_lobby_counts()
 
 
 func _on_codex_tab(p_tab: String) -> void:
 	_codex_tab = p_tab
+	# R254-1：目标页提到预建队首（玩家即将看的页最先备好——闲时泵同帧内消费）
+	var qi := _codex_prewarm_queue.find(p_tab)
+	if qi >= 0:
+		_codex_prewarm_queue.remove_at(qi)
+		_codex_prewarm_queue.push_front(p_tab)
 	_rebuild_codex()
 
 
-# ── 图鉴内容（怪物击杀解锁 / 武器获得解锁 / 词条抽取解锁） ────────
-func _rebuild_codex() -> void:
+func _rows_attached_in_order(p_cache: Array, p_extra: int = 0) -> bool:
+	# R267 刀P3：缓存组已按序挂树判定（指针直比，O(n)≈µs 级）——面板关闭只隐藏
+	# _panel_root 不卸行，同态重开（关→开同面板/同面板连按）无需 detach+reattach，
+	# 逐行重进树 ~90-195µs/行的挂载成本整段跳过（显示态等价：行/序/内容均未变）
+	if _panel_list == null or p_cache.is_empty() \
+			or _panel_list.get_child_count() != p_cache.size() + p_extra:
+		return false
+	for i in range(p_cache.size()):
+		if _panel_list.get_child(i) != p_cache[i]:
+			return false
+	return true
+
+
+func _free_cached_rows(p_rows: Array) -> void:
+	# R259 评审 HIGH-1：缓存行数组释放共用口——Node 非 RefCounted，失去引用不释放
+	# （孤儿行泄漏）。挂树防御同 _invalidate_map_rows_cache（被覆盖的旧行通常已被
+	# _recycle_panel_rows detach，但仍可能有挂树路径）。
+	for r_v: Variant in p_rows:
+		var r: Node = r_v as Node
+		if r != null and is_instance_valid(r):
+			if r.get_parent() != null:
+				r.get_parent().remove_child(r)
+			r.queue_free()
+
+
+func _invalidate_map_rows_cache() -> void:
+	# R259：选关地图行缓存失效（Meta.map_records_changed——结算/通关喂入写点）。
+	# 行内锁定态/星标随记录变=旧行不可复用，全档弃置（行尚挂树=选关面板开着的
+	# 防御路径：一并 detach 再 free，下次打开重建）。
+	for d_v: Variant in _map_rows_cache.keys():
+		_free_cached_rows(_map_rows_cache[d_v])
+	_map_rows_cache.clear()
+
+
+func _recycle_panel_rows() -> void:
+	# R254-1：面板行统一回收口（R252D P1 先离树再释放语义不变）——图鉴缓存行
+	#（CodexRow_/RxnRow_ 名标）与 R259 三面板缓存行（AchRow_/CharRow_/MapRow_），
+	# R267 刀P3 三面板缓存行（RecRow_/UpgRow_/DlyRow_）同入 detach 白名单；
+	# 只 detach 回缓存复用不 free；其余页行照旧 remove+queue_free。
+	# 六 rebuild 开头共用（切面板互切时对方页行各归各位）
 	for c in _panel_list.get_children():
-		(c as Node).queue_free()
+		_panel_list.remove_child(c)
+		var nm := String(c.name)
+		if not (nm.begins_with("CodexRow_") or nm.begins_with("RxnRow_")
+				or nm.begins_with("AchRow_") or nm.begins_with("CharRow_")
+				or nm.begins_with("MapRow_")
+				or nm.begins_with("RecRow_") or nm.begins_with("UpgRow_")
+				or nm.begins_with("DlyRow_")):
+			c.queue_free()
+
+
+func _invalidate_codex_cache(p_keep_reaction: bool = false) -> void:
+	# R254-1：缓存失效（击杀数/解锁态已变——行文案随档漂移，旧行不可复用）。
+	# 行尚挂树时一并 detach（面板开着的防御路径：codex_changed 局内解锁可先于回
+	# 大厅达）。清缓存后重排预建队列，闲时泵重新备五页。
+	# R254 修轮#3a：p_keep_reaction=true 保留「反应」页——行源纯静态（枚举序+
+	# 运行期静态表+固定文案，零 Meta 态），进菜单失效口对它是白建（回菜单五连
+	# 小卡的三成白费源）；codex_changed 口不保留（防御未来反应行接 Meta 态）。
+	# R254 修轮#2：泵在建半成品一并弃置（防跨失效期的孤儿行）。
+	for ghost: Node in _codex_pump_rows:
+		ghost.queue_free()
+	_codex_pump_tab = ""
+	_codex_pump_rows = []
+	var keep_tab: StringName = &"反应" if p_keep_reaction else &""
+	var kept_rows: Variant = _codex_page_cache.get(keep_tab, null) if keep_tab != &"" else null
+	if _panel_list == null:                    # _build_panel 前的信号边界（防御——只清数据不碰树）
+		_codex_page_cache.clear()
+		_codex_prewarm_queue = _codex_tab_preset().duplicate()
+		if kept_rows != null:
+			_codex_page_cache[keep_tab] = kept_rows
+			_codex_prewarm_queue.erase(String(keep_tab))
+		return
+	var cached_rows: Array = []
+	for tab_v: Variant in _codex_page_cache.keys():
+		if String(tab_v) == String(keep_tab):
+			continue
+		for row_v: Variant in _codex_page_cache[tab_v]:
+			cached_rows.append(row_v)
+	for c in _panel_list.get_children():
+		if c in cached_rows:
+			_panel_list.remove_child(c)
+	for row_v: Variant in cached_rows:
+		(row_v as Node).queue_free()
+	_codex_page_cache.clear()
+	if kept_rows != null:
+		_codex_page_cache[keep_tab] = kept_rows
+	_codex_prewarm_queue = _codex_tab_preset().duplicate()
+	if kept_rows != null:
+		_codex_prewarm_queue.erase(String(keep_tab))
+
+
+func _codex_tab_preset() -> Array[String]:
+	# 武器页压尾（修轮#2）：武器图标 tex 预热项排 boss 段后，先建四轻页为其留
+	# 消化时窗——泵到武器页时图标热、单行成本回落常态档
+	return ["怪物", "祝福", "遗物", "反应", "武器"]
+
+
+# ── 图鉴内容（怪物击杀解锁 / 武器获得解锁 / 祝福=开局词条解锁） ────
+func _rebuild_codex() -> void:
+	_recycle_panel_rows()
 	if registry == null:
 		return
-	match _codex_tab:
+	# R254-1：页级行缓存——命中直挂（切页从全量重建 82ms 降到挂树+VBox 排版）；
+	# 未命中建页入缓存（首开该页仍一次构建，闲时泵已把常见路径预建掉）
+	if not _codex_page_cache.has(_codex_tab):
+		_codex_page_cache[_codex_tab] = _build_codex_rows(_codex_tab)
+		var qi := _codex_prewarm_queue.find(_codex_tab)
+		if qi >= 0:
+			_codex_prewarm_queue.remove_at(qi)
+	for row: Control in (_codex_page_cache[_codex_tab] as Array):
+		_panel_list.add_child(row)
+	_sticker_active_tab()
+
+
+func _build_codex_rows(p_tab: String) -> Array:
+	# 纯构建（不挂树——玩家点未缓存页的同步路径）：行序真源 = _make_codex_entry_row
+	# 逐行聚合（R254 修轮#2：泵行粒度化后单行工厂是唯一行源，本函数与闲时泵共用）
+	var rows: Array = []
+	var i := 0
+	while true:
+		var row := _make_codex_entry_row(p_tab, i)
+		if row == null:
+			break
+		rows.append(row)
+		i += 1
+	return rows
+
+
+func _make_codex_entry_row(p_tab: String, p_i: int) -> Control:
+	# 单行工厂（R254 修轮#2）：p_i 越界返 null（页毕哨兵）。五页行源：
+	# 怪物/武器/祝福/遗物 = registry 数组序；反应 = 枚举声明序 + 尾 blank 行。
+	# 泵按行消费（4ms 预算内逐行建），同步路径整页循环调——同一行真源零漂移
+	var src_arr: Array = []                   # 行源序（registry 四族是 Dictionary——keys() 保插入序）
+	match p_tab:
 		"怪物":
-			for eid: Variant in registry.enemies:
-				var ed: EnemyData = registry.get_enemy(eid)
-				if ed == null:
-					continue
-				var kills := Meta.codex_kill_count(eid)
-				var atk_note := GameConst.enemy_attack_note(String(eid))
-				_panel_list.add_child(_make_codex_row(
-					_enemy_icon_tex(eid), kills > 0,
-					ed.display_name if kills > 0 else "？？？",
-					"累计击杀 %d · HP %d · 经验 %d%s" % [kills, int(ed.hp_base),
-						int(ed.exp_base), atk_note]
-						if kills > 0 else "未解锁：击杀一只后展示详情"))
+			src_arr = registry.enemies.keys()
+		"武器":
+			src_arr = registry.weapons.keys()
+		"祝福":
+			# R262b L14：阈值型镜像词条（TH_*）五池滤全过但图鉴全目录扫入——它们永不可抽
+			#（局内不进卡池），挂在祝福页=恒锁「？？？」假行。行源滤除，计数随之归真。
+			for tid_v: Variant in registry.traits.keys():
+				var td_c: TraitData = registry.get_trait(tid_v)
+				if td_c != null and not bool(td_c.params.get("threshold_only", false)):
+					src_arr.append(tid_v)
+		"遗物":
+			src_arr = registry.relics.keys()
+		"反应":
+			src_arr = GameConst.ReactionType.keys()
+	var blank_idx: int = src_arr.size()          # 反应页尾 blank 行位（其余页=越界哨兵位）
+	if p_i >= src_arr.size() + (1 if p_tab == "反应" else 0):
+		return null
+	match p_tab:
+		"怪物":
+			var eid: Variant = src_arr[p_i]
+			var ed: EnemyData = registry.get_enemy(eid)
+			if ed == null:
+				return _make_codex_entry_row(p_tab, p_i + 1)   # 脏数据跳行（递进到下一合法行）
+			var kills := Meta.codex_kill_count(eid)
+			var atk_note := GameConst.enemy_attack_note(String(eid))
+			return _make_codex_row(
+				_enemy_icon_tex(eid), kills > 0,
+				ed.display_name if kills > 0 else "？？？",
+				"累计击杀 %d · HP %d · 经验 %d%s" % [kills, int(ed.hp_base),
+					int(ed.exp_base), atk_note]
+					if kills > 0 else "未解锁：击杀一只后展示详情")
 		"武器":
 			# R196 三态（定案 wunlock）：①已获得 = got 现状（机制一句话 + 形态数值）；
 			# ②可获取 = 门开未获得（显示名 + 局内抽卡提示）；③未解锁 = 门未开（隐名 +
 			# 「通关『X』后开放」——句式单源 MechanicGate.weapon_locked_line，UI 禁手抄；
 			# 锁徽记走 ui_lock 贴纸，行压暗读感同 RxnRow 锁定态手法）。
 			# 「图鉴 %d/%d」计数保持获得口径不动（_refresh_lobby_counts）。
-			for wid: Variant in registry.weapons:
-				var wd: WeaponData = registry.get_weapon(wid)
-				if wd == null:
-					continue
-				var got := Meta.is_weapon_unlocked(wid)
-				# R196 评审修复：三态门态改进度派生（weapon_allowed_progress）——
-				# weapon_allowed 读 run_map（上一局地图残留），大厅冷启动全亮「可获取」
-				# 假话、局后按末局地图漂移；进度门 = 已通关大关数派生，与选关页一致
-				var allowed := MechanicGate.weapon_allowed_progress(wid)
-				# R190：解锁行副文案加机制一句话（图鉴直接可见，不靠 hover）——
-				# 万镜回廊/蓄能轨道等 R187 特殊机制读图标猜不出
-				var w_desc := ""
-				var w_name := wd.display_name
-				if got:
-					var w_note := GameConst.weapon_note(String(wid))
-					w_desc = ("%s\n%s" % [w_note, _form_stat_line(wd)]) if w_note != "" \
-						else _form_stat_line(wd)
-				elif allowed:
-					w_desc = "可获取：局内抽到「新武器」卡解锁"
-				else:
-					w_name = "？？？"
-					w_desc = MechanicGate.weapon_locked_line(wid)
-				var w_row := _make_codex_row(
-					TextureFactory.weapon_icon(wid), got or allowed,
-					w_name, w_desc)
-				if not allowed and not got:
-					# 未解锁三态：压暗 + 右上角锁徽贴纸（观察名 WeaponLockBadge）。
-					# R196 wunlock 定案 P6「获得优先于门」：门外已获得的武器按已获得态
-					# 展示（显示名 + 无锁徽 + 不压暗）——只拦「未获得 ∧ 门外」，老档无损
-					w_row.modulate.a = 0.55
-					var w_lock := TextureRect.new()
-					w_lock.name = "WeaponLockBadge"
-					w_lock.texture = TextureFactory.ui_lock()
-					w_lock.position = Vector2(536.0, 8.0)
-					w_lock.size = Vector2(26.0, 24.0)
-					w_lock.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-					w_lock.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-					w_lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
-					w_row.add_child(w_lock)
-				_panel_list.add_child(w_row)
-		"词条":
-			for tid: Variant in registry.traits:
-				var td: TraitData = registry.get_trait(tid)
-				if td == null:
-					continue
-				var got := Meta.is_trait_unlocked(tid)
-				_panel_list.add_child(_make_codex_row(
-					TextureFactory.type_icon(1, int(td.pool)), got,
-					td.display_name if got else "？？？",
-					td.description if got else "未解锁：抽到该词条卡后展示详情"))
+			var wid: Variant = src_arr[p_i]
+			var wd: WeaponData = registry.get_weapon(wid)
+			if wd == null:
+				return _make_codex_entry_row(p_tab, p_i + 1)   # 脏数据跳行
+			var got := Meta.is_weapon_unlocked(wid)
+			# R196 评审修复：三态门态改进度派生（weapon_allowed_progress）——
+			# weapon_allowed 读 run_map（上一局地图残留），大厅冷启动全亮「可获取」
+			# 假话、局后按末局地图漂移；进度门 = 已通关大关数派生，与选关页一致
+			var allowed := MechanicGate.weapon_allowed_progress(wid)
+			# R190：解锁行副文案加机制一句话（图鉴直接可见，不靠 hover）——
+			# 万镜回廊/蓄能轨道等 R187 特殊机制读图标猜不出
+			var w_desc := ""
+			var w_name := wd.display_name
+			if got:
+				var w_note := GameConst.weapon_note(String(wid))
+				w_desc = ("%s\n%s" % [w_note, _form_stat_line(wd)]) if w_note != "" \
+					else _form_stat_line(wd)
+			elif allowed:
+				# 二dc M1（评审）：可获取态补难度尾注——纯大关进度派生（progress 门）
+				# 不含难度维度，普通玩家照「可获取」去抽永远抽不到族武器（门在卡池侧）
+				var gd_min := MechanicGate.weapon_difficulty_min(wid)
+				var gd_note := ""
+				if gd_min >= 2:
+					gd_note = "（仅地狱难度对局可获取）"
+				elif gd_min == 1:
+					gd_note = "（困难起可获取；地狱全开）"
+				w_desc = "可获取：局内抽到「新武器」卡解锁%s" % gd_note
+			else:
+				w_name = "？？？"
+				w_desc = MechanicGate.weapon_locked_line(wid)
+			var w_row := _make_codex_row(
+				TextureFactory.weapon_icon(wid), got or allowed,
+				w_name, w_desc)
+			if not allowed and not got:
+				# 未解锁三态：压暗 + 右上角锁徽贴纸（观察名 WeaponLockBadge）。
+				# R196 wunlock 定案 P6「获得优先于门」：门外已获得的武器按已获得态
+				# 展示（显示名 + 无锁徽 + 不压暗）——只拦「未获得 ∧ 门外」，老档无损
+				w_row.modulate.a = 0.55
+				var w_lock := TextureRect.new()
+				w_lock.name = "WeaponLockBadge"
+				w_lock.texture = TextureFactory.ui_lock()
+				w_lock.position = Vector2(536.0, 8.0)
+				w_lock.size = Vector2(26.0, 24.0)
+				w_lock.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				w_lock.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				w_lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				w_row.add_child(w_lock)
+			return w_row
+		"祝福":
+			# R252D（需求②）：页签改名「词条」→「祝福」——本页=开局祝福（blessing_trait）
+			# 候选池的全集图鉴；解锁口径不变（Meta.is_trait_unlocked = codex_traits 既有
+			# 读口，「局内获得过该词条」），锁定态文案对齐新语义（含「开局祝福」）
+			var tid: Variant = src_arr[p_i]
+			var td: TraitData = registry.get_trait(tid)
+			if td == null:
+				return _make_codex_entry_row(p_tab, p_i + 1)   # 脏数据跳行
+			var got := Meta.is_trait_unlocked(tid)
+			return _make_codex_row(
+				TextureFactory.type_icon(1, int(td.pool)), got,
+				td.display_name if got else "？？？",
+				td.description if got else "未解锁：抽到该词条卡后解锁对应开局祝福")
+		"遗物":
+			# R245 §4.4-1 遗物页：18 件全量行（resources/relics 目录真源经 registry.relics），
+			# 解锁口径 = 获得过该遗物（Meta.codex_relics——RELIC 卡应用即收录，接线在
+			# meta_manager._on_card_chosen，本文件零写口）。锁定态：名「？？？」+ 统一句式
+			# （同词条页先例）；图标复用 ui_gem 贴纸（遗物=局外珍贵收集品语义，零新贴纸）。
+			var rid_v: Variant = src_arr[p_i]
+			var rdata: RelicData = registry.get_relic(StringName(String(rid_v)))
+			if rdata == null:
+				return _make_codex_entry_row(p_tab, p_i + 1)   # 脏数据跳行
+			var rgot := Meta.is_relic_unlocked(rdata.id)
+			return _make_codex_row(
+				TextureFactory.ui_gem(), rgot,
+				rdata.display_name if rgot else "？？？",
+				rdata.description if rgot else "未解锁：获得后展示详情")
 		"反应":
 			# R191#5 图鉴「反应」页：枚举全键全量可见（无解锁过滤——不设 codex 门、零新增
 			# 存档键；页面不出现难度门文案，条件句写代码真条件）。倍率运行时读
@@ -851,15 +1444,15 @@ func _rebuild_codex() -> void:
 			# reaction_table 成员过滤——缺键 push_error+跳过（半接线启动期报红，禁静默落行）；
 			# 行序 = 枚举声明序（构建序定位保留）。冰+草留白标注行（21 配对唯一空格）在循环
 			# 后单独追加——不计入枚举行数。
-			for rid_key: String in GameConst.ReactionType.keys():
-				if GameConfig.balance == null \
-						or not GameConfig.balance.reaction_table.has(rid_key):
-					push_error("[MenuScreen] reaction_table 缺键（半接线）：%s——行跳过" % rid_key)
-					continue
-				_panel_list.add_child(
-					_make_codex_reaction_row(int(GameConst.ReactionType[rid_key])))
-			_panel_list.add_child(_make_codex_blank_row())
-	_sticker_active_tab()
+			if p_i == blank_idx:
+				return _make_codex_blank_row()               # 尾行：冰+草留白标注
+			var rid_key: String = src_arr[p_i]
+			if GameConfig.balance == null \
+					or not GameConfig.balance.reaction_table.has(rid_key):
+				push_error("[MenuScreen] reaction_table 缺键（半接线）：%s——行跳过" % rid_key)
+				return _make_codex_entry_row(p_tab, p_i + 1)   # 缺键跳行
+			return _make_codex_reaction_row(int(GameConst.ReactionType[rid_key]))
+	return null
 
 
 func _form_stat_line(p_wd: WeaponData) -> String:
@@ -935,7 +1528,10 @@ func _enemy_icon_tex(p_eid: Variant) -> ImageTexture:
 func _make_codex_row(p_tex: ImageTexture, p_unlocked: bool, p_name: String,
 		p_desc: String) -> Control:
 	# 图鉴行：章形图标 + 名称 + 副文案（未解锁 = 剪影灰 + 问号）
+	# R254-1：CodexRow_ 名标 = 页级缓存行回收判据（_recycle_panel_rows 只 detach 不 free）
 	var row := Panel.new()
+	row.name = "CodexRow_%d" % _codex_row_seq
+	_codex_row_seq += 1
 	row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
 	row.custom_minimum_size = Vector2(576.0, 64.0)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -965,8 +1561,18 @@ func _make_codex_row(p_tex: ImageTexture, p_unlocked: bool, p_name: String,
 	# 字型排版实测（同 card_select_ui._measured_desc_h 口径：wrap 高 + 行距，禁拍值），
 	# 行体随描述扩高
 	desc_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var _raw_need: float = StickerTheme.font().get_multiline_string_size(p_desc,
-		HORIZONTAL_ALIGNMENT_LEFT, 500.0, 13, -1, 7).y
+	# R252D P2：行高测量缓存（进程级 static）——get_multiline_string_size 按描述全文
+	# 键入缓存（宽 500/字号 13 为常量不进键），命中直返。锁定态行全是同一句固定文案
+	#（祝福页 73 行同句=73 次排版测量 → 1 次），跨页重复描述（遗物/武器锁定句）同样
+	# 命中。codex 行 desc 为静态 .tres 字段或固定句，无失效面（M1 首建上限的直接支撑；
+	# 页签重建仍逐行走，仅测量命中缓存——同页重建语义不受影响）。
+	var _raw_need: float = 0.0
+	if _row_measure.has(p_desc):
+		_raw_need = float(_row_measure[p_desc])
+	else:
+		_raw_need = StickerTheme.font().get_multiline_string_size(p_desc,
+			HORIZONTAL_ALIGNMENT_LEFT, 500.0, 13, -1, 7).y
+		_row_measure[p_desc] = _raw_need
 	var _lines := maxi(1, roundi(_raw_need / maxf(StickerTheme.font().get_height(13), 1.0)))
 	var desc_need: float = _raw_need + float(_lines - 1) \
 		* float(desc_l.get_theme_constant("line_spacing"))
@@ -1232,21 +1838,88 @@ func _sticker_ach_tab() -> void:
 			if kind == _ach_tab else Color(1.0, 1.0, 1.0, 0.55)
 
 
+func _ach_desc_text(p_a: Dictionary, p_done: bool) -> String:
+	# R259：成就行 desc 文本单源（建行与缓存轻刷共用——防双源漂移，R245 同教训）。
+	# R245 §4.4-3 行内进度：未完成行尾追加「x/y」（当前值经 Meta._counter_value
+	# 逐条取）。已完成行维持「　已完成」；desc 已含进度语义（「当前」字样）不重复显示。
+	var dtext := String(p_a.desc)
+	if p_done:
+		dtext += "　已完成"
+	elif not dtext.contains("当前"):
+		dtext += "　%d/%d" % [int(Meta._counter_value(String(p_a.type), p_a)), int(p_a.target)]
+	return dtext
+
+
+func _ach_key() -> String:
+	# R259 评审 MED-2：成就缓存键单源=页签|页码——四页签列表长不等，键漏页签维度
+	# 则切签恒 miss+旧页签 rows 被同键覆盖泄漏（且位图长恰等时潜伏 sig 撞车串页）。
+	return "%s|%d" % [_ach_tab, _ach_page]
+
+
 func _rebuild_achievements() -> void:
-	for c in _panel_list.get_children():
-		(c as Node).queue_free()
 	var list := _ach_filtered()
 	var pages := maxi(1, ceili(float(list.size()) / float(ACH_PAGE_SIZE)))
 	_ach_page = clampi(_ach_page, 0, pages - 1)
+	# R259 行缓存：sig=页码+全表完成位图（mark/name 色随 done——sig 变则整页重建）；
+	# desc 尾进度数字不入 sig（高频变化防抖动），命中时逐行轻刷文本（<0.5ms）
+	var done_sig := ""
+	for i in range(list.size()):
+		done_sig += "1" if Meta.is_ach_done(list[i].id) else "0"
+	var sig := "%d|%s" % [_ach_page, done_sig]
+	var cached: Dictionary = _ach_page_cache.get(_ach_key(), {})
+	# R267 修轮1：同态直跳——当前页行已按序挂树、sig 一致（done 位图未变=行色/勾
+	# 不变）且逐行 desc 文本全等（含进度 x/y——纯读比对，字符串级，零 Label 工作）
+	# 则显示态已等价，跳过 detach+reattach 整段（逐行重进树 ~85-195µs/行是「成就
+	# 重开 5ms」大头——P3 三面板同款直跳，r259 ④ 性能门的贴脸抖动根治）。
+	if not cached.is_empty() and String(cached.get("sig", "")) == sig \
+			and _rows_attached_in_order(cached.get("rows", [])):
+		var fresh := true
+		for r_f_v: Variant in cached["rows"]:
+			var row_f: Control = r_f_v
+			var a_f: Dictionary = row_f.get_meta("ach", {})
+			var desc_f: Label = row_f.get_node_or_null("DescL") as Label
+			if desc_f == null or a_f.is_empty() \
+					or desc_f.text != _ach_desc_text(a_f,
+						Meta.is_ach_done(a_f.get(&"id", &""))):
+				fresh = false
+				break
+		if fresh:
+			_sticker_ach_tab()
+			if _ach_page_label != null:
+				_ach_page_label.text = "%d/%d" % [_ach_page + 1, pages]
+				if _ach_prev_btn != null:
+					_ach_prev_btn.disabled = _ach_page <= 0
+				_ach_next_btn.disabled = _ach_page >= pages - 1
+			return
+	_recycle_panel_rows()                   # R254-1：统一回收口（缓存行 detach 回缓存，其余照旧 free）
+	if not cached.is_empty() and String(cached.get("sig", "")) == sig:
+		for r_v: Variant in cached["rows"]:
+			var row_c: Control = r_v
+			var a_c: Dictionary = row_c.get_meta("ach", {})
+			var desc_l: Label = row_c.get_node_or_null("DescL") as Label
+			if desc_l != null and not a_c.is_empty():
+				desc_l.text = _ach_desc_text(a_c, Meta.is_ach_done(a_c.get("id", &"")))
+			_panel_list.add_child(row_c)
+		_sticker_ach_tab()
+		if _ach_page_label != null:
+			_ach_page_label.text = "%d/%d" % [_ach_page + 1, pages]
+			if _ach_prev_btn != null:
+				_ach_prev_btn.disabled = _ach_page <= 0
+			_ach_next_btn.disabled = _ach_page >= pages - 1
+		return
+	var rows: Array = []
 	for i in range(_ach_page * ACH_PAGE_SIZE, mini((_ach_page + 1) * ACH_PAGE_SIZE, list.size())):
 		var a: Dictionary = list[i]
 		var done := Meta.is_ach_done(a.id)
 		var row := Panel.new()
+		row.name = "AchRow_%d" % i                   # R259：缓存行名标（回收口 detach 白名单）
+		row.set_meta("ach", a)                       # 轻刷取成就定义（Dictionary 引用轻拷）
 		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
 		row.custom_minimum_size = Vector2(576.0, 60.0)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var mark := Label.new()
+		mark.name = "Mark"
 		StickerTheme.label_sticker(mark, 24, PopPalette.SUCCESS if done else PopPalette.INK_SOFT,
 			0, Color.WHITE, true)
 		mark.text = "✓" if done else "·"
@@ -1255,6 +1928,7 @@ func _rebuild_achievements() -> void:
 		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(mark)
 		var name_l := Label.new()
+		name_l.name = "NameL"
 		StickerTheme.label_sticker(name_l, 17, PopPalette.INK if done else PopPalette.INK_SOFT,
 			0, Color.WHITE, true)
 		name_l.text = String(a.name)
@@ -1263,13 +1937,19 @@ func _rebuild_achievements() -> void:
 		name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(name_l)
 		var desc_l := Label.new()
+		desc_l.name = "DescL"
 		StickerTheme.label_sticker(desc_l, 13, PopPalette.INK_SOFT)
-		desc_l.text = String(a.desc) + ("　已完成" if done else "")
+		desc_l.text = _ach_desc_text(a, done)   # R259：文本单源（轻刷同款口径）
 		desc_l.position = Vector2(60.0, 32.0)
 		desc_l.size = Vector2(500.0, 22.0)
 		desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(desc_l)
 		_panel_list.add_child(row)
+		rows.append(row)
+	# R259 评审 HIGH-1：覆盖前释放旧 rows（旧键行已被 _recycle_panel_rows detach，
+	# 整键覆盖后失去全部引用——Node 非 RefCounted 不 free 即孤儿泄漏）
+	_free_cached_rows(_ach_page_cache.get(_ach_key(), {}).get("rows", []))
+	_ach_page_cache[_ach_key()] = {"sig": sig, "rows": rows}   # R259：入缓存（键=页签|页码，评审 MED-2）
 	_sticker_ach_tab()
 	if _ach_page_label != null:
 		_ach_page_label.text = "%d/%d" % [_ach_page + 1, pages]
@@ -1280,13 +1960,36 @@ func _rebuild_achievements() -> void:
 
 # ── 角色选择 ──────────────────────────────────────────────────────
 func _rebuild_char_select() -> void:
-	for c in _panel_list.get_children():
-		(c as Node).queue_free()
+	_recycle_panel_rows()                   # R254-1：统一回收口（缓存行 detach 回缓存，其余照旧 free）
+	# R259 全量签名缓存：行内全部动态输入入 sig（picked/解锁位图/购买力位图/结晶值/
+	# 自定义武器/图鉴武器计数/击杀总数/无尽深度/所选难度——锁定 hint 与按钮出现消失
+	# 全随之变；第九项难度=评审 MED-1：_custom_weapon_label 读 _sel_difficulty，
+	# 漏项则切难度后重开选人武器钮文本陈旧）。
+	# sig 同=直挂缓存行（<1ms）；sig 变=整页重建。无失效口=无陈旧数据风险（R254-D1 同型防御）
+	var unlock_bits := ""
+	var buy_bits := ""
+	for i in range(CharacterTable.count()):
+		var def_i := CharacterTable.CHARACTERS[i]
+		unlock_bits += "1" if Meta.is_character_unlocked(def_i.id) else "0"
+		buy_bits += "1" if int(def_i.get("unlock_price", 0)) > 0 \
+			and Meta.crystals >= int(def_i.get("unlock_price", 0)) else "0"
+	var best_depth := int(Meta.call(&"best_endless_depth")) \
+		if Meta.has_method(&"best_endless_depth") else 0
+	var sig := "%s|%s|%s|%d|%s|%d|%d|%d|%d" % [String(Meta.character_id), unlock_bits, buy_bits,
+		Meta.crystals, String(Meta.custom_weapon()), Meta.codex_weapons.size(),
+		int(Meta.records.get("total_kills", 0)), best_depth, _sel_difficulty]
+	var cached_rows: Array = _char_rows_cache.get("rows", [])
+	if String(_char_rows_cache.get("sig", "")) == sig and not cached_rows.is_empty():
+		for r_v: Variant in cached_rows:
+			_panel_list.add_child(r_v)
+		return
+	var rows: Array = []
 	for i in range(CharacterTable.count()):
 		var def := CharacterTable.CHARACTERS[i]
 		var picked: bool = Meta.character_id == def.id
 		var unlocked: bool = Meta.is_character_unlocked(def.id)
 		var row := Panel.new()
+		row.name = "CharRow_%d" % i                   # R259：缓存行名标（回收口 detach 白名单）
 		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(14.0, 3, false))
 		row.custom_minimum_size = Vector2(576.0, 140.0)   # R194 触控目标放大联动（118→140，行底容纳 92+48 武器循环钮）
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1303,37 +2006,12 @@ func _rebuild_char_select() -> void:
 		skill_ico.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(skill_ico)
 		var name_l := Label.new()
+		name_l.name = "NameL"
 		StickerTheme.label_sticker(name_l, 20, PopPalette.PLAYER if picked else (PopPalette.INK if unlocked else PopPalette.INK_SOFT),
 			0, Color.WHITE, true)
 		var unlock_hint := ""
-		# R196：锁/奖杯/结晶 emoji 前缀删除（Android 系统字体链缺 SMP 字形只出字不出图——
-		# apk_menu_no_icons 定案 T7；仅删符号不动词，行首全角空格保留）
 		if not unlocked:
-			var umap: StringName = def.get("unlock_map", &"")
-			if umap != &"":
-				unlock_hint = "　通关「%s」解锁" % String(MapTable.get_map(umap).get("name", "?"))
-			elif bool(def.get("unlock_normal_clear", false)):
-				# R186：改造者·枢——任一地图常规局普通通关（每日局结算分流不解锁）
-				# R198（二aw-7）：锁定句压缩——删「任一地图常规局 · 当前最佳 %d 波」段（当前最佳
-				# 波次已由记录/成就面可见，此处冗余）。规划拟句「（首关需 %d 波）」连同角色名前缀
-				# 实测仍溢 406px 格（≈21.5 全角 ≈430px → name_l autowrap 折两行压 stat/skill 行），
-				# 再省「需」字 + 数字前空格（语义不变）→ 估宽 400px（真字型 396px）单行可容；
-				# 兜底见下方 name_l autowrap。
-				unlock_hint = "　通关普通难度解锁（首关%d 波）" % [
-					int(MapTable.get_map(MapTable.FIRST_MAP_ID).get("final_wave", 10))]
-			elif bool(def.get("unlock_hard_clear", false)):
-				unlock_hint = "　任意地图·困难难度通关解锁"   # R186：回响·伊可
-			elif int(def.get("unlock_kills", 0)) > 0:
-				unlock_hint = "　图鉴累计击杀 %d 解锁" % int(def.get("unlock_kills", 0))
-			elif def.get("unlock_achievement", &"") != &"":
-				var uach: StringName = def.get("unlock_achievement", &"")
-				var aname := String(uach)
-				for a in Meta.ACHIEVEMENTS:
-					if a.id == uach:
-						aname = String(a.name)
-				unlock_hint = "　成就「%s」解锁" % aname
-			elif int(def.get("unlock_price", 0)) > 0:
-				unlock_hint = "　结晶解锁 %d（当前 %d）" % [int(def.get("unlock_price", 0)), Meta.crystals]
+			unlock_hint = _locked_hint(def)
 		name_l.text = String(def.name) + ("　✓ 当前" if picked else "") + unlock_hint
 		name_l.position = Vector2(74.0, 12.0)
 		name_l.size = Vector2(406.0, 28.0)
@@ -1427,6 +2105,53 @@ func _rebuild_char_select() -> void:
 			buy_btn.button_down.connect(func() -> void: StickerTheme.press_punch(buy_btn))
 			row.add_child(buy_btn)
 		_panel_list.add_child(row)
+		rows.append(row)
+	_free_cached_rows(_char_rows_cache.get("rows", []))   # R259 评审 HIGH-1：覆盖前释放旧 rows（防孤儿泄漏）
+	_char_rows_cache = {"sig": sig, "rows": rows}   # R259：入缓存
+
+
+func _locked_hint(p_def: Dictionary) -> String:
+	# R246：锁定角色解锁条件文案单源（_rebuild_char_select 原内联链提取，分支逐字节
+	# 等价 + 新增 endless_depth 门）。链序与 Meta.is_character_unlocked 判定链
+	# （meta_manager.gd）平行同位同序——漏改任一侧则锁定角色 hint 空串/判定错门。
+	# R196：锁/奖杯/结晶 emoji 前缀删除（Android 系统字体链缺 SMP 字形只出字不出图——
+	# apk_menu_no_icons 定案 T7；仅删符号不动词，行首全角空格保留）
+	var umap: StringName = p_def.get("unlock_map", &"")
+	if umap != &"":
+		return "　通关「%s」解锁" % String(MapTable.get_map(umap).get("name", "?"))
+	if bool(p_def.get("unlock_normal_clear", false)):
+		# R186：改造者·枢——任一地图常规局普通通关（每日局结算分流不解锁）
+		# R198（二aw-7）：锁定句压缩——删「任一地图常规局 · 当前最佳 %d 波」段（当前最佳
+		# 波次已由记录/成就面可见，此处冗余）。规划拟句「（首关需 %d 波）」连同角色名前缀
+		# 实测仍溢 406px 格（≈21.5 全角 ≈430px → name_l autowrap 折两行压 stat/skill 行），
+		# 再省「需」字 + 数字前空格（语义不变）→ 估宽 400px（真字型 396px）单行可容；
+		# 兜底见 _rebuild_char_select name_l autowrap。
+		return "　通关普通难度解锁（首关%d 波）" % [
+			int(MapTable.get_map(MapTable.FIRST_MAP_ID).get("final_wave", 10))]
+	if bool(p_def.get("unlock_hard_clear", false)):
+		return "　任意地图·困难难度通关解锁"   # R186：回响·伊可
+	if int(p_def.get("unlock_endless_depth", 0)) > 0:
+		# R246：无尽深度成就门（medic 20 层 / vortex 50 层，_channels.md §3/§4 单源句式，
+		# 插入位=hard_clear 之后 kills 之前，与 meta 判定链同位同序）。M=历史最深无尽深度
+		# ——跨泳道依赖 Meta.best_endless_depth()（meta 泳道 R247 聚合读口：跨地图 × 跨
+		# #1/#2 分档键取最大），has_method 守卫（R186 同式）保证并行窗口期本文件可编译
+		# 可跑（读 0），meta 合入后同口直读自动生效；打开面板即读属查询非解锁动作
+		var best_depth := int(Meta.call(&"best_endless_depth")) \
+			if Meta.has_method(&"best_endless_depth") else 0
+		return "　任意无尽模式深入 %d 层解锁（当前 %d）" % [
+			int(p_def.get("unlock_endless_depth", 0)), best_depth]
+	if int(p_def.get("unlock_kills", 0)) > 0:
+		return "　图鉴累计击杀 %d 解锁" % int(p_def.get("unlock_kills", 0))
+	if p_def.get("unlock_achievement", &"") != &"":
+		var uach: StringName = p_def.get("unlock_achievement", &"")
+		var aname := String(uach)
+		for a in Meta.ACHIEVEMENTS:
+			if a.id == uach:
+				aname = String(a.name)
+		return "　成就「%s」解锁" % aname
+	if int(p_def.get("unlock_price", 0)) > 0:
+		return "　结晶解锁 %d（当前 %d）" % [int(p_def.get("unlock_price", 0)), Meta.crystals]
+	return ""
 
 
 func _custom_weapon_candidates() -> Array[StringName]:
@@ -1437,12 +2162,17 @@ func _custom_weapon_candidates() -> Array[StringName]:
 	# 照常入选——R196 评审修复：原 weapon_allowed 过滤在菜单态读 run_map 残留（冷启动
 	# =world_grass → map_index()==0），把老档已获得∧门外武器全滤掉（10→3 把）且循环钮
 	# 把存档非初始批首发静默降级手枪落盘——定案 P6「老档无损」被破，整段门滤除。
-	# 白名单首元素恒在 → 结果恒非空。
+	# R253（二dc L2 缓办清账）难度门：地狱限定的近战/法器不再作为首发候选（用户难度
+	# 层意图「普通见不到近战/法器」优先于「获得优先于门」——后者仅在卡池/echo 生效）；
+	# 按选关面板当前所选难度 _sel_difficulty 过滤（非 Meta.run_gate_difficulty 哨兵——
+	# 菜单态未进局恒 -1 全开）。白名单首元素恒在 → 结果恒非空。
 	var cands: Array[StringName] = [&"W1_pistol"]
 	if registry != null:
 		for wid_v: Variant in registry.weapons.keys():
 			var sid := StringName(String(wid_v))
 			if sid == &"W1_pistol" or cands.has(sid) or not Meta.is_weapon_unlocked(sid):
+				continue
+			if MechanicGate.weapon_difficulty_min(sid) > _sel_difficulty:
 				continue
 			cands.append(sid)
 	return cands
@@ -1450,11 +2180,16 @@ func _custom_weapon_candidates() -> Array[StringName]:
 
 func _custom_weapon_label() -> String:
 	# R186：当前首发展示名（空键 → 手枪；脏 id → 原样 id 文本）
+	# R253 评审 M5 诚实化：门外武器（超当前所选难度）显示实际回落——开局
+	# _starting_weapon_id 同门兜底回落手枪，原样显示存档名 = 按钮说谎
 	var wid := Meta.custom_weapon()
 	if wid == &"":
 		return "手枪"
 	var wd: WeaponData = registry.get_weapon(wid) if registry != null else null
-	return String(wd.display_name) if wd != null else String(wid)
+	var disp := String(wd.display_name) if wd != null else String(wid)
+	if MechanicGate.weapon_difficulty_min(wid) > _sel_difficulty:
+		return "%s（本档未开→手枪）" % disp
+	return disp
 
 
 func _on_custom_weapon_cycle() -> void:
@@ -1487,20 +2222,73 @@ func _on_char_buy(p_id: StringName) -> void:
 
 # ── 局外养成（结晶 + 永久升级） ──────────────────────────────────
 func _rebuild_upgrades() -> void:
-	for c in _panel_list.get_children():
-		(c as Node).queue_free()
+	# R267 刀P3：同态直跳（行已按序挂树且指纹一致——购买轻刷新已重算 fp，关→开
+	# 同面板零成本；行序含头/星尘/升级行/注，见 _build_upgrades_rows）
+	if _rows_attached_in_order(_upg_rows_cache) and _upgrades_fp() == _upg_fp:
+		return
+	_recycle_panel_rows()                   # R254-1：统一回收口（图鉴缓存行 detach 回缓存，其余照旧 free）
+	# R267 刀P3：指纹比对复用——货币量与各级别不变（纯读快照）则整组行直挂（基线
+	# 11782µs/次 → 直挂量级）；购买路径另走 _refresh_upgrades_rows 轻刷（只改文案/态）
+	var fp := _upgrades_fp()
+	if _upg_rows_cache.is_empty() or fp != _upg_fp:
+		_free_cached_rows(_upg_rows_cache)
+		_upg_rows_cache = _build_upgrades_rows()
+		_upg_fp = fp
+	# 轻刷新引用随组重建/直挂重抓（防旧组引用悬空）
+	_refresh_upg_refs()
+	for row_v: Variant in _upg_rows_cache:
+		_panel_list.add_child(row_v)
+
+
+func _upgrades_fp() -> String:
+	# R267 刀P3：养成面板指纹 = 双货币 + 各升级 id:lv（决定行文案/按钮态的字段全集，
+	# v3 评审⑴构造规矩）。UPGRADES 静态序即展示序，级别串按 Meta.UPGRADES 序拼接。
+	var lvs := ""
+	for u: Dictionary in Meta.UPGRADES:
+		lvs += "%s:%d;" % [String(u.get("id", "")), Meta.upgrade_level(u.id)]
+	return "%d|%d|%s" % [Meta.crystals, Meta.stardust, lvs]
+
+
+func _build_upgrades_rows() -> Array:
+	# R267 刀P3：养成行纯构建（原 _rebuild_upgrades 主体不变，产出改入数组 + 名标）
+	var rows: Array = []
 	var head := Label.new()
+	head.name = "UpgRow_%d" % _upg_row_seq          # R267 刀P3：缓存行名标
+	_upg_row_seq += 1
 	StickerTheme.label_sticker(head, 20, PopPalette.XP, 0, Color.WHITE, true)
 	head.text = "裂变结晶：%d（每局结算产出：波次 + 击杀）" % Meta.crystals
 	head.custom_minimum_size = Vector2(576.0, 36.0)
 	head.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_panel_list.add_child(head)
+	rows.append(head)
+	# R263 星尘行（结晶头行下追加——双轨货币双行披露；星尘=祝福携带消耗/每局结算产出，
+	# 与结晶互不兑换）。四芒星图标（TextureFactory.stardust_icon）+ 居中文案。
+	var sd_box := HBoxContainer.new()
+	sd_box.name = "UpgRow_%d" % _upg_row_seq
+	_upg_row_seq += 1
+	sd_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	sd_box.add_theme_constant_override("separation", 6)
+	sd_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var sd_icon := TextureRect.new()
+	sd_icon.texture = TextureFactory.stardust_icon()
+	sd_icon.custom_minimum_size = Vector2(20.0, 20.0)
+	sd_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	sd_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	sd_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sd_box.add_child(sd_icon)
+	var sd_label := Label.new()
+	StickerTheme.label_sticker(sd_label, 15, PopPalette.GOLD, 0, Color.WHITE, true)
+	sd_label.text = "星尘：%d（每局结算产出 · 祝福携带消耗）" % Meta.stardust
+	sd_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sd_box.add_child(sd_label)
+	rows.append(sd_box)
 	for u in Meta.UPGRADES:
 		var lv := Meta.upgrade_level(u.id)
 		var maxed := lv >= int(u.max_lv)
 		var cost := Meta.upgrade_cost(u.id)
 		var row := Panel.new()
+		row.name = "UpgRow_%d" % _upg_row_seq
+		_upg_row_seq += 1
 		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
 		row.custom_minimum_size = Vector2(576.0, 68.0)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1534,46 +2322,132 @@ func _rebuild_upgrades() -> void:
 		buy.pressed.connect(_on_buy_upgrade.bind(u.id))
 		buy.button_down.connect(func() -> void: StickerTheme.press_punch(buy))
 		row.add_child(buy)
-		_panel_list.add_child(row)
+		rows.append(row)
 	var note := Label.new()
+	note.name = "UpgRow_%d" % _upg_row_seq
+	_upg_row_seq += 1
 	StickerTheme.label_sticker(note, 13, PopPalette.INK_SOFT)
 	note.text = "养成永久生效：开局自动应用（生命/攻击/磁吸/技能冷却）"
 	note.custom_minimum_size = Vector2(576.0, 24.0)
 	note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_panel_list.add_child(note)
+	rows.append(note)
+	return rows
+
+
+func _refresh_upg_refs() -> void:
+	# R267 刀P3：轻刷新引用重抓——缓存组内节点序 = [head, sd_box, 升级行×N, note]，
+	# 引用按序落位（组重建/直挂后统一调用，防跨组悬空引用）
+	_upg_row_refs = []
+	_upg_head = null
+	_upg_sd = null
+	if _upg_rows_cache.size() < 2:
+		return
+	_upg_head = _upg_rows_cache[0] as Label
+	_upg_sd = _upg_rows_cache[1] as HBoxContainer
+	var idx := 2
+	for u: Dictionary in Meta.UPGRADES:
+		if idx >= _upg_rows_cache.size():
+			break
+		var row: Panel = _upg_rows_cache[idx] as Panel
+		var refs := {
+			"name_l": row.get_child(0) as Label,
+			"buy": row.get_child(row.get_child_count() - 1) as Button,
+			"u": u,
+		}
+		_upg_row_refs.append(refs)
+		idx += 1
+
+
+func _refresh_upgrades_rows() -> void:
+	# R267 刀P3：购买轻刷新——不重建行（零 Label/Button 新建），只刷货币双行 + 每行
+	# Lv 文案/按钮文案/icon/禁用态，尾段重算指纹（下次开面板直挂命中）。行序 =
+	# Meta.UPGRADES 序（静态），与 _upg_row_refs 逐位对齐。
+	if _upg_head != null:
+		_upg_head.text = "裂变结晶：%d（每局结算产出：波次 + 击杀）" % Meta.crystals
+	if _upg_sd != null and _upg_sd.get_child_count() >= 2:
+		(_upg_sd.get_child(1) as Label).text = "星尘：%d（每局结算产出 · 祝福携带消耗）" % Meta.stardust
+	for r_v: Variant in _upg_row_refs:
+		var refs: Dictionary = r_v
+		var u: Dictionary = refs.get("u", {})
+		var lv := Meta.upgrade_level(u.id)
+		var maxed := lv >= int(u.max_lv)
+		var cost := Meta.upgrade_cost(u.id)
+		(refs.get("name_l") as Label).text = "%s  Lv%d/%d" % [String(u.name), lv, int(u.max_lv)]
+		var buy: Button = refs.get("buy")
+		buy.text = "已满级" if maxed else "升级 (%d)" % cost
+		buy.icon = null if maxed else TextureFactory.ui_gem()
+		if not maxed:
+			buy.add_theme_constant_override("icon_max_width", 22)
+		buy.disabled = maxed or Meta.crystals < cost
+	_upg_fp = _upgrades_fp()
 
 
 func _on_buy_upgrade(p_id: StringName) -> void:
 	if Meta.buy_upgrade(p_id):
-		_rebuild_upgrades()
+		_refresh_upgrades_rows()      # R267 刀P3：面板内轻刷替代全量重建（行不换实例）
 		_refresh_lobby_counts()
 
 
 # ── 每日挑战（P2：当日固定种子 + 三词缀 + daily_best——全玩家同日同配置口径） ──
 func _rebuild_daily() -> void:
-	for c in _panel_list.get_children():
-		(c as Node).queue_free()
+	# R267 刀P3：同态直跳（缓存行 + 出发钮共挂树且指纹一致；p_extra=1 = 钮在尾）
+	if _rows_attached_in_order(_dly_rows_cache, 1) and _daily_fp() == _dly_fp:
+		return
+	_recycle_panel_rows()                   # R254-1：统一回收口（图鉴缓存行 detach 回缓存，其余照旧 free）
+	# R267 刀P3：指纹比对复用——日期键（词缀源）与当日最佳不变则整组行直挂（基线
+	# 3233µs/次 → 直挂量级）。词缀由日期键纯函数派生，故日期入指纹即覆盖词缀行。
+	# 出发按钮不缓存（保留语义名 DailyStartButton——verify_feedback 可达性断言用；
+	# 名不入 detach 白名单会被回收口释放，单 Button 重建仅 µs 级，不入缓存组）
+	var fp := _daily_fp()
+	if _dly_rows_cache.is_empty() or fp != _dly_fp:
+		_free_cached_rows(_dly_rows_cache)
+		_dly_rows_cache = _build_daily_rows()
+		_dly_fp = fp
+	for row_v: Variant in _dly_rows_cache:
+		_panel_list.add_child(row_v)
+	_panel_list.add_child(_build_daily_go_button())
+
+
+func _daily_fp() -> String:
+	# R267 刀P3：每日面板指纹 = 日期键（词缀/日期文案源）+ 当日 best_wave/best_kills
+	# （最佳行文案源，v3 评审⑴构造规矩——显示字段全集）
+	var key := Meta.daily_date_key()
+	var best := Meta.daily_record(key)
+	return "%s|%d|%d" % [key, int(best.get("best_wave", 0)), int(best.get("best_kills", 0))]
+
+
+func _build_daily_rows() -> Array:
+	# R267 刀P3：每日行纯构建（原 _rebuild_daily 主体不变，产出改入数组 + 名标）
+	var rows: Array = []
 	var key := Meta.daily_date_key()
 	var date_disp := "%s-%s-%s" % [key.substr(0, 4), key.substr(4, 2), key.substr(6, 2)]
 	var affixes := Meta.daily_affixes(key)
-	# 当日词缀行（诅咒 ×2 珊瑚红 / 祝福 ×1 薄荷绿——名称复用 map_table 单源）
+	# 当日词缀行（诅咒 ×2 珊瑚红 / 吉兆 ×1 薄荷绿——名称复用 map_table 单源；R253 前缀消歧「祝」→「兆」）
 	for cid: Variant in affixes.get("curses", []):
-		_panel_list.add_child(_make_daily_row("诅",
+		rows.append(_make_daily_row("诅",
 			Meta.affix_name(StringName(String(cid))), PopPalette.ENEMY))
 	var bless: StringName = StringName(String(affixes.get("bless", "")))
-	_panel_list.add_child(_make_daily_row("祝", Meta.affix_name(bless), PopPalette.SUCCESS))
+	rows.append(_make_daily_row("兆", Meta.affix_name(bless), PopPalette.SUCCESS))
 	# 当日最佳（daily_best：波次 + 击杀——独立口径不混常规记录）
 	var best := Meta.daily_record(key)
-	_panel_list.add_child(_make_daily_row("最佳", "波次 %d · 击杀 %d" % [
+	rows.append(_make_daily_row("最佳", "波次 %d · 击杀 %d" % [
 		int(best.get("best_wave", 0)), int(best.get("best_kills", 0))], PopPalette.PLAYER))
 	var note := Label.new()
+	note.name = "DlyRow_%d" % _dly_row_seq
+	_dly_row_seq += 1
 	StickerTheme.label_sticker(note, 13, PopPalette.INK_SOFT)
 	note.text = "%s · 锁定晴空草原 · 全玩家同日同词缀" % date_disp
 	note.custom_minimum_size = Vector2(576.0, 24.0)
 	note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_panel_list.add_child(note)
+	rows.append(note)
+	return rows
+
+
+func _build_daily_go_button() -> Button:
+	# R267 刀P3：出发按钮逐次新建（语义名 DailyStartButton 不入缓存白名单——
+	# verify_feedback find_child 可达性断言锁名，保名优先于缓存）
 	var go := Button.new()
 	go.name = "DailyStartButton"
 	go.text = "出发挑战"
@@ -1584,12 +2458,14 @@ func _rebuild_daily() -> void:
 	go.focus_mode = Control.FOCUS_NONE
 	go.pressed.connect(_on_daily_start)
 	go.button_down.connect(func() -> void: StickerTheme.press_punch(go))
-	_panel_list.add_child(go)
+	return go
 
 
 func _make_daily_row(p_mark: String, p_text: String, p_color: Color) -> Control:
-	# 每日挑战信息行：字标（诅/祝/最佳）+ 内容
+	# 每日挑战信息行：字标（诅/兆/最佳——R253 祝→兆消歧）+ 内容
 	var row := Panel.new()
+	row.name = "DlyRow_%d" % _dly_row_seq           # R267 刀P3：缓存行名标
+	_dly_row_seq += 1
 	row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
 	row.custom_minimum_size = Vector2(576.0, 60.0)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1613,14 +2489,61 @@ func _make_daily_row(p_mark: String, p_text: String, p_color: Color) -> Control:
 
 func _on_daily_start() -> void:
 	# 出发挑战：关面板 → 申请启动（仲裁权在 GameLoop._on_menu_start_daily，E-16 同源）
-	_panel_root.visible = false
+	_panel_end_defer()        # R252D P6：落盘先于离菜单（每日出发行同 §4.4-1 口径）
+	_close_panel_core()       # R260 评审 HIGH-1：出发直关=挂起标志随清（防回大厅双泵停摆）
 	start_daily_requested.emit()
+
+
+func _close_panel_core() -> void:
+	# R260 评审 HIGH-1：绕过 _on_panel_close 的直关面板统一口（出发路径两口）——
+	# 挂起标志不清则打完一局回大厅时双泵永久停摆（恢复唯一途径=再开面板手动关）
+	_panel_root.visible = false
+	_lobby_detail_open = false
+	_panel_kind = ""
 
 
 # ── 记录内容 ──────────────────────────────────────────────────────
 func _rebuild_records() -> void:
-	for c in _panel_list.get_children():
-		(c as Node).queue_free()
+	# R267 刀P3：同态直跳——行已按序挂树且指纹一致（纯读快照），显示态已等价，
+	# 跳过回收+直挂整段（面板关→开同面板/同面板连按的主路径）
+	if _rows_attached_in_order(_rec_rows_cache) and _records_fp() == _rec_fp:
+		return
+	_recycle_panel_rows()                   # R254-1：统一回收口（图鉴缓存行 detach 回缓存，其余照旧 free）
+	# R267 刀P3：指纹比对复用——显示字段与上次重建一致（纯读快照）则整组行直挂，
+	# 不符才全量重建（基线 5668µs/次开合 → 直挂量级）
+	var fp := _records_fp()
+	if _rec_rows_cache.is_empty() or fp != _rec_fp:
+		_free_cached_rows(_rec_rows_cache)
+		_rec_rows_cache = _build_records_rows()
+		_rec_fp = fp
+	for row_v: Variant in _rec_rows_cache:
+		_panel_list.add_child(row_v)
+
+
+func _records_fp() -> String:
+	# R267 刀P3：记录面板指纹 = 显示字段全集（v3 评审⑴构造规矩）——五全局记录 +
+	# 分图记录摘要（best_wave/endless_depth 决定星标/无尽位）+ 通关图数。摘要键序
+	# 排序走 Array[String]（红线 4：StringName 排序静默无效）。
+	var mk: Array[String] = []
+	for k_v: Variant in Meta.map_records.keys():
+		mk.append(String(k_v))
+	mk.sort()
+	var mrs := ""
+	for k: String in mk:
+		var mr: Dictionary = Meta.map_records.get(k, {})
+		mrs += "%s:%d/%d;" % [k, int(mr.get("best_wave", 0)), int(mr.get("endless_depth", 0))]
+	var ck: Array[String] = []
+	for k_v: Variant in Meta.maps_cleared.keys():
+		ck.append(String(k_v))
+	ck.sort()
+	return "%d|%d|%d|%d|%d|%s|%s" % [int(Meta.records["best_wave"]),
+		int(Meta.records["best_kills"]), int(Meta.records["best_level"]),
+		int(Meta.records["total_runs"]), int(Meta.records["total_kills"]),
+		mrs, ",".join(ck)]
+
+
+func _build_records_rows() -> Array:
+	# R267 刀P3：记录行纯构建（原 _rebuild_records 主体不变，产出改入数组 + 名标）
 	var lines := [
 		["历史最高波次（全图）", "%d" % int(Meta.records["best_wave"])],
 		["单局最高击杀", "%d" % int(Meta.records["best_kills"])],
@@ -1638,16 +2561,25 @@ func _rebuild_records() -> void:
 		var mr_l: Dictionary = Meta.map_records.get(String(def.id) + "#2", {})
 		if mr_h.is_empty() and mr_l.is_empty():
 			lines.append(["%s 最高波次" % String(def.name),
-				"%d%s%s" % [int(mr.get("best_wave", 0)), " ★" if Meta.is_map_cleared(def.id) else "",
+				"%d%s%s" % [int(mr.get("best_wave", 0)),
+					" ★" if Meta.is_map_cleared_at(def.id, 0) else "",
 					" · 无尽 %d" % depth if depth > 0 else ""]])
 		else:
+			# R245 星标分档：三列各挂各的星（普/困/狱独立判据——与选关面板同口径，
+			# 旧 is_map_cleared 任意难度通关即真，会把困/狱通关错挂到普通列）
 			lines.append(["%s 最高波次（普/困/狱）" % String(def.name),
-				"%d%s / %d / %d" % [int(mr.get("best_wave", 0)),
-					"★" if Meta.is_map_cleared(def.id) else "",
-					int(mr_h.get("best_wave", 0)), int(mr_l.get("best_wave", 0))]])
+				"%d%s / %d%s / %d%s" % [int(mr.get("best_wave", 0)),
+					"★" if Meta.is_map_cleared_at(def.id, 0) else "",
+					int(mr_h.get("best_wave", 0)),
+					"★" if Meta.is_map_cleared_at(def.id, 1) else "",
+					int(mr_l.get("best_wave", 0)),
+					"★" if Meta.is_map_cleared_at(def.id, 2) else ""]])
 	lines.append(["通关进度", "%d/%d 图" % [Meta.cleared_count(), MapTable.count()]])
+	var rows: Array = []
 	for l in lines:
 		var row := Panel.new()
+		row.name = "RecRow_%d" % _rec_row_seq           # R267 刀P3：缓存行名标
+		_rec_row_seq += 1
 		row.add_theme_stylebox_override("panel", StickerTheme.panel_style(12.0, 2, false))
 		row.custom_minimum_size = Vector2(576.0, 56.0)
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1667,4 +2599,5 @@ func _rebuild_records() -> void:
 		val_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		val_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(val_l)
-		_panel_list.add_child(row)
+		rows.append(row)
+	return rows

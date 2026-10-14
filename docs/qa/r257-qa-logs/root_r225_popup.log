@@ -1,0 +1,45 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R225 跳字位图化自测 ══════════
+── R225 门控·未就绪回退 ──
+PASS | 未就绪门：override=1 但图集未烤 → gate=false（回退 Label，零战斗期烤图）
+PASS | 分帧烤①：首 cell 后仍未就绪（ready=全量完成判定）
+PASS | 分帧烤②：build_all 后就绪（12 字形全烤）
+── R225 图集契约 ──
+PASS | 字形集：12 字形（0-9 + 免疫，审计口径——无负号/无万乙/无 CRIT 文字标记）
+PASS | 图集纹理：单张共享（ImageTexture 非空 / 双通道掩码画布）
+PASS | 字形 meta：全量齐备（adv>0 / bbox 非空 / code 反查一致）
+PASS | 幂等：build_all 重放同纹理（cell 短路，不重烤不换纹理）
+PASS | 共享材质：单例（同实例——全跳字合批前提）
+── R225 字形序列 ──
+PASS | 序列：12345 → 恰 5 个位图 sprite（_decode 顺序 1..5）
+PASS | 结构：位图门下零 Label 节点（数值臂 Label 计数=0 本体）
+PASS | 合批前提：全部 sprite 同图集纹理 + 同共享材质（同贴图同桶）
+PASS | region：逐 sprite 指向对应字形格（rect 与 meta 全等）
+PASS | merge：累计 12345+100=12445 → tick 重排序列正确（R189 置脏 tick 刷新）
+PASS | 位数收缩：池复用 42 → 2 显 + 余量隐藏（Sprite 只增不删纪律）
+── R225 tint 与字号乘区 ──
+PASS | 元素色：NORMAL+FIR → sprite modulate=元素表色（只染填充，描边藏青在图集）
+PASS | CRIT 字号：scale=40/64（FONT_SIZE_CRIT 等比，无 tier）
+PASS | 金档字号：scale=roundi(40×1.6)/64=1.0（量级档乘区同 Label 口径）
+PASS | 免疫：位图 2 字形顺序「免疫」+ STYLE_COLORS 灰蓝 tint
+PASS | DOT ceil：0.5 → 「1」（文本口径与 Label 分支同源）
+PASS | HEAL：样式表色 tint（非直击臂）
+── R225 manager 契约（位图门） ──
+PASS | 层1 并入（位图）：同 uid 两跳 active=1 / 值累计 10 / 位图序列=10
+PASS | CRIT 升格（位图）：宿主原地升 CRIT / sprite scale 跟 40px 基准
+PASS | 数量帽（位图）：低档 30 目标封顶 20（R220/R19 档位帽不回归）
+PASS | REACTION 豁免臂：Label 惰性补建（text=名+值）/ 位图 sprite 全隐藏
+PASS | REACTION 豁免臂：位图字形零显示（防双渲染）
+PASS | 池复用：REACTION 槽位转数值臂 → Label 退位 / 位图序列=8
+── R225 deferred 首排版（位图门） ──
+PASS | deferred：show_popup 后置脏 + 位图字形零显示（首刷让渡 tick）
+PASS | deferred：tick 首刷 → 位图序列=456（R212 驱动序位图同构）
+── R225 门关闭回归锁 ──
+PASS | 门关闭：override=0 → gate=false（桌面既有路径口径）
+PASS | 回归锁：Label 路径原样（_label 就位 / text=12345 / 位图 sprite 零）
+PASS | 平台自动：headless 桌面 gate=false（桌面零扰动口径）
+── R225 位图路径 Label 计数=0 结构断言 ──
+PASS | 结构断言：数值臂全样式（NORMAL/CRIT/DOT/HEAL/XP/IMMUNE/CHARGE_BURST）位图门下 Label 计数=0 且位图字形在位
+────────────────────────────────────────
+汇总：PASS 32 / FAIL 0（共 32 项）

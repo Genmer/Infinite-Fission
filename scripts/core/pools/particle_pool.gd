@@ -12,6 +12,7 @@ var _active_priorities: Dictionary = {}
 # 发射器寿命表（emitter → 剩余 s；finished 信号兜底——用户反馈 2026-08-29「爆炸效果长
 # 时间没清除」：one_shot 发射器偶发不触发 finished → 残留；到点强制归还双保险）
 var _burst_left: Dictionary = {}
+var _reap_buf: Array = []                     # R262b L3：寿命表键遍历缓冲（爆发期 ≤64 活跃时每帧 keys() 分配税）
 
 
 func acquire() -> GPUParticles2D:
@@ -50,7 +51,11 @@ func reap_expired(p_delta: float) -> void:
 	# 寿命到点强制 disconnect + 归还——残留发射器最多存活 lifetime×1.3 + 0.25s
 	if _burst_left.is_empty():
 		return
-	for e in _burst_left.keys():
+	# R262b L3：keys() 快照改成员缓冲遍历（erase 只落寿命表，缓冲遍历安全）
+	_reap_buf.clear()
+	for e_v: Variant in _burst_left:
+		_reap_buf.append(e_v)
+	for e: Variant in _reap_buf:
 		var emitter := e as GPUParticles2D
 		if emitter == null:
 			_burst_left.erase(e)

@@ -1,0 +1,20 @@
+{
+	"gate_phys_max_us": 12000,
+	"gates": {
+		"phys_flat": true,
+		"queue_drained": true
+	},
+	"meta": {
+		"adapter_api": "3.3.0 NVIDIA 610.62",
+		"date": "2026-10-08",
+		"headless": false,
+		"purpose": "R244 修A：MENU 预热迁渲染轴端到端验证",
+		"user_dir": "E:/Code/Agent/Infinite-Fission/.qa_sandbox_r244/Godot/app_userdata/Infinite Fission"
+	},
+	"phys_samples": 1300,
+	"phys_us_max": 292,
+	"phys_us_mean": 155,
+	"queue0": 167,
+	"queue_left": 0,
+	"render_ms_max": 213.035
+}

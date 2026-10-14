@@ -5,8 +5,8 @@ class_name BallisticProjectile
 extends ProjectileBase
 
 var acceleration: float = 0.0                 # 加特林变体可 >0；手枪/霰弹 = 0（匀速直线）
-var range_left: float = 0.0                   # 射程快照（>0 启用超射程判定；≤0 仅寿命过期）
-var _traveled: float = 0.0                    # 已飞行里程（射程判定）
+# R231 刀B：range_left/_traveled 上收 ProjectileBase（声明位上移，语义/初值/清零口不变
+# ——快路径 _tick_fast_player 需在基类内联超射程回收，分析 AC-6；本类读写不动）
 
 
 func _read_form_params(p_params: Dictionary) -> void:

@@ -50,6 +50,9 @@ var bloom_timer: float = 0.0                   # R192 绽放延迟臂剩余（HY
 var bloom_snapshot_atk: float = 0.0            # 绽放爆发快照面板 S_snap
 var bloom_active: bool = false                 # 绽放调度标记（照 superconduct_active 模式）
 var _chill_from_full: bool = false             # 寒滞已由满槽触发（二次满槽 → 冻结判定位）
+var _expired_scratch: Array = []                # R202 ⑧：反应 CD 到期键暂存复用（原每次
+                                               # tick 新建 []——空 CD 稳态下逐宿主逐帧分配；
+                                               # 成员缓冲 clear+append 容量复用零稳态分配）
 
 
 func apply(p_element: int, p_value: float, p_snapshot: float = 0.0,
@@ -94,13 +97,15 @@ func tick(p_game_delta: float, p_decay_lambdas: Array[float]) -> void:
 	vuln_timer = maxf(vuln_timer - p_game_delta, 0.0)
 	shock_chain_cd = maxf(shock_chain_cd - p_game_delta, 0.0)
 	# 反应 CD：到期键 erase（字典回落——长期局 CD 键不再常驻）
-	var _expired: Array = []
-	for rxn in reaction_cd:
-		reaction_cd[rxn] = maxf(float(reaction_cd[rxn]) - p_game_delta, 0.0)
-		if float(reaction_cd[rxn]) <= 0.0:
-			_expired.append(rxn)
-	for rxn in _expired:
-		reaction_cd.erase(rxn)
+	# R202 ⑧：is_empty 守卫（多数帧无 CD 键——空字典迭代+缓冲清空直接跳过）+ 成员缓冲复用
+	if not reaction_cd.is_empty():
+		_expired_scratch.clear()
+		for rxn in reaction_cd:
+			reaction_cd[rxn] = maxf(float(reaction_cd[rxn]) - p_game_delta, 0.0)
+			if float(reaction_cd[rxn]) <= 0.0:
+				_expired_scratch.append(rxn)
+		for rxn in _expired_scratch:
+			reaction_cd.erase(rxn)
 	if superconduct_active:
 		superconduct_left = maxf(superconduct_left - p_game_delta, 0.0)
 	if bloom_timer > 0.0:

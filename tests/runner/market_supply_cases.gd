@@ -289,12 +289,12 @@ func _test_evergreen_fallback() -> void:
 	_check("⑤ 保底行可购（buyable_count() >= 1）", shop.buyable_count() >= 1,
 		"buyable=%d" % shop.buyable_count())
 	if fb_idx >= 0:
-		var fb_ware: Dictionary = shop._wares[fb_idx]
-		var fb_target: WeaponBase = fb_ware.get("target")
-		var layers0 := _tid_layers(fb_target, &"FALLBACK_ATK")
+		# R262d 迁移：常青货走全局授予（player.add_fallback_atk）——原「落展示 target 栈
+		# 层数+1」口径退役（evergreen 行无 target，宿主链已拆）
+		var fb_pct0: float = float(_gl.player.get("run_fallback_atk_pct"))
 		shop._buy(fb_idx)
-		_check("⑤ 购买保底行：FALLBACK_ATK 落展示 target 栈 + 金币 25→0",
-			_tid_layers(fb_target, &"FALLBACK_ATK") == layers0 + 1
+		_check("⑤ 购买保底行：应急强化入全局累计（+5% 全武器）+ 金币 25→0",
+			is_equal_approx(float(_gl.player.get("run_fallback_atk_pct")) - fb_pct0, 0.05)
 				and int(_gl.player.get("gold")) == 0)
 	# 验收原文动作：清空 _wares → open 立即补保底常青行且可购
 	_gl.player.set("gold", 25)

@@ -1,0 +1,47 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R246/R247 meta 泳道回归验收 ══════════
+── M1：表完整性（13 角色 / id 唯一 / 必备键 / 门型互斥） ──
+PASS | M1a 表规模 13（存量 10 + R247 三新）
+PASS | M1b 全表 id 唯一 + 必备键齐（name/desc/hp/atk_pct/cd/skill_name/skill_desc）
+PASS | M1c 全表 cd==120（verify_feedback 遍历契约——fission no_skill 仍保 cd 键）
+PASS | M1d 全表 hp 为正
+PASS | M1e 解锁门互斥（每角色至多一种门键；sentinel 免费无门）
+PASS | M1f has_skill 契约：no_skill 唯 fission（其余 12 角色含三新均有技能）
+── M2：新角色条目（medic/vortex/reaper） ──
+PASS | M2a medic：战地医师·苏 / 血 75 / 攻 +0% / 门 unlock_endless_depth=20 / 「应急修复」回复 30% +4s 减半
+PASS | M2b vortex：坍缩者·汐 / 血 55 / 攻 +10% / 门 unlock_endless_depth=50 / 「奇点坍缩」3s 牵引 + 120% 末爆
+PASS | M2c reaper：处刑者·刈 / 血 50 / 攻 +20% / 门 unlock_price=240 / 「处决时刻」6s +50% 伤害窗
+PASS | M2d 三新角色均有技能且非随机双武（has_skill 真——普通版实现归 player.gd）
+── M3：升华键 × _sublime_available 一致性（终修回归锁） ──
+PASS | M3a 存量 10 角色 sublime_name/sublime_desc 全量非空（升华文案真源落表）
+PASS | M3b 三新角色无 sublime 键（升华版未设计——掷卡侧须由判据拦截）
+PASS | M3c 一致性：13 角色 _sublime_available ==（sublime_desc 非空）——单判据无 has_skill 旁路
+PASS | M3d medic 掷卡不可用（has_skill 真但表无 sublime_desc——「空文案+零行为」破洞卡杜绝）
+PASS | M3d vortex 掷卡不可用（has_skill 真但表无 sublime_desc——「空文案+零行为」破洞卡杜绝）
+PASS | M3d reaper 掷卡不可用（has_skill 真但表无 sublime_desc——「空文案+零行为」破洞卡杜绝）
+PASS | M3e 表嵌套冻结不可注入（源级锚兜底：单判据在源）
+── M4：无尽深度成就门（四档族 / best_endless_depth 聚合 / 计数口一致） ──
+PASS | M4a endless_depth 四档在册（10/20/30/50，奖励 0/0/0/100）
+PASS | M4b 成就桶注册：_ach_by_type[endless_depth] 恰 4 条
+PASS | M4c best_endless_depth 聚合：空表 0 / 混合分档键取最大 7 / 缺键与脏值降级 0
+PASS | M4d 成就计数口与聚合读口同源（_counter_value(endless_depth)==best_endless_depth）
+── M5：解锁判定矩阵（零基线 → 逐门翻转；判定链 meta_manager.gd:389-417） ──
+PASS | M5a 零基线：仅 sentinel 解锁（免检门），其余 12 角色全锁
+PASS | M5b 通关门：veles（①晴空草原 maps_cleared）翻转 / bulwark·mank 仍锁
+PASS | M5c 通关门：bulwark（②寒霜冰原）+ mank（⑤翠毒沼泽）翻转
+PASS | M5d fission：普通档通关记录（best_wave==final_wave 无 # 后缀）→ 解锁 / echo 仍锁
+PASS | M5e echo：困难档记录（#1 键）→ 解锁（剥后缀查表口径）/ fission 回锁（仅普档键）
+PASS | M5f 深度门边界：19 层 medic/vortex 双锁（阈值 20/50）
+PASS | M5g 深度门边界：20 层（地狱 #2 键）medic 解锁 / vortex 仍锁
+PASS | M5h 深度门边界：50 层 vortex 解锁（链终双奖：成就 +100 与角色门同沿）
+PASS | M5i 击杀门边界：499 vera 锁 / 500 翻转（records.total_kills）
+PASS | M5i 击杀门边界：500 vera 解锁
+PASS | M5j 成就门：未达成 wave_20 时 noah 锁
+PASS | M5j 成就门：wave_20 达成 noah 解锁
+PASS | M5k 价梯表键：ranger 80 / zero 160 / reaper 240（结晶价梯 80→160→240 顺延）
+PASS | M5l 购买门：80 结晶恰足买 ranger（扣费归零 + 永久解锁 / zero·reaper 仍锁）
+PASS | M5m 门-成就同步：深度 20 落账后 medic 解锁 ⇔ endless_depth_20 达成（同源同阈值）
+────────────────────────────────────────
+汇总：PASS 36 / FAIL 0（共 36 项）
+验收汇总：36/36 通过

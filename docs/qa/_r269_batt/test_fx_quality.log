@@ -1,0 +1,50 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · 特效质量档位自测 ══════════
+── 设置读写 ──
+PASS | 出厂默认：fx_quality = 2（高）
+PASS | 写口：低档落盘读回
+PASS | 写口：越界钳上界（7→2）
+PASS | 写口：越界钳下界（-3→0）
+PASS | 复位：高档
+── 跳字档位 ──
+PASS | 档位表：跳字上限 20/40/80
+PASS | 档位表：合并窗 0.3/0.2/0.12s
+PASS | 低档：跳字同屏封顶 20（30 个目标只出 20 条）
+PASS | 高档：上限放宽到 80（35 条全部在册）
+── R186 反应字体 ──
+PASS | R186 碎裂大字：54px 字号 + 12px 描边 + 「中文名+数字」（R192 名+值纯函数）
+PASS | R186 碎裂大字：双色通道（暖雪白填充/绯红描边）+ 乘色退位 + 专属字型
+PASS | R186 升格：直击小字原地换过载大字（active 不涨 / 数值并入 12+8）
+PASS | R186 升格：过载双色（爆裂橙填充/暗电紫描边）+ 斜体 900 字型 + merge 后文本==名+新值
+PASS | R186 直击让行：反应大字不被吞，新起小字下移 +20px（30px 常规字号）
+PASS | R186 超导标签：纯文字「超导-30%」+ 冰晶白/靛紫双色 + 斜体 700 字型 + merged_value 恒 0
+PASS | R192 bucket3 拒值：文字标签不吞值（text/merged_value 不变）+ 数值走独立 bucket1 起字
+PASS | R192 直击让行（bucket3）：文字标签不被吞，小字下移 offset==(0,20)
+PASS | R186 超导专属：碎裂 reaction_triggered 不在此起字（防翻倍刷屏）
+PASS | R186 零值短路：≤0.5 反应结算不起大字
+PASS | R186 帧上限（低档=1）：同帧第二条就近并入宿主（数值累加/位置不动/active 不涨）
+PASS | R186 帧上限：跨帧计数重置后可再起
+PASS | R186 满池回收：最老直击槽让位反应大字（active 守恒 20 / 不涨丢弃计数）
+PASS | R186 串色防线：复用反应槽起直击小字 = 白填充/藏青描边/8px/30px/常规字型
+── R192 图鉴预览 scale == CODEX_PREVIEW_SCALE ──
+PASS | R192 预览缩放：prev.scale == CODEX_PREVIEW_SCALE(0.5) 且 pivot_offset==size×0.5（居中适配格）
+── 粒子档位 ──
+PASS | 低档：普命中 0 粒子爆发
+PASS | 低档：暴击保留粒子（打击感底线）
+PASS | 高档：普命中恢复粒子
+── 火箭命中四层爆（R36 范围爆炸显示护栏） ──
+PASS | 前置：FX 层在册（_blasts 池持有者）
+PASS | 四层爆：emit 后计时槽就位
+PASS | 四层爆：白闪/火球/冲击环/烟尘 四层全可见
+PASS | 四层爆：特效半径联动结算半径（r1 = 110×1.25）
+PASS | 四层爆：0.64s 后全层自熄
+────────────────────────────────────────
+汇总：PASS 32 / FAIL 0（共 32 项）
+WARNING: 116 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 28 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 127 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 2 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

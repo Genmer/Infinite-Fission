@@ -3,7 +3,9 @@
 # glob 误收；-s 对非 MainLoop 脚本会挂起——前缀化 cases 文件会让 _batt_r215.py glob 误收后
 # 死挂）。覆盖（任务验收 ①~⑨ / 设计 §9.1 buff ①~⑧）：
 # ① MEC_GIANT_BLADE required_weapon→[W8,W9,W11,W12,W13]（value 0.25/层 stack_max 2）+
-#    分层断言：W11 判定半径 10.8/12.6、W12 震荡半径 110.4/124.8、W13 斩击半径 228/266
+#    分层断言：W11 判定半径 10.8/12.6、W12 震荡半径 110.4/124.8、W13 斩击半径 156/182
+#    （二ct：分裂继承恒 70%——0.4/0.45/0.6 分层值已退役，本套件期望值同步；
+#     R245 表值迁移：W13 基数 190→130——228/266 改 156/182）
 # ② MEC_ORBIT_LINK 扩五武器（卡描述改「近战/法器武器的攻击体 +1/层」）+ 数量帽：金 3 层
 #    link raw 12（1.45×2.6 金档→round 4/层×3）→ W12 额外 min(12,3)=3 斧 / W11 额外 +6 /
 #    W13 幻影斩额外 +2
@@ -11,10 +13,10 @@
 # ④ MEC_FRACTAL required_forms→[0,2,3]（inheritable=true 锁定）+ 门：form3 五武器与
 #    form0 W1 全过
 # ⑤ 通道 B 单元（trait_effect_fractal melee 臂）：双宿主缺位早退保持；melee 臂同参数表
-#    （1 层 2 枚 ±28°/0.4，2 层 3 枚 ±22°/0.45）；TH_FRACTAL_ECHO 深度读 melee.generation
+#    （1 层 2 枚 ±28°，2 层 3 枚 ±22°——继承恒 0.7）；TH_FRACTAL_ECHO 深度读 melee.generation
 #   （gen2→echo 抬 0.6、gen1 不触发、OrbitField 无代数键 = 深度 0 不触发）
-# ⑥ 通道 A 集成：W12×FRACTAL 母斧落地碎裂 2 子斧（flight_axe/gen=3 封堵/shock_scale 0.4/
-#    面板×0.4/落点=母落点+出射×120 tol1px/二次进入计数/split_rejected_generation 恰 +2）+
+# ⑥ 通道 A 集成：W12×FRACTAL 母斧落地碎裂 2 子斧（flight_axe/gen=3 封堵/shock_scale 0.7/
+#    面板×0.7/落点=母落点+出射×120 tol1px/二次进入计数/split_rejected_generation 恰 +2）+
 #    W11 子代 = 迷你飞剑（flight_sword=true、generation=1）
 # ⑦ W8 子引爆（§4.5-4 终审①）：母-only 50 / 子-only 20 / 中心幂等 50 + 结算次数恰 3
 #   （粗相候选 4+3+3=10）+ _detonate_settle 纯结算体无 ON_EXPIRE 派发结构断言 + 负控
@@ -270,11 +272,11 @@ func _case1_giant_blade() -> void:
 		w12.attach_trait(td) and absf(w12._shock_radius() - 124.8) < 0.01,
 		"r=%s" % str(w12._shock_radius()))
 	var w13 := _fresh(&"W13_great_sword") as OrbitWeapon
-	_check("①W13 G=1：斩击半径 190×1.2=228",
-		w13 != null and w13.attach_trait(td) and absf(w13.effective_slash_radius() - 228.0) < 0.01,
+	_check("①W13 G=1：斩击半径 130×1.2=156（R245 表值迁移：基数 190→130）",
+		w13 != null and w13.attach_trait(td) and absf(w13.effective_slash_radius() - 156.0) < 0.01,
 		"r=%s" % str(w13.effective_slash_radius() if w13 != null else -1.0))
-	_check("①W13 G=2：斩击半径 190×1.4=266",
-		w13.attach_trait(td) and absf(w13.effective_slash_radius() - 266.0) < 0.01,
+	_check("①W13 G=2：斩击半径 130×1.4=182（R245 表值迁移：基数 190→130）",
+		w13.attach_trait(td) and absf(w13.effective_slash_radius() - 182.0) < 0.01,
 		"r=%s" % str(w13.effective_slash_radius()))
 
 
@@ -396,18 +398,18 @@ func _case5_channel_b_unit() -> void:
 	# 1 层表：2 枚/±28°/继承 0.4（写 melee_split_request、不写 split_request）
 	var t1 := _melee_dispatch(w13, arc)
 	var r1: Dictionary = t1.melee_split_request
-	_check("⑤1 层 melee 臂：{count 2, spread ±28°, inherit 0.4, echo false} 且 split_request 恒空",
+	_check("⑤1 层 melee 臂：{count 2, spread ±28°, inherit 0.7（二ct 恒值）, echo false} 且 split_request 恒空",
 		int(r1.get("count", 0)) == 2 and is_equal_approx(float(r1.get("spread_deg", 0.0)), 28.0)
-		and is_equal_approx(float(r1.get("inherit_ratio", 0.0)), 0.4)
+		and is_equal_approx(float(r1.get("inherit_ratio", 0.0)), 0.7)
 		and not bool(r1.get("echo", true)) and t1.split_request.is_empty(),
 		"req=%s" % str(r1))
 	# 2 层表：3 枚/±22°/继承 0.45
 	w13.attach_trait(_trait(&"MEC_FRACTAL"))
 	var t2 := _melee_dispatch(w13, arc)
 	var r2: Dictionary = t2.melee_split_request
-	_check("⑤2 层 melee 臂：{count 3, spread ±22°, inherit 0.45}",
+	_check("⑤2 层 melee 臂：{count 3, spread ±22°, inherit 0.7（二ct 恒值）}",
 		int(r2.get("count", 0)) == 3 and is_equal_approx(float(r2.get("spread_deg", 0.0)), 22.0)
-		and is_equal_approx(float(r2.get("inherit_ratio", 0.0)), 0.45),
+		and is_equal_approx(float(r2.get("inherit_ratio", 0.0)), 0.7),
 		"req=%s" % str(r2))
 	# TH_FRACTAL_ECHO：深度源 = melee.generation（子斩 gen+1）；gen2 → 子 gen3 ≥3 → echo
 	w13.data.threshold_traits.append({
@@ -418,14 +420,14 @@ func _case5_channel_b_unit() -> void:
 	var t3 := _melee_dispatch(w13, arc)
 	var r3: Dictionary = t3.melee_split_request
 	_check("⑤echo 复活：melee gen=2（子斩 gen3）→ echo=true + inherit 抬 0.6",
-		bool(r3.get("echo", false)) and is_equal_approx(float(r3.get("inherit_ratio", 0.0)), 0.6),
+		bool(r3.get("echo", false)) and is_equal_approx(float(r3.get("inherit_ratio", 0.0)), 0.7),
 		"req=%s" % str(r3))
 	arc.generation = 1
 	var t4 := _melee_dispatch(w13, arc)
 	var r4: Dictionary = t4.melee_split_request
-	_check("⑤阈值下：melee gen=1（子斩 gen2 <3）→ echo=false + inherit 保持 0.45",
+	_check("⑤阈值下：melee gen=1（子斩 gen2 <3）→ echo=false + inherit 恒 0.7（二ct）",
 		not bool(r4.get("echo", true))
-		and is_equal_approx(float(r4.get("inherit_ratio", 0.0)), 0.45),
+		and is_equal_approx(float(r4.get("inherit_ratio", 0.0)), 0.7),
 		"req=%s" % str(r4))
 	# OrbitField 宿主无 generation 键 → 深度 0（母引爆）→ echo 不触发、请求照常
 	var fld := OrbitField.new()
@@ -462,15 +464,15 @@ func _case6_channel_a() -> void:
 	for c in children:
 		var cp := c as ProjectileBase
 		if not (bool(cp.get("_flight_axe")) and int(cp.get("generation")) == 3
-				and is_equal_approx(float(cp.get("_shock_scale")), 0.4)
-				and absf(float(cp.get("_panel_base_atk")) - 22.4) < 0.01):
-			child_ok = false                       # 56 面板 ×0.4 = 22.4
+				and is_equal_approx(float(cp.get("_shock_scale")), 0.7)
+				and absf(float(cp.get("_panel_base_atk")) - 39.2) < 0.01):
+			child_ok = false                       # 二ct：56 面板 ×0.7 = 39.2
 		var ctp: Vector2 = cp.get("_target_point")
 		var d := ctp.distance_to(mother_land)
 		if d < 119.0 or d > 121.0:
 			tp_ok = false                          # 落点 = 母落点 + 出射方向 ×120（tol 1px）
 		tp_detail += "%.2fpx " % d
-	_check("⑥W12 母斧落地碎裂 2 子斧：flight_axe 继承 + generation=3 封堵 + shock_scale 0.4 + 面板 22.4",
+	_check("⑥W12 母斧落地碎裂 2 子斧：flight_axe 继承 + generation=3 封堵 + shock_scale 0.7 + 面板 39.2（二ct）",
 		child_ok, "n=%d land=%d" % [children.size(), int(axe.land_count)])
 	_check("⑥子斧落点 = 母斧落点 + 出射方向 ×120（tol 1px）", tp_ok, "距母落点=%s" % tp_detail)
 	var land0: int = DebugStats.get_counter(&"axe_landings")
@@ -478,9 +480,9 @@ func _case6_channel_a() -> void:
 	_run_axes_to_completion()
 	var land_d: int = DebugStats.get_counter(&"axe_landings") - land0
 	var rej_d: int = DebugStats.get_counter(&"split_rejected_generation") - rej0
-	_check("⑥子斧二次进入：landings Δ2 + R=96×0.4=38.4 + scale 0.4 读回",
-		land_d == 2 and absf(axe.last_land_shock_radius - 38.4) < 0.01
-		and is_equal_approx(axe.last_land_shock_scale, 0.4),
+	_check("⑥子斧二次进入：landings Δ2 + R=96×0.7=67.2 + scale 0.7 读回（二ct）",
+		land_d == 2 and absf(axe.last_land_shock_radius - 67.2) < 0.01
+		and is_equal_approx(axe.last_land_shock_scale, 0.7),
 		"Δland=%d R=%.3f scale=%.3f" % [land_d, axe.last_land_shock_radius,
 		axe.last_land_shock_scale])
 	_check("⑥子斧再裂封堵：split_rejected_generation Δ2 + 无 live 斧 + land_count=3",
@@ -534,8 +536,8 @@ func _case7_w8_child_detonate() -> void:
 	_check("⑦母-only 域：B（100px 胞侧）恰 50（子引爆 ±28° 域外溢为零）",
 		frac_ok and absf((hp_b0 - float(e_b.hp)) - 50.0) < 0.6,
 		"Δhp=%s frac=%s" % [str(hp_b0 - float(e_b.hp)), str(frac_ok)])
-	_check("⑦子-only 域：C（113px @-28°，距子心 65≤52.8+14）恰 20（0.4×50——子引爆半径/伤害正确）",
-		absf((hp_c0 - float(e_c.hp)) - 20.0) < 0.6,
+	_check("⑦子-only 域：C（113px @-28°，距子心 65≤52.8+14）恰 35（0.7×50——子引爆半径/伤害正确，二ct）",
+		absf((hp_c0 - float(e_c.hp)) - 35.0) < 0.6,
 		"Δhp=%s" % str(hp_c0 - float(e_c.hp)))
 	_check("⑦重叠中心幂等：A 恰 50（母+双子同帧 (source,target,frame) 折返单次）",
 		absf((hp_a0 - float(e_a.hp)) - 50.0) < 0.6,
@@ -571,11 +573,11 @@ func _case7_w8_child_detonate() -> void:
 		_bump()
 	var tctx := _melee_dispatch(w8, field)
 	var ctrl_ok := int(tctx.melee_split_request.get("count", 0)) == 2 \
-		and is_equal_approx(float(tctx.melee_split_request.get("inherit_ratio", 0.0)), 0.4) \
+		and is_equal_approx(float(tctx.melee_split_request.get("inherit_ratio", 0.0)), 0.7) \
 		and DebugStats.get_counter(&"w8_detonation_aoe_targets") - settle0 == 10 \
 		and absf((hp_a0 - float(e_a.hp)) - 50.0) < 0.6 \
 		and absf((hp_d0 - float(e_d.hp)) - 50.0) < 0.6
-	_check("⑦负控+稳定：事后再派发仍写 count 2/0.4 请求（栈未耗尽）+ 帧推进后计数/血量零增量",
+	_check("⑦负控+稳定：事后再派发仍写 count 2/0.7 请求（栈未耗尽）+ 帧推进后计数/血量零增量",
 		ctrl_ok, "req=%s settleΔ=%d Δd=%s" % [str(tctx.melee_split_request),
 		DebugStats.get_counter(&"w8_detonation_aoe_targets") - settle0,
 		str(hp_d0 - float(e_d.hp))])

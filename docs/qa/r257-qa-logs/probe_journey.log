@@ -1,0 +1,32 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══ QA probe R257: demon@hard full journey timeline ══
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+[pre] unlocked(demon,1)=true pool(tier)=[&"AFF_MULTI"] auto_restart_mode=0
+[T+72ms] 祝福面板出现（pending=true）
+[T+162ms] PLAYING 开局：hp=60 首帧敌=15
+[T+162ms] state -1→2
+[T+162ms] 首敌入场（15 只）
+[T+8681ms] 首次掉血 hp 60→31
+[T+12052ms] state 2→4
+[post] 20s 后：state=4 结算屏可见=false 倒计时=0.0 回菜单=false
+[post] 时间线摘要：首敌=162ms 首伤=8681ms 死亡=-1ms（首伤→死亡 -1ms）
+[diag] 事件行 ×6（真机导出同形态）：
+  [ev 18:08:21] 状态 0→1
+  [ev 18:08:21] 祝福面板弹：池 1 项 · 档 2 · map=world_demon
+  [ev 18:08:21] 祝福确认：（未选直出发）
+  [ev 18:08:21] start_run map=world_demon 难度=1
+  [ev 18:08:21] 状态 1→2
+  [ev 18:08:33] 状态 2→4
+══ probe done ══
+WARNING: 16 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 46 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 139 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

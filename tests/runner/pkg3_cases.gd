@@ -1067,17 +1067,21 @@ func _test_split_gates() -> void:
 	var inherit_ok := true
 	var elem_ok := true
 	var attach_ok := true
+	var hitbox_ok := true
 	var angle_set: Array = []
 	for c in children:
 		var child := c as ProjectileBase
 		inherit_ok = (inherit_ok
-			and _approx(float(child.panel_snapshot.get("base_atk", 0.0)), 4.0, 0.001))
+			and _approx(float(child.panel_snapshot.get("base_atk", 0.0)), 7.0, 0.001))
 		elem_ok = (elem_ok and child.element == GameConst.Element.FIR)
 		attach_ok = (attach_ok and _approx(child.attach_value, 0.0))
+		hitbox_ok = (hitbox_ok and _approx(child.hitbox_radius, 4.2, 0.001))
 		angle_set.append(snappedf(child.velocity.angle_to(Vector2(0, -600)), 0.0001))
 	angle_set.sort()
-	_check("分裂继承 F-13：ATK 面板 40%（10 → 4.0）",
+	_check("分裂继承 F-13：ATK 面板 70%（10 → 7.0，二ct 恒值）",
 		inherit_ok and children.size() == 2)
+	_check("分裂尺寸二ct：子代 hitbox=母 6.0 × 70% → 4.2（动态跟随）",
+		hitbox_ok and children.size() == 2)
 	_check("分裂继承：元素继承 / 元素附着不继承（attach_value=0）",
 		elem_ok and attach_ok)
 	_check("分裂继承：夹角 ±28°（spread_deg，均匀分布）",
@@ -1454,8 +1458,12 @@ func _test_arc_slash() -> void:
 	# 同窗同目标单次 + 窗口 0.34s 过期（R65：0.15→0.34——用户点名挥砍动画放慢）
 	for i in range(43):
 		w1.tick(DT)                                # 窗口耗尽（0.34s ≈ 41 帧 @DT）
-	_check("挥斩窗口：0.34s 判定窗 → 窗口外无判定（visible 复位）",
-		_approx(w1.arc_slash.window_left, 0.0) and not w1.arc_slash.visible)
+	# 二cv#8 帧率随改：visible 断言随 二cv#2 待机范围虚线契约迁移——窗口外本体槽不再
+	# 复位可见性（待机虚线弧接管，_range_dash_active 门：零代+本体槽+fx_quality>0）；
+	# 本断言保留窗口过期核心（window_left 归零=窗口外零判定），visible==虚线门出力。
+	_check("挥斩窗口：0.34s 判定窗 → 窗口外无判定（visible 随 二cv#2 虚线门迁移）",
+		_approx(w1.arc_slash.window_left, 0.0)
+			and w1.arc_slash.visible == w1.arc_slash._range_dash_active())
 	_check("挥斩去重：同窗同目标单次（A/B 不再扣血）",
 		_approx(e_in1.hp, 990.0, 0.01) and _approx(e_in2.hp, 990.0, 0.01))
 	w1.free()

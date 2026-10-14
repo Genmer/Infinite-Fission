@@ -357,10 +357,12 @@ func _case5_fx_lifetime() -> void:
 	_check("⑤前置：落地特效节点在树", fx_ready, "last_fx=%s" % str(fx))
 	if not fx_ready:
 		return
-	fx._process(0.4)                               # 手驱越 0.35s 生命线 → queue_free
+	fx._process(0.4)                               # 手驱越 0.35s 生命线 → R253 归还池
 	await tree.process_frame
-	_check("⑤手驱 0.4s：queue_free 下一帧销毁（FX_LIFE=0.35 契约）",
-		not is_instance_valid(fx), "still_valid=%s" % str(is_instance_valid(fx)))
+	_check("⑤手驱 0.4s：归还池（隐藏+停处理——FX_LIFE=0.35 寿命口径不变，R253 池化）",
+		is_instance_valid(fx) and not fx.visible and not fx.is_processing(),
+		"valid=%s visible=%s processing=%s" % [str(is_instance_valid(fx)),
+		str(fx.visible), str(fx.is_processing())])
 	# 真帧流：新落地特效自然老化销毁
 	_clear_enemies()
 	_spawn_e(Vector2(560.0, 640.0))
@@ -369,13 +371,13 @@ func _case5_fx_lifetime() -> void:
 	var fx2 := axe.last_fx
 	var fx2_was := fx2 != null and is_instance_valid(fx2)   # Godot4 释放件 ==null——先录在树位
 	var deadline := Time.get_ticks_msec() + 2500
-	while fx2_was and fx2 != null and is_instance_valid(fx2) \
+	while fx2_was and fx2 != null and is_instance_valid(fx2) and fx2.visible \
 			and Time.get_ticks_msec() < deadline:
 		await tree.process_frame
-	_check("⑤真帧流 0.35s 自然销毁（2.5s 预算内失效）",
-		fx2_was and (fx2 == null or not is_instance_valid(fx2)),
+	_check("⑤真帧流 0.35s 自然归还（2.5s 预算内隐藏+停处理，R253 池化）",
+		fx2_was and fx2 != null and is_instance_valid(fx2) and not fx2.visible,
 		"was=%s now_valid=%s land=%d live=%d lastland=%s" % [str(fx2_was),
-		str(fx2 != null and is_instance_valid(fx2)), axe.land_count,
+		str(fx2.visible if fx2 != null else null), axe.land_count,
 		_axes_live().size(), str(axe.last_land_pos)])
 
 
@@ -438,14 +440,14 @@ func _case7_fractal_children() -> void:
 	for c in children:
 		var cp: ProjectileBase = c
 		if not (bool(cp.get("_flight_axe")) and int(cp.get("generation")) == 3
-				and is_equal_approx(float(cp.get("_shock_scale")), 0.4)
-				and absf(float(cp.get("_panel_base_atk")) - 22.4) < 0.01):
-			child_ok = false
+				and is_equal_approx(float(cp.get("_shock_scale")), 0.7)   # 二ct：恒 70%
+				and absf(float(cp.get("_panel_base_atk")) - 39.2) < 0.01):
+			child_ok = false                       # 二ct：56 面板 ×0.7 = 39.2
 		var ctp: Vector2 = cp.get("_target_point")
 		if ctp.distance_to(mother_land) < 118.0 or ctp.distance_to(mother_land) > 122.0:
 			child_tp_ok = false                    # 落点 = 母落点 + 出射方向 ×120
 		child_tp_detail += "%.0fpx " % ctp.distance_to(mother_land)
-	_check("⑦母斧落地碎裂 2 子斧：flight_axe 继承 + generation=3 封堵 + shock_scale=0.4 + 面板 22.4",
+	_check("⑦母斧落地碎裂 2 子斧：flight_axe 继承 + generation=3 封堵 + shock_scale=0.7 + 面板 39.2（二ct）",
 		fractal_ok and child_ok and int(axe.land_count) == 1,
 		"n=%d land=%s" % [children.size(), str(axe.land_count)])
 	_check("⑦子斧 target_point = 母落点 + 出射方向 ×120（tol 2px）",
@@ -455,10 +457,10 @@ func _case7_fractal_children() -> void:
 	_run_axes_to_completion()                      # 子斧落地 → 二次迷你震荡
 	var land_delta: int = DebugStats.get_counter(&"axe_landings") - land0
 	var rej_delta: int = DebugStats.get_counter(&"split_rejected_generation") - rej0
-	_check("⑦子斧落地二次迷你震荡：landings Δ2 + R=96×0.4=38.4 + scale 0.4 读回 + fx 同径",
-		land_delta == 2 and absf(axe.last_land_shock_radius - 38.4) < 0.01
-		and is_equal_approx(axe.last_land_shock_scale, 0.4)
-		and axe.last_fx != null and absf(axe.last_fx.shock_radius - 38.4) < 0.01,
+	_check("⑦子斧落地二次迷你震荡：landings Δ2 + R=96×0.7=67.2（二ct）+ scale 0.7 读回 + fx 同径",
+		land_delta == 2 and absf(axe.last_land_shock_radius - 67.2) < 0.01
+		and is_equal_approx(axe.last_land_shock_scale, 0.7)
+		and axe.last_fx != null and absf(axe.last_fx.shock_radius - 67.2) < 0.01,
 		"Δland=%d R=%.3f scale=%.3f" % [land_delta, axe.last_land_shock_radius,
 		axe.last_land_shock_scale])
 	_check("⑦代数闸封堵：子斧再裂 split_rejected_generation Δ2 + 无 gen2 子斧残留",
@@ -501,7 +503,7 @@ func _case8_axe_count() -> void:
 	var overlap_ok := axes.size() == 2
 	var overlap_detail := "axes=%d" % axes.size()
 	if overlap_ok:
-		var origin: Vector2 = _gl.player.global_position      # 出掷真源 = 武器宿主位
+		var origin: Vector2 = axe.muzzle_position()           # 二cu 合一：出掷真源 = 化身出膛口
 		var primary: Vector2 = (axes[0] as ProjectileBase).get("_target_point")
 		var extra: Vector2 = (axes[1] as ProjectileBase).get("_target_point")
 		var base_dir: Vector2 = solo.global_position - origin

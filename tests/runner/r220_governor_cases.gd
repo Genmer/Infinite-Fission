@@ -2,7 +2,7 @@
 # R220 模式地基用例体（入口 test_r220_governor.gd 运行时 load——-s 编译期禁引工程类名纪律）。
 # 覆盖（R220 拆解契约 §5.1 + 主控验收单①-⑤）：
 # ① perf_mode 双注册（默认 0 / clampi 0,1 / 未知键静默丢弃 / 写盘重读还原）
-# ② 设置面板「优先模式」行（帧率上限行后插行 / 两态循环 / 十行重排几何钉死 / 写口即翻转）
+# ② 设置面板「优先模式」行（帧率上限行后插行 / 两态循环 / 十一行重排几何钉死[R269：保帧行加入重迁] / 写口即翻转）
 # ③ PerfGovernor 帧率优先转换序（<0.90 降档至地板 1 / >0.95 升档帽 3 / 双侧迟滞带 /
 #    transitions 与档变一一对应）
 # ④ 特效优先（<0.70 地板 2 / 0.85 升档阈值同值对照 / 模式切换计时清零 tier 保持）
@@ -160,9 +160,10 @@ func _test_2_panel_row() -> void:
 		"fps=%s perf=%s shake=%s" % [str(sp._fps_btn.position.y if sp._fps_btn != null else -1.0),
 			str(sp._perf_mode_btn.position.y if sp._perf_mode_btn != null else -1.0),
 			str(sp._shake_btn.position.y if sp._shake_btn != null else -1.0)])
-	# 几何底线：十开关行互不重叠 / 行距 46 钉死 / 末行钮底 812 ≤ hint 顶 824−6px / 卡高 968 不扩
-	var btns: Array = [sp._fx_btn, sp._fps_btn, sp._perf_mode_btn, sp._shake_btn, sp._dmg_btn,
-		sp._show_fps_btn, sp._diag_log_btn, sp._diag_len_btn, sp._pos_btn, sp._codex_reset_btn]
+	# R269：保帧模式行（BoostMode，插在优先模式后）加入——十行重迁为十一行 330..770 间距 44（行距 46→44 压缩塞卡不扩高）
+	# 几何底线：十一开关行互不重叠 / 行距 44 钉死 / 末行钮底 814 ≤ hint 顶 824−6px / 卡高 968 不扩
+	var btns: Array = [sp._fx_btn, sp._fps_btn, sp._perf_mode_btn, sp._boost_btn, sp._shake_btn,
+		sp._dmg_btn, sp._show_fps_btn, sp._diag_log_btn, sp._diag_len_btn, sp._pos_btn, sp._codex_reset_btn]
 	var all_present := true
 	for b in btns:
 		if b == null:
@@ -179,23 +180,23 @@ func _test_2_panel_row() -> void:
 				var bb := btns[j] as Control
 				if ba.get_rect().intersects(bb.get_rect()):
 					pair_overlap.append("%s∩%s" % [ba.name, bb.name])
-	_check("②十开关行按钮互不重叠（行距 52→46 / 钮高 48→44 重排零重叠）",
+	_check("②十一开关行按钮互不重叠（R269：行距 46→44 重排零重叠——含保帧行）",
 		all_present and pair_overlap.is_empty(), str(pair_overlap))
 	var height_ok := true
 	for b in btns:
 		if b != null and absf((b as Control).size.y - 44.0) > 0.01:
 			height_ok = false
 	_check("②钮高 44（= R194 触控目标下限——塞卡不扩高）", all_present and height_ok, "")
-	var spacing_ok := ys.size() == 10 and absf(ys[0] - 354.0) < 0.01 and absf(ys[9] - 768.0) < 0.01
+	var spacing_ok := ys.size() == 11 and absf(ys[0] - 330.0) < 0.01 and absf(ys[10] - 770.0) < 0.01
 	for i in range(1, ys.size()):
-		if absf(ys[i] - ys[i - 1] - 46.0) > 0.01:
+		if absf(ys[i] - ys[i - 1] - 44.0) > 0.01:
 			spacing_ok = false
-	_check("②十行 354..768、行距 46（重排钉死——不扩卡高塞入）",
+	_check("②十一行 330..770、行距 44（R269 重排钉死——不扩卡高塞入）",
 		spacing_ok, "ys=%s" % str(ys))
-	var last_btn: Control = btns[9] as Control if btns.size() == 10 else null
+	var last_btn: Control = btns[10] as Control if btns.size() == 11 else null
 	var last_bottom: float = last_btn.position.y + last_btn.size.y if last_btn != null else 9999.0
-	_check("②末行钮底 812 ≤ hint 顶 824−6px（卡内不溢）",
-		absf(last_bottom - 812.0) < 0.01 and last_bottom <= 824.0 - 6.0 + 0.01,
+	_check("②末行钮底 814 ≤ hint 顶 824−6px（卡内不溢）",
+		absf(last_bottom - 814.0) < 0.01 and last_bottom <= 824.0 - 6.0 + 0.01,
 		"bottom=%s" % str(last_bottom))
 	_check("②卡高不扩（offset_bottom==618 ∧ 卡高 968 钉死）",
 		sp._card.offset_bottom == 618.0 and absf(sp._card.size.y - 968.0) < 0.01,

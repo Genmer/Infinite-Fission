@@ -1,6 +1,9 @@
 # tests/probe_r238_barrier_repro_cases.gd
 # R238「格挡力场（MEC_SHIELD）选了没生效」五假设诊断用例体（入口运行时 load——
 # cases 禁 test_ 前缀防电池 glob 误收；本文件可直引工程类名）。
+# ⚠R262d 过时声明：H2 段断言「FALLBACK_ATK 落他栈 / 静默替换」基于 vc71 前挂武器栈
+# 旧制——R262d 起应急强化改全局授予（player.add_fallback_atk+品级缩放+横幅），该段
+# 断言不再反映现行契约（历史诊断快照保原貌不追改；现行契约由 qa_r262d_fallback 锁）。
 # 假设 → 用例映射（全部真实工程对象：main.tscn 真起 GameLoop · 真卡架/apply_choice ·
 # 真词条 attach · 真玩家 tick/受击 · 真敌池物理帧；夹具模式=r237_contact_radial_cases）：
 # · H1 满层续上架×效果饱和：主武器连挂 2 层金 MEC_SHIELD → 货架仍上架 → 第 3 张白卡

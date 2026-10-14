@@ -1,0 +1,42 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+OpenGL API 3.3.0 NVIDIA 610.62 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 4070 Laptop GPU
+
+PHYSATTR 环境头：rendering(project/旗标扫)=forward_plus adapter_api=3.3.0 NVIDIA 610.62 headless=false user_dir=E:/Code/Agent/Infinite-Fission/.qa_sandbox_r244/Godot/app_userdata/Infinite Fission phys_hz=120
+══ R244 churn 臂归因：A0 / B popup / C shards / D bucket / A0b（窗口 gl_compatibility 档）══
+  PASS | G-沙箱 user:// 重定向生效（含 .qa_sandbox_r244）（user_dir=E:/Code/Agent/Infinite-Fission/.qa_sandbox_r244/Godot/app_userdata/Infinite Fission）
+── CAL0 监视器语义标定（无 GameLoop 净环境：步忙等 2000µs × 帧压 50ms）──
+CAL0：步/帧=3.00 monitor=1979µs 步耗时=2000µs monitor/步耗时=0.99 → 语义=last-step
+  PASS | CAL0 监视器语义可判（frame-sum / last-step 二选一）（ratio=0.99（歧义窗 1.6~1.8））
+boot.词条：PIERCE×3/3 MULTI×2/2 BOUNCE×3/3 NOVA×2/2 FRACTAL×2/2
+boot：grove w16 构成 42 敌种池（E1_grunt×26 E2_runner×7 E3_bastion×3 E10_woodbird×6）压血×1.00；物理引擎自然驱动 60Hz；构筑=W2 L5 五词条（无棱镜）+ 风筝
+── A0 基线深载（=R237 A0 同构复跑，当前代码基线） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=35384.9（p95=64970.0，钳负帧占99%）｜mon=8433.2µs/步 段和=31819.7µs/步｜步/帧=7.95 样本=150 步=1200 墙=45.0s
+负载：敌 p50=115 弹 p50=406 跳 p50=79 fps=3
+  PASS | G-A0 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=150 步=1200 墙=45.0s（帽 75s/6000 步内收口））
+  PASS | G-A0 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=115/120 弹=406 跳=79）
+── B popup 摘除（damage_resolved↔popup_manager 断连——跳字零 spawn 零 tick） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=36001.3（p95=61052.0，钳负帧占99%）｜mon=8272.2µs/步 段和=29707.1µs/步｜步/帧=7.95 样本=150 步=1200 墙=41.4s
+负载：敌 p50=115 弹 p50=404 跳 p50=0 fps=4
+  PASS | G-B 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=150 步=1200 墙=41.4s（帽 75s/6000 步内收口））
+  PASS | G-B 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=115/120 弹=404 跳=0）
+  PASS | G-B popup 注入生效（测量窗 跳 p50==0）（跳=0）
+── D 桶place 摘除（全池 bucket_host 置空——零 reparent churn） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=30842.3（p95=56273.0，钳负帧占99%）｜mon=7294.7µs/步 段和=26790.6µs/步｜步/帧=7.89 样本=170 步=1349 墙=40.1s
+负载：敌 p50=113 弹 p50=401 跳 p50=79 fps=4
+  PASS | G-D 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=170 步=1349 墙=40.1s（帽 75s/6000 步内收口））
+  PASS | G-D 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=113/120 弹=401 跳=79）
+  PASS | G-D bucket 注入生效（池 host null + 首敌挂池根）（host_null=true parent_is_pool=true）
+── A0b 序效应复跑（B/D 注入复原后再跑 A0——漂移带披露） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=35637.3（p95=63441.0，钳负帧占100%）｜mon=8709.0µs/步 段和=33545.2µs/步｜步/帧=7.95 样本=150 步=1200 墙=45.1s
+负载：敌 p50=114 弹 p50=406 跳 p50=79 fps=3
+  PASS | G-A0b 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=150 步=1200 墙=45.1s（帽 75s/6000 步内收口））
+  PASS | G-A0b 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=114/120 弹=406 跳=79）
+── C 碎片链摘除（enemy_killed↔drop_xp 断连——XP 池零 spawn 零磁吸；末位终臂不复原） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=38511.3（p95=65049.0，钳负帧占98%）｜mon=8853.0µs/步 段和=31972.8µs/步｜步/帧=7.95 样本=150 步=1200 墙=43.3s
+负载：敌 p50=114 弹 p50=424 跳 p50=79 fps=4
+  PASS | G-C 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=150 步=1200 墙=43.3s（帽 75s/6000 步内收口））
+  PASS | G-C 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=114/120 弹=424 跳=79）
+  PASS | G-C shards 注入生效（测量窗 碎片活口恒 0）（mid=0 end=0）
+── 派生（R237 规则：降幅<30% 未命中 / ≥30% 塌缩确证）：resid_alt 降幅 B(popup)=-2% C(shards)=-9% D(bucket)=13%｜mon 降幅 B=2% C=-5% D=14%｜A0b 序漂移=-1%
+留档：res://docs/qa/probe_r244_physattr.json
+PROBE 汇总：硬门全过（五臂数字已留档 docs/qa/probe_r244_physattr.json）

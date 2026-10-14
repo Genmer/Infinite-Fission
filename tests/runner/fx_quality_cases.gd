@@ -165,6 +165,11 @@ func _test_reaction_popup() -> void:
 	_check("R186 升格：直击小字原地换过载大字（active 不涨 / 数值并入 12+8）",
 		pm.active_popups == 2 and p1.style == GameConst.PopupStyle.REACTION
 		and absf(p1.merged_value - 20.0) <= 0.001)
+	# R268 追认迁移（主会话授权窄迁移）：R268 P1 起 upgrade_to_reaction 只置脏
+	# （_label_dirty，排版并入 R212 tick 限批——qa_r268_physphase P1a 断言在案），
+	# 本用例升格臂断言前补一次 tick 驱动刷新（桌面帽 0 不限批，一帧全刷）——
+	# 验证意图不变：升格后反应大字显形（样式/字型/文本）仍被逐位检验。
+	pm.tick(DT)
 	_check("R186 升格：过载双色（爆裂橙填充/暗电紫描边）+ 斜体 900 字型 + merge 后文本==名+新值",
 		p1._label.get_theme_color("font_color") == PopPalette.RXN_FILL_OVERLOAD
 		and p1._label.get_theme_color("font_outline_color") == PopPalette.RXN_LINE_OVERLOAD

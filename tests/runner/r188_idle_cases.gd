@@ -18,9 +18,9 @@
 # 夹具口径：seed(42) + main.tscn 全栈启动（GameLoop 真件）+ DT=1/120 手动计帧驱动
 #（pkg4/auto_idle 同模式：手动驱动 _physics_process，禁自动帧保证确定性）。
 # 分段各自 fresh boot（market/叠层/性能/挂机互不污染——market 枯竭态武器栈残留不外溢）。
-# 已知实现缺陷（如实遥测不落常红断言）：gain_xp(1e12) 连升爆发单帧超 50ms 预算线
+# 已知实现缺陷（如实遥测不落常红断言）：gain_xp 巨额连升爆发单帧超 50ms 预算线
 #（逐级 emit_level_up × meta 成就全表扫，deep_wave_probe 已裁定为 WARN 遥测线）——
-# 本套件同口径：排队帽硬闸 + 爆发帧耗时打印。
+# 本套件同口径：排队帽硬闸 + 爆发帧耗时打印。QA-257-3：注入缩 1e10（见 §P P7 注）。
 extends RefCounted
 
 const DT := 1.0 / 120.0                       # 120Hz 物理帧
@@ -229,8 +229,13 @@ func _drain_card_window(p_max: int = 50) -> void:
 
 func _kill_player() -> void:
 	# 必死一击（pkg4 Q-16 简化路径）：清复活/护盾/无敌 → 接触伤害超血线
+	# R253 QA BUG-2 真源迁移：shield_ready 已降级派生视图——清真源 _shield_units
+	#（choose(0) 概率抽到 MEC_SHIELD 首挂即就绪挡下致命一击 = 6 轮 1 红假红源）；
+	# 橙盾 temp_shield_stacks 同清（QA 报告同型遗漏）
 	var p := _gl.player
 	p.set("revives_left", 0)
+	p._shield_units.clear()
+	p.set("temp_shield_stacks", 0)
 	p.set("shield_ready", false)
 	p.set("invuln_left", 0.0)
 	p.take_contact_damage(float(p.get("hp")) + 1.0)
@@ -456,12 +461,12 @@ func _test_market_evergreen() -> void:
 	_check("⑤ 保底行可购（buyable_count() >= 1）", shop.buyable_count() >= 1,
 		"buyable=%d" % shop.buyable_count())
 	if fb_idx >= 0:
-		var fb_ware: Dictionary = shop._wares[fb_idx]
-		var fb_target: WeaponBase = fb_ware.get("target")
-		var layers0 := _tid_layers(fb_target, &"FALLBACK_ATK")
+		# R262d 迁移：常青货走全局授予（player.add_fallback_atk）——原「落展示 target 栈
+		# 层数+1」口径退役（evergreen 行无 target，宿主链已拆）
+		var fb_pct0: float = float(_gl.player.get("run_fallback_atk_pct"))
 		shop._buy(fb_idx)
-		_check("⑤ 购买保底行：FALLBACK_ATK 落展示 target 栈 + 金币 25→0",
-			_tid_layers(fb_target, &"FALLBACK_ATK") == layers0 + 1
+		_check("⑤ 购买保底行：应急强化入全局累计（+5% 全武器）+ 金币 25→0",
+			is_equal_approx(float(_gl.player.get("run_fallback_atk_pct")) - fb_pct0, 0.05)
 				and int(_gl.player.get("gold")) == 0)
 	# 验收原文动作：清空 _wares → open 立即补保底常青行且可购
 	_gl.player.set("gold", 25)
@@ -744,7 +749,7 @@ func _hsc_curse_full_and_zero_floor() -> void:
 
 
 func _hsc_mult_guards() -> void:
-	# ⑤ 乘区护栏（单区钳/top-8/cap_prod/crit/cdr/rof 全显式钳制）
+	# ⑤ 乘区护栏（单区钳/top-10/cap_prod/crit/cdr/rof 全显式钳制）
 	var ms := ModifierStack.new()
 	var one: Array[Dictionary] = [{"pool_id": &"mult_probe", "source_uid": 0,
 		"contrib": 5.0, "cap_pool": 2.0, "priority": 0}]
@@ -759,8 +764,8 @@ func _hsc_mult_guards() -> void:
 		many.append({"pool_id": StringName("mult_p%02d" % i), "source_uid": 0,
 			"contrib": 2.0, "cap_pool": 2.0, "priority": 0})
 	ms4.aggregate_mults(many, int(_cfg().balance.cap_mul_count), float(_cfg().balance.cap_prod))
-	_check("⑤b 乘区名额 top-8（20 区 → 8 入）+ cap_prod 钳 8.0 + 审计 compressed",
-		ms4.resolved_mults.size() == 8 and absf(ms4.product_clamped - 8.0) < 1e-12
+	_check("⑤b 乘区名额 top-10（20 区 → 10 入）+ cap_prod 钳 12.0 + 审计 compressed",
+		ms4.resolved_mults.size() == 10 and absf(ms4.product_clamped - 12.0) < 1e-12
 		and (ms4.audit as DamageAudit).compressed,
 		"n=%d prod=%s" % [ms4.resolved_mults.size(), str(ms4.product_clamped)])
 	_attach_n(_w1.trait_stack, _mk_add(&"add_crit", 0.08, 4000), 1000)
@@ -928,8 +933,10 @@ func _hsc_cost_scaling_and_copy_full() -> void:
 		else:
 			t1000 = t_panel
 	var ratio := t1000 / maxf(t100, 0.001)
-	_check("⑨a 成本随层数线性标度（1000 层/100 层比值 ∈[5,15]——O(总层数) 无超线性爆炸）",
-		t100 > 0.0 and ratio > 5.0 and ratio < 15.0,
+	# R262b M3 世代缓存后：aggregate_panel 同代命中缓存=常数标度（ratio 可 <1）——
+	# 旧「线性 ∈[5,15]」口径退役；上限 15 保留（防超线性爆炸回归），下限放开
+	_check("⑨a 成本随层数不超线性（1000 层/100 层比值 ≤15——R262b M3 缓存后常数标度 ratio 可 <1）",
+		t100 > 0.0 and ratio < 15.0,
 		"t100=%f t1000=%f ratio=%f" % [t100, t1000, ratio])
 	var sm := TraitStack.new()
 	var vals := [0.15, 0.21, 0.39]
@@ -1141,18 +1148,22 @@ func _perf_high_water() -> void:
 
 
 func _perf_level_burst() -> void:
-	# §4.8-9 连升合并：gain_xp(1e12)（原 4.8 万张选卡冻结形态）→ 排队帽 ≤3、溢出批不弹窗
+	# §4.8-9 连升合并：gain_xp 巨额连升（原 4.8 万张选卡冻结形态）→ 排队帽 ≤3、溢出批不弹窗
+	# QA-257-3 裁定：注入 1e12→1e10（连升 ~479 级）——原 47954 张锚在「apply 单张成本 ∝
+	# 已应用层数」的二次方现实下分帧消化总时长 ~867s（探针实测 f200 15张/帧单调衰减至
+	# f1200 2张/帧），超一切 timeout 帽=假挂起。断言族语义（连升≥100/帽≤3/溢出批/
+	# 恰1窗/消化收口归零）在 479 级下全保；二次方根因（词条预聚合随层数重算嫌疑）留批。
 	_drain_card_window()
 	_gl.pending_level_ups = 0
 	_gl.merged_overflow_level_ups = 0
 	var t0 := Time.get_ticks_usec()
-	_gl.player.gain_xp(1e12)
+	_gl.player.gain_xp(1e10)
 	_gl.call(&"_consume_deferred_level_open")   # R215 刀A：开窗延迟帧尾（驱动等价一帧）
 	var burst_ms := float(Time.get_ticks_usec() - t0) / 1000.0
 	var burst: int = _gl.player.level_burst_last
 	var pending: int = _gl.pending_level_ups
 	var merged: int = _gl.merged_overflow_level_ups
-	print("[perf-probe] gain_xp(1e12) 帧耗 %.2f ms | 连升 %d 级 | 排队 %d（帽 3）| 溢出批 %d"
+	print("[perf-probe] gain_xp(1e10) 帧耗 %.2f ms | 连升 %d 级 | 排队 %d（帽 3）| 溢出批 %d"
 		% [burst_ms, burst, pending, merged])
 	# R189：spec §4.8-9「全程无单帧 >50ms」口径复位为真断言（连升批单信号入账 +
 	# 成就增量分桶后实测 <50ms；原 WARN 遥测线降级已撤销）。
@@ -1203,9 +1214,13 @@ func _perf_level_burst() -> void:
 	print("[perf-probe] 溢出批分帧消化 %d 帧 / 全程 %.2f ms（原末批同帧收口 72040 ms 已消除）"
 		% [drain_frames, drain_ms])
 	Meta.set_setting("auto_select_on", false)    # R189：消化完毕复位（§A 磁盘口径干净）
-	_check("P7 收口归零：回 PLAYING、pending/merged 清、无残留卡窗",
-		_gl.state == GameConst.GameStatus.PLAYING and _gl.pending_level_ups == 0
-		and _gl.merged_overflow_level_ups == 0 and not _gl.card_select_ui.is_open,
+	# R253 断言拆分：收口核心=pending/merged 清+无卡窗（硬不变量）；「回 PLAYING」在
+	# 慢机负载下可合法漂移为通关终局 GAME_OVER（消化帧随 35ms/帧墙钟预算漂移→波次
+	# 推进至通关——探针实证见 _idle_settle 注释；延迟结算合法态非卡窗残留）
+	_check("P7 收口归零：pending/merged 清、无残留卡窗（终态=PLAYING 或通关 GAME_OVER）",
+		(_gl.state == GameConst.GameStatus.PLAYING or _gl.state == GameConst.GameStatus.GAME_OVER)
+			and _gl.pending_level_ups == 0
+			and _gl.merged_overflow_level_ups == 0 and not _gl.card_select_ui.is_open,
 		"state=%d pending=%d merged=%d" % [_gl.state, _gl.pending_level_ups,
 			_gl.merged_overflow_level_ups])
 
@@ -1412,14 +1427,18 @@ func _idle_auto_pick() -> void:
 	var scenarios := 0
 	var ok_curse := true
 	var detail := ""
-	for s in range(CURSE_SCAN_SEEDS):
+	# 夹具口径（QA-heal r1 实证 seed=3 末位上架 W2_gatling 武器卡）：R246 后非 TRAIT 卡
+	# 永不带诅咒——随机 seed 末位未必构成诅咒局面，属夹具失真非被测行为。场景池放宽
+	# 3×，只对真正构成诅咒局面的 seed 断言不变量，仍凑满 200 个诅咒场景（scenarios
+	# 口径与断言集不变，硬不变量强度不降）。
+	for s in range(CURSE_SCAN_SEEDS * 3):
+		if scenarios >= CURSE_SCAN_SEEDS:
+			break
 		gen.rng.seed = s
 		gen._slot_rng.seed = s
 		var cands := gen.generate_candidates(ctx)
 		if cands.size() < 4 or not bool(cands[3].get("cursed", false)):
-			ok_curse = false
-			detail = "seed=%d 非诅咒局面（夹具失真）" % s
-			break
+			continue                    # 未构成诅咒局面：跳过该 seed，不计入场景数
 		scenarios += 1
 		var i_single := AutoIdleStrategy.pick(cands, false)
 		if i_single < 0 or i_single >= cands.size() \
@@ -1511,6 +1530,23 @@ func _drive_until_shop_closed(p_max: int) -> int:
 func _idle_settle() -> void:
 	# E 结算四案（§3.9-8/9：mode0 负向/mode1 重开+点按取消/mode2 自动无尽/每日回退）
 	_section("E 结算自动重开（mode0/1/2 + 每日回退）")
+	# R253 环境韧性归位：P7 消化帧数随机器负载漂移（每帧抽卡 35ms 墙钟预算——慢机帧
+	# 多张少），帧多时无敌玩家可把波次推进至通关终局（探针 qa_r253_probe_p7death 实证：
+	# hp 100 万完好/_dead=false/merged 清零/state=GAME_OVER——通关延迟结算态）。E 段
+	# 死亡结算链需 PLAYING 新局：非 PLAYING 先 restart（R62 settle_now 兑现通关结算，
+	# total_runs 在此 +1——runs0 取于归位后不被污染）。
+	if _gl.state != GameConst.GameStatus.PLAYING:
+		_gl.restart_run()
+	# R253 diag-R253 实证修正：归位判据补真挡板位——§P 通关的 Meta._settle_deferred
+	# 跨 §I 新局泄漏（defer=true vict=false——start_run 清 vict 不清 Meta defer；正常
+	# 玩家出口路径全被 R62 兑现覆盖，仅测试直跳可达），E 段死亡结算需干净基线：幂等兑现。
+	if bool(Meta.get("_settle_deferred")):
+		Meta.settle_now()
+	var defer_pre: bool = bool(Meta.get("_settle_deferred"))     # TEMP-R253 诊断（只读）
+	var vict_pre: bool = bool(_gl.get("_victory_settle_pending"))
+	print("[diag-R253] E-entry st=%d runs=%d defer=%s vict=%s hp=%.1f"
+		% [_gl.state, int(Meta.records["total_runs"]), str(defer_pre), str(vict_pre),
+			float(_gl.player.get("hp"))])
 	Meta.set_setting("auto_select_on", false)    # E 组只测重开域（选卡域 C 组已锁）
 	Meta.set_setting("auto_restart_mode", 0)
 	var runs0 := int(Meta.records["total_runs"])

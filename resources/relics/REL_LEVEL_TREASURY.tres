@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_LEVEL_TREASURY"
+display_name = "跃升金库"
+description = "每次升级获得 25 金币（连升批量一次入账）"
+rarity = 3
+listen_events = [&"level_up"]
+effect_id = &"REL_EF_LEVEL_GOLD"
+params = {"gold_per_level": 25}
+unique = true

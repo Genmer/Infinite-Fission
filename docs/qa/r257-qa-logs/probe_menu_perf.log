@@ -1,0 +1,80 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+════ R252-M0 菜单性能探针（headless 直调 handler 计时） ════
+WARNING: Nodes with non-equal opposite anchors will have their size overridden after _ready(). 
+If you want to set size, change the anchors or consider using set_deferred().
+     at: _set_size (scene/gui/control.cpp:1448)
+{
+  "boot_ready": true,
+  "carddesc_remaining_after_12000": 748,
+  "carddesc_remaining_after_4000": 726,
+  "carddesc_total_built": 808,
+  "children_same_frame": {
+    "codex_open_first": 29,
+    "codex_open_second": 29,
+    "codex_tab_反应_first": 21,
+    "codex_tab_反应_second": 21,
+    "codex_tab_怪物_first": 29,
+    "codex_tab_怪物_second": 29,
+    "codex_tab_武器_first": 13,
+    "codex_tab_武器_second": 13,
+    "codex_tab_祝福_first": 73,
+    "codex_tab_祝福_second": 73,
+    "codex_tab_遗物_first": 40,
+    "codex_tab_遗物_second": 40,
+    "lobby_ach": 24,
+    "lobby_ach_page2": 24,
+    "lobby_char": 13,
+    "lobby_daily": 6,
+    "lobby_records": 12,
+    "lobby_upgrade": 10,
+    "map_difficulty_repick": 6,
+    "map_select_open": 6
+  },
+  "handlers_us": {
+    "carddesc_pump_12000": 12100,
+    "carddesc_pump_4000": 4238,
+    "codex_open_first": 61189,
+    "codex_open_second": 2663,
+    "codex_tab_反应_first": 80785,
+    "codex_tab_反应_second": 5888,
+    "codex_tab_怪物_first": 2672,
+    "codex_tab_怪物_second": 2632,
+    "codex_tab_武器_first": 10312,
+    "codex_tab_武器_second": 1387,
+    "codex_tab_祝福_first": 29195,
+    "codex_tab_祝福_second": 7419,
+    "codex_tab_遗物_first": 26969,
+    "codex_tab_遗物_second": 3773,
+    "delegate_icon_cold": 7,
+    "delegate_icon_warm": 2,
+    "lobby_ach": 18232,
+    "lobby_ach_page2": 12233,
+    "lobby_char": 20382,
+    "lobby_daily": 2675,
+    "lobby_records": 4935,
+    "lobby_upgrade": 7414,
+    "map_difficulty_repick": 9974,
+    "map_select_open": 14521,
+    "tex_prewarm_12000": 2
+  },
+  "prewarm_drained": true,
+  "probe": "r252_menu_perf",
+  "registry": {
+    "enemies": 29,
+    "relics": 40,
+    "traits": 73,
+    "weapons": 13
+  },
+  "tex_prewarm_queue_left": 0
+}
+JSON 已写：res://tests/runner/_probe_r252_menu_perf.json
+WARNING: 828 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 54 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 1015 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 5 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 2 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

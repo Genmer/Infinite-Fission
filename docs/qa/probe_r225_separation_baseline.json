@@ -9,19 +9,19 @@
 		"占位命中跳过元素附着（R223 评审#2 语义）——TICK 臂零附着零反应（与 r224 夹具感0 基线一致）"
 	],
 	"median": {
-		"derived_per_proj_tick_us": 70.7890205995469,
-		"derived_per_proj_tick_us_mean": 65.7031890914754,
-		"derived_reconcile_ratio": 0.9295860234466,
-		"derived_settle_share_pct_mean": 17.8262177634221,
-		"derived_settle_share_pct_p50": 37.0277151900101,
-		"derived_upper_bound_us_res": 393.853917679751,
-		"micro_per_settle_us_median": 50.3645833333334,
-		"res_proj_seg_mean_ms": 20.1583344444445,
-		"res_proj_seg_p50_ms": 19.601,
+		"derived_per_proj_tick_us": 52.8674160680724,
+		"derived_per_proj_tick_us_mean": 53.2946199270953,
+		"derived_reconcile_ratio": 1.0265542049093,
+		"derived_settle_share_pct_mean": 20.1894338912583,
+		"derived_settle_share_pct_p50": 40.7289718290511,
+		"derived_upper_bound_us_res": 293.744323197919,
+		"micro_per_settle_us_median": 46.8098958333333,
+		"res_proj_seg_mean_ms": 15.0355122222222,
+		"res_proj_seg_p50_ms": 14.443,
 		"res_settle_per_step_p50": 51.1833333333333,
-		"tick_proj_seg_mean_ms": 16.5657166666666,
-		"tick_proj_seg_p50_ms": 12.346,
-		"tick_separate_drop_per_s": 2853.5
+		"tick_proj_seg_mean_ms": 11.9996083333333,
+		"tick_proj_seg_p50_ms": 8.5565,
+		"tick_separate_drop_per_s": 3152.5
 	},
 	"meta": {
 		"arms": "RES=override -3 帽96@60Hz（r224 S1 同配置）/ TICK=override -4 全弃（separate_drop 计数、零结算）/ MICRO=override -2 直驱管线合成结算（批 48/96/192，对真敌实例构建 ctx）",
@@ -42,20 +42,20 @@
 		{
 			"date": "2026-10-05",
 			"derived": {
-				"per_proj_tick_us": 73.5337137137137,
-				"per_proj_tick_us_mean": 67.2250560512468,
-				"per_settle_us_micro": 50.6041666666667,
-				"reconcile_ratio": 0.97799671592775,
-				"res_seg_mean_ms": 20.0374983333334,
-				"res_settle_step": 50.75,
-				"settle_share_pct_mean": 18.5303266262143,
-				"settle_share_pct_p50": 38.8357502828345,
-				"tick_drop_s": 2978,
-				"tick_over_res_seg": 0.814696733737857,
-				"tick_proj_mean": 242.833333333333,
-				"tick_proj_p50": 222,
-				"tick_seg_mean_ms": 16.3244844444444,
-				"upper_bound_us_res": 394.827553366174
+				"per_proj_tick_us": 48.9986639118458,
+				"per_proj_tick_us_mean": 49.9060465768799,
+				"per_settle_us_micro": 45.09375,
+				"reconcile_ratio": 1.02855267476206,
+				"res_seg_mean_ms": 14.8286211111111,
+				"res_settle_step": 50.7833333333333,
+				"settle_share_pct_mean": 20.0352036927983,
+				"settle_share_pct_p50": 39.3541092502297,
+				"tick_drop_s": 3134,
+				"tick_over_res_seg": 0.799647963072017,
+				"tick_proj_mean": 237.6,
+				"tick_proj_p50": 242,
+				"tick_seg_mean_ms": 11.8576766666667,
+				"upper_bound_us_res": 291.997790176129
 			},
 			"gates": {
 				"G1 RES 敌带 p50≥118（负载在位）": {
@@ -63,7 +63,7 @@
 					"ok": true
 				},
 				"G2 RES 弹带 p50≥60（弹群在位；上沿披露不设门）": {
-					"detail": "393",
+					"detail": "412",
 					"ok": true
 				},
 				"G3 TICK 零结算（结算窗增量=0 且 冲刷窗增量=0 且 顺延窗增量=0 且 反应窗增量=0）": {
@@ -71,7 +71,7 @@
 					"ok": true
 				},
 				"G4 TICK 弃计数在走（separate_drop 窗内>0）": {
-					"detail": "85587",
+					"detail": "88174",
 					"ok": true
 				},
 				"G5 MICRO 线性度（三档 µs/结算 max/min ≤3=同数量级）": {
@@ -83,61 +83,61 @@
 					"ok": true
 				},
 				"G7* 对账比 separate_drop/s ÷（RES 结/步×60）∈[1/3,3]（TICK 臂敌不死→新星级联需求缺失=结构性偏差）": {
-					"detail": "0.98",
+					"detail": "1.03",
 					"disclosed": true,
 					"ok": true
 				},
 				"G8* TICK/RES 弹段比 ∈[0.2,2.0]（双臂动态同量级）": {
-					"detail": "0.81",
+					"detail": "0.80",
 					"disclosed": true,
 					"ok": true
 				},
 				"G9* 结算份额 ∈[0,100]%（负值=噪声淹没，两轮中位数判）": {
-					"detail": "38.8%",
+					"detail": "39.4%",
 					"disclosed": true,
 					"ok": true
 				}
 			},
 			"micro": {
 				"batch_us": {
-					"192": 48.640625,
-					"48": 50.6041666666667,
-					"96": 50.6770833333333
+					"192": 45.09375,
+					"48": 43.7708333333333,
+					"96": 45.6145833333333
 				},
 				"batches": "[48, 96, 192]",
 				"deferred_total": 0,
 				"dupe_total": 0,
-				"linearity_ratio": 1.04186743762716,
-				"per_settle_us_median": 50.6041666666667,
+				"linearity_ratio": 1.0421227986673,
+				"per_settle_us_median": 45.09375,
 				"planned_total": 336,
 				"separate_drop_total": 0,
 				"settles_total": 336
 			},
 			"res": {
-				"deferred_per_step_p50": 0.4,
-				"deferred_window": 3094,
+				"deferred_per_step_p50": 0.366666666666667,
+				"deferred_window": 3095,
 				"dropped_per_step_p50": 0,
 				"enemy_p50": 120,
-				"flush_window": 2980,
-				"killed_in_window": 2838,
+				"flush_window": 2999,
+				"killed_in_window": 2834,
 				"label": "RES 臂（override=-3 帽96@60Hz——r224 S1 同配置，结算臂）",
 				"override": -3,
 				"popup_p50": 79,
-				"proj_max": 521,
-				"proj_mean": 401.766666666667,
-				"proj_p50": 393,
-				"proj_seg_mean_ms": 20.0374983333334,
-				"proj_seg_p50_ms": 19.446,
-				"proj_seg_p95_ms": 32.179,
+				"proj_max": 570,
+				"proj_mean": 415.3,
+				"proj_p50": 412,
+				"proj_seg_mean_ms": 14.8286211111111,
+				"proj_seg_p50_ms": 14.151,
+				"proj_seg_p95_ms": 24.839,
 				"reaction_window": 0,
 				"separate_drop_per_s": 0,
 				"separate_drop_window": 0,
-				"settle_per_s_p50": 3045,
-				"settle_per_step_p50": 50.75,
-				"settle_window": 91507,
-				"subs_per_step_p50": 51.15,
-				"wall_p50_ms": 27.075,
-				"wall_p95_ms": 41.157
+				"settle_per_s_p50": 3047,
+				"settle_per_step_p50": 50.7833333333333,
+				"settle_window": 90181,
+				"subs_per_step_p50": 52.4833333333333,
+				"wall_p50_ms": 20.268,
+				"wall_p95_ms": 31.657
 			},
 			"round": 1,
 			"tick": {
@@ -150,40 +150,40 @@
 				"label": "TICK 臂（override=-4 全弃——纯 tick 对照，separate_drop 计数）",
 				"override": -4,
 				"popup_p50": 0,
-				"proj_max": 520,
-				"proj_mean": 242.833333333333,
-				"proj_p50": 222,
-				"proj_seg_mean_ms": 16.3244844444444,
-				"proj_seg_p50_ms": 11.894,
-				"proj_seg_p95_ms": 42.686,
+				"proj_max": 373,
+				"proj_mean": 237.6,
+				"proj_p50": 242,
+				"proj_seg_mean_ms": 11.8576766666667,
+				"proj_seg_p50_ms": 8.582,
+				"proj_seg_p95_ms": 29.589,
 				"reaction_window": 0,
-				"separate_drop_per_s": 2978,
-				"separate_drop_window": 85587,
+				"separate_drop_per_s": 3134,
+				"separate_drop_window": 88174,
 				"settle_per_s_p50": 0,
 				"settle_per_step_p50": 0,
 				"settle_window": 0,
 				"subs_per_step_p50": 0,
-				"wall_p50_ms": 16.486,
-				"wall_p95_ms": 46.093
+				"wall_p50_ms": 12.104,
+				"wall_p95_ms": 32.975
 			}
 		},
 		{
 			"date": "2026-10-05",
 			"derived": {
-				"per_proj_tick_us": 68.0443274853801,
-				"per_proj_tick_us_mean": 64.181322131704,
-				"per_settle_us_micro": 50.125,
-				"reconcile_ratio": 0.88117533096545,
-				"res_seg_mean_ms": 20.2791705555556,
-				"res_settle_step": 51.6166666666667,
-				"settle_share_pct_mean": 17.1221089006298,
-				"settle_share_pct_p50": 35.2196800971857,
-				"tick_drop_s": 2729,
-				"tick_over_res_seg": 0.828778910993702,
-				"tick_proj_mean": 261.866666666667,
-				"tick_proj_p50": 247,
-				"tick_seg_mean_ms": 16.8069488888889,
-				"upper_bound_us_res": 392.880281993327
+				"per_proj_tick_us": 56.7361682242989,
+				"per_proj_tick_us_mean": 56.6831932773108,
+				"per_settle_us_micro": 48.5260416666667,
+				"reconcile_ratio": 1.02455573505654,
+				"res_seg_mean_ms": 15.2424033333333,
+				"res_settle_step": 51.5833333333333,
+				"settle_share_pct_mean": 20.3436640897182,
+				"settle_share_pct_p50": 42.1038344078724,
+				"tick_drop_s": 3171,
+				"tick_over_res_seg": 0.796563359102818,
+				"tick_proj_mean": 214.2,
+				"tick_proj_p50": 214,
+				"tick_seg_mean_ms": 12.14154,
+				"upper_bound_us_res": 295.490856219709
 			},
 			"gates": {
 				"G1 RES 敌带 p50≥118（负载在位）": {
@@ -191,7 +191,7 @@
 					"ok": true
 				},
 				"G2 RES 弹带 p50≥60（弹群在位；上沿披露不设门）": {
-					"detail": "402",
+					"detail": "400",
 					"ok": true
 				},
 				"G3 TICK 零结算（结算窗增量=0 且 冲刷窗增量=0 且 顺延窗增量=0 且 反应窗增量=0）": {
@@ -199,11 +199,11 @@
 					"ok": true
 				},
 				"G4 TICK 弃计数在走（separate_drop 窗内>0）": {
-					"detail": "83892",
+					"detail": "86225",
 					"ok": true
 				},
 				"G5 MICRO 线性度（三档 µs/结算 max/min ≤3=同数量级）": {
-					"detail": "1.13",
+					"detail": "1.15",
 					"ok": true
 				},
 				"G6 MICRO 纯净（结算=336 · 顺/弃/复=0——零混入）": {
@@ -211,61 +211,61 @@
 					"ok": true
 				},
 				"G7* 对账比 separate_drop/s ÷（RES 结/步×60）∈[1/3,3]（TICK 臂敌不死→新星级联需求缺失=结构性偏差）": {
-					"detail": "0.88",
+					"detail": "1.02",
 					"disclosed": true,
 					"ok": true
 				},
 				"G8* TICK/RES 弹段比 ∈[0.2,2.0]（双臂动态同量级）": {
-					"detail": "0.83",
+					"detail": "0.80",
 					"disclosed": true,
 					"ok": true
 				},
 				"G9* 结算份额 ∈[0,100]%（负值=噪声淹没，两轮中位数判）": {
-					"detail": "35.2%",
+					"detail": "42.1%",
 					"disclosed": true,
 					"ok": true
 				}
 			},
 			"micro": {
 				"batch_us": {
-					"48": 48.375,
-					"96": 54.5520833333333,
-					"192": 50.125
+					"48": 51.1666666666667,
+					"96": 44.3125,
+					"192": 48.5260416666667
 				},
 				"batches": "[48, 96, 192]",
 				"deferred_total": 0,
 				"dupe_total": 0,
-				"linearity_ratio": 1.12769164513351,
-				"per_settle_us_median": 50.125,
+				"linearity_ratio": 1.15467795016455,
+				"per_settle_us_median": 48.5260416666667,
 				"planned_total": 336,
 				"separate_drop_total": 0,
 				"settles_total": 336
 			},
 			"res": {
-				"deferred_per_step_p50": 0.483333333333333,
-				"deferred_window": 1520,
+				"deferred_per_step_p50": 0.716666666666667,
+				"deferred_window": 3158,
 				"dropped_per_step_p50": 0,
 				"enemy_p50": 120,
-				"flush_window": 1501,
-				"killed_in_window": 2820,
+				"flush_window": 3010,
+				"killed_in_window": 2871,
 				"label": "RES 臂（override=-3 帽96@60Hz——r224 S1 同配置，结算臂）",
 				"override": -3,
 				"popup_p50": 79,
-				"proj_max": 655,
-				"proj_mean": 396.533333333333,
-				"proj_p50": 402,
-				"proj_seg_mean_ms": 20.2791705555556,
-				"proj_seg_p50_ms": 19.756,
-				"proj_seg_p95_ms": 31.105,
+				"proj_max": 582,
+				"proj_mean": 410.3,
+				"proj_p50": 400,
+				"proj_seg_mean_ms": 15.2424033333333,
+				"proj_seg_p50_ms": 14.735,
+				"proj_seg_p95_ms": 24.38,
 				"reaction_window": 0,
 				"separate_drop_per_s": 0,
 				"separate_drop_window": 0,
-				"settle_per_s_p50": 3097,
-				"settle_per_step_p50": 51.6166666666667,
-				"settle_window": 91093,
-				"subs_per_step_p50": 52.05,
-				"wall_p50_ms": 27.492,
-				"wall_p95_ms": 39.714
+				"settle_per_s_p50": 3095,
+				"settle_per_step_p50": 51.5833333333333,
+				"settle_window": 92779,
+				"subs_per_step_p50": 52.6,
+				"wall_p50_ms": 21.106,
+				"wall_p95_ms": 31.383
 			},
 			"round": 2,
 			"tick": {
@@ -278,21 +278,21 @@
 				"label": "TICK 臂（override=-4 全弃——纯 tick 对照，separate_drop 计数）",
 				"override": -4,
 				"popup_p50": 0,
-				"proj_max": 414,
-				"proj_mean": 261.866666666667,
-				"proj_p50": 247,
-				"proj_seg_mean_ms": 16.8069488888889,
-				"proj_seg_p50_ms": 12.798,
-				"proj_seg_p95_ms": 41.747,
+				"proj_max": 411,
+				"proj_mean": 214.2,
+				"proj_p50": 214,
+				"proj_seg_mean_ms": 12.14154,
+				"proj_seg_p50_ms": 8.531,
+				"proj_seg_p95_ms": 31.317,
 				"reaction_window": 0,
-				"separate_drop_per_s": 2729,
-				"separate_drop_window": 83892,
+				"separate_drop_per_s": 3171,
+				"separate_drop_window": 86225,
 				"settle_per_s_p50": 0,
 				"settle_per_step_p50": 0,
 				"settle_window": 0,
 				"subs_per_step_p50": 0,
-				"wall_p50_ms": 17.285,
-				"wall_p95_ms": 46.508
+				"wall_p50_ms": 12.092,
+				"wall_p95_ms": 35.345
 			}
 		}
 	]

@@ -38,6 +38,10 @@
 #   运行中购卡即时生效；聚合值走 _pierce_cache 面板缓存，逐帧零分配——R188
 #   每帧分配红线）。pause 面板穿透列经 pause_overlay.gd:566 has_method
 #   守卫自动转正（零改动）。
+# ── R201 发射口对齐补口（2026-10-01，用户「棱镜的激光不是从棱镜发出」）──
+# · muzzle_position 覆写为 _avatar_muzzle()（R25 禁令当时只落弹道/自导——激光族
+#   漏网）；主束生成/逐拍 set_origin、副束生成位 + 逐拍原点同步（sub_beam 标记
+#   过滤，W5 折射链束从敌命中点出束不经此口）全部收敛到化身枪口。
 class_name LaserWeapon
 extends WeaponBase
 
@@ -93,6 +97,16 @@ func _exit_tree() -> void:
 	active_beams.clear()
 
 
+func muzzle_position() -> Vector2:
+	# R201 发射口对齐补口（用户反馈「棱镜的激光不是从棱镜发出」）：R25 禁令
+	# 「发射口和武器对不上」当时只覆写弹道/自导——激光族（W4 主束/副束、W5 锚束）
+	# 一直从玩家本体位出束，棱镜化身悬在旁边。与 ballistic/homing 同款走化身枪口，
+	# 化身不可用回退本体位（_avatar_muzzle 兜底）；镜面内壳激光经 R191#2 别名链
+	# 解析到包装体化身枪口（先例：镜面加特林枪口）。R253：豁免 12px 屏幕钳制——
+	# 束锚纯视觉，贴边钳制会与棱镜化身脱钩（R201 评审 low 遗留清账）
+	return _avatar_muzzle(true)
+
+
 func try_fire() -> bool:
 	# 维持主光束（无目标也保持指向 UP——全自动开火持续）+ 副束补位
 	if laser_pool == null:
@@ -117,8 +131,11 @@ func focus_multiplier() -> float:
 func _on_tick_post(p_game_delta: float) -> void:
 	# 主束重定向 + 副束补位/再瞄准 + 存活光束推进（死亡段裁剪）+ 灼焦池清扫
 	var aim := aim_direction()
+	# R201 评审#2：枪口本拍取一次共用（avatar_global 内 _entries_of 每调用新建 Array
+	# 线性查——主束+逐副束各调一次违反 R188 每帧分配红线；hoist 后 1 次/拍）
+	var mp := muzzle_position()
 	if _main_beam != null and _main_beam.is_live():
-		_main_beam.set_origin(muzzle_position())
+		_main_beam.set_origin(mp)
 		_main_beam.set_aim(aim)
 		# R191 逐拍回写：常驻束（lifetime=0）不重建而镜面 meta_atk_pct（ratio）mid-run
 		# 随 apply_state 变化——每拍刷新每跳 ATK（仿 _refresh_sub_beams tick_rate 回写先例）
@@ -126,6 +143,13 @@ func _on_tick_post(p_game_delta: float) -> void:
 		# R195 逐拍回写：运行中购买 AFF_PIERCE 穿透预算即时生效（仿上方 R191 先例——
 		# 常驻束不重建，预算随栈聚合 add_pierce 逐拍刷新）
 		_main_beam.pierce = _pierce_count()
+		# R211 逐拍回写：常驻主束元素随挂卡即时生效（仿 R191 tick_atk / R195 pierce 先例
+		# ——束不重建，element 取 dominant_element() 稳定主色；变化才重染。束色与跳字
+		# 元素链（ctx.element→result.element→跳字配色）同步恢复，此前恒停在建束时快照）
+		var beam_elem := dominant_element()
+		if _main_beam.element != beam_elem:
+			_main_beam.element = beam_elem
+			_main_beam.refresh_element_tint()
 		# R91 聚焦爬坡：主束当前命中目标与上次一致 → 计时累积；换目标保留/归零
 		var hit_uid := _main_beam.last_hit_uid
 		if hit_uid > 0 and hit_uid == _focus_uid:
@@ -139,6 +163,12 @@ func _on_tick_post(p_game_delta: float) -> void:
 			_main_beam.apply_focus_visual(_focus_time)
 	_refresh_sub_beams()
 	_update_sub_aims(aim)
+	# R201：副束原点逐拍同步化身枪口（主束上方 set_origin 同律——化身公转/转向下
+	# 原点若只在生成时定格会与棱镜视觉脱钩）。只动 sub_beam 标记束：W5 折射链束
+	# 从敌命中点出束（深度>0 通道），_alive_sub_beams 含它但不得重钉原点
+	for b in active_beams:
+		if b != null and is_instance_valid(b) and b.is_live() and b.sub_beam:
+			b.set_origin(mp)
 	for beam in active_beams.duplicate():
 		if beam.is_live():
 			beam.tick(p_game_delta)
@@ -205,7 +235,7 @@ func _spawn_beam(p_origin: Vector2, p_dir: Vector2, p_depth: int, p_dmg_mult: fl
 		"refract_depth": int(_leveled_param("refract_depth",
 			float(data.laser.get("refract_depth", 2)))),
 		"panel_snapshot": build_panel_snapshot(),
-		"trait_stack": trait_stack.copy_runtime() if trait_stack != null else null,
+		"trait_stack": trait_stack.acquire_runtime() if trait_stack != null else null,   # R220 刀5 池借出（开关关=copy_runtime 原路径逐位等价）
 		"weapon_uid": uid,
 		"weapon_ref": self,
 		"target_uid": p_target_uid,
@@ -275,9 +305,23 @@ func _nearest_unhit(p_pos: Vector2, p_exclusions: Array[int]) -> Node2D:
 func attach_trait(p_trait: TraitData) -> bool:
 	# 词条挂载钩子（副束/拓扑卡挂上即时补位——横幅与束数徽标即挂即现）
 	var ok := super(p_trait)
-	if ok and laser_pool != null and p_trait != null \
-			and (p_trait.id == &"MEC_SPLIT_PRISM" or TOPOLOGY_IDS.has(p_trait.id)):
-		_refresh_sub_beams()
+	if ok and laser_pool != null and p_trait != null:
+		if p_trait.id == &"MEC_SPLIT_PRISM" or TOPOLOGY_IDS.has(p_trait.id):
+			_refresh_sub_beams()
+		elif int(p_trait.pool) == GameConst.PoolClass.ELEM:
+			# R211 副束元素陈旧快照补口：存活副束 element 停在生成时快照——此前挂 ELEM
+			# 卡只对之后新生成的副束生效。挂卡即按 SPECTRA 轮转序（锁定次序）重算存活
+			# 副束 element 并重染；主束由 _on_tick_post 逐拍回写通道兜底（挂卡即拍生效）。
+			# 折射子束（sub_beam=false）只走 refresh：光谱色优先级在元素染色之上，
+			# 重解析仍保光谱观感、element 不改写（spawn 时已带 dominant_element）。
+			var sub_i := 0
+			for b in _alive_sub_beams():
+				if b.sub_beam:
+					var want := _sub_element(sub_i)
+					sub_i += 1
+					if b.element != want:
+						b.element = want
+				b.refresh_element_tint()
 	return ok
 
 
@@ -582,7 +626,8 @@ func _emit_subbeam_spawned(p_is_copy: bool) -> void:
 
 func _leveled_param(p_key: String, p_default: float) -> float:
 	# 逐级形态参数（形态段新增键 <key>_levels: Array[float]——A3 §3.4/§3.5 逐级递进）
-	var levels: Variant = data.laser.get(String(p_key) + "_levels", null)
+	# QA-heal r1：键串拼改 WeaponBase._leveled_key 静态键缓存（常量税——光束自持链触达）
+	var levels: Variant = data.laser.get(WeaponBase._leveled_key(p_key), null)
 	if levels is Array and level >= 1 and level <= (levels as Array).size():
 		return float((levels as Array)[level - 1])
 	return p_default

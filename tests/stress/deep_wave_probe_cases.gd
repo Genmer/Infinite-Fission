@@ -26,6 +26,10 @@ func run(p_tree: SceneTree) -> void:
 	seed(42)
 	_boot()
 	_start_run()
+	# R256 修轮（评审 M2）：负载在场守卫——挂 MENU 形态各探针段静默跳过=假绿堵死
+	if _gl.state != GameConst.GameStatus.PLAYING:
+		print("[deep-probe] 负载在场守卫 FAIL：state=%d 非 PLAYING（直调修失效嫌疑）" % _gl.state)
+		_fails += 1
 	_probe_w233_build()
 	_probe_high_water()
 	_probe_level_burst()
@@ -47,7 +51,11 @@ func _boot() -> void:
 
 
 func _start_run() -> void:
-	_gl.menu_screen.start_requested.emit()
+	# R256 序0：直调绕 R252 祝福面板（emit 经 lambda _on_menu_start 被面板挂起，state 停 MENU
+	# =压力门自 R252 起静默空转 16 天；qa_r255_perf_battle 直调先例）
+	_gl._blessing_pending = false
+	_gl.current_map_id = MapTable.FIRST_MAP_ID
+	_gl._finish_menu_start(MapTable.FIRST_MAP_ID)
 	for i in range(8):
 		_gl._physics_process(DT)
 	_gl.player.invuln_left = 1.0

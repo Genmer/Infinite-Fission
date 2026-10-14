@@ -90,8 +90,8 @@ PASS | 三选一 roll 数量 = 3
 PASS | 卡面字段齐全（kind/id/display_name）
 PASS | 稀有度权重分布合理（金卡 500 抽 ≤55，w<10 基础权重 6%）
 PASS | 夹具：AFF_ATK_UP 存在（stack_max=3）
-PASS | 叠层上限过滤：满 stack_max 层 ID 仍上架（ADD 池帽放宽至 stack_max+5）
-PASS | 叠层上限过滤：满 stack_max+5 层 ID 移出候选池
+PASS | 叠层过滤拆除：满 stack_max 层 ID 仍上架
+PASS | 叠层过滤拆除：满 8 层（原 stack_max+5 帽点）仍上架（R226 无限供给）
 PASS | 同批货架去重（picked 过滤）
 PASS | 卡池耗尽 → 全 fallback（AC-16.4）
 PASS | fallback 应用：主武器栈 +1

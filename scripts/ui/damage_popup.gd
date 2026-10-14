@@ -15,6 +15,13 @@
 # 反应名+rxn_stat 短文案段（超导-30%/激化+25%/结晶-15%/冻结1.2s；空串只显名，数值由
 # manager 起字读表格式化、禁进 const 文案表）；REACTION_LOOKS 扩 20 反应（名称单源
 # GameConst.REACTION_NAMES）；元素配色单源 PopPalette.ELEMENT_COLORS（本地副本已删）。
+# R225 渲染首刀·跳字位图化（mobile 门，桌面 Label 路径零扰动）：深载满载跳字 Label 文本
+# +描边是渲染 dc 大头——位图门内数值臂（NORMAL/CRIT/DOT/HEAL/XP/IMMUNE/CHARGE_BURST）
+# 改走 PopupGlyphAtlas 共享图集的 Sprite2D 序列（同贴图同材质=全跳字合并 1 dc/桶语义），
+# _ready 不建 Label（数值臂结构断言=零 Label 节点）；REACTION 臂（反应名大字/文字标签）
+# 保留 Label 路径（图集不烘焙反应名——低频必显通道，首次经 _ensure_label 惰性补建）。
+# 文本/tint/字号口径与 Label 分支逐位同源（_numeric_text/_bitmap_tint/_bitmap_px）；
+# 位图字形刷新无字体排版成本 → R212 限批/R221 脏龄保底逻辑原样保留（保底自然恒满足）。
 class_name DamagePopup
 extends Node2D
 
@@ -29,6 +36,8 @@ var rxn_stat: String = ""                     # R192 stat 型反应短文案段�
                                               # 池复用经 _reset_state/_clear_reaction_overrides 清空防串文案）
 
 var _label: Label = null
+var _glyph_sprites: Array[Sprite2D] = []      # R225 位图臂：数值字形 Sprite 序列（共享图集；
+                                              # 池化复用只增不删，退役置 hidden）
 var _reaction_styled: bool = false            # §5 契约：反应观感装配标志（_apply/_clear 成对翻转）
 var _life_left: float = 0.0                   # 剩余展示时长（s）
 var _rise_from: Vector2 = Vector2.ZERO        # 上浮起点（相对坐标基准）
@@ -271,20 +280,77 @@ const TIER_COLORS: Array[Color] = [
 # （fx_quality_cases/elem_immune_cases/verify_feedback_cases 既有锁零触碰）。
 static var fx_opacity := 1.0
 
+# ── R230 K1：跳字根 alpha 四分档量化（R229 刀2 elemental_fx_layer.Q_ALPHA_STEPS 同定律） ──
+# 根 modulate.a 的全部写点（tick 淡出① / _reset_state 复位②）过 _qa() 落 0.25 步进——
+# 跳字根逐帧连续 alpha=逐件唯一 modulate=逐张独立 dc（vc33 定案：位图同图集也不合并）；
+# 量化后同图集（位图字形 Sprite 或字体图集 Label）+ 同档位共享 modulate 可合批，dc 从
+# live 跳字数坍缩到 ~档数（F8 族夹具预期 34-40→8-16）。位图路径（R227 PopupGlyphAtlas）
+# 与 Label 兜底路径行为不变——两路径同走根 modulate，本刀不分路径；渐隐时序语义不变
+# （t 驱动逐帧照跑，只改 alpha 写入粒度=4 档阶梯，R229/R217 先例已过评审）。QA 契约：
+# tests/runner/test_r230_k1_popup_quant.gd（写点全覆盖 grep 钉 + 双路径回归 + 不串档）。
+const Q_ALPHA_STEPS := 4                       # 渐隐量化档数（a ∈ {0, 0.25, 0.5, 0.75, 1.0}）
+
+
+static func _qa(p_a: float) -> float:
+	# alpha 四分档量化（写点处包整体表达式——最终乘积量化；R229 _qa 同式）
+	return float(roundi(clampf(p_a, 0.0, 1.0) * Q_ALPHA_STEPS)) / float(Q_ALPHA_STEPS)
+
 
 func _ready() -> void:
-	# 池化实例化期组装：Label 子节点（贴纸字：粗字重 + 藏青描边）
-	_label = Label.new()
-	_label.name = "Value"
-	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	StickerTheme.label_sticker(_label, FONT_SIZE, Color.WHITE, OUTLINE_PX, PopPalette.OUTLINE, true)
-	add_child(_label)
+	# 池化实例化期组装。R225 位图门：mobile（或覆写）走共享图集 Sprite 序列且不建 Label
+	#（数值臂零 Label 节点/零 Label dc）；桌面门保持既有 Label 装配逐位不变（零扰动）。
+	# 门在 _ready 一次性求值，实例生命周期内恒定（池化实例构成不随门翻转重建）。
+	if bitmap_gate():
+		_label = null
+	else:
+		_ensure_label()
 	visible = false
+
+
+func _ensure_label() -> Label:
+	# R225：Label 惰性装配——位图门 _ready 不建；REACTION 臂（mobile 保留 Label 路径）
+	# 首次起字经此一次性补建（低频豁免路径，节点创建 µs 级、排版仍走 R212 限批通道）
+	if _label == null:
+		_label = Label.new()
+		_label.name = "Value"
+		_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		StickerTheme.label_sticker(_label, FONT_SIZE, Color.WHITE, OUTLINE_PX, PopPalette.OUTLINE, true)
+		add_child(_label)
+	return _label
 
 
 var element: int = GameConst.Element.KIN      # 命中元素（R22：跳字元素配色）
 var _label_dirty: bool = false                # R189：合并期文字脏标记（reset_size 字形
                                               # 排版 ~10µs/次——同帧多合并推迟到 tick 一次刷新）
+var _dirty_age: float = 0.0                   # R221 修轮 M5：脏持续时长（秒；清脏即清零）——
+                                              # 与寿命无关的饥饿计量（merge 重置寿命不影响龄）
+# R221 Fix B/C 测试覆写口：-1=平台自动（mobile 延迟首排版/桌面立即）；0=强制立即；1=强制延迟
+static var defer_first_layout: int = -1
+
+# R225 位图门测试覆写口（先例 defer_first_layout 同款 static 口径）：-1=平台自动
+#（mobile=位图/桌面=Label）；0=强制 Label 路径；1=强制位图路径（图集未就绪仍回退）。
+# 用毕复位 -1（套件纪律，同 label_refresh_cap_override）。
+static var bitmap_override: int = -1
+
+# R225 位图门真源：override 优先；平台自动 = mobile。图集未烤完（boot 菜单预热未消化
+# 完即开局）恒回退 Label 路径——表现不劣化于现状（R215 先例口径），战斗期零烤图红线。
+static func bitmap_gate() -> bool:
+	if bitmap_override >= 0:
+		return bitmap_override == 1 and PopupGlyphAtlas.ready()
+	if not OS.has_feature("mobile"):
+		return false
+	return PopupGlyphAtlas.ready()
+
+
+func _defer_first_layout() -> bool:
+	# R221 Fix C：首排版分流真源（show_popup 用）——mobile 限批延迟（跳字束刺尖峰
+	# 只在 Android 字体排版贵），桌面立即保持字节级零扰动
+	if defer_first_layout >= 0:
+		return defer_first_layout == 1
+	return OS.has_feature("mobile")
+# R212 刀5 测试观测口：_refresh_label 执行次数（跳字排版限批断言——40 张脏弹字
+# 下一帧刷新数 ≤6 / 全部脏弹字 ≤7 帧内收敛）；进程级累计，套件自取基线差值
+static var refresh_label_calls: int = 0
 
 func show_popup(p_pos: Vector2, p_value: float, p_style: int, p_target_uid: int = 0,
 		p_tier: int = 0, p_element: int = GameConst.Element.KIN) -> void:
@@ -300,16 +366,44 @@ func show_popup(p_pos: Vector2, p_value: float, p_style: int, p_target_uid: int 
 	_life_left = LIFE_TIME
 	_bounce_left = BOUNCE_TIME
 	is_active = true
-	_refresh_label()
-	_label_dirty = false
+	# R221 Fix C：首排版按平台分流——mobile 并入 tick 限批通道（新起突发波一帧 20+
+	# 新跳字也 ≤6 排版/帧，vc27「跳」尖峰主源；驱动序成立：dispatch 在 ⑧段前、
+	# PopupManager.tick 在 _tick_ui，当帧入 _active_list 当帧消化）；桌面（限批帽 0）
+	# 保持立即排版——排版结果与既有口径字节级一致，零扰动。
+	# R225：位图门下驱动通道原样保留（首刷照走 deferred/tick）——位图字形刷新无字体
+	# 排版成本，限批/脏龄保底（R221）逻辑照跑，饥饿面自然恒满足。
+	if _defer_first_layout():
+		if _label != null:
+			_label.text = ""                  # 清上一命残留（避免限批延迟期闪旧数）
+		_hide_glyphs()                        # R225：位图字形臂同口径清残留（等 tick 首刷）
+		_label_dirty = true
+	else:
+		_refresh_label()
+		_label_dirty = false
 	visible = true
 
 
-func merge(p_value: float) -> void:
+func merge(p_value: float, p_style: int = -1, p_element: int = -1) -> void:
 	# 合并：数值累加 + 重置漂浮计时（E-17）+ 小幅重弹（果冻反馈）。
 	# R189：文字刷新推迟到本帧 tick（风暴形态同帧数十次合并 × reset_size 字形排版
 	# 是结算链消费方大头；一帧只渲染一次，中间值本就不可见——显示语义不变）
+	#
+	# R202 层1 扩参（尾部可选参，默认 -1 = 未传）：默认路径零语义变化——全仓测试唯一
+	# 直调 r192_element_cases.gd:727 `p0.merge(34.0)`（宿主 REACTION：升格条件为假、
+	# element 不改写，其后断言文本纯函数 f(look, merged_value) 不受影响）；加必选参
+	# 该套件编译红且不在五组任何清单——签名扩展硬约束。
+	# ① p_style==CRIT 且宿主 NORMAL → 照 upgrade_to_reaction(:318-328) 先例升样式
+	#   （_refresh_label 在 tick 读 style——CRIT 基础字号 40px 立即生效）；量级档重判
+	#   与档音/档震由 manager 承担（baseline_provider 在彼处，档音 tier>=3 先例）。
+	# ② p_element 仅直击宿主（NORMAL/CRIT）改写——异元素连击颜色不得停在第跳；
+	#   REACTION 宿主 element 承载 ReactionType 中性 ID（名称/双色真源），并入不改写
+	#   保旧语义；DOT/HEAL/XP 等非直击样式不吃元素配色，同样不改写。
 	merged_value += maxf(p_value, 0.0)
+	if p_style == GameConst.PopupStyle.CRIT and style == GameConst.PopupStyle.NORMAL:
+		style = GameConst.PopupStyle.CRIT
+	if p_element >= 0 and (style == GameConst.PopupStyle.NORMAL
+			or style == GameConst.PopupStyle.CRIT):
+		element = p_element
 	_life_left = MERGE_LIFE_RESET
 	_bounce_left = maxf(_bounce_left, BOUNCE_TIME * 0.6)
 	_label_dirty = true
@@ -325,22 +419,43 @@ func upgrade_to_reaction(p_value: float, p_rxn: int) -> void:
 	tier = 0
 	_life_left = MERGE_LIFE_RESET
 	_bounce_left = maxf(_bounce_left, BOUNCE_TIME * 0.6)
-	_refresh_label()
+	# R268 性能刀 P1：升格臂并入 R212 tick 限批（置脏走 tick 刷新，与 merge 通道 :409
+	# 同契约）——ms 级 Label 排版（反应臂 _apply_reaction_look+reset_size）逐出派发段
+	# （整窗计 diag「派µs」键，vc77 尖峰带 1017-17478µs 实锤成分）；桌面帽 0 同帧
+	# tick 刷零扰动，mobile ≤6/帧收敛，超龄保底（popup_manager :500-506 强制臂）不饿死。
+	# 零 rng/零分配/popup_manager.gd 零改。
+	_label_dirty = true
 
 
-func tick(p_raw_delta: float) -> void:
+func tick(p_raw_delta: float, p_refresh_label: bool = true) -> void:
 	# 果冻弹跳 + 上浮 + 淡出（raw 通道；到期由管理器归还池）
+	# R202 微优化：alpha/position/scale 等值跳过写点——弹跳收敛后（>0.22s）每帧
+	# scale==ONE 的重复 Node2D 属性 setter 是 80 池满载时的稳定写开销（80 弹 × 满屏
+	# 密度 × 每帧 3 写）；值比较远廉于 setter（写穿 transform 重算），等值跳过零显示
+	# 语义差（曲线值不变，只是不再重复写同一个值）
+	# R212 刀5：p_refresh_label=false 时排版让渡（脏标记保留，下一驱动帧续）——
+	# PopupManager.tick 限批用；默认 true 保持既有调用方（测试直调/管理器不限批
+	# 路径）零变化
 	if not is_active:
 		return
-	if _label_dirty:
+	if _label_dirty and p_refresh_label:
 		_refresh_label()                          # R189：本帧合并值一次性排版（帧渲染前）
 		_label_dirty = false
+		_dirty_age = 0.0                          # R221 修轮 M5：清脏即清龄
+	else:
+		_dirty_age = _dirty_age + p_raw_delta if _label_dirty else 0.0
 	_life_left -= p_raw_delta
 	var t := 1.0 - clampf(_life_left / LIFE_TIME, 0.0, 1.0)
-	position = _rise_from + Vector2(0.0, -RISE_PX * t)
+	var pos := _rise_from + Vector2(0.0, -RISE_PX * t)
+	if pos != position:
+		position = pos
 	# R194 alpha 写点①：淡出曲线 × fx_opacity 全局特效透明度（只乘根 modulate.a——
-	# _label.self_modulate / theme / position / scale 零触碰，fx_quality 既有观感锁不变）
-	modulate.a = fx_opacity * clampf(1.0 - t * t, 0.0, 1.0)
+	# _label.self_modulate / theme / position / scale 零触碰，fx_quality 既有观感锁不变）。
+	# R230 K1：整体表达式过 _qa() 四分档量化——同档共享 modulate 合批；时序语义不变
+	# （t 逐帧照算，等值跳过写点纪律原样：同档内重复拍不再触发 setter 写）。
+	var a := _qa(fx_opacity * clampf(1.0 - t * t, 0.0, 1.0))
+	if a != modulate.a:
+		modulate.a = a
 	if _bounce_left > 0.0:
 		_bounce_left = maxf(_bounce_left - p_raw_delta, 0.0)
 		# 弹性生长 + 过冲（0.25 → 峰值 ~1.3 → 1；手绘曲线，无 Tween——池化安全）
@@ -349,7 +464,8 @@ func tick(p_raw_delta: float) -> void:
 		var s := grow * (1.0 + 0.52 * exp(-4.0 * bt) * sin(bt * 14.0))
 		scale = Vector2(s, 2.0 - s)
 	else:
-		scale = Vector2.ONE
+		if scale != Vector2.ONE:
+			scale = Vector2.ONE
 
 
 func life_left() -> float:
@@ -369,22 +485,37 @@ func _reset_state() -> void:
 	is_active = false
 	_life_left = 0.0
 	_bounce_left = 0.0
-	modulate.a = fx_opacity                       # R194 alpha 写点②：复位即带乘区（池复用直取可见
+	# R230 K1：复位同过 _qa()（写点②全包）——复位值恒等 tick 首拍 _qa(fx_opacity×1)，
+	# 「复位即带乘区防首帧闪帧」契约在量化口径下原样成立（首帧值与复位值同档）。
+	modulate.a = _qa(fx_opacity)                  # R194 alpha 写点②：复位即带乘区（池复用直取可见
 	                                             # 前已落 fx_opacity，防 fx_opacity<1 时首帧满亮闪帧）
 	scale = Vector2.ONE
 	position = Vector2.ZERO
 	_rise_from = Vector2.ZERO
+	_hide_glyphs()                               # R225：位图字形臂随池归还隐藏（Sprite 节点保留复用）
 	_clear_reaction_overrides()
 
 
 func _refresh_label() -> void:
 	# 数值 + 样式刷新（圆胖数字：CRIT 加大字号；量级档叠乘字号 + 档位配色——
 	# 仅直击样式 NORMAL/CRIT 吃量级档，REACTION/DOT/HEAL/XP 沿既有配色观感）
-	if _label == null:
+	# R225 位图门分流：数值臂（非 REACTION）走共享图集 Sprite 序列（_refresh_bitmap_
+	# glyphs——零 Label 排版；判据=门+样式，非 _label==null——池复用实例吃过 REACTION
+	# 后 _label 已惰性补建，按 null 判会让后续数值臂永久退化 Label 路径）；REACTION 臂
+	# 与桌面门走既有 Label 路径逐位不变。
+	refresh_label_calls += 1                     # R212 刀5：测试观测口
+	if bitmap_gate() and style != GameConst.PopupStyle.REACTION:
+		_refresh_bitmap_glyphs()
 		return
+	_ensure_label()
 	if style == GameConst.PopupStyle.REACTION:
 		# R186 反应大字专属分支（规格表分流）：双色主题通道 + 专属字型 + 1.8× 字号——
 		# 不走 self_modulate 乘色、不吃量级档（_tier_for 对非直击恒返 0 契约不变）
+		# R225：REACTION 走 Label——位图字形臂退位（升格 REACTION 的宿主原为数值臂
+		# Sprite 序列显示中，藏之防双渲染）；Label 显示回归（池复用数值臂→REACTION
+		# 时 Label 被位图臂置过 hidden，对称复位防文字消失）
+		_hide_glyphs()
+		_label.visible = true
 		_apply_reaction_look()
 		_label.reset_size()
 		_label.position = -_label.size * 0.5
@@ -420,6 +551,96 @@ func _refresh_label() -> void:
 		_label.add_theme_font_size_override("font_size", base_size)
 	_label.reset_size()
 	_label.position = -_label.size * 0.5
+
+
+# ── R225 位图字形臂（mobile 门数值臂：共享图集 Sprite 序列） ──────────────
+func _numeric_text() -> String:
+	# 数值臂文本口径——与 _refresh_label Label 分支逐位同源（DOT ceil「烧伤 0」修复 /
+	# IMMUNE 文案 / 其余 round）。merged_value = maxf(p_value,0) 累加恒非负 → 无负号；
+	# str 无千分位 → 无万/亿；CRIT 无文字标记（字号/色升格）——字形集审计见
+	# PopupGlyphAtlas 文件头。
+	if style == GameConst.PopupStyle.IMMUNE:
+		return "免疫"
+	if style == GameConst.PopupStyle.DOT and merged_value > 0.0:
+		return str(ceili(merged_value))
+	return str(int(round(merged_value)))
+
+
+func _bitmap_tint() -> Color:
+	# 色真源与 Label 分支同表：直击样式元素色优先（颜色读元素）→ 量级档色兜底（大小读
+	# 量级）；非直击走 STYLE_COLORS。元素/档色经 sprite.modulate 染填充（白填充 × tint），
+	# 描边恒藏青由图集 shader 承担——元素色只染填充不染描边，读感与 Label 一致。
+	var crit := style == GameConst.PopupStyle.CRIT
+	var direct := style == GameConst.PopupStyle.NORMAL or crit
+	if direct:
+		if element != GameConst.Element.KIN and PopPalette.ELEMENT_COLORS.has(element):
+			return PopPalette.ELEMENT_COLORS[element]
+		return TIER_COLORS[clampi(tier, 0, TIER_COLORS.size() - 1)]
+	return STYLE_COLORS.get(style, Color.WHITE)
+
+
+func _bitmap_px() -> int:
+	# 字号真源与 Label 分支同表：直击吃 CRIT 基准 × 量级档乘区；其余基准字号（不吃档）
+	var crit := style == GameConst.PopupStyle.CRIT
+	var direct := style == GameConst.PopupStyle.NORMAL or crit
+	var base_size := FONT_SIZE_CRIT if crit else FONT_SIZE
+	if direct:
+		return roundi(base_size * float(TIER_SCALES[clampi(tier, 0, TIER_SCALES.size() - 1)]))
+	return base_size
+
+
+func _refresh_bitmap_glyphs() -> void:
+	# 位图字形刷新：数值文本 → 逐字形 Sprite（region 指向共享图集格 / modulate=tint /
+	# scale=显示px÷烘焙px）——同贴图同材质合批；无 reset_size 字体排版（位图无排版
+	# 成本，R212 限批/R221 脏龄保底契约在驱动层原样保留，保底自然恒满足）。
+	if _label != null:
+		_label.visible = false                 # 池复用防御：上一命 REACTION Label 残留退位
+	var txt := _numeric_text()
+	var tint := _bitmap_tint()
+	var px := _bitmap_px()
+	var scale_f := float(px) / float(PopupGlyphAtlas.BAKED_PX)
+	var total_w := 0.0
+	var metas: Array[Dictionary] = []
+	for ch in txt:
+		var m: Dictionary = PopupGlyphAtlas.glyph_meta(ch.unicode_at(0))
+		if m.is_empty():
+			continue                           # 字形缺字守卫（集外字符跳过——审计内不触达）
+		metas.append(m)
+		total_w += float(m["adv"])
+	var pen := 0.0
+	var idx := 0
+	for m in metas:
+		var sp := _ensure_glyph_sprite(idx)
+		sp.texture = PopupGlyphAtlas.glyph_texture()
+		sp.region_enabled = true
+		sp.region_rect = m["rect"]
+		sp.material = PopupGlyphAtlas.glyph_material()
+		sp.scale = Vector2(scale_f, scale_f)
+		# 居中口径与 Label 一致（_label.position = -size*0.5）：pen 累计 advance，
+		# 字形中心 = lsb+半宽（cx_off），整体 −总宽/2；行基线由图集 cell 内 bbox 居中承担
+		sp.position = Vector2(pen + float(m["cx_off"]) - total_w * 0.5, 0.0)
+		sp.modulate = tint
+		sp.visible = true
+		pen += float(m["adv"])
+		idx += 1
+	for k in range(idx, _glyph_sprites.size()):
+		_glyph_sprites[k].visible = false      # 位数收缩（池复用位数变短）多余 Sprite 隐藏
+
+
+func _ensure_glyph_sprite(p_idx: int) -> Sprite2D:
+	# Sprite 惰性增长（池化实例生命周期内只增不删——位数峰值复用，无运行期反复实例化）
+	while p_idx >= _glyph_sprites.size():
+		var sp := Sprite2D.new()
+		add_child(sp)
+		_glyph_sprites.append(sp)
+	return _glyph_sprites[p_idx]
+
+
+func _hide_glyphs() -> void:
+	# 位图字形臂退位（REACTION 升格 / 池归还 / deferred 首刷前清残留）
+	for sp in _glyph_sprites:
+		if is_instance_valid(sp):
+			sp.visible = false
 
 
 func _apply_reaction_look() -> void:

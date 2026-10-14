@@ -1,0 +1,34 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R225（-4 全弃哨兵契约） 回归 ══════════
+── ① -4 全弃语义 ──
+  PASS | ①五发全弃零值占位（final=0 · deferred_merge · killed=false）
+  PASS | ①零真结算（settles 不增）
+  PASS | ①零顺延（settle_deferred 不增——全弃≠顺延）
+  PASS | ①separate_drop 计数 +5
+  PASS | ①占位不落血（hp 不变）
+  PASS | ①占位不入派发队（队列空）
+  PASS | ①无积压（FIFO 空）
+── ② separate_drop 计数口径 ──
+  PASS | ②占位入幂等缓存（折返同一占位实例——QA-2 同构）
+  PASS | ②折返计 dupe 不计 drop（ra 新提交 drop+1 · rb 折返只计 dupe+1）
+── ③ -4 跨帧无积压合并 ──
+  PASS | ③跨帧新提交再弃再计（separate_drop +2 · 无积压合并 FIFO=0）
+── ④ 既有语义零回归 ──
+  PASS | ④-1 默认门帽 0 → 真结算（final>0 · 非占位 · 落血 10）
+  PASS | ④-2 强制关 → 真结算（final>0 · 落血）
+  PASS | ④-3 tier3 → 帽 96（二cv#8 并档）
+  PASS | ④-3 tier2 → 帽 96
+  PASS | ④-3 帽内真结算照常（final>0 · 非占位）
+  PASS | ④≥0 强制帽超帽顺延（deferred_merge · settle_deferred+1 · FIFO=1）
+  PASS | ④恢复默认后帽回 0（headless）
+────────────────────────────────────────
+汇总：PASS 17 / FAIL 0（共 17 项）
+验收汇总：17/17 通过
+WARNING: 12 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 18 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 111 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

@@ -1,0 +1,69 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_data.gd" id="1_wd"]
+[ext_resource type="Script" path="res://scripts/core/data/resources/weapon_level_stats.gd" id="2_wls"]
+
+[sub_resource type="Resource" id="WeaponLevelStats_l1"]
+script = ExtResource("2_wls")
+base_atk = 56.0
+rof = 0.2778
+cd = 3.6
+pierce = 1
+pellets = 1
+note = "每 3.6s 掷出巨斧落地震荡（半径 96 内全额伤害并清弹），单体 DPS 15.6"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l2"]
+script = ExtResource("2_wls")
+base_atk = 56.0
+rof = 0.2778
+cd = 3.6
+pierce = 1
+pellets = 1
+note = "震荡半径 96→104（半径成长先行），每拍 15.6 伤/目标"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l3"]
+script = ExtResource("2_wls")
+base_atk = 70.0
+rof = 0.2778
+cd = 3.6
+pierce = 1
+pellets = 1
+note = "震荡伤害 56→70，每拍 19.4/目标"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l4"]
+script = ExtResource("2_wls")
+base_atk = 84.0
+rof = 0.2778
+cd = 3.6
+pierce = 1
+pellets = 1
+note = "震荡伤害 70→84，每拍 23.3/目标"
+
+[sub_resource type="Resource" id="WeaponLevelStats_l5"]
+script = ExtResource("2_wls")
+base_atk = 96.0
+rof = 0.3571
+cd = 2.8
+pierce = 1
+pellets = 1
+note = "震荡伤害 84→96、间隔缩至 2.8s，每拍 34.3/目标"
+
+[resource]
+script = ExtResource("1_wd")
+id = &"W12_ground_axe"
+display_name = "法器·裂地斧"
+form = 3
+crit_rate = 0.05
+crit_dmg = 2.0
+hitbox_r = 12.0
+unlock_rarity = 1
+threshold_traits = []
+melee = {
+"weapon_class": "talisman", "mode": "axe", "nullify": true,
+"orbs": 1, "arc_deg": 120.0,
+"knockback": 80.0, "throw_speed": 640.0,
+"shock_radius": 96.0, "shock_radius_levels": [96.0, 104.0, 104.0, 112.0, 128.0],
+"transcend": {"name": "崩山击", "atk_mult": 1.0, "radius_mult": 1.25,
+"ring_mult": 1.6, "ring_ratio": 0.4}
+}
+upgrade_table = [SubResource("WeaponLevelStats_l1"), SubResource("WeaponLevelStats_l2"), SubResource("WeaponLevelStats_l3"), SubResource("WeaponLevelStats_l4"), SubResource("WeaponLevelStats_l5")]

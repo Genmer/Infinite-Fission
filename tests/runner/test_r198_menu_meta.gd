@@ -2,7 +2,7 @@
 # R198 组4「菜单成长」验收自测入口（SceneTree 脚本：godot --headless --path <工程>
 #   -s tests/runner/test_r198_menu_meta.gd）
 # 覆盖（真源：R198_BACKLOG_SWEEP.md §4 组4 WorkItems）：
-#   A 二aw-4 养成 revive desc「3s 无敌」（真值 REVIVE_INVULN_S=3.0 对齐）
+#   A 二aw-4 养成 revive desc「5s 无敌」（真值 REVIVE_INVULN_S=5.0 对齐，二cs）
 #   B 二aw-5 skill_icon 10 角色两两互异（像素采样哈希）+ fission/echo 非默认星
 #   C 二aw-6 echo_unlocked 边沿恰发一次 + 大厅「·新」角标 + fission 旧边沿不回退
 #   D 二aw-7 fission 锁定句压缩（≤406px）+ name_l autowrap 兜底

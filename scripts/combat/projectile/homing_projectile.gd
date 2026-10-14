@@ -122,8 +122,12 @@ func _track(p_game_delta: float) -> void:
 
 func _is_target_valid() -> bool:
 	# uid 双重校验：节点回收复用后 uid 已换（新身份）→ 视为丢失，杜绝错绑
+	# R220 刀4：Enemy 类型分支直读 dead/uid（else 保留 Variant gets 桩路径——R210 双轨）
 	if _target == null or not is_instance_valid(_target):
 		return false
+	if _target is Enemy:
+		var te := _target as Enemy
+		return not te.dead and te.uid == target_uid
 	if bool(_target.get("dead")):
 		return false
 	return int(_target.get("uid")) == target_uid

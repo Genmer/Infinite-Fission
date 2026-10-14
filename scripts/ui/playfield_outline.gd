@@ -27,6 +27,14 @@ func _on_viewport_size_changed() -> void:
 
 
 func _draw() -> void:
+	# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+	# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+	DebugStats.bucket_begin(&"draw")
+	_draw_r271()
+	DebugStats.bucket_end(&"draw")
+
+
+func _draw_r271() -> void:
 	# 四边描 res_logic 逻辑域（unfilled 1px 矩形边框）
 	var domain := Rect2(Vector2.ZERO, Vector2(GameConfig.balance.res_logic))
 	draw_rect(domain, Color(PopPalette.INK_SOFT, OUTLINE_ALPHA), false, 1.0)

@@ -1,0 +1,42 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R271 A/B 轴刀验收（verdict 门控：V-C1 实测 + 未触发档 SKIP 判据 + B1 判读行） ══════════
+══ R271 flushcut：V-C1 弹桶惰性归位（boost 门内）实测 + 未触发档 SKIP 判据 ══
+  PASS | verdict 归档存在（先归档后开刀次序红线）
+  PASS | verdict 刀单宣告行存在（档位真源）
+── a3 V-C1 单元面（boost 开：release 留桶/同变体零 reparent/换变体换桶/关=逐位） ──
+  PASS | a3.1 前置：place 落桶 A
+  PASS | a3.1 boost 开 release 留桶（parent==桶A 非 pool 根）
+  PASS | a3.1 留桶弹 visible==false（不绘不断批）
+  PASS | a3.1 _assert_clean 双向零污染（release 侧）
+  PASS | a3.2 同变体复用取回同一件（LIFO）
+  PASS | a3.2 同变体复用零 reparent（加N/摘N 差分==0）
+  PASS | a3.2 复用后仍在桶 A
+  PASS | a3.3 变体变更换桶（parent==桶B）
+  PASS | a3.3 换桶树进出面恰为 加3摘2（桶建+根+Visual 子树传播——无其他件移动）
+  PASS | a3.4 boost 关 release 逐位回池根（unplace 现状）
+  PASS | a3.4 关态归还件 visible==false
+  SKIP | a3.6 升全局刀预案门（判据：verdict S1 塌缩（50%）+ soak 双证后主会话授权——本批 boost 门内默认，全局刀不启用）
+── a3 V-C1 soak：180s 池卫生（0 实例化 0 污染）+ lazy 口真实流量 ──
+  soak 池读数：projectile(ri=0 pol=0) homing(ri=0 pol=0) enemy(ri=0 pol=0) popup(ri=0 pol=0) particle(ri=0 pol=0) laser(ri=0 pol=0) xp(ri=0 pol=0)
+  PASS | a3.5 soak 180s 六池 0 运行期实例化
+  PASS | a3.5 soak 180s 六池 0 池污染（_assert_clean 双向）
+  PASS | a3.5 soak 期真实弹 release 流量过池（hits 增量>0）
+  PASS | a3.5 soak 期运行期实例化恒 0（projectile 池直读）
+  PASS | a3.5 lazy 口真实流量（空闲栈存在留桶件 >0）
+  PASS | a3.5 留桶空闲件全部不可见（不绘不断批）
+  PASS | a3.5 soak 末仍在 PLAYING（会话保活）
+── 未触发档 SKIP（判据读自归档 verdict） ──
+  SKIP | a1 V-A 接触监控清退（判据：verdict V-A=未触发——S2 并集塌缩 21%（<60% 触发带；v6 归档行 H2））
+  SKIP | a1.⑥ blink_cases「走位出圈免伤」语义迁移（判据：随 V-A 触发才存在（CONTACT_RADIAL 未翻——信号缓存口径原样，无迁移面））
+  SKIP | a2 V-B 重绘链限频（判据：verdict V-B=未触发——S3 塌缩 1%、绘µs/延µs 9%（<50%/<40% 触发带；v6 归档行 H3））
+  SKIP | a4 V-C2 释放批预算（判据：C2 全局刀未启用（K=8 待调参——verdict 只坐实 C1 面；全局/机制刀另批主会话授权））
+  SKIP | b3 B2 弹帽 384（判据：B-0 三键制真机未判（headless 不可测渲ms 语义）∧ 绘µs/延µs 占比 9% 未坐实拖尾重绘主载——vc81 复核后定）
+── b1 敌侧三候选判读行（§3.4-B1：本批=判据行） ──
+  PASS | b1 候选① MM 排除面判读行存在（boss/elite——台架不可定谳，待 vc81）
+  PASS | b1 候选② MM 每帧同步判读行存在（S7 短路塌缩——本批不坐实）
+  PASS | b1 候选③ 填充率判读行存在（B-0 三键制，真机专属）
+  PASS | b1 敌侧免刀判定成立（三候选均未触发→预算转 B2/B4 由 vc81 定）
+────────────────────────────────────────
+汇总：PASS 24 / FAIL 0 / SKIP 6（共 30 项）
+验收汇总：24/24 通过

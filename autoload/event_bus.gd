@@ -33,6 +33,7 @@ signal elite_summon_requested(elite_uid: int, enemy_id: StringName, pos: Vector2
 signal chain_lightning(from_pos: Vector2, to_pos: Vector2)  # 感电连锁主闪电（表现层专用广播，方向 C）
 signal elemental_dot_fired(pos: Vector2)                    # 点燃 DOT 跳伤结算（表现层火星专用广播）
 signal shield_blocked(pos: Vector2)                         # 格挡力场挡下接触伤害（护盾脉冲涟漪，A3 §4.4）
+signal graze(pos: Vector2)                                  # 掠过微光（表现层专用广播——二cp#1：0.6s 无敌帧静默吞没接触/敌弹伤害的轻反馈，c4①）
 signal bullet_nullified(pos: Vector2)                       # 弧斩消弹（W9 NULLIFIED 涟漪，表现层专用）
 signal pool_exhausted(pool_id: StringName)                 # 池满降级计数（DebugStats）
 signal beam_impact(pos: Vector2, dir: Vector2)             # 光束命中点迸裂（脉冲激光每跳结算，表现层专用）
@@ -40,7 +41,7 @@ signal reroll_granted(count: int)                          # 刷新次数获得�
 signal trait_milestone(trait_id: StringName, name: String, mult: float)   # 词条满层质变（HUD 金色 toast）
 signal burn_devour_proc(pos: Vector2)                       # 烈焰吞噬乘区生效（表现层专用：橙色内聚吞噬特效）
 signal knockback_hit(pos: Vector2)                           # 强击退生效（表现层专用：击退小字，R7）
-signal poison_cloud_cast(pos: Vector2, radius: float)        # 毒云领域施放（表现层专用：绿环展开，R10）
+signal poison_cloud_cast(pos: Vector2, radius: float, dur: float)   # 毒云领域施放（表现层专用：绿环展开，R10；R246 追加 dur 位——升华 7s 窗，emit 包装缺省 6.0，两参调用兼容）
 signal poison_cloud_tick(pos: Vector2, radius: float)        # 毒云每跳（表现层专用：毒圈持续/绿雾，R10）
 signal poison_cloud_end()                                    # 毒云领域结束（表现层专用：立即入渐隐，R199 H01）
 signal burn_spread_ignited(pos: Vector2)                     # 燎原传火点燃（表现层专用：原点橙环；R199 F17 前曾冒用 reaction_triggered 污染图鉴/成就计数）
@@ -57,6 +58,12 @@ signal laser_subbeam_spawned(owner_kind: int)               # 副激光生成（
 signal mirror_formed(text: String)                          # 棱镜镜面生成/重掷（HUD toast；文案「棱镜映照：镜面承接了 X」）
 signal w8_detonated(pos: Vector2, target_uid: int)          # W8 蓄能满档引爆事件（target_uid——CHARGE_BURST 大字按同帧该敌结算聚合起字）
 signal crystal_shield_request(dr: float, duration: float)   # R192 结晶族反应：玩家晶盾减伤请求（Player grant 唯一消费——减伤闸在 take_contact_damage 唯一漏斗；纯会话态零存档）
+signal sword_mark(pos: Vector2, angle: float)                # 二cu 灵剑命中剑痕（表现层专用：目标身上斜置剑痕，projectile_base 飞剑命中唯一发点，ElementalFxLayer 池化消费）
+signal mine_dodged(pos: Vector2)                             # 二db 躲过敌方爆炸（地雷/自爆虫/闪现爆/法术圈未伤人——player 橙盾 grant 唯一消费；吸收涟漪/成就计数走 shield_blocked 通道不在此）
+# R251 需求③ 首遇卡片（纯增量新信号，零既有订阅者迁移）：新机制/新武器/新敌人第一次
+# 出现在玩家面前 → 统一弹介绍卡（FirstEncounterCardUI 消费；p_kind ∈
+# &"enemy" | &"weapon" | &"reaction"，p_id = 敌 id / 武器 id / ReactionType id 字符串）
+signal first_encounter_card(p_title: String, p_body: String, p_kind: StringName, p_id: StringName)
 
 var _dispatch_count: Dictionary = {}        # StringName(事件) -> int(本帧计数)
 const STORM_WARN_THRESHOLD := 128           # 同事件同帧派发上限（§六.4）
@@ -198,6 +205,21 @@ func emit_shield_blocked(pos: Vector2) -> void:
 	shield_blocked.emit(pos)
 
 
+func emit_mine_dodged(pos: Vector2) -> void:
+	_track_dispatch(&"mine_dodged")
+	mine_dodged.emit(pos)
+
+
+func emit_first_encounter_card(p_title: String, p_body: String, p_kind: StringName, p_id: StringName) -> void:
+	_track_dispatch(&"first_encounter_card")
+	first_encounter_card.emit(p_title, p_body, p_kind, p_id)
+
+
+func emit_graze(pos: Vector2) -> void:
+	_track_dispatch(&"graze")
+	graze.emit(pos)
+
+
 func emit_bullet_nullified(pos: Vector2) -> void:
 	_track_dispatch(&"bullet_nullified")
 	bullet_nullified.emit(pos)
@@ -223,6 +245,11 @@ func emit_beam_impact(pos: Vector2, dir: Vector2) -> void:
 	beam_impact.emit(pos, dir)
 
 
+func emit_sword_mark(pos: Vector2, angle: float) -> void:
+	_track_dispatch(&"sword_mark")
+	sword_mark.emit(pos, angle)
+
+
 func emit_reroll_granted(count: int) -> void:
 	_track_dispatch(&"reroll_granted")
 	reroll_granted.emit(count)
@@ -243,9 +270,10 @@ func emit_knockback_hit(pos: Vector2) -> void:
 	knockback_hit.emit(pos)
 
 
-func emit_poison_cloud_cast(pos: Vector2, radius: float) -> void:
+func emit_poison_cloud_cast(pos: Vector2, radius: float, dur: float = 6.0) -> void:
+	# R246：dur 缺省 6.0（普通版口径）——两参既有调用零改动；vera 升华施放传 7.0
 	_track_dispatch(&"poison_cloud_cast")
-	poison_cloud_cast.emit(pos, radius)
+	poison_cloud_cast.emit(pos, radius, dur)
 
 
 func emit_poison_cloud_tick(pos: Vector2, radius: float) -> void:
@@ -314,16 +342,29 @@ func emit_crystal_shield_request(p_dr: float, p_duration: float) -> void:
 
 
 # ── 计数 / 风暴防护 / 订阅纪律 ─────────────────────────────────────
+var _storm_warn_last_ms: int = -100000       # R205：告警日志节流游标（5s 全局一条；计数不受影响）
+
 func _track_dispatch(event: StringName) -> void:
 	# 帧计数 + 超阈值告警一次（每帧每事件仅一次）
 	var count := int(_dispatch_count.get(event, 0)) + 1
 	_dispatch_count[event] = count
 	if count == STORM_WARN_THRESHOLD:
 		storm_warnings += 1
-		push_warning("[EventBus] 事件风暴：%s 本帧已派发 %d 次（阈值 %d）" % [event, count, STORM_WARN_THRESHOLD])
+		_warn_storm_throttled("[EventBus] 事件风暴：%s 本帧已派发 %d 次（阈值 %d）" % [event, count, STORM_WARN_THRESHOLD])
 	if event == &"damage_resolved" and count == STORM_WARN_DAMAGE_RESOLVED:
 		storm_warnings += 1
-		push_warning("[EventBus] 结算风暴：damage_resolved 本帧已派发 %d 次（定位：结算条目过多）" % count)
+		_warn_storm_throttled("[EventBus] 结算风暴：damage_resolved 本帧已派发 %d 次（定位：结算条目过多）" % count)
+
+
+func _warn_storm_throttled(p_msg: String) -> void:
+	# R205：持续战斗期每帧每事件 1 条 = 真机 60 条/秒 logcat 刷屏（vc12 卡点嫌疑之一）；
+	# 日志层 5s 全局一条封顶。storm_warnings 计数口径不变（pkg0 断言 + 诊断日志差分
+	# 读的都是计数器，与告警是否打印无关）。
+	var now := Time.get_ticks_msec()
+	if now - _storm_warn_last_ms < 5000:
+		return
+	_storm_warn_last_ms = now
+	push_warning(p_msg)
 
 
 func end_frame() -> void:
@@ -359,10 +400,14 @@ func _total_connections() -> int:
 
 func _check_node_subscribers() -> void:
 	# 仅 Node 派生类可订阅（E-12：RefCounted 连接持强引用 → 泄漏）；开发期拦截计数。
+	# R248 例外口径：Script 本体订阅者（静态 lambda 绑定 GDScript 资源——player.gd
+	# _static_init 击杀账本先例）豁免——脚本随全局类缓存长生、不构成 RefCounted 强引用
+	# 泄漏；pkg0 E-12 恰 +1 计数锚（RefCounted 实例）不受影响（headless 实证：
+	# 该 lambda get_object()=<GDScript>、is_node=false，原扫描每帧误计 1 次）。
 	for sig in get_signal_list():
 		var sname := String(sig["name"])
 		for conn in get_signal_connection_list(sname):
 			var obj: Object = conn["callable"].get_object()
-			if obj != null and not (obj is Node):
+			if obj != null and not (obj is Node) and not (obj is Script):
 				non_node_subscriber_errors += 1
 				push_error("[EventBus] 非 Node 订阅者被拦截（E-12）：%s ← %s" % [sname, str(conn["callable"])])

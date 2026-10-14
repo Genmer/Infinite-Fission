@@ -7,8 +7,11 @@
 #       > repo/tests/qa_r228_diagfreeze_before.txt
 #   对拍（改造后跑；加载采集档逐行比对）：
 #     ./tools/Godot_v4.3-stable_win64_console.exe --headless --path repo \
-#       -s tests/qa_r228_diagfreeze.gd -- compare=tests/qa_r228_diagfreeze_before.txt
+#       -s tests/qa_r228_diagfreeze.gd -- compare=tests/qa_r228_diagfreeze_before_stripped.txt
 # 纪律：-s 入口编译期先于 autoload 注册——零工程类名直引；用例体运行时 load。
+#   R269 修5（QA P3）：对拍基线档改指 _stripped 剥尾版（L 行按迁移后剥离正则口径剥去
+#   「 裁N」起全部尾键、止于 补N；源=改造前 raw 采集档 _before.txt 留档存证——对拍
+#   语义=去尾后与改造前逐位相等）。
 #   探针本体零 R229 新符号引用（trim_free_to / pool_valve_override 一概不出现）——
 #   同一脚本可在改造前后双态运行（改造前的「触发步」= tier/mode 注入 + 驱动一帧物理，
 #   即改造前可达的最接近等价序列；改造后补 -3 哨兵的完整触发在 test_r229_pool_valve 内）。

@@ -338,7 +338,11 @@ func _test_5_capped_delta_and_diagline() -> void:
 	# R235 搭车③迁移：行尾再追加「物步µsN 派µsN 渲msN.N」三键（物理服务器步本体/⑧前
 	# 派发段/渲染轴秒窗读数）——物步µs/渲ms=秒窗时序读数不逐位断言（X 口径）；DiagStub
 	# 空 stage_probe_us → 派µs0 确定值（r229 L1 迁移同款纪律）
-	rx_tail.compile("补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d( 挡\\d+)?$")
+	# R269 B 轨迁移（§0.2 预声明）：行尾再追加八键（死µs/警µs/桶µs/延µs/释N/敌弹N/拒N/
+	# 促N）——DiagStub 空 counts 且无物理帧 → 敌弹N/拒N=0 确定值；秒窗桶键 X 口径不锁值
+	# R271 P 轨迁移（§0.2 同款协议）：促 后续组十一键（步µs/隙µs/延早µs/延渲µs/延峰µs/
+	# 加N/摘N/绘µs/渲帧N/呈帧N/渲峰ms——qa_r228_diagfreeze_cases.gd:152 同款全可选组）
+	rx_tail.compile("补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d( 挡\\d+)?( 死µs\\d+)?( 警µs\\d+)?( 桶µs\\d+)?( 延µs\\d+)?( 释\\d+)?( 敌弹\\d+)?( 拒\\d+)?( 促\\d+)?( 步µs\\d+)?( 隙µs\\d+)?( 延早µs\\d+)?( 延渲µs\\d+)?( 延峰µs\\d+)?( 加\\d+)?( 摘\\d+)?( 绘µs\\d+)?( 渲帧\\d+)?( 呈帧\\d+)?( 渲峰ms\\d+\\.\\d+)?$")
 	_check("⑤行尾「补N 裁N 快N 结µsN 插µsN 插模拟µsN 派deferredN 派dropN 物步µsX 派µs0 渲msX.X」冻结断言不变位（r229_pool_valve 断言兼容——R231 快N/R232 T1b 结µs/R233 T1 插µs/R233 修轮 插模拟µs+派deferred/派drop/R235 搭车③ 物步µs+派µs+渲ms 追加在派drop 后；DiagStub 空 counts → 新键 0 确定值）",
 		rx_tail.search(line) != null, "tail=%s" % line.right(64))
 	var line2: String = DebugStats._diag_format_line(stub, 65001)

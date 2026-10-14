@@ -6,7 +6,13 @@ class_name EnemySpawner
 extends Node
 
 const SPAWN_PER_FRAME: int = 8                # 单帧生成节流（B_spec M-04）
-const MAX_ONSCREEN: int = 120                # 同屏敌人上限（超出排队，波次不卡死）
+const WAVE1_SPAWN_PER_FRAME: int = 4          # R267 刀P5：首波摊帧档——w1 出队 8→4（出发后
+                                             # 首两帧渲染/贴图上传余量让路；敌自屏外走入+
+                                             # 入场渐显天然无感）。生成顺序=队列序不变，仅
+                                             # 改每帧出队帽；wave≥2 契约 8/帧不动（M-04）
+const MAX_ONSCREEN: int = 120                # 同屏敌人上限（超出排队，波次不卡死）。
+                                             # R269 必改2：const 保留（r212_poolwarm_cases 符号
+                                             # 直引编译不破）——产品消费经 max_onscreen() 读口
 const SPAWN_OFFSCREEN := 40.0                # 出生点屏外余量（配合入场渐显）
 const SPAWN_QUEUE_HIGH_WATER := 600          # R188 档3：spawn_queue 高水位（深层无尽投放无界——
                                             # w233+ 建波 O(count) 结构性失控配套钳；正常局峰值远低）
@@ -38,6 +44,13 @@ func prewarm() -> void:
 		pool.prewarm(GameConfig.get_pool_capacity(&"enemy"))
 
 
+static func max_onscreen() -> int:
+	# R269 A-5：同屏敌上限读口（§3.4——boost 开=90 模式帽 / 关=MAX_ONSCREEN 120 逐位）。
+	# 排队不丢弃契约保持（超帽留队，波次不卡死——只是到场节奏放缓 §6 披露）。产品代码
+	# 唯一消费点=tick 同屏比较处；const MAX_ONSCREEN 保留供符号直引（r212_poolwarm:118）。
+	return 90 if PerfGovernor.boost_mode() else MAX_ONSCREEN
+
+
 func enqueue(p_entry: Dictionary) -> void:
 	# WaveDirector 投放生成请求：{data_id, wave, tags, pos}（pos 可缺省→出生点抽样）。
 	# R188 档3：高水位 600 拒收（深层无尽建波投放无界——队列积压 = 帧尖峰与 RSS 缓升
@@ -59,8 +72,15 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 	if _queue_warned and spawn_queue.size() < QUEUE_WARN_REARM:
 		_queue_warned = false                    # R188 档3：队列回落半水位 → 重臂告警（每饱和段一次）
 	var spawned := 0
-	while spawned < SPAWN_PER_FRAME and not spawn_queue.is_empty():
-		if active.size() >= MAX_ONSCREEN:
+	# R267 刀P5：首波摊帧——队首待生成项 wave==1 时本帧出队帽取 4（17 只 = 5 帧内落场，
+	# 出发链同帧的渲染/首遇卡冷建余量让路）；FIFO 下同帧出队项同波，队首判定即整帧帽。
+	# wave≥2 项回 8/帧原契约；首波残余与次波首项同帧共存时按队首项档位走（次波完整项
+	# 下帧起即 8/帧，最坏多等 1 帧不破「波次不卡死」）。
+	var per_frame := SPAWN_PER_FRAME
+	if not spawn_queue.is_empty() and int(spawn_queue[0].get("wave", 1)) == 1:
+		per_frame = WAVE1_SPAWN_PER_FRAME
+	while spawned < per_frame and not spawn_queue.is_empty():
+		if active.size() >= max_onscreen():    # R269 A-5：比较处换读口（boost 开 90/关 120）
 			break                             # 同屏上限：余量留队（排队不丢弃）
 		var entry: Dictionary = spawn_queue[0]
 		var data := _resolve_data(entry)
@@ -76,12 +96,19 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 		if enemy == null:
 			break                             # 池满：留在队首等待下帧（不丢弃）
 		spawn_queue.pop_front()
+		# R214 E'：分桶 host 注入须在 spawn 前（spawn 内 _sync_visual 尾 _place_in_bucket
+		# 消费；host 未装配的老路径 null=不分桶零行为变化）
+		enemy.bucket_host = pool.bucket_host
 		enemy.spawn(data, int(entry.get("wave", 1)), int(entry.get("tags", 0)))
 		_elite_affix_roll(enemy, int(entry.get("wave", 1)))
-		# E5 首遇提示条：新形态敌第一次实际登场 → 屏上机制一句话（跨局只提示一次）
+		# E5/R251 首遇介绍卡：敌第一次实际登场 → 首遇卡片（跨局只弹一次）。R251 通道
+		# 升级：由 mechanics_intro toast 改发 first_encounter_card 统一弹卡（队列化不互顶，
+		# 图标+一句话正文）；文案表 R251 §3.4 已扩全 29 敌——三路生成（自然波/Boss/精英
+		# 召唤）汇聚出队天然全覆盖
 		var note := GameConst.enemy_attack_note(String(data.id))
 		if not note.is_empty() and Meta.mark_first_met(data.id):
-			EventBus.emit_mechanics_intro("【首次遭遇】%s：%s" % [data.display_name, note])
+			EventBus.emit_first_encounter_card(
+				"【首次遭遇】%s" % data.display_name, note, &"enemy", StringName(String(data.id)))
 		# R28 基线强化（用户裁定「敌人攻击、生命值提升 20%」）：出生管线单次应用
 		# R72 难度乘区（困难 ×3 / 地狱 ×9——用户口径「最基础的数值：攻击、血量」）：
 		# 与基线同点单次应用，覆盖全部自然刷怪/Boss/召唤
@@ -115,6 +142,7 @@ func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:
 			enemy.position = pos_v
 		else:
 			enemy.position = _pick_spawn_pos()
+		enemy.ip_birth_snap()                 # R233 T6：插值缓冲置出生位（prev=curr=挂位后出生位）
 		active.append(enemy)
 		if enemy.is_boss():
 			EventBus.emit_boss_spawned(enemy)   # Boss 登场事件（HUD 血条/GameFeel）

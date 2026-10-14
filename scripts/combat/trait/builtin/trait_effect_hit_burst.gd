@@ -26,6 +26,9 @@ func handle(p_trait: TraitBase, p_ctx: TraitContext) -> void:
 	var ratio := float(p_trait.data.value)
 	if p_trait.layers >= 2:
 		radius = float(params.get("radius_lv2", radius))
+		# R262b L9 口径注：本键为「乘数口径」（×1.28 递进 0.35→0.448≈文案 45%）——
+		# 与 MEC_KILL_BLAST atk_ratio_lv2 的「绝对白值口径」（0.45 直取，见
+		# trait_effect_mech.gd）契约相反；改任一 .tres 数值前先核对此处乘除形态，两卡勿互抄
 		ratio *= float(params.get("ratio_lv2", 1.0))
 	var pos := p_ctx.damage_ctx.pos
 	if p_ctx.projectile != null:

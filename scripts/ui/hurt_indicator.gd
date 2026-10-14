@@ -61,6 +61,14 @@ func _process(p_delta: float) -> void:
 
 
 func _draw() -> void:
+	# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+	# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+	DebugStats.bucket_begin(&"draw")
+	_draw_r271()
+	DebugStats.bucket_end(&"draw")
+
+
+func _draw_r271() -> void:
 	var k := clampf(_t / LIFE, 0.0, 1.0)
 	var col := Color(1.0, 0.25, 0.22, 0.65 * k)  # 珊瑚红警示（§1.2 敌向语义）
 	# 双弧：内亮弧（实指）+ 外宽晕弧（方向体感）

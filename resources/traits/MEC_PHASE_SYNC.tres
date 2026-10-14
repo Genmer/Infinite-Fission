@@ -6,7 +6,7 @@
 script = ExtResource("1_td")
 id = &"MEC_PHASE_SYNC"
 display_name = "相位同步"
-description = "副激光 ≥2 束时主束聚焦爬坡翻倍（15%/s→30%/s，×2 封顶 3.35s 即满）"
+description = "副激光 ≥2 束时主束聚焦爬坡翻倍（15%/s→30%/s，封顶 3.35s 即满）"
 pool = 3
 pool_id = &""
 effect_id = &"EF_MECH"

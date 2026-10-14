@@ -28,6 +28,6 @@ extends Resource
 @export_range(0.001, 1.0) var proc_chance: float = 1.0   # (0, 1]
 @export var cooldown: float = 0.0                   # ≥0（词条触发冷却）
 @export var rarity: int = 0                         # 白/蓝/紫/金
-@export var tags: int = 0                           # TAG 位（CURSE 等，F-23 净化通道占位）
+@export var tags: int = 0                           # TAG 位占位未实装——诅咒真源=trait_stack 按 contrib<0 派生（生效中），params.is_curse 为写而不读的镜像；F-23 净化实装前须先决断真源（R262b L15：按 tags 位清将清不到现有诅咒，勿直接按本字段实现）
 # MULT 类条件 {condition_id, params}（见 SynergyRuleData）
 @export var condition: Dictionary = {}

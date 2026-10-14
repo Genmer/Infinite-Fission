@@ -16,3 +16,7 @@ var damage_ctx: DamageContext = null          # ON_HIT 期注入乘区（contrib
 var game_delta: float = 0.0
 var split_request: Dictionary = {}            # ON_EXPIRE 期分裂请求输出 {count, spread_deg, inherit_ratio, echo}
 var attach_request: Dictionary = {}           # 元素附着请求输出 {element, value, overrides}
+# ── R243 新字段（与旧单槽并列——旧断言零位移） ─────────────────────
+var melee_split_request: Dictionary = {}      # ON_EXPIRE 期近战分裂请求输出（§4.5 通道 B；键集同 split_request）
+var attach_requests: Array[Dictionary] = []   # 元素附着请求输出数组（§6.3 全元素并发；旧单槽保留，非空时消费侧跳过单槽防双发）
+var host_elements: Array[int] = []            # 宿主元素全集（§6.3 守卫输入——ELE 卡元素 ∉ 池则零附着；空数组 = 无限制旧语义）

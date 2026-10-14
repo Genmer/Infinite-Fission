@@ -18,17 +18,30 @@ extends RefCounted
 
 const MILESTONE_BONUS := 2.0                  # 满层质变卡加成（「到什么程度会质变」优先）
 const CURSE_PENALTY := 999.0                  # 诅咒罚分（压过一切非诅咒项可能得分）
+const SOFT_EXCLUDE_PENALTY := 100.0           # 软排除罚分（压过 rarity3×scale+质变的一切组合；
+                                              # 低于诅咒层——非硬禁：全货架同卡时兜底仍可选）
 const DUAL_SLOT_BASE := 4                     # 成对模式槽位基址（card_select_ui 槽 4~9 协议）
+# 软排除清单（用户裁定 2026-10-07「排除那个加大吸取范围那个 buff」——挂机永不优先磁吸）：
+# 罚分语义=「有别的安全卡绝不选它」而非「永不选」（硬禁会让全同卡货架返回 -1 进重试死循环）。
+# 语义边界：仅影响 AUTO 自动选卡，手动选卡不受限；成对模式行合计含罚分=含此卡整行避开。
+const SOFT_EXCLUDE_TRAITS: Array[StringName] = [&"AFF_PICKUP"]   # 磁力吸附（拾取半径+30%）
 
 
 static func score(p_card: Dictionary) -> float:
 	# 单卡评分（纯函数；缺省字段按中性值回退——value_scale 缺省 1.0 / rarity 缺省 0）
+	# R246 升华卡特判必选（设计 §4 D8）：998 > 一切非诅咒组合上限（rarity3×scale2.6+
+	# 质变 2 = 9.8）且与诅咒域（−999）不相交——挂机永不跳过 0.001% 的红色传说
+	#（挂机静默跳过升华卡=用户无感损失最贵卡）；clampi 本体不动（其余卡评分零漂移）。
+	if int(p_card.get("kind", -1)) == CardGenerator.CardKind.SUBLIME:
+		return 998.0
 	var value := float(clampi(int(p_card.get("rarity", 0)), 0, 3)) \
 		* maxf(float(p_card.get("value_scale", 1.0)), 0.0)
 	if bool(p_card.get("milestone", false)):
 		value += MILESTONE_BONUS
 	if bool(p_card.get("cursed", false)):
 		value -= CURSE_PENALTY
+	if StringName(str(p_card.get("id", &""))) in SOFT_EXCLUDE_TRAITS:
+		value -= SOFT_EXCLUDE_PENALTY
 	return value
 
 

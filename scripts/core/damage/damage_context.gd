@@ -36,6 +36,12 @@ var generation: int = 0
 var is_first_hit_of_wave: bool = false
 var player_hp_pct: float = 1.0
 var pos: Vector2 = Vector2.ZERO               # 跳字锚点
+var kill_backlink: WeakRef = null             # R223 修轮：击杀证据回填链（弹侧 ctx 构建期
+                                              # weakref(self)；预算顺延项冲刷击杀时回填
+                                              # projectile.killed_target——死亡新星
+                                              # MEC_KILL_BLAST 等击杀证据型消费面）。
+                                              # 非弹路径（settle_aoe/laser/orbit）不设——
+                                              # 无 killed_target 消费面
 
 
 static func make() -> DamageContext:

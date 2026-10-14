@@ -9,6 +9,9 @@
 # · 点燃 DOT 火星小喷：订阅 EventBus.elemental_dot_fired（每跳结算瞬间 3 粒上飘火星）。
 # 全部对象 _ready 预建轮换复用（0 运行期实例化）；折线顶点预生成池轮换；共享贴图、
 # 无 shader、零数值副作用（纯表现层，订阅事件只读位置）。
+# R229：sprite 族渐隐 alpha 全写点四分档量化（_qa，0/0.25/0.5/0.75/1.0）——同族
+# live 件按（贴图×色×alpha 档）合批（R216/R217 断批定律反用），dc 从 live 件数坍缩；
+# 视觉代价=0.16-0.55s 寿命件渐隐变 4 档阶梯（R217 敌染色量化同一定案路线，非阀门）。
 class_name ElementalFxLayer
 extends Node2D
 
@@ -35,6 +38,10 @@ const GLOW_LIFE := 0.18                       # 橙光晕时长 s
 const IMPACT_COUNT := 20                      # 光束命中迸裂并发池（脉冲激光每跳，用户反馈 2026-08-31）
 const IMPACT_LIFE := 0.16                     # 迸裂星闪时长 s
 const IMPACT_SPARKS := 3                      # 每次迸裂迸溅火花数（束色圆珠）
+const IMPACT_CD := 0.07                       # R202 ⑨：光束命中迸裂全局节流（0.05~0.09s 档——
+                                            # 激光 tick 8/s × 多目标 × 主副束同帧多触发的观感
+                                            # 上限，DEVOUR_CD 同款先例；纯表现层节流，消费侧
+                                            # 激光结算通道不动）
 const DEVOUR_COUNT := 10                      # 烈焰吞噬内聚并发池（burn_dmg 乘区生效，2026-09-13）
 const DEVOUR_LIFE := 0.3                      # 吞噬内聚时长 s
 const DEVOUR_SPARKS := 4                      # 每次内卷火苗数（外圈 → 命中点）
@@ -49,11 +56,44 @@ const KNOCKTEXT_CD := 0.12                    # 击退小字全局节流（多�
 const DOT_SPARK_BUDGET := [0, 2, 4]           # 每跳点燃火星数（高档 = 原 4 粒口径）
 const BOLT_ZAP_BUDGET := [0, 1, 3]            # 每道连锁闪电落点电花数（0 = 整体关；高档 = 原 3）
 const KILLBLAST_QUALITY_MIN := 1              # kill_blast 低档关（中/高档四层爆口径不变）
+# 二cu 灵剑剑痕（W11 命中反馈——用户「目标身上会有对应的剑痕（斜着的剑痕 小范围性的）」）：
+# 池容量 = 齐射 7 + 分裂子剑 8 同帧峰值；每槽 Node2D + 2×Line2D（主痕 + 偏移副痕）
+const MARK_COUNT := 16                        # 剑痕并发池
+const MARK_LIFE := 0.22                       # 剑痕时长 s（小范围短闪读感）
+const MARK_MAIN_COL := Color(0.82, 0.92, 1.0, 0.95)   # 主痕银蓝白
+const MARK_ECHO_COL := Color(0.45, 0.65, 0.95, 0.55)  # 副痕深蓝
+const SWORD_MARK_BUDGET := [0, 1, 2]          # 剑痕层数分档（低档关 / 中档主痕 / 高档主+副）
+
+# ── R229 渐隐 alpha 量化（4 档）——sprite 族共享贴图合批 ──────────────
+# z=5 层内 sprite 族全部共享贴图（flame_bit / ring_tex+modulate 上色 / soft_dot /
+# bead / star / confetti），但逐帧连续渐隐 modulate.a → 逐件唯一 modulate = 逐件
+# 独立 dc（R216/R217 真机断批定律）。全部 fade 写点过 _qa() 落 0.25 步进后，同族
+# live 件按（贴图×色×alpha 档）合批，dc 从 live 件数坍缩到 ~族数×档数。
+# 与 R217 敌染色量化 / enemy.gd:566-568 入场渐显 4 档同一定案路线；非阀门
+# （无条件、桌面 mobile 同口径）。不碰：_tick_bolts（Line2D 折线不与精灵同批，
+# 量化无收益）、毒云 _draw、MissileBlastFx 内类（_draw 件）、池容量/寿命/订阅。
+const Q_ALPHA_STEPS := 4                       # 渐隐量化档数（a ∈ {0, 0.25, 0.5, 0.75, 1.0}）
+
+
+static func _qa(p_a: float) -> float:
+	# alpha 四分档量化（写点处包整体表达式——最终乘积量化）
+	return float(roundi(clampf(p_a, 0.0, 1.0) * Q_ALPHA_STEPS)) / float(Q_ALPHA_STEPS)
 
 
 func _fx_quality() -> int:
 	# 特效质量档读取（钳制 [0,2]；Meta 单一真源）
-	return clampi(int(Meta.settings("fx_quality")), 0, 2)
+	# R204：mobile 门内高档降中档——与 Enemy._fx_q()/命中粒子门同口径
+	#（DOT 火花/电光花族在怪海下逐宿主常驻）
+	# R269 必改1：本口直读 Meta.settings 不经调速器帽（PerfGovernor.fx_quality_cap——
+	# 分析轮坐实），保帧模式钉 0 在此独立加分支：boost 开 → 0（DOT 火花/电光花/涟漪/
+	# 光晕族预算表 [0,2,4] 落 0 档）；关=现状逐位（r213_fullload/test_fx_quality/
+	# r202_g3 复跑门）
+	var q := clampi(int(Meta.settings("fx_quality")), 0, 2)
+	if OS.has_feature("mobile"):
+		q = mini(q, 1)
+	if PerfGovernor.boost_mode():
+		return 0
+	return q
 
 var _bolts: Array[Dictionary] = []            # [{root, core, glow, flash, left}]（池条目）
 var _bolt_idx: int = 0
@@ -71,6 +111,7 @@ var _glows: Array[Dictionary] = []            # [{sprite, left}]（DOT 橙光晕
 var _glow_idx: int = 0
 var _impacts: Array[Dictionary] = []          # [{flash, sparks[], vels[], left}]（光束命中迸裂池）
 var _impact_idx: int = 0
+var _impact_cd: float = 0.0                   # R202 ⑨：迸裂全局节流计时（IMPACT_CD 口径）
 var _devours: Array[Dictionary] = []          # [{flash, sparks[], vels[], left}]（吞噬内聚池）
 var _devour_idx: int = 0
 var _devour_cd: float = 0.0                   # 吞噬特效全局节流计时
@@ -85,6 +126,8 @@ var _skill_rings: Array[Dictionary] = []      # 技能施放金环槽池（R19�
 var _skill_ring_idx: int = 0
 var _rxn_rings: Array[Dictionary] = []        # 反应专属环槽池（R22：过载双环/超导雾环）
 var _rxn_ring_idx: int = 0
+var _marks: Array[Dictionary] = []            # [{root, main, echo, left}]（二cu 灵剑剑痕池）
+var _mark_idx: int = 0
 
 
 func _ready() -> void:
@@ -99,6 +142,7 @@ func _ready() -> void:
 	_build_impacts()
 	_build_devours()
 	_build_knocktexts()
+	_build_marks()
 	EventBus.chain_lightning.connect(_on_chain_lightning)
 	EventBus.knockback_hit.connect(_on_knockback_hit)
 	EventBus.poison_cloud_cast.connect(_on_poison_cloud_cast)
@@ -114,6 +158,7 @@ func _ready() -> void:
 	EventBus.bullet_nullified.connect(_on_bullet_nullified)
 	EventBus.beam_impact.connect(_on_beam_impact)
 	EventBus.burn_devour_proc.connect(_on_burn_devour)
+	EventBus.sword_mark.connect(_on_sword_mark)
 
 func tick(p_raw_delta: float) -> void:
 	# GameLoop ⑦ feel 阶段驱动（raw 通道）；非战斗状态不被驱动 → 表现件自然冻结
@@ -130,6 +175,7 @@ func tick(p_raw_delta: float) -> void:
 	_tick_blasts(p_raw_delta)
 	_tick_skill_rings(p_raw_delta)
 	_tick_rxn_rings(p_raw_delta)
+	_tick_marks(p_raw_delta)
 
 
 # ── 感电连锁主锯齿闪电（签名特效） ────────────────────────────────
@@ -163,12 +209,13 @@ func _build_bolts() -> void:
 		root.add_child(flash)
 		add_child(root)
 		_bolts.append({"root": root, "core": core, "glow": glow, "flash": flash,
-			"left": 0.0})
+			"pts": PackedVector2Array(), "left": 0.0})   # R188⑩：每槽折线顶点缓冲（复用）
 
 
 func _on_chain_lightning(p_from: Vector2, p_to: Vector2) -> void:
 	# 取池内下一道闪电（轮换）：定位源敌 → 重铺双层折线 + 中点星闪 + 落点电花迸溅；
-	# 终点存 meta（生命期逐帧重铺折线复用，零额外分配）。
+	# 终点存 meta（生命期逐帧重铺折线复用；R188⑩ 顶点按槽复用后，逐帧重铺确为零新建
+	# 分配——旧注释「零额外分配」与每帧新建 pts 的事实不符，现改如实描述）。
 	# R188 档2：电花数接 fx_quality 档预算 [0,1,3]（0 = 闪电整体关；高档口径不变 3）
 	var zap_budget: int = BOLT_ZAP_BUDGET[_fx_quality()]
 	if zap_budget <= 0:
@@ -190,10 +237,14 @@ func _on_chain_lightning(p_from: Vector2, p_to: Vector2) -> void:
 
 func _layout_bolt(p_bolt: Dictionary, p_local_to: Vector2, p_amp: float) -> void:
 	# 双层折线铺点（白芯 + 紫辉同形）：沿线插值 + 预生成垂直抖动系数 × 包络 × 段长
+	# R188⑩：顶点缓冲按槽复用（原每调新建 PackedVector2Array+append——每活雷每帧
+	# 常量税）；resize+下标赋值原地重铺。core/glow.points 赋值仍引擎侧 COW 拷贝——
+	# 本缓冲下帧再改不回写已上屏折线（Line2D 自持独立副本），语义逐位不变
 	var patterns := _get_bolt_patterns()
 	var offsets: PackedFloat32Array = patterns[_pattern_idx % patterns.size()]
 	_pattern_idx += 1
-	var pts := PackedVector2Array()
+	var pts: PackedVector2Array = p_bolt["pts"]
+	pts.resize(BOLT_SEGMENTS + 1)
 	var perp := Vector2(p_local_to.y, -p_local_to.x).normalized()
 	if perp == Vector2.ZERO:
 		perp = Vector2.UP
@@ -201,7 +252,7 @@ func _layout_bolt(p_bolt: Dictionary, p_local_to: Vector2, p_amp: float) -> void
 		var t := float(i) / float(BOLT_SEGMENTS)
 		var amp := 0.0 if i == 0 or i == BOLT_SEGMENTS \
 			else offsets[i % offsets.size()] * p_amp * p_local_to.length() * 0.16
-		pts.append(p_local_to * t + perp * amp)
+		pts[i] = p_local_to * t + perp * amp
 	var core: Line2D = p_bolt["core"]
 	var glow: Line2D = p_bolt["glow"]
 	core.points = pts
@@ -259,6 +310,10 @@ func _build_sparks() -> void:
 func _on_dot_fired(p_pos: Vector2) -> void:
 	# 跳伤瞬间：橙光晕一闪 + 火星上飘（用户反馈「燃烧特效没看见」→ 加量）。
 	# R188 档2：火星数接 fx_quality 档预算 [0,2,4]（低档全关；高档口径不变 4 粒）
+	# R213 B案：满载门——DOT 跳伤表现（光晕+火星）整体关（敌身火苗/染色保留读感，
+	# enemy 侧 A 案；敌数回落自动恢复）
+	if Enemy.fullload_dim():
+		return
 	var budget: int = DOT_SPARK_BUDGET[_fx_quality()]
 	if budget <= 0:
 		return
@@ -296,7 +351,7 @@ func _tick_sparks(p_raw_delta: float) -> void:
 		vel.y += 320.0 * p_raw_delta             # 火星上抛后回落（重力）
 		spark["vel"] = vel
 		sp.position += vel * p_raw_delta
-		sp.modulate.a = clampf(left / SPARK_LIFE * 1.3, 0.0, 1.0)
+		sp.modulate.a = _qa(clampf(left / SPARK_LIFE * 1.3, 0.0, 1.0))
 
 
 # ── 碎裂冲击小环（RXN_FIR_ICE 结算瞬间；夜间R58 主环改冰蓝——用户反馈「冰冻的
@@ -444,14 +499,14 @@ func _tick_rxn_rings(p_raw_delta: float) -> void:
 			continue
 		var t := 1.0 - left / float(slot["life"])
 		sp.scale = Vector2.ONE * lerpf(0.3, float(slot["scale"]), t)
-		sp.modulate.a = 1.0 - t
+		sp.modulate.a = _qa(1.0 - t)
 
 
 func _layout_ring(p_ring: Dictionary, p_progress: float) -> void:
 	var sp: Sprite2D = p_ring["sprite"]
 	var r: float = lerpf(RING_R0, RING_R1, p_progress)
 	sp.scale = Vector2.ONE * (r / 19.0)          # 贴图环半径 19px 口径
-	sp.modulate.a = clampf(1.0 - p_progress, 0.0, 1.0) * 0.95
+	sp.modulate.a = _qa(clampf(1.0 - p_progress, 0.0, 1.0) * 0.95)
 
 
 # ── 青色涟漪（护盾格挡 / 弧斩消弹——2026-08-29 用户反馈「格挡要看得见」） ──
@@ -492,7 +547,7 @@ func _layout_ripple(p_ripple: Dictionary, p_progress: float) -> void:
 	var sp: Sprite2D = p_ripple["sprite"]
 	var r: float = lerpf(float(p_ripple["r0"]), float(p_ripple["r1"]), p_progress)
 	sp.scale = Vector2.ONE * (r / 19.0)
-	sp.modulate.a = clampf(1.0 - p_progress, 0.0, 1.0) * 0.85
+	sp.modulate.a = _qa(clampf(1.0 - p_progress, 0.0, 1.0) * 0.85)
 
 
 func _tick_ripples(p_raw_delta: float) -> void:
@@ -566,7 +621,7 @@ func _tick_zaps(p_raw_delta: float) -> void:
 		zap["vel"] = vel
 		sp.position += vel * p_raw_delta
 		sp.rotation += float(zap["rot_vel"]) * p_raw_delta
-		sp.modulate.a = clampf(left / ZAP_LIFE * 1.4, 0.0, 1.0)
+		sp.modulate.a = _qa(clampf(left / ZAP_LIFE * 1.4, 0.0, 1.0))
 
 
 # ── DOT 橙光晕（点燃跳伤瞬间体周一闪） ───────────────────────────
@@ -594,7 +649,7 @@ func _tick_glows(p_raw_delta: float) -> void:
 			continue
 		var t := 1.0 - left / GLOW_LIFE
 		sp.scale = Vector2.ONE * lerpf(0.5, 1.15, t)   # 扩散
-		sp.modulate.a = 0.5 * (1.0 - t)                # 渐隐
+		sp.modulate.a = _qa(0.5 * (1.0 - t))                # 渐隐
 
 
 # ── 光束命中迸裂（脉冲激光每跳结算：星闪 + 束色火花迸溅） ──────────
@@ -607,14 +662,14 @@ func _build_impacts() -> void:
 		var flash := Sprite2D.new()
 		flash.name = "Flash"
 		flash.texture = TextureFactory.star(44, PopPalette.PLAYER.lerp(Color.WHITE, 0.55))
-		flash.modulate = Color(1.0, 1.0, 1.0, 0.95)
+		flash.modulate = Color(1.0, 1.0, 1.0, _qa(0.95))   # R229：常亮底 alpha 上网格（tick 只重写 root/火花，flash.a 不再逐帧写——族内全域四分档）
 		root.add_child(flash)
 		var sparks: Array[Sprite2D] = []
 		for j in range(IMPACT_SPARKS):
 			var sp := Sprite2D.new()
 			sp.name = "Spark%d" % j
 			sp.texture = TextureFactory.bead(PopPalette.PLAYER, 24, false)
-			sp.modulate = Color(1.0, 1.0, 1.0, 0.9)
+			sp.modulate = Color(1.0, 1.0, 1.0, _qa(0.9))   # R229：建槽底 alpha 上网格（tick 逐帧重写，此值仅首发帧前生效）
 			root.add_child(sp)
 			sparks.append(sp)
 		add_child(root)
@@ -624,6 +679,11 @@ func _build_impacts() -> void:
 
 func _on_beam_impact(p_pos: Vector2, p_dir: Vector2) -> void:
 	# 取池内下一槽（轮换）：星闪原地爆散（旋转 + 快缩）+ 火花朝束反向半球迸溅（快出快停）
+	# R202 ⑨：全局节流（_devour_cd 先例——激光每跳同源多触发的观感上限；CD 窗内静默
+	# 吞触发，不影响 EventBus.beam_impact 广播契约与激光侧结算）
+	if _impact_cd > 0.0:
+		return
+	_impact_cd = IMPACT_CD
 	var impact: Dictionary = _impacts[_impact_idx % IMPACT_COUNT]
 	_impact_idx += 1
 	var root: Node2D = impact["root"]
@@ -649,6 +709,7 @@ func _on_beam_impact(p_pos: Vector2, p_dir: Vector2) -> void:
 
 
 func _tick_impacts(p_raw_delta: float) -> void:
+	_impact_cd = maxf(_impact_cd - p_raw_delta, 0.0)   # R202 ⑨：迸裂节流计时推进
 	for impact: Dictionary in _impacts:
 		var left := float(impact["left"])
 		if left <= 0.0:
@@ -673,8 +734,8 @@ func _tick_impacts(p_raw_delta: float) -> void:
 			vel *= maxf(1.0 - 7.0 * p_raw_delta, 0.0)
 			vels[j] = vel
 			sp.position += vel * p_raw_delta
-			sp.modulate.a = clampf(left / IMPACT_LIFE * 1.4, 0.0, 1.0)
-		root.modulate.a = clampf(1.2 - progress, 0.0, 1.0)
+			sp.modulate.a = _qa(clampf(left / IMPACT_LIFE * 1.4, 0.0, 1.0))
+		root.modulate.a = _qa(clampf(1.2 - progress, 0.0, 1.0))
 
 
 # ── 烈焰吞噬内聚（burn_dmg 乘区生效：外圈火苗向命中点旋入——2026-09-13 用户反馈） ──
@@ -747,7 +808,7 @@ func _tick_devours(p_raw_delta: float) -> void:
 		var flash: Sprite2D = dv["flash"]
 		flash.rotation += p_raw_delta * 16.0
 		flash.scale = Vector2.ONE * lerpf(0.7, 1.3, progress)   # 中心星闪放大 = 汲取聚拢
-		flash.modulate.a = 0.9 * (1.0 - progress)
+		flash.modulate.a = _qa(0.9 * (1.0 - progress))
 		var sparks: Array = dv["sparks"]
 		var vels: PackedVector2Array = dv["vels"]
 		for j in range(sparks.size()):
@@ -756,7 +817,7 @@ func _tick_devours(p_raw_delta: float) -> void:
 				continue
 			sp.position += vels[j] * p_raw_delta
 			sp.scale = sp.scale * maxf(1.0 - 2.5 * p_raw_delta, 0.25)   # 卷入即缩（被吞）
-			sp.modulate.a = clampf(left / DEVOUR_LIFE * 1.5, 0.0, 1.0)
+			sp.modulate.a = _qa(clampf(left / DEVOUR_LIFE * 1.5, 0.0, 1.0))
 
 
 # ── 击退小字（强击退生效提示——R7 用户反馈「击退小字蹦出来」） ──────────
@@ -802,12 +863,14 @@ func _tick_knocktexts(p_raw_delta: float) -> void:
 
 
 # ── 毒云领域持续表现（薇拉技能——R10 用户反馈「只有白色掉血没特效」） ────
-func _on_poison_cloud_cast(p_pos: Vector2, p_radius: float) -> void:
+func _on_poison_cloud_cast(p_pos: Vector2, p_radius: float, p_dur: float = 6.0) -> void:
+	# R246：p_dur 默认 6.0（普通版）——r199_g6 两参直调硬依赖保持兼容；vera 升华
+	# 「毒理学终章」7s 窗经 player 侧 emit 第三参传入（不再第 6s 提前渐隐）
 	_poison["active"] = true
 	_poison["center"] = p_pos
 	_poison["radius"] = p_radius
-	_poison["left"] = 6.0
-	_poison["dur"] = 6.0
+	_poison["left"] = p_dur
+	_poison["dur"] = p_dur
 	_poison["anim"] = 0.0
 	queue_redraw()
 
@@ -848,6 +911,14 @@ func _tick_poison(p_raw_delta: float) -> void:
 
 
 func _draw() -> void:
+	# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+	# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+	DebugStats.bucket_begin(&"draw")
+	_draw_r271()
+	DebugStats.bucket_end(&"draw")
+
+
+func _draw_r271() -> void:
 	# 毒圈：半透绿盘 + 双层呼吸描边 + 8 颗毒泡（相位漂移）；末 1.5s 渐隐
 	if not bool(_poison["active"]):
 		return
@@ -967,7 +1038,7 @@ func _tick_skill_rings(p_raw_delta: float) -> void:
 			continue
 		var t := 1.0 - left / 0.4
 		sp.scale = Vector2.ONE * lerpf(0.3, 2.6, t)
-		sp.modulate.a = 1.0 - t
+		sp.modulate.a = _qa(1.0 - t)
 
 
 func _tick_blasts(p_raw_delta: float) -> void:
@@ -987,19 +1058,20 @@ func _tick_blasts(p_raw_delta: float) -> void:
 		var r1: float = float(slot["r1"])
 		var flash: Sprite2D = slot["flash"]
 		if t < 0.3:
-			flash.modulate.a = 1.0 - t / 0.3
+			flash.modulate.a = _qa(1.0 - t / 0.3)
 			flash.scale = Vector2.ONE * flash.scale.x * (1.0 + p_raw_delta * 6.0)
 		else:
 			flash.visible = false
 		var fire: Sprite2D = slot["fire"]
 		var ft := clampf(t / 0.75, 0.0, 1.0)
 		fire.scale = Vector2.ONE * lerpf(r1 * 0.25 / 32.0, r1 * 0.78 / 32.0, ft)
-		fire.modulate = Color(1.0, lerpf(0.55, 0.30, ft), lerpf(0.18, 0.10, ft), 1.0 - ft * 0.9)
+		fire.modulate = Color(1.0, _qa(lerpf(0.55, 0.30, ft)), _qa(lerpf(0.18, 0.10, ft)),
+			_qa(1.0 - ft * 0.9))
 		var ring: Sprite2D = slot["ring"]
 		if t > 0.08:
 			var rt := clampf((t - 0.08) / 0.92, 0.0, 1.0)
 			ring.scale = Vector2.ONE * lerpf(0.3, r1 * 1.12 / 19.0, rt)
-			ring.modulate.a = 0.95 * (1.0 - rt)
+			ring.modulate.a = _qa(0.95 * (1.0 - rt))
 		else:
 			ring.modulate.a = 0.0
 		var smoke: Sprite2D = slot["smoke"]
@@ -1007,7 +1079,7 @@ func _tick_blasts(p_raw_delta: float) -> void:
 			var st := clampf((t - 0.18) / 0.82, 0.0, 1.0)
 			smoke.position.y -= p_raw_delta * 26.0
 			smoke.scale = Vector2.ONE * lerpf(r1 * 0.5 / 32.0, r1 * 0.95 / 32.0, st)
-			smoke.modulate.a = 0.5 * (1.0 - st)
+			smoke.modulate.a = _qa(0.5 * (1.0 - st))
 		else:
 			smoke.modulate.a = 0.0
 
@@ -1109,6 +1181,14 @@ class MissileBlastFx:
 		queue_redraw()
 
 	func _draw() -> void:
+		# R271 P4：绘µs wrap（自绘件 _draw 计时入 &"draw" 桶——只加计不改行为；
+		# 原体迁 _draw_r271，早退 return 由委托面兜底不漏收口）
+		DebugStats.bucket_begin(&"draw")
+		_draw_r271()
+		DebugStats.bucket_end(&"draw")
+
+
+	func _draw_r271() -> void:
 		var k := clampf(_t / LIFE, 0.0, 1.0)
 		var fire := PopPalette.ELEMENT_COLORS[GameConst.Element.FIR]   # 火球主色（色表单源）
 		var ember := fire.darkened(0.45)                               # 余烬深红（派生渐变）
@@ -1151,3 +1231,66 @@ class MissileBlastFx:
 			var sp := Vector2(float(sm["off"].x), float(sm["off"].y)) * radius 				+ Vector2(0.0, -46.0 * k)
 			draw_circle(sp, radius * float(sm["r"]) * (0.6 + 0.6 * k),
 				Color(0.45, 0.40, 0.38, 0.30 * (1.0 - k)))
+
+
+# ── 二cu 灵剑剑痕（W11 命中反馈——斜置剑痕小范围闪现，池化 Line2D） ──
+func _build_marks() -> void:
+	# 每槽 Node2D 容器 + 2×Line2D（主痕银蓝白 + 副痕深蓝偏移）——_ready 预建轮换，
+	# 运行期零实例化（本层纪律同 zaps/glows）；rot/pos 由 _fire_mark 落位
+	for i in range(MARK_COUNT):
+		var root := Node2D.new()
+		root.name = "SwordMark%d" % i
+		var main := Line2D.new()
+		main.points = PackedVector2Array([Vector2(-13.0, 0.0), Vector2(13.0, 0.0)])
+		main.width = 2.8
+		main.default_color = MARK_MAIN_COL
+		main.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		main.end_cap_mode = Line2D.LINE_CAP_ROUND
+		var echo := Line2D.new()
+		echo.points = PackedVector2Array([Vector2(-8.0, 4.5), Vector2(10.0, 3.0)])
+		echo.width = 1.4
+		echo.default_color = MARK_ECHO_COL
+		echo.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		echo.end_cap_mode = Line2D.LINE_CAP_ROUND
+		root.add_child(main)
+		root.add_child(echo)
+		root.visible = false
+		add_child(root)
+		_marks.append({"root": root, "main": main, "echo": echo, "left": 0.0})
+
+
+func _on_sword_mark(p_pos: Vector2, p_angle: float) -> void:
+	# 剑痕落位：目标位 + 来速角 +45° 斜置（「斜着的剑痕」——直角入射也呈斜痕）+ 槽序
+	# 微抖动防齐射同角度平行痕；质量分档（低档整体关 / 中档主痕 / 高档主+副）
+	if int(SWORD_MARK_BUDGET[_fx_quality()]) <= 0:
+		return
+	var mark: Dictionary = _marks[_mark_idx % MARK_COUNT]
+	_mark_idx += 1
+	var root: Node2D = mark["root"]
+	root.position = p_pos
+	root.rotation = p_angle + PI * 0.25 + float(_mark_idx % 3 - 1) * 0.10
+	root.visible = true
+	(mark["echo"] as Line2D).visible = int(SWORD_MARK_BUDGET[_fx_quality()]) >= 2
+	mark["left"] = MARK_LIFE
+
+
+func _tick_marks(p_raw_delta: float) -> void:
+	for mark: Dictionary in _marks:
+		var left := float(mark["left"])
+		if left <= 0.0:
+			continue
+		left = maxf(left - p_raw_delta, 0.0)
+		mark["left"] = left
+		var root: Node2D = mark["root"]
+		if left <= 0.0:
+			root.visible = false
+			continue
+		var t := 1.0 - left / MARK_LIFE
+		# 前段快速张开（0.55→1.12）后整体渐隐 + 痕宽收细（划开读感，R229 _qa 量化渐隐）
+		root.scale = Vector2.ONE * lerpf(0.55, 1.12, minf(t * 2.6, 1.0))
+		var main: Line2D = mark["main"]
+		var echo: Line2D = mark["echo"]
+		main.modulate.a = _qa(1.0 - t)
+		echo.modulate.a = _qa((1.0 - t) * 0.7)
+		main.width = lerpf(2.8, 1.2, t)
+		echo.width = lerpf(1.4, 0.6, t)

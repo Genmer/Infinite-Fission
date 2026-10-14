@@ -177,7 +177,10 @@ func _diag_lines_part1() -> void:
 	# R235 搭车③迁移：行尾再追加「物步µsN 派µsN 渲msN.N」三键（物理服务器步本体/
 	# ⑧前派发段/渲染轴秒窗读数）——物步µs/渲ms=秒窗时序读数不逐位断言（X 口径），
 	# 派µs=MENU 探针关=0 确定值（同 插模拟µs 迁移纪律）
-	rx_l1.compile("补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d( 挡\\d+)?$")
+	# R269 B 轨迁移（§0.2 预声明）：行尾再追加八键（死µs/警µs/桶µs/延µs/释N/敌弹N/拒N/
+	# 促N）——秒窗桶与差分/直读键同 X 口径不断言值（MENU 同步窗内多为 0 但引擎帧
+	# 在跑即 延µs 可非 0，不锁值）
+	rx_l1.compile("补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d( 挡\\d+)?( 死µs\\d+)?( 警µs\\d+)?( 桶µs\\d+)?( 延µs\\d+)?( 释\\d+)?( 敌弹\\d+)?( 拒\\d+)?( 促\\d+)?( 步µs\\d+)?( 隙µs\\d+)?( 延早µs\\d+)?( 延渲µs\\d+)?( 延峰µs\\d+)?( 加\\d+)?( 摘\\d+)?( 绘µs\\d+)?( 渲帧\\d+)?( 呈帧\\d+)?( 渲峰ms\\d+\\.\\d+)?$")
 	_check("L1 行尾段「 补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µsX 派µs0 渲msX.X」（追加位在位、触发前读 0——R231 快N/R232 T1b 结µs/R233 T1 插µs/R233 修轮 插模拟µs+派deferred/派drop/R235 搭车③ 物步µs+派µs+渲ms 追加在派drop 后；预置格式化后同步零帧 → 插模拟µs0/派µs0 确定值；物步µs/渲ms=秒窗均值时序读数不断言值）",
 		rx_l1.search(_line_l1) != null, "tail=%s" % _line_l1.right(64))
 
@@ -204,9 +207,11 @@ func _strip_trim(p_line: String) -> String:
 	#（既有子串（至 补%d）提取——R231 快N/R232 T1b 结µs/R233 T1 插µs/R233 修轮 插模拟µs+
 	# 派deferred/派drop/R235 搭车③ 物步µs+派µs+渲ms 追加在裁N 后，同归「行尾新段」一并
 	# 剥离：快N=当帧分区计数，L2/L3 并发弹读数与 L1 不同属预期；插模拟µs/物步µs/渲ms=
-	# 时序读数同剥离不断言值）
+	# 时序读数同剥离不断言值；R269 B 轨八键（死µs/警µs/桶µs/延µs/释N/敌弹N/拒N/促N）
+	# 同归行尾新段一并剥离——秒窗桶/差分键不断言值；R271 P 轨十一键（步µs…渲峰ms）
+	# 同归行尾新段剥离（时序/计数读数不断言值——qa_r228 迁移同批）
 	var rx := RegEx.new()
-	rx.compile(" 裁\\d+ 快\\d+( 结µs\\d+)?( 插µs\\d+)?( 插模拟µs\\d+)?( 派deferred\\d+)?( 派drop\\d+)?( 物步µs\\d+)?( 派µs\\d+)?( 渲ms\\d+\\.\\d+)?( 挡\\d+)?$")
+	rx.compile(" 裁\\d+ 快\\d+( 结µs\\d+)?( 插µs\\d+)?( 插模拟µs\\d+)?( 派deferred\\d+)?( 派drop\\d+)?( 物步µs\\d+)?( 派µs\\d+)?( 渲ms\\d+\\.\\d+)?( 挡\\d+)?( 死µs\\d+)?( 警µs\\d+)?( 桶µs\\d+)?( 延µs\\d+)?( 释\\d+)?( 敌弹\\d+)?( 拒\\d+)?( 促\\d+)?( 步µs\\d+)?( 隙µs\\d+)?( 延早µs\\d+)?( 延渲µs\\d+)?( 延峰µs\\d+)?( 加\\d+)?( 摘\\d+)?( 绘µs\\d+)?( 渲帧\\d+)?( 呈帧\\d+)?( 渲峰ms\\d+\\.\\d+)?$")
 	var m := rx.search(p_line)
 	return p_line.substr(0, m.get_start()) if m != null else ""
 
@@ -270,13 +275,18 @@ func _diag_lines_part2() -> void:
 	# 派deferred/派drop=MENU 无战斗派发 → 确定零。L3：L2→L3 同步零帧 → 插模拟µs0。
 	# R235 搭车③迁移：行尾再追加 物步µsN 派µsN 渲msN.N（三键恒在——秒窗均值时序读数
 	# 不逐位断言，X 口径；派µs MENU 探针关=0 确定值）。
+	# R269 B 轨再迁移（设计 §5-b4「末端锚定则同批迁移」——§0.2 声明族）：行尾再追加
+	# 八键段（死µs/警µs/桶µs/延µs/释N/敌弹N/拒N/促N）——本套 MENU 冻结同步窗内
+	# 除 延µs（哨兵冲刷窗时序读数 X 口径）外全 0 确定值。
+	# R271 P 轨迁移（同协议三迁）：促 后续组十一键（步µs…渲峰ms 全可选组——
+	# qa_r228_diagfreeze_cases.gd:152 / r230_k2 / bucketprobe 同批迁移）
 	var rx_tail := RegEx.new()
-	rx_tail.compile(" 裁\\d+ 快\\d+ 结µs\\d+ 插µs\\d+ 插模拟µs\\d+ 派deferred\\d+ 派drop\\d+ 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d+( 挡\\d+)?$")
+	rx_tail.compile(" 裁\\d+ 快\\d+ 结µs\\d+ 插µs\\d+ 插模拟µs\\d+ 派deferred\\d+ 派drop\\d+ 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d+( 挡\\d+)?( 死µs\\d+)?( 警µs\\d+)?( 桶µs\\d+)?( 延µs\\d+)?( 释\\d+)?( 敌弹\\d+)?( 拒\\d+)?( 促\\d+)?( 步µs\\d+)?( 隙µs\\d+)?( 延早µs\\d+)?( 延渲µs\\d+)?( 延峰µs\\d+)?( 加\\d+)?( 摘\\d+)?( 绘µs\\d+)?( 渲帧\\d+)?( 呈帧\\d+)?( 渲峰ms\\d+\\.\\d+)?$")
 	_check("L2 行尾六段在位「 裁372 快0 结µs0 插µs0 插模拟µsX 派deferred0 派drop0 物步µsX 派µs0 渲msX.X」（裁372 触发后下一采样行 >0；X=时序读数不断言值）",
 		rx_tail.search(_line_l2) != null and _line_l2.contains("裁372 快0 结µs0 插µs0")
 			and _line_l2.contains("派deferred0 派drop0"), "tail=%s" % _line_l2.right(64))
 	var rx_l3 := RegEx.new()
-	rx_l3.compile("裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d( 挡\\d+)?$")
+	rx_l3.compile("裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs\\d+ 派µs0 渲ms\\d+\\.\\d( 挡\\d+)?( 死µs\\d+)?( 警µs\\d+)?( 桶µs\\d+)?( 延µs\\d+)?( 释\\d+)?( 敌弹\\d+)?( 拒\\d+)?( 促\\d+)?( 步µs\\d+)?( 隙µs\\d+)?( 延早µs\\d+)?( 延渲µs\\d+)?( 延峰µs\\d+)?( 加\\d+)?( 摘\\d+)?( 绘µs\\d+)?( 渲帧\\d+)?( 呈帧\\d+)?( 渲峰ms\\d+\\.\\d+)?$")
 	_check("L3 行尾「 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µsX 派µs0 渲msX.X」（之后归 0——一次性读数；物步µs/渲ms=秒窗均值时序读数不断言值）",
 		rx_l3.search(_line_l3) != null, "tail=%s" % _line_l3.right(56))
 	var s1 := _strip_trim(_line_l1)
@@ -288,8 +298,12 @@ func _diag_lines_part2() -> void:
 		s3 == s1 and s3 != "", "len=%d/%d" % [s1.length(), s3.length()])
 	_check("diag_counts 再拉 pool_trimmed==0（一次性语义——差分已清）",
 		int(_gl.diag_counts().get(&"pool_trimmed", -1)) == 0, "")
+	# R253 位图值改宽：位图N 的 N 是位图跳字计数（依赖 PopupGlyphAtlas bake 态——
+	# R227 桌面自动门环境值，长测试会话中 1→0 漂移；断言本意=段序「位图/翻/补 在 裁
+	# 之前」，位图数值非断言目的）；裁372 硬值保留（前置组构造的池裁量）
 	_check("R226/R227 段原样（位图/翻/补 在 裁 之前）",
-		_line_l2.contains(" 位图1 翻0 补0 裁372"), "seg=%s" % _line_l2.right(40))
+		_line_l2.contains(" 翻0 补0 裁372") and _line_l2.find(" 位图") < _line_l2.find(" 翻0"),
+		"seg=%s" % _line_l2.right(40))
 
 
 # ── ①b 树实减：queue_free 落地后子节点数对账 ────────────────────────

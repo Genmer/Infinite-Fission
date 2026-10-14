@@ -1,0 +1,23 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══ R234 overkill 封顶实证：r224 深载夹具 × damage_resolved 事件流 × 帧初 hp 快照 ══
+boot：r224 同款深载夹具就绪（grove w16 42 构成 压血×0.30；W2 L5 五词条无棱镜）
+── S0 预算关（override=-2）：①②③ 出数情景 ──
+账本对账：事件数=87279｜diag 结N 和=87441｜enemy_killed=2902｜补位击杀口径=2890
+① 一击致死率：①a 命中时点 hp_before≤final 6.8%（5902/87279）｜①b 帧初 hp≤final 2.6%（2298/87279）
+② 同帧同目标组：组数=34322（19.1/帧）｜size=1 58.9%｜2-4 28.1%｜5+ 13.0%｜组均 2.54 发｜max=55｜多发组 14109
+③ 白打占比：账本推死后仍提交 4.1%（3561/87279）｜白打伤害占比 2.9%（11128/380011）
+③e 暴击账：全事件暴击 4.4%｜白打中暴击 4.9%（合并掷骰的期望损失输入）
+需求轴：提交=2909/s（48.5/步）｜击杀=2902（96.7/s）｜发/击杀=30.1｜口径外命中（帧初无档）=26172
+驻场对齐：敌 p50=120｜弹 p50=369（r224 基线带 敌118+/弹60-350）
+  FAIL | C1 事件流完整：事件数 == diag 结N 和（S0 全量提交可见）（87279 vs 87441）
+  PASS | C2 敌驻场 p50≥118（120）
+  FAIL | C3 弹带 p50∈[60,350]（369）
+留档：res://docs/qa/probe_r234_overkill_baseline.json
+── S1 模拟真机 tier2（override=-3，帽96@60Hz——仅饱和度参照轴） ──
+饱和度参照：提交/步 p50=51.0（3059/s）｜结=50.7｜顺=0.4｜弃=0.0（r224 对照用）
+── S2 饱和复现（override=48 强制帽——仅饱和度参照轴） ──
+饱和度参照：提交/步 p50=95.4（5723/s）｜结=44.8｜顺=44.0｜弃=7.0（r224 对照用）
+PROBE 汇总：2 项硬门未过（见上 FAIL 行）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

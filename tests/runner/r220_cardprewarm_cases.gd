@@ -100,7 +100,8 @@ func _test_1_menu_drive_gate() -> void:
 	_check("预热期量测计入 DebugStats.fit_desc_measures（量测本体计数）",
 		DebugStats.get_counter(&"fit_desc_measures") - dbg0 > 0,
 		"delta=%d" % (DebugStats.get_counter(&"fit_desc_measures") - dbg0))
-	# 离开菜单：PLAYING 态驱动暂停（不偷跑战斗期帧预算）
+	# 离开菜单：R256 序1 契约翻案——PLAYING 态续泵（战斗帧 2ms/帧消化余量，
+	# 每局首次升级开卡顿挫根治）；旧契约「PLAYING 不泵」随刀废止
 	_gl.state = GameConst.GameStatus.MENU
 	_gl.current_map_id = MapTable.FIRST_MAP_ID
 	_gl.start_run()
@@ -110,8 +111,16 @@ func _test_1_menu_drive_gate() -> void:
 	await tree.process_frame
 	await tree.process_frame
 	await tree.process_frame
-	_check("离开菜单暂停（PLAYING 帧推进 remaining 不变）",
-		Prewarm.remaining() == r0, "%d → %d" % [r0, Prewarm.remaining()])
+	_check("战斗续泵（R256 序1：PLAYING 帧推进 remaining 递减）",
+		Prewarm.remaining() < r0, "%d → %d" % [r0, Prewarm.remaining()])
+	# 泵门=PLAYING 态单门：PAUSED 不泵（暂停帧预算不偷跑——序1 边界侧证）
+	if _gl.change_state(GameConst.GameStatus.PAUSED):
+		var r1: int = Prewarm.remaining()
+		await tree.process_frame
+		await tree.process_frame
+		_check("PAUSED 不泵（暂停帧推进 remaining 不变）",
+			Prewarm.remaining() == r1, "%d → %d" % [r1, Prewarm.remaining()])
+		_gl.change_state(GameConst.GameStatus.PLAYING)
 
 
 # ── ② 变体全清单清点 + 全量泵 + 抽测全命中 ────────────────────────
@@ -152,14 +161,17 @@ func _test_2_variant_coverage() -> void:
 	_check("① 4 稀有度数值重写全在变体（value_scale ×1.0/×1.4/×1.9/×2.6）",
 		vs_seen.has("1.0") and vs_seen.has("1.4") and vs_seen.has("1.9") and vs_seen.has("2.6"),
 		str(vs_seen.keys()))
-	# ② MASTERY 等级文案（等级域生成——任意 ±2 近窗超集；描述三态全在）
+	# ② MASTERY 等级文案（等级域生成——任意 ±3 近窗超集（R245 boosts 最高 +3，相邻两窗
+	#    武器等级最大跳变 3）；三档分化后描述六态全在）
 	var txts := {}
 	for v in variants:
 		txts[String(v["desc"])] = true
-	_check("② MASTERY 文案全四态在变体（+1 / +2 史诗连升 / +1 史诗连升(Lv4 封顶) / 已满级）",
+	_check("② MASTERY 文案全六态在变体（+1 / +2稀有连升 / +1稀有连升已触顶 / +2史诗连升×3已触顶 / +1史诗连升×3已触顶 / 已满级）",
 		txts.has("武器等级 +1（终值表口径）")
-			and txts.has("武器等级 +2（史诗品质连升 ×2）（终值表口径）")
-			and txts.has("武器等级 +1（史诗品质连升 ×2）（终值表口径）")
+			and txts.has("武器等级 +2（稀有品质连升 ×2）（终值表口径）")
+			and txts.has("武器等级 +1（稀有品质连升 ×2，已触顶）（终值表口径）")
+			and txts.has("武器等级 +2（史诗品质连升 ×3，已触顶）（终值表口径）")
+			and txts.has("武器等级 +1（史诗品质连升 ×3，已触顶）（终值表口径）")
 			and txts.has("已满级（终值表口径）"),
 		"")
 	# R226 有意契约变更：超帽注记退役——预热变体只余 milestone 尾注态（变体键空间收窄）
@@ -210,7 +222,7 @@ func _test_2_variant_coverage() -> void:
 	_check("⑥ DebugStats.fit_desc_measures 与静态观测口同步（每量测 +1）",
 		DebugStats.get_counter(&"fit_desc_measures") - dc0 == measures_delta,
 		"dbg=%d static=%d" % [DebugStats.get_counter(&"fit_desc_measures") - dc0, measures_delta])
-	# 抽测全命中：每稀有度一变体 + MASTERY 三态 + 尾注态 × 普通/双列两档
+	# 抽测全命中：每稀有度一变体 + MASTERY 六态（R245 三档分化）+ 尾注态 × 普通/双列两档
 	var ls := CardSelectUI.prewarm_line_spacing()
 	var samples: Array = []
 	var picked_vs := {}
@@ -224,8 +236,10 @@ func _test_2_variant_coverage() -> void:
 			samples.append({"text": CardSelectUI.compose_desc_text(String(v["desc"]), vs, true),
 				"cw": 324.0, "compact": true, "ls": ls})
 	for mastery_txt in ["武器等级 +1（终值表口径）",
-			"武器等级 +2（史诗品质连升 ×2）（终值表口径）",
-			"武器等级 +1（史诗品质连升 ×2）（终值表口径）", "已满级（终值表口径）"]:
+			"武器等级 +2（稀有品质连升 ×2）（终值表口径）",
+			"武器等级 +1（稀有品质连升 ×2，已触顶）（终值表口径）",
+			"武器等级 +2（史诗品质连升 ×3，已触顶）（终值表口径）",
+			"武器等级 +1（史诗品质连升 ×3，已触顶）（终值表口径）", "已满级（终值表口径）"]:
 		samples.append({"text": mastery_txt, "cw": 600.0, "compact": false, "ls": ls})
 		samples.append({"text": CardSelectUI.compose_desc_text(mastery_txt, 1.0, true),
 			"cw": 324.0, "compact": true, "ls": ls})
@@ -343,7 +357,7 @@ func _test_5_open_window_measures() -> void:
 			"description": String(by_vs["%.1f" % vs]), "value_scale": vs, "milestone": false})
 	cands.append({"kind": CardGenerator.CardKind.MASTERY, "id": &"R220PROBE_M",
 		"rarity": 2, "data": null, "display_name": "精通探针",
-		"description": "武器等级 +2（史诗品质连升 ×2）（终值表口径）"})
+		"description": "武器等级 +2（史诗品质连升 ×3，已触顶）（终值表口径）"})
 	var ui: CardSelectUI = _gl.card_select_ui
 	CardSelectUI.fit_desc_measures = 0
 	ui.open(cands, false)

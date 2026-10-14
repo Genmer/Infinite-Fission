@@ -841,6 +841,9 @@ func _test_6_weapon_gate() -> void:
 	_check("⑥矩阵：未登记 id → 0 恒开放（新武器入库漏登记不上锁）",
 		MechanicGate.weapon_unlock_map_index(&"W_UNREGISTERED") == 0)
 	# 无局态全开（既有验收基线不受扰）
+	# r250 难度武器门叠架：本组验「大关层」——难度层置地狱全开语境（本套件 boot 过
+	# start_run，run_gate_difficulty 已武装且残留普通档，不清会锁近战/法器族）
+	Meta.set_run_difficulty(2)
 	Meta.set_run_map(&"")
 	var all_open := true
 	for wid_v: Variant in _gl.registry.weapons.keys():
@@ -937,13 +940,20 @@ func _test_6_weapon_gate() -> void:
 		MechanicGate.weapon_allowed_progress(&"W4_pulse_beam")
 			and not MechanicGate.weapon_allowed_progress(&"W8_orbit_field"))
 	Meta.maps_cleared = _snap_maps_cleared        # 进度还原（防跨用例/跨套件串扰）
-	# R196 评审修复锁定：首发候选「获得优先于门」——候选过滤不再按门态滤已获得武器
-	# （原 run_map 残留把老档 10 把缩到 3 把 + 循环钮静默降级首发落盘）；W8 已获得
-	# 且进度门外仍入选，W1 白名单恒在
+	# R196 评审修复锁定「获得优先于门」→ R253（二dc L2）难度门有意收窄：地狱限定
+	# 近战/法器不再作为普通难度首发候选（用户难度层意图「普通见不到近战/法器」优先
+	# 于 P6「老档无损」——后者仅在卡池/echo 来源侧保留）。W8 已获得∧超当前所选
+	# 难度（NORMAL）→ 不入选；W1 白名单恒在；难度提到 HELL 则 W8 回候选（门正向）。
 	var cands6: Array[StringName] = menu._custom_weapon_candidates()
-	_check("⑥首发候选：已获得∧门外 W8 仍入选（获得优先于门——老档无损）",
-		cands6.has(&"W8_orbit_field") and cands6.has(&"W1_pistol"),
+	_check("⑥首发候选：已获得∧超难度 W8 不入选（R253 难度门优先于 P6 老档无损）",
+		not cands6.has(&"W8_orbit_field") and cands6.has(&"W1_pistol"),
 		"cands=%s" % [cands6])
+	menu._sel_difficulty = GameConst.Difficulty.HELL
+	var cands6h: Array[StringName] = menu._custom_weapon_candidates()
+	menu._sel_difficulty = GameConst.Difficulty.NORMAL
+	_check("⑥首发候选：难度提 HELL → 已获得 W8 回候选（门随所选难度正向开合）",
+		cands6h.has(&"W8_orbit_field") and cands6h.has(&"W1_pistol"),
+		"cands_h=%s" % [cands6h])
 	Meta.set_run_map(&"")
 	# echo 双武装同门（P4）：固定 seed → 双武器均门内 + 池空回退双首发不空手
 	_gl.player.character_id = &"echo"

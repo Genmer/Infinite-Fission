@@ -109,6 +109,11 @@ func _test_c10_boot_gate_weapons() -> void:
 # ── R199-P01：restart_run 难度附赠复活补授 ────────────────────────
 func _test_p01_restart_difficulty_revives() -> void:
 	print("── R199-P01 restart_run 难度附赠复活 ──")
+	# R252 迁移：_on_menu_start 在祝福池非空时弹面板挂起 start_run（game_loop.gd:1773），
+	# 旧写法同步读 revives_left 会拿到挂起态的 0。本组测 restart 补授、与祝福流正交，
+	# 按设计 §2.4-1/B2 合规退化口径快照清空 codex_traits 令池空直达战斗（收尾还原）。
+	var bk_codex: Dictionary = Meta.codex_traits.duplicate()
+	Meta.codex_traits.clear()
 	var meta_charges := int(Meta.revive_charges())
 	# 困难（附赠 1）：暂停面板「重新开始」路（PAUSED → restart_run）
 	_menu_start(1)
@@ -137,6 +142,7 @@ func _test_p01_restart_difficulty_revives() -> void:
 		_gl.restart_run() and int(_gl.player.revives_left) == meta_charges,
 		"revives=%d 养成=%d" % [int(_gl.player.revives_left), meta_charges])
 	_gl.quit_to_menu()
+	Meta.codex_traits = bk_codex               # 还原（防跨套件污染）
 
 
 # ── R199-P18①：选卡收口输入宽限（拖动残留不落位） ─────────────────

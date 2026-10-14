@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="RelicData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/data/resources/relic_data.gd" id="1_rd"]
+
+[resource]
+script = ExtResource("1_rd")
+id = &"REL_FIELD_MEDIC"
+display_name = "战地医师"
+description = "每波结束回复 8% 生命上限"
+rarity = 3
+listen_events = [&"wave_cleared"]
+effect_id = &"REL_EF_WAVE_HEAL"
+params = {"heal_pct": 0.08}
+unique = true

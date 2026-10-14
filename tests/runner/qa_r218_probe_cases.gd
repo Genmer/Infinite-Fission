@@ -12,7 +12,8 @@
 #      popup 键= _ui_popup_us 同源、探针关时零写（popup/other 均）
 #   ⑤ 满载跳字帽：源级锚 24/40 + 桌面 80/40/20 恒定 + fullload_override 不影响桌面分支
 #   ⑥ 契约：DIAG 15 段序锁死（popup 在 fx 后 ui 前、other 殿后）、tags 跳/他、
-#      diag 行含 组N 与全 15 段标签、余值三子集跳过（源级锚+合成帧函数级）
+#      diag 行含 组N 与全 15 段标签、余值跳过子集键（源级锚+合成帧函数级）
+#      （R268：popup 出排除表入段和——⑥c2/⑥e 已迁新口径，主会话裁定迁移点）
 #   ⑦ 回归面：R212 跳字排版限批（label_refresh 计数/收敛）不变、R206 峰值采样（尖峰Xms
 #      标记+读取后清零钩）仍工作
 # 坑位纪律：敌池 _gl.pools[&"enemy"]；elemental 初始 null 自挂 ElementalState.new()；
@@ -337,8 +338,8 @@ func _test_1_cap_semantics() -> void:
 		_gl2._physics_process(DT)
 		if _gl2.stage_probe_us.has(&"__qa_sentinel__"):
 			sentinel_ok = false
-		if _gl2.stage_probe_us.size() != 16:
-			size_ok = false
+		if _gl2.stage_probe_us.size() != 17:   # R244 冲刷桶批：+entry（帧入口键——不印
+			size_ok = false                    # 行/不进 DIAG_STAGE_ORDER，16→17）
 		var other_us := int(_gl2.stage_probe_us.get(&"other", -1))
 		if other_us < 0:
 			frames_ok = false
@@ -354,7 +355,7 @@ func _test_1_cap_semantics() -> void:
 			order_ok = fo_eq
 	_check("①d 10 帧连续驱动：探针段逐帧重建（哨兵键每帧被 clear——无残留无累积）",
 		sentinel_ok, "")
-	_check("①d2 每帧恒 16 键（十五段+他——卡/特/跳/派 键不缺位不增键；R235 ③ 派发段常驻后 15→16）", size_ok,
+	_check("①d2 每帧恒 17 键（R244 +entry 帧入口键——卡/特/跳/派/entry 键不缺位不增键；R235 ③ 派发段常驻后 15→16，R244 16→17）", size_ok,
 		"末帧 size=%d" % _gl2.stage_probe_us.size())
 	_check("①d3 帧序契约：frame_order 七步序（①输入→②玩家→④网格投射→⑤敌→⑥波→⑦感→⑧UI）",
 		order_ok, str(_gl2.frame_order))
@@ -489,11 +490,18 @@ func _test_6_contract() -> void:
 	_check("⑥c 合成探针帧：十五段逐标签落行（玩1/移2000/火2000/跳2000/UI2/他3）", seg_ok,
 		line_syn.right(160))
 	var fps := maxi(_extract_int(line_syn, "fps"), 1)
-	var expect_yu := maxi(int(round(1000.0 / float(fps) - 6.0)), 0)
-	var actual_yu := _extract_int(line_syn, "余")
-	_check("⑥c2 余值三子集跳过（函数级）：余=%d == 帧预算−6ms 非子集和（6s 子集被跳过）" % expect_yu,
+	# R268：⑥c2 迁移至「popup 入段和」新口径（P2 记账三表设计 §2 P2-c——主会话裁定迁移点）。
+	# 新注入 popup=5000µs（5ms）：段和 = 玩1+跳5+UI2+他3 = 11ms；移/火各 100ms 子集仍排除
+	#（若误入段和则余钳 0 与期望恒异——判别面保留）。原合成帧（popup=2000ms）留 ⑥c 段落行断言零改。
+	_gl2.stage_probe_us = {&"player": 1000, &"player_mv": 100000, &"player_wp": 100000,
+		&"popup": 5000, &"ui": 2000, &"other": 3000}
+	var line_syn_r268: String = String(ds.call(&"_diag_format_line", _gl2, Time.get_ticks_msec()))
+	var fps_r268 := maxi(_extract_int(line_syn_r268, "fps"), 1)
+	var expect_yu := maxi(int(round(1000.0 / float(fps_r268) - 11.0)), 0)
+	var actual_yu := _extract_int(line_syn_r268, "余")
+	_check("⑥c2 余值含 popup（R268 迁移）：余=%d == 帧预算−11ms（popup 5ms 入段和、移/火仍排除）" % expect_yu,
 		actual_yu == expect_yu,
-		"actual=%d expect=%d fps=%d" % [actual_yu, expect_yu, fps])
+		"actual=%d expect=%d fps=%d" % [actual_yu, expect_yu, fps_r268])
 	# ⑥d 空探针帧：全 16 段零值逐位落行 + 组N 与 diag_counts 同源
 	_gl2.stage_probe_us = {}
 	var counts: Dictionary = _gl2.diag_counts()
@@ -504,11 +512,11 @@ func _test_6_contract() -> void:
 	_check("⑥d2 diag 行含 组N 且与 diag_counts 同源（组%d）" % int(counts[&"tint_groups"]),
 		line_zero.contains("组%d" % int(counts[&"tint_groups"])), line_zero.right(160))
 	ds.free()
-	# ⑥e 余值跳过源级锚（debug_stats 三子集条件）
+	# ⑥e 余值跳过源级锚（R268：popup 出表入段和——排除表迁 移/火 两子集键，主会话裁定迁移点）
 	var ds_src: String = FileAccess.get_file_as_string("res://autoload/debug_stats.gd")
-	_check("⑥e 源级锚：余值求和跳过 移/火/跳 三子集键（他已含未捕获部分）",
-		ds_src.contains("if key != &\"player_mv\" and key != &\"player_wp\" and key != &\"popup\":"),
-		"缺三子集跳过门")
+	_check("⑥e 源级锚：余值求和跳过 移/火 两子集键（popup 已出表入段和——R268 记账三表）",
+		ds_src.contains("if key != &\"player_mv\" and key != &\"player_wp\":"),
+		"缺 移/火 二子集跳过门")
 
 
 # ── ⑦ 回归面（R212 限批 / R206 峰值采样） ──────────────────────────

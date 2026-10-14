@@ -1,0 +1,16 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+════════ QA丙探针⑤：老档兼容（无新标记字段的首局行为） ════════
+OBSERVE-DATA | 测试档路径（headless 隔离） | user://meta_save_test.cfg
+OBSERVE-PASS | A-1 旧档加载不炸且 kills 回填 | kills.E1_grunt=152
+OBSERVE-PASS | A-2 codex_first_met 为空（无键→默认）——老玩家首局将重弹全量首遇卡 | size=0
+OBSERVE-PASS | A-3 reaction_seen 为空（无键→默认）——反应首见将重弹卡 | size=0
+OBSERVE-PASS | A-4 E28 旧档已击杀 3 只但无 first_met 键 → mark_first_met 返 true（重弹） | 
+OBSERVE-PASS | A-5 M2 新契约：enemy_attack_note(E1_grunt) 非空（旧怪零打扰废止后旧档首遇弹卡） | note_len=15
+OBSERVE-PASS | A-6 23 缺口抽查：E4/E6_boss1/E12/E24 文案全部非空 | 
+OBSERVE-PASS | A-7 reaction_seen 空 → 首见返 true（首局真反应将弹卡） | rxn0=0
+OBSERVE-PASS | A-8 往返：first_met 新键落盘并回读 | first_met=["E1_grunt", "E28_hexcaster"]
+OBSERVE-PASS | A-9 往返：reaction_seen 落盘并回读 | seen=["0"]
+OBSERVE-PASS | B-1 kills 非字典：加载不炸、kills 保持默认 | kills_type=27 size=3
+OBSERVE-DATA | B-2 该分支下 first_met 不回填（:1252 嵌套在 kills is Dictionary 内）→ 空 → 全量重弹 | size=2
+════════ 探针⑤结束（原测试档已还原） ════════

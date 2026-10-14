@@ -1,0 +1,161 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R246 技能升华（skills 泳道）验收 ══════════
+── G0：enable_sublime/set_character/_reset 收口 + 普通版回归 ──
+  PASS | G0a enable_sublime 幂等置位（重复调用无叠层副作用）
+  PASS | G0b set_character 复位区清 skill_sublime（继续局回填在其后——先清后回不冲突）
+  PASS | G0c _reset_skill_temp_state 清全部升华会话态
+  PASS | G0d veles 施放连接 enemy_killed（is_connected 幂等守卫）
+  PASS | G0e reset 后 veles 余热监听断开（换角/重开不残留）
+  PASS | G0f sentinel 普通版：3s 无敌 + 3s 护盾泡 + 零升华力场
+  PASS | G0g veles 普通版：rof 2.0 / 4s 窗
+  PASS | G0h veles 普通版到期硬复位 rof 1.0（无余热）
+  PASS | G0i zero 普通版：直写 freeze 2.5（快照脉冲）/ rof 不动
+  PASS | G0j vera 普通版：6.0s 窗 / 半径恒 300 / 无层表
+  PASS | G0k echo 普通版：rof 1.5 / 5s 窗 / 无余韵
+  PASS | G0l echo 普通版到期 rof 1.0（无余韵）
+  PASS | G0m fission 契约不破：activate 恒 false / 不置 CD / 不计数 skill_used
+  PASS | G0n 普通版 _skill_fx_duration 十角色逐位（0.8 瞬发缺省不动）
+── G1：sentinel 绝对屏障（5s 力场/相位反冲/吸收回充） ──
+  PASS | G1a 升华施放：5s 无敌 + 5s 泡 + 力场权威计时 + fx 5.0
+  PASS | G1b 相位反冲：120px 内 15% 主武器 ATK（KIN/AOE_SECONDARY/crit0）
+  PASS | G1c 反冲击退：220px 冲量（enemy.knockback ×9 阻尼口径）
+  PASS | G1d 半径边界：120px 外不掉血
+  PASS | G1e 反冲节拍：5s 全程恰 10 跳；力场结束后不再跳（pulses=%d）
+  PASS | G1f 吸收节流：同帧连打 ×10 → CD 只减 2.0（0.5s 闸计 1 次）
+  PASS | G1g 吸收期不掉血（无敌闸先行）
+  PASS | G1h 回充帽：单施放累计 ≤20s（18→20 封顶，第 2 口不计）
+  PASS | G1i 归零保护：CD<2 时吸收 clamp 到 0 不为负
+  PASS | G1j 强限定：_sub_field_left==0（通用无敌帧）被打 → CD 不减
+── G2：veles 临界过载（爬坡/余热/渐冷） ──
+  PASS | G2a 升华施放：起点 2.0 / 5s 窗 / 击杀监听已连接 + fx 5.0
+  PASS | G2b 爬坡中点：2.5s → rof≈2.6（0.25s/档 lerp 2.0→3.2）
+  PASS | G2c 余热计层：2 直调 + 1 真派发击杀 → _heat_stacks==3（帽 5）
+  PASS | G2d 到期余热软着陆：rof == 1.0 + 4%×3 = 1.12（非硬复位）
+  PASS | G2e 渐冷掉层：1.2s 后 rof == 1.08（每层 -4%）
+  PASS | G2f 渐冷收口：层尽 rof 1.0 / _heat_stacks==0
+  PASS | G2g 余热层帽 5（9 杀只计 5）
+  PASS | G2h 满层软着陆 1.20
+── G3：bulwark 余震壁垒（参化主震/余震时序/磐岩护壁） ──
+  PASS | G3a 普通主震：280 冲量（×9 阻尼）
+  PASS | G3b 质量分级自动继承：精英 ×0.35 / Boss 免疫（enemy.knockback 内建）
+  PASS | G3c 普通主震不喂护壁（p_feed=false）
+  PASS | G3d 升华主震：300px 内 380 冲量
+  PASS | G3e 升华主震清弹 340px 内 3/3 + 喂壁 4.5（1.5/弹）
+  PASS | G3f fx 3.8（HUD 时长条盖余震窗）
+  PASS | G3g REVIVE_CLEAR_CAP 刻意不动（复活缓冲公平性红线）
+  PASS | G3h 余震#1（t+1s）：140 冲量
+  PASS | G3i 余震#2/#3（t+2/3s）：累计 2×140 冲量
+  PASS | G3j t+4s 起零脉冲（余震窗收口）
+  PASS | G3k 全吸收：hp 不动 + 护壁 30→10 + 无敌帧（contact_tick 口径）
+  PASS | G3l 部分吸收：护壁归零 + hp 只掉净伤 10
+  PASS | G3m 护壁耗尽后原路径逐位（20 直减）
+  PASS | G3n 护壁帽 48（无弹不喂壁——p_feed 且 cleared>0 守卫）
+── G4：ranger 百影穿袭（位移/路径结算/残影爆/潜影） ──
+  PASS | G4a 普通版零回归：260px 瞬步 + invuln 1.0
+  PASS | G4b 升华 0 层：340px + invuln 1.8
+  PASS | G4c fx 1.2（含残影爆窗）
+  PASS | G4d 残影播种：起点 + 中点两道引信 0.45s
+  PASS | G4e 路径结算：沿线敌恰一次 240% ATK（步进圆重叠 uid 去重）
+  PASS | G4f 残影爆半径 150：250px 外敌不伤（>150+64 粗判触达）
+  PASS | G4g 残影爆：150px 内 120% ATK + 160 冲量
+  PASS | G4h 拂弹：110px 内 team==1 双弹无效化（帽 6/影）
+  PASS | G4i 引信期不爆（0.4s 仍 2 影）
+  PASS | G4j 0.45s 后两影皆爆清空
+  PASS | G4k 潜影 12s +1 层
+  PASS | G4l 潜影帽 4（48s 不溢出）
+  PASS | G4m 格挡吸收不清潜影（挡住≠受创）
+  PASS | G4n 实减 HP 清潜影（受创断影）
+  PASS | G4o 满层 460px 落点钳活动区下界（y==1264）
+  PASS | G4p 施放消耗潜影（层清零）
+── G5：zero 时滞奇点（3.5s 直写/力场覆盖/击杀延展/唯我演算） ──
+  PASS | G5a 升华施放：freeze 直写 3.5（绕 immune_mask 签名保持）+ rof 1.2 + 3.5s 窗
+  PASS | G5b 持续力场：0.3s 后入场敌下一拍（≤0.25s）一并凝滞
+  PASS | G5c 非凝滞击杀不计（freeze==0——账本快照路径）
+  PASS | G5d 凝滞击杀 +0.15s（真派发·账本路径；fx 分母同步抬）
+  PASS | G5e 延展帽 +0.9s（6 杀满额后不再加）：_ts_left == 3.1+0.9 == 4.0
+  PASS | G5f 射速窗随延展同步（skill_active_left ≥ _ts_left）
+  PASS | G5g 窗尽：_ts_left 归零 + rof 1.0（骑既有复位口）+ 监听断开
+── G6：mank 万毒噬界（210% 基线/喂层分档/腐沼爆裂） ──
+  PASS | G6a 普通毒爆零回归：150% 面板（kill 不喂层不爆裂）
+  PASS | G6b 升华基线：0 层 210% 面板
+  PASS | G6c 腐沼爆裂：存活者受 nova 2.1 + 双锚点爆裂去重后仅一次 0.5（合成 UID 不撞幂等键）
+  PASS | G6d 击杀喂层：双杀各 +1（毒爆直杀，tags 读账本快照）
+  PASS | G6e 喂层分档：普 +1 / 精 +2 / Boss +5（2+1+2+5=10）
+  PASS | G6f 层数帽 30（29+5 钳 30）
+  PASS | G6g 满层毒爆 270%（2.1+0.02×30）
+  PASS | G6h 满层里程碑横幅（emit_mechanics_intro 复用）
+── G7：vera 毒理学终章（7s 窗/半径滋生/层乘区/催化错帧） ──
+  PASS | G7a 升华置窗：7.0s + 首跳当帧即结算（0 层 8%）+ fx 7.0
+  PASS | G7b 首跳减速 0.8（0 层）
+  PASS | G7c 层乘区：5 层跳伤 8%×1.30 + 深减速 0.725（20%+1.5%×5）
+  PASS | G7d 毒蚀帽 12
+  PASS | G7e 领域滋生：300 起 / 中点 345 / 终点 390（线性）
+  PASS | G7f 催化结算：12 层 → 36% ATK（pending 帧云已死——单算催化无跳伤混入）
+  PASS | G7g 催化后清层表 + pending 复位
+  PASS | G7h 云尽帧转挂 catalysis pending（错帧防幂等键吞跳）
+  PASS | G7i 普通版零回归：无层表增长 / 无催化挂起 / 半径恒 300
+── G8：noah 万械共鸣（3 副本 3 舰 16s/寿命绑定/共鸣层/恋战延时） ──
+  PASS | G8a 普通版零回归：2 副本 / 2 舰 / 10.0s / 舰体寿命 10.0（默认参回归锚）
+  PASS | G8b 升华分派：3 副本 / 3 舰 / 16+2=18s（存量预支 floor(10/5)）+ fx_max 18
+  PASS | G8c 舰体寿命绑定本窗：18.0（拔 10s 硬编码）
+  PASS | G8d 副本乘区施放即继承：meta == 源 + 1.5%×10 层
+  PASS | G8e 共鸣层帽 40（10+50 杀只到 40——含 1 次真派发）
+  PASS | G8f 恋战延时兑点：bonus 帽 8 / _summon_left 同步 24.0 / fx_max 24.0
+  PASS | G8g 兑点帧舰体寿命逐舰 +6（同帧同涨不脱钩）
+  PASS | G8h 乘区回写幂等：重复 _apply_resonance_mult 值不变（基准快照）
+  PASS | G8i 跨 10s 旧硬编码自毁点：3 舰全在场
+  PASS | G8j 到期回收不清书（跨施放滚存）
+  PASS | G8k reset 清书与已兑延时
+  PASS | G8l 窗外击杀不计（_summon_left==0 早退）
+  PASS | G8m 升华舰弹出弹恰 1 发（真池 acquire → active_list 尾追）
+  PASS | G8m 升华舰弹面板：base_atk × 18% ×（1 + 1.5% × 12 层）三乘区数值
+  PASS | G8n 普通版舰弹零回归：base_atk×12%（无共鸣乘区）
+── G9：echo 无尽回响（和弦分流/回声层/渐弱余韵） ──
+  PASS | G9 前置：第二武器入槽（异款形态）
+  PASS | G9a 双声部（异款）：主窗 1.80 / 5s 窗
+  PASS | G9b 回声层帽 6（8 杀只计 6）+ 双声部层微增 rof 1.92
+  PASS | G9c 主窗尽 → 余韵 1.35 / ≈3.6s（0.6×6 帽 3.6；到期帧后随帧微衰减）+ fx 续接
+  PASS | G9d 余韵归零：rof 1.0 / 层清零
+  PASS | G9 前置：同款第二把入槽
+  PASS | G9e 同频共振：主窗 1.90 + 横幅播报
+  PASS | G9f 同款不吃层（rof 恒 1.90）但叠层照常（余韵燃料）
+  PASS | G9g 同款余韵 ≈0.5s×6=3.0（帽 3.0；到期帧后随帧微衰减）
+  PASS | G9h 余韵尽 rof 1.0（R29 降挡不回罚语义由 cd_pace 锁定，此处锁终值）
+  PASS | G9i 零层到期直接归 1.0（无余韵）
+── G10：fission 本命同调（契约/回填/注入/Ω 五档/CDR 参数化） ──
+  PASS | G10a 原始计数 run 作用域：4 杀全计（普 2/精 1/Boss 1）与层无关
+  PASS | G10b 追溯回填：4 杀 ×0.5 → 2 层（enable_sublime 替代分支）
+  PASS | G10c 升华喂层分档：2+1+3+15=21（普+1/精+3/Boss+15——账本读 tags）
+  PASS | G10d 本命注入：meta_atk_pct == 基准+0.08+21×0.0013
+  PASS | G10e 异 id 零注入 + extern 恒空
+  PASS | G10f 21 层无改装件（<100 档）extern 空
+  PASS | G10g Ω 满配 extern：spd/size/crit/rof 各 0.08/0.08/0.05/0.08
+  PASS | G10h 本命 meta 满配 == 基准+0.08+0.65+0.08（即时糖+层数+弹匣）
+  PASS | G10i Ω-超频 rof 尾乘：节拍 ÷1.08（extern_buffs._player_rof_mult 消费）
+  PASS | G10j 档位跨越横幅：21→500 一次性五档播报（Ω-弹匣…Ω-超频）
+  PASS | G10k resonance_snapshot 键值保真（{on, fission_layers}）
+  PASS | G10l restore_resonance clampi 防脏档（9999→500）
+  PASS | G10 前置：AFF_SKILL_HASTE 挂载（池 12%）
+  PASS | G10m CDR 参数化：同池升华 ×(1+0.12×0.65)=1.078 > 普通 ×1.06
+  PASS | G10n 换角清口：skill_sublime/层/原始计数清零 + extern 还原空
+── G11：medic 医疗矩阵（回复 + 减伤窗） ──
+  PASS | G11a 施放回复：hp = min(20+0.3×max, max) = 38 + 4s 减伤窗 + fx 4.0
+  PASS | G11b 减伤窗内 ×0.5：10 伤只扣 5（与无敌独立）
+  PASS | G11c 窗尽还原全伤（10 直减）
+── G12：vortex 奇点（向心牵引 + 末爆） ──
+  PASS | G12a 施放：3s 奇点窗 + fx 3.0 + 首拉即发
+  PASS | G12b 向心：冲量 70（×9 阻尼）方向指向玩家（敌在上方 → +Y 向下）
+  PASS | G12c 窗尽末爆：kill_blast 表现事件一发（220px 120% 照 nova 模板）
+  PASS | G12d 末爆 120% ATK / 220px 内
+  PASS | G12e 末爆半径外不受
+── G13：reaper 收割窗（extern atk 乘区启停） ──
+  PASS | G13a 施放：6s 窗 + extern atk +0.5 + fx 6.0
+  PASS | G13b 面板即时生效：base_atk ×1.5（build_panel_snapshot atk 尾乘）
+  PASS | G13c 窗尽还原：extern 清空 + 面板回基线（6s 准时）
+  PASS | G13d 提前收口路径（reset → _apply_reaper_buffs(false)）与窗尽同源
+────────────────────────────────────────
+汇总：PASS 139 / FAIL 0（共 139 项）
+验收汇总：139/139 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

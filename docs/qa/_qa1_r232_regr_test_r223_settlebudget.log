@@ -1,0 +1,70 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R223（Fix Q 战斗门 EMA + 刀R 结算预算） 回归 ══════════
+── ① 刀R：预算顺延基础 ──
+  PASS | ①常量契约（帽 48/96 · 过期 12 · 硬帽 256）
+  PASS | ①帽内两发真结算（final>0 · 非占位 · 落血 20）
+  PASS | ①超帽第三发零值占位（final=0 · killed=false · deferred_merge=true）
+  PASS | ①占位不落血（hp 仍 hp0−20）
+  PASS | ①计数（settles=2 · settle_deferred=1）
+  PASS | ①占位不入派发队（队列恰 2 条）
+── ② 刀R：幂等先于预算 ──
+  PASS | ②同帧同对折返回真结果（非占位）
+  PASS | ②占位不污染幂等缓存（rc 为占位非缓存真值）
+  PASS | ②修QA-2：同键占位折返（rc2==rc 同一占位实例）
+  PASS | ②折返/占位折返计账（dupe+2 · deferred 仅新对 +1）
+── ③ 刀R：同对累积冲刷（跨帧形态——QA-2 修复后同帧同键走占位折返） ──
+  PASS | ③双顺延在队（FIFO=2）
+  PASS | ③跨帧同对并入（FIFO 仍 1 · deferred +1 · hp 扣 X+C=15）
+  PASS | ③冲刷一次真结算（累积 base 25 全额落账 · FIFO 清空）
+── ④ 刀R：死亡目标冲刷诚实丢弃 ──
+  PASS | ④亡目标冲刷诚实丢弃（settle_flush_dead +1 · settle_flush 不增）
+  PASS | ④亡目标零落血
+── ⑤ 刀R：过期强冲（12 帧窗外帧末落账） ──
+  PASS | ⑤30 对顺延在队（FIFO=30）
+  PASS | ⑤过期强冲触发（stale_flush ≥ 15 且 FIFO 清空）
+  PASS | ⑤账目守恒（预算冲刷+过期强冲 = 30 · hp 扣 10+30）
+── ⑥ 刀R：硬帽修剪 + 门关全量冲刷 ──
+  PASS | ⑥硬帽修剪（FIFO=256 · overload_drop ≥ 44）
+  PASS | ⑥修剪后帧序未强冲（同帧龄 0 < 12——stale 零增）
+  PASS | ⑥门关全量冲刷（FIFO 清空 · settle_flush +256）
+  PASS | ⑥伤害守恒（hp 扣 10+256——被修剪 44 项为诚实卸载不计入）
+── ⑦ 刀R：门控密封 + tier→帽映射 ──
+  PASS | ⑦headless 默认帽 0（既有套件零扰动前提）
+  PASS | ⑦强制关帽 0
+  PASS | ⑦帽 0 零顺延（settle_deferred 不增）
+  PASS | ⑦模拟真机门：tier3 → 帽 0
+  PASS | ⑦模拟真机门：tier2 → 帽 96
+  PASS | ⑦模拟真机门：tier1 → 帽 48
+  PASS | ⑦特效优先 → 帽 0（刀仅帧率优先）
+  PASS | ⑦真值 tier2（tier_override 撤销）→ 帽 96
+  PASS | ⑦恢复默认后帽回 0
+── ⑧ Fix Q：vc29 选卡窗场景复现 ──
+  PASS | ⑧降档链 3→1（tier=1 · transitions=2）
+  PASS | ⑧选卡窗样本不入 EMA（逐位不动=35.00）
+  PASS | ⑧选卡窗零档变（tier 仍 1 · 无假升档）
+  PASS | ⑧无效降档回升+冻结（tier=2 · transitions=3 · frozen）——pre-fix 判别器
+  PASS | ⑧校验窗关闭复位（_drop_ema=-1 · hold=0）
+── ⑨ Fix Q：长选卡窗不开假升档窗 ──
+  PASS | ⑨降一档基线（tier=2）
+  PASS | ⑨长窗零假升档（tier 仍 2 · EMA 不动）
+  PASS | ⑨战斗内真恢复通道照常（tier 回 3 · transitions=2）
+── ⑩ 修轮：冲刷 uid 复用防护 ──
+  PASS | ⑩uid 不符丢弃（settle_flush_reuse +1 · flush_dead 不增）
+  PASS | ⑩新身份零幻影伤害（hp 仍 hp0−10）
+── ⑪ 修轮：击杀证据回填 + 顺延附着跳过 ──
+  PASS | ⑪顺延占位（deferred_merge）
+  PASS | ⑪冲刷击杀回填 killed_target（弹存活期证据——死亡新星消费面）
+  PASS | ⑪归池弹不回填（_live=false 晚到证据丢弃）
+  PASS | ⑪顺延占位跳过附着（apply_attach 零调用——感电连锁 0 伤空放根除）
+  PASS | ⑪真结果附着照常（apply_attach 1 次）
+── ⑫ 修轮：非战斗帧冲刷挂起 ──
+  PASS | ⑫非战斗帧零冲刷零强冲（FIFO=1 · hp 仍 hp0−10）
+  PASS | ⑫恢复战斗冲刷落账（hp 扣 17 · FIFO 清空）
+────────────────────────────────────────
+汇总：PASS 48 / FAIL 0（共 48 项）
+验收汇总：48/48 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 2 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

@@ -1,0 +1,29 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R232（刀1b pending 字段袋） 回归 ══════════
+── ① r223 核心轴（袋路径现行态） ──
+  PASS | ①轴A 超帽零值占位（final=0 · deferred_merge · 不落血）
+  PASS | ①轴B 跨帧同对并入（FIFO=1 · deferred+1）
+  PASS | ①轴B 累积 base 25 全额落账（hp 扣 10+5+25=40 · FIFO 清空）
+  PASS | ①轴C 亡目标冲刷诚实丢弃（flush_dead+1 · hp 不动）
+  PASS | ①轴D 过期强冲（stale≥15 · 账目守恒 30 · hp 扣 40 · FIFO 清空）
+  PASS | ①轴E uid 复验丢弃（flush_reuse+1——袋重建路径 uid 校验在位）
+── ② 冲刷重建 ctx 字段完备（全字段非默认 → 结果逐字段对拍） ──
+  PASS | ②重建 ctx 池/面板段逐位（panel150 · M2.0 · L1.2 · final360）
+  PASS | ②重建 ctx 元数据逐位（element=FIR · frame_stamp=首顺延 600 · pos 快照）
+  PASS | ②冲刷结果入派发队列（间谍捕获 src=7501）
+── ③ 幂等占位折返（QA-2 语义袋形态保真） ──
+  PASS | ③占位入幂等缓存（rc2==rc 同实例 · dupe 语义）
+  PASS | ③同键双发不双计（settle_deferred 仅 +1）
+── ④ 袋池（冲刷/丢弃还池 ≤ 硬帽 256 · 池命中复用） ──
+  PASS | ④300 顺延建袋（袋池未还——在队持有）
+  PASS | ④硬帽修剪还袋（丢弃 44 项入池 FIFO=256）
+  PASS | ④全量冲刷还袋（FIFO 清空 · 池封顶 ≤256）
+  PASS | ④袋池借出复用（池缩 1——池命中非新建）
+── ⑤ 非战斗帧冲刷挂起（袋形态） ──
+  PASS | ⑤非战斗帧零冲刷（FIFO=1 · hp 仍 hp0−10）
+  PASS | ⑤恢复战斗冲刷落账（hp 扣 17 · FIFO 清空）
+  PASS | 套件总项数（EXPECTED=17——R231 假绿教训：总项数也要断言）
+────────────────────────────────────────
+汇总：PASS 18 / FAIL 0（共 18 项）
+验收汇总：18/18 通过

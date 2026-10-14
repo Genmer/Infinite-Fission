@@ -1,0 +1,48 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+OpenGL API 3.3.0 NVIDIA 610.62 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 4070 Laptop GPU
+
+PHYSATTR 环境头：rendering(project/旗标扫)=forward_plus adapter_api=3.3.0 NVIDIA 610.62 headless=false user_dir=E:/Code/Agent/Infinite-Fission/.qa_sandbox_r237/Godot/app_userdata/Infinite Fission phys_hz=120
+══ R237 物理相归因：A0/A1/A2 物理面 A/B + A3 敌数梯度（窗口 gl_compatibility 档）══
+  PASS | G-沙箱 user:// 重定向生效（含 .qa_sandbox_r237）（user_dir=E:/Code/Agent/Infinite-Fission/.qa_sandbox_r237/Godot/app_userdata/Infinite Fission）
+── CAL0 监视器语义标定（无 GameLoop 净环境：步忙等 2000µs × 帧压 50ms）──
+CAL0：步/帧=3.00 monitor=1907µs 步耗时=2000µs monitor/步耗时=0.95 → 语义=last-step
+  PASS | CAL0 监视器语义可判（frame-sum / last-step 二选一）（ratio=0.95（歧义窗 1.6~1.8））
+boot.词条：PIERCE×3/3 MULTI×2/2 BOUNCE×3/3 NOVA×2/2 FRACTAL×2/2
+boot：grove w16 构成 42 敌种池（E1_grunt×26 E2_runner×7 E3_bastion×3 E10_woodbird×6）压血×1.00；物理引擎自然驱动 60Hz；构筑=W2 L5 五词条（无棱镜）+ 风筝
+── A0 基线深载（敌 HitArea 监测开 + 玩家 Area2D 监测开） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=17345.9（p95=32630.0，钳负帧占95%）｜mon=5015.0µs/步 段和=17730.3µs/步｜步/帧=6.93 样本=284 步=1976 墙=40.1s
+负载：敌 p50=116 弹 p50=322 跳 p50=79 fps=7
+  PASS | G-A0 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=284 步=1976 墙=40.1s（帽 75s/6000 步内收口））
+  PASS | G-A0 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=116/120 弹=322 跳=79）
+── A1 敌 HitArea 双监测关（monitoring/monitorable=false——形状仍入空间） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=19402.3（p95=38164.0，钳负帧占90%）｜mon=5692.7µs/步 段和=21050.3µs/步｜步/帧=6.96 样本=232 步=1621 墙=40.1s
+负载：敌 p50=116 弹 p50=346 跳 p50=79 fps=6
+  PASS | G-A1 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=232 步=1621 墙=40.1s（帽 75s/6000 步内收口））
+  PASS | G-A1 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=116/120 弹=346 跳=79）
+── A2 A1 + 玩家双监测关（潜在配对终局=0） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=18781.2（p95=33644.0，钳负帧占88%）｜mon=5714.6µs/步 段和=17117.9µs/步｜步/帧=6.22 样本=321 步=2004 墙=40.0s
+负载：敌 p50=117 弹 p50=339 跳 p50=79 fps=8
+  PASS | G-A2 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=321 步=2004 墙=40.0s（帽 75s/6000 步内收口））
+  PASS | G-A2 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=117/120 弹=339 跳=79）
+── A3_30 敌数梯度 30（余同 A0） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=9795.5（p95=17080.0，钳负帧占58%）｜mon=7347.0µs/步 段和=14364.9µs/步｜步/帧=3.19 样本=732 步=2338 墙=40.0s
+负载：敌 p50=29 弹 p50=746 跳 p50=34 fps=24
+  PASS | G-A3_30 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=732 步=2338 墙=40.0s（帽 75s/6000 步内收口））
+  PASS | G-A3_30 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=29/30 弹=746 跳=34）
+── A3_60 敌数梯度 60（余同 A0） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=12525.7（p95=21190.0，钳负帧占99%）｜mon=3953.5µs/步 段和=16924.7µs/步｜步/帧=7.44 样本=275 步=2052 墙=40.1s
+负载：敌 p50=57 弹 p50=576 跳 p50=63 fps=7
+  PASS | G-A3_60 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=275 步=2052 墙=40.1s（帽 75s/6000 步内收口））
+  PASS | G-A3_60 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=57/60 弹=576 跳=63）
+── A3_120 敌数梯度 120（=A0 复跑，序效应披露） ──
+读数：物步µs/活跃帧=0.0｜resid_alt=18653.3（p95=30881.0，钳负帧占98%）｜mon=4596.5µs/步 段和=17330.2µs/步｜步/帧=7.83 样本=253 步=1988 墙=40.1s
+负载：敌 p50=117 弹 p50=306 跳 p50=79 fps=6
+  PASS | G-A3_120 采样成立（活跃帧>0 且 步≥1200 且 墙≥40s×0.9）（样本=253 步=1988 墙=40.1s（帽 75s/6000 步内收口））
+  PASS | G-A3_120 负载带披露（敌 p50≥hold-8 且 弹 p50≥60——R224 带 [60,350]）（敌=117/120 弹=306 跳=79）
+── 派生：物步µs 降幅 A1=0% A2=0%｜resid_alt 降幅 A1=-12% A2=-8%｜mon降幅 A2=-14%｜A3 梯度 物步µs 30/60/120 = 0.0/0.0/0.0 每敌边际[30→60]=0.000 [60→120]=0.000
+留档：res://docs/qa/probe_r237_physattr.json
+PROBE 汇总：硬门全过（四臂数字已留档 docs/qa/probe_r237_physattr.json）
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

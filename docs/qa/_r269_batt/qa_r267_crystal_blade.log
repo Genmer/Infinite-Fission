@@ -1,0 +1,70 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══ R267 视觉刀验收（qa_r267_crystal_blade）══
+── a) 棕修判据（暖池 8 档采样 0/8；亮核 v≥0.75；sat 下限钳制） ──
+  PASS | a-判据自证：六暖池旧配方均有棕档（≥1/8）
+  PASS | a-1 暖池六池 × 双式 × 两态 × 三档：水晶输出棕命中 0
+  PASS | a-2 亮核明度 v≥0.75（saber 尖/刃位、greatsword 尖/刃位）
+  PASS | a-3 sat 下限 0.55 生效（入参 s≈0.49 → 输出 0.55，三式）
+  PASS | a-4 过渡层 v×0.92 < 亮核 v（七元素真明度分层）
+── a′) KIN/身份豁免（身份表命中/零钳制零提亮/暗黑契约/生产口不进工厂） ──
+  PASS | a′-1 五身份色全命中豁免表
+  PASS | a′-2 七元素表色全不命中（元素恒走水晶）
+  PASS | a′-3 身份入参各层 RGB 零偏移（含 W13 黑金 s≈0.06 不被钳）
+  PASS | a′-4 greatsword KIN _t2_fill 暗黑契约（== GREATSWORD_TINT）
+  PASS | a′-5 crystal 键缺元素不激活（空池 _crystal_visual_on=false——风格键单盲不生效）
+  PASS | a′-6 W10/W11/W12 KIN 缺省调用零工厂构建（tex_builds 0→0）
+  PASS | a′-7 W8 _wolf_body_color == PLAYER（KIN 蓝身单源不动）
+  PASS | a′-8 W8 无宿主 _crystal_active=false（空池豁免）
+── b) 降档矩阵（档2 五层/档1 三层/档0 两层；α 断言；quality 进缓存键） ──
+  PASS | b-1 layer_count 2/1/0 = 5/3/2
+  PASS | b-2 层 α 单源（壳 0.18/过渡 0.32/核 0.60/缘 0.9/平涂 0.50——R268 真透明）
+  PASS | b-5 R268 真透明契约（核 ≤0.70 且 平涂 ≤0.60 且 壳<过渡<核 层序单调）
+  PASS | b-3 档1/0 外壳层 α=0（层不可用）+ shell 色表空（数据面表达）
+  PASS | b-4 质变外壳加浓（t2 α 0.18→0.26）+ 折射线档1 α=0
+  PASS | b-5 quality 进缓存键（三档互异实例 + 同档同实例）
+  PASS | b-6 弹体降级参数口：flight_tex/boomerang_tex p_quality 0/1/2 落工厂对应档
+  PASS | b-7 三式 × 三档 9 连调零新键全命中（builds 持平 + hits +9）
+── c) 缓存签名 + 六站点烘焙读回（尺寸/半透像素/生产口同实例委托） ──
+  PASS | c-1 贴图首生成单次 ≤10ms（三式冷烤）
+  PASS | c-2 三烘焙式非空 + 尺寸正确 + 外壳半透像素 ≥10
+  PASS | c-3 W11/W12/W10 生产口 == 工厂实例（烘焙形态单源）
+  PASS | c-4 即时形态色表长度（saber/greatsword 8、wolf 7）
+── c′) 防混搭（五委托位 + W10 match 臂全命中水晶版图标） ──
+  PASS | c′-1 六 id 图标全命中水晶版（构建标记=1 + 壳层半透像素 ≥10）
+  PASS | c′-2 图标二次调用零重建（构建计数恒 1）
+── d) 外壳几何（包围盒 ⊇ 本体；_poly_cache 四键；expand_poly 单调） ──
+  PASS | d-1 saber/greatsword ×质变：壳顶点质心距全数外扩（×1.32 单调）
+  PASS | d-2 _poly_cache 四键读回口照绿（R188⑨——style×transcended 四组缓存齐）
+  PASS | d-3 expand_poly 狼刀 7 顶点样例外扩单调（W8 壳层算子）
+── e) 零 rng（生成器源码静态扫描） ──
+  PASS | e-1 生成器源码 randi|randf|RandomNumberGenerator 命中 = 0
+  PASS | e-2 orbit_weapon._slash_spawn_params 携带 "crystal": true（源面机制）
+── f) 排序纪律（缓存键列举拍序必须 Array[String]） ──
+  PASS | f-1 色表缓存键 Array[String] 拍序升序（78 键）
+── g) 绘制路径零分配（数据面缓存命中 + 真绘制帧二次绘制零重建） ──
+  PASS | g-1 独占键首取建表（cols/shell 各 +1）后二次调用零构建全命中
+  PASS | g-2 真绘制帧走水晶层（首帧后命中计数已增长——绘制确在使用工厂表）
+  PASS | g-3 第二绘制帧零新建（cols/shell/tex builds 逐位不变——零分配实证）
+── 六武器覆盖 + echo 双武装边界（子斩/回斩继承水晶键） ──
+  PASS | W8-1 环刀元素态 _crystal_active=true（FIR 池）
+  PASS | W8-2 wolf 水晶色表 7 位可取
+  PASS | W8-3 环刀 KIN 池 _crystal_active=false（蓝身薄荷线豁免）
+  PASS | W9-1 saber+FIR 激活 _crystal_visual_on=true
+  PASS | W9-2 echo 回斩子窗继承水晶键（crystal=true + 子代激活 + gen=1）
+  PASS | W13-1 greatsword+FIR 激活（元素刀体站点 §2.3）
+  PASS | W10/W11/W12 元素实例 ≠ KIN 缺省实例
+── 修轮①：W10 折射带 / W11 深度带 / 图标壳层 / 即时轮廓描边 ──
+  PASS | 修1-W10a q2 五带齐全（壳 174/折射 120/描边 54/白缘 34/亮核 22 ≥100/50/30/20/10）
+  PASS | 修1-W10b 折射带占刃体 <70%（折射 120 / 刃体 230——旧 bug 为 100%）
+  PASS | 修1-W11a q1 亮核带 ≥10（≥1.8px 芯带非空）
+  PASS | 修1-W11b q0 平涂带 ≥10 且 q0/q1 图像互异（降档有观感差）
+  PASS | 修1-W11c q2 白缘带 ≥30（折射线 depth 守卫——不再吃白缘；q1 同带对照 42）
+  PASS | 修1-图标a ICON_SHELL_EXPAND == 1.45（外扩环露出可读档）
+  PASS | 修1-图标b 六枚壳层带（α∈[0.25,0.35]）每枚 ≥6 且合计 ≥200（W8_:28 W9_:21 W10:132 W11:8 W12:118 W13:44 ）
+  PASS | 修1-轮廓a 工厂描边色 == PopPalette.OUTLINE α0.65
+  PASS | 修1-轮廓b 挥斩体与环刀水晶路径均接线 crystal_outline_color（源面）
+── 预烤域（prewarm_shared 后 21 键全命中零冷 miss） ──
+  PASS | prewarm-1 预烤后 21 键零冷 miss（builds 30→30）
+  PASS | prewarm-2 预烤键数 = 21（三式 × 七元素）
+验收汇总：PASS 54 / FAIL 0

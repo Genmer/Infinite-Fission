@@ -1,10 +1,16 @@
 # tests/stress/storm_cases.gd
 # R188 风暴档基准用例体（由 test_storm_bench.gd 入口在 autoload 就绪后运行时加载编译）。
-# 负载构成（风暴形态口径）：100 敌向心聚团 + 700 穿透弹对穿敌团——damage_resolved ≥300/帧
-# 的事件风暴形态（EventBus.STORM_WARN_DAMAGE_RESOLVED=600 专项告警线以下、≥300 观测档）。
+# 负载构成（风暴形态口径）：100 敌向心聚团 + 700 穿透弹对穿敌团 + 合成结算风暴
+# （真 DamagePipeline.resolve ×300/帧——R188 原始形态）。
+# R256 序2 翻案注记：R221 Fix C（DISPATCH_FRAME_CAP=48）+ R223/R236（SETTLE_BUDGET_T1=48
+# 超帽顺延）落地后，「damage_resolved 派发 ≥300/帧」结构性不可达——派发帽正是削峰设计
+# 本意（r221_fixreg_cases ⑤ 直断言 48 契约）。本套件 stress 系不在电池内，R221-R255 间
+# 无人跑=老断言静默过期（R252 出发挂起再遮一层；R256 序0 复活后暴露）。断言①随架构
+# 翻案为双层：载荷仍 300 resolve 调用/帧（风暴输入形态不变），派发侧验证削峰生效。
 # 断言（验收）：
-#   ① 风暴形态可达：max(每帧 damage_resolved) ≥ 300；
-#   ② 风暴满载 P95 < 8.3ms（frame_budget_ms 判定线）；
+#   ①a 风暴载荷形态：max(每帧 resolve 调用) ≥ 300 且 ≥90% 帧在载（合成风暴全窗投递）；
+#   ①b 派发帽削峰：max(每帧 damage_resolved 派发) ≤ DISPATCH_FRAME_CAP（R221 Fix C 生效）；
+#   ② 结算链消费方放大 ≤ 2.50×（管线地板口径——原 8.3ms 门经 R189 真实语境分账证伪重锚）；
 #   ③ 七池 0 运行期实例化 / 0 污染 / 0 非法归还（AC-14 压力口径延续）；
 #   ④ DeathPop 表现件池有界（news ≤ 池上限 24）；
 #   ⑤ 平台期（迷你 soak）：后半程节点数与前半程差 ≤ 基线+10、RSS 增幅 < 3%。
@@ -20,13 +26,15 @@ const BUDGET_MS := 8.3
 const SUPPLY_PROJ_PER_FRAME := 48
 const SUPPLY_ENEMY_PER_FRAME := 8
 const PROJ_SPEED := 420.0
-const STORM_FORM := 300                       # 风暴形态判定线（damage_resolved/帧）
+const STORM_FORM := 300                       # 风暴形态判定线（resolve 调用/帧——R256 翻案后口径）
 const GRUNT_ID := &"E1_grunt"
 
 var tree: SceneTree
 var _gl: GameLoop = null
 var _frame_us: PackedFloat64Array = PackedFloat64Array()
 var _resolves: PackedInt32Array = PackedInt32Array()
+var _calls: PackedInt32Array = PackedInt32Array()   # R256 ①a：每帧 resolve 调用数（驱动侧口径）
+var _resolve_calls: int = 0                    # R256 ①a：驱动侧调用计数（不经 EventBus——派发帽不影响）
 var _rng := RandomNumberGenerator.new()
 var _fails: int = 0
 var _nodes_half: int = 0
@@ -71,6 +79,7 @@ func _drive_storm_settles() -> void:
 		ctx.pos = target.global_position
 		if _gl.pipeline != null and _gl.pipeline.has_method(&"resolve"):
 			_gl.pipeline.call(&"resolve", ctx)
+			_resolve_calls += 1               # R256 ①a：驱动侧口径（派发帽顺延不影响本计数）
 
 
 func _on_resolved(_r: DamageResult) -> void:
@@ -112,7 +121,11 @@ func _boot() -> void:
 
 
 func _start_run() -> void:
-	_gl.menu_screen.start_requested.emit()
+	# R256 序0：直调绕 R252 祝福面板（emit 经 lambda _on_menu_start 被面板挂起，state 停 MENU
+	# =压力门自 R252 起静默空转 16 天；qa_r255_perf_battle 直调先例）
+	_gl._blessing_pending = false
+	_gl.current_map_id = MapTable.FIRST_MAP_ID
+	_gl._finish_menu_start(MapTable.FIRST_MAP_ID)
 
 
 func _prime_load() -> void:
@@ -210,16 +223,20 @@ func _measure() -> void:
 	_frame_us.resize(MEASURE_FRAMES)
 	_resolves.clear()
 	_resolves.resize(MEASURE_FRAMES)
+	_calls.clear()
+	_calls.resize(MEASURE_FRAMES)
 	var rss0 := _rss_mb()
 	var nodes0 := _count_nodes(tree.get_root())
 	for i in range(MEASURE_FRAMES):
 		_resolve_ctr = 0                          # 同步窗口：reset → 驱动 → 读（无引擎帧穿插）
+		_resolve_calls = 0                        # R256 ①a：同窗口驱动侧计数
 		_maintain_load()
 		var t0 := Time.get_ticks_usec()
 		_gl._physics_process(DT)
 		_drive_storm_settles()                    # 风暴形态载荷：≥300 真管线结算/帧（计时区内）
 		_frame_us[i] = float(Time.get_ticks_usec() - t0) / 1000.0
 		_resolves[i] = _resolve_ctr
+		_calls[i] = _resolve_calls
 		if (i + 1) == MEASURE_FRAMES / 2:
 			await _flush_frames(tree, 30)
 			_nodes_half = _count_nodes(tree.get_root())
@@ -248,21 +265,40 @@ func _measure() -> void:
 		peak_resolve = maxi(peak_resolve, int(v))
 		if int(v) >= STORM_FORM:
 			over_form += 1
+	var peak_calls := 0
+	var over_calls := 0
+	for v in _calls:
+		peak_calls = maxi(peak_calls, int(v))
+		if int(v) >= STORM_FORM:
+			over_calls += 1
 	var sorted := _frame_us.duplicate()
 	sorted.sort()
 	var p95 := _percentile(sorted, 0.95)
-	print("[storm] 风暴形态：峰值 %d 结算/帧 | ≥%d 结算帧 %d/%d（%.1f%%）" % [
-		peak_resolve, STORM_FORM, over_form, MEASURE_FRAMES,
-		float(over_form) / float(MEASURE_FRAMES) * 100.0])
+	print("[storm] 风暴载荷（resolve 调用）：峰值 %d/帧 | ≥%d 调用帧 %d/%d（%.1f%%）" % [
+		peak_calls, STORM_FORM, over_calls, MEASURE_FRAMES,
+		float(over_calls) / float(MEASURE_FRAMES) * 100.0])
+	var cap_now: int = DamagePipeline.dispatch_frame_cap_now()
+	print("[storm] 派发侧（damage_resolved，R221 Fix C 有效帽 %d）：峰值 %d/帧 | ≥%d 派发帧 %d/%d" % [
+		cap_now, peak_resolve, STORM_FORM, over_form, MEASURE_FRAMES])
 	print("[storm] 帧时间：P50=%.3f P95=%.3f P99=%.3f MAX=%.3f (ms)" % [
 		_percentile(sorted, 0.50), p95, _percentile(sorted, 0.99), sorted[sorted.size() - 1]])
 	print("[storm] RSS：开始 %.1f MB → 结束 %.1f MB（增幅 %.2f%%）| 节点 %d → 半程 %d → %d" % [
 		rss0, _rss_mb(), (_rss_mb() - rss0) / maxf(rss0, 1.0) * 100.0,
 		nodes0, _nodes_half, _count_nodes(tree.get_root())])
-	# ① 风暴形态可达
-	var form_ok := peak_resolve >= STORM_FORM
-	print("[storm] 断言① 风暴形态 ≥ %d 结算/帧：%s" % [STORM_FORM, "PASS" if form_ok else "FAIL"])
+	# ①a 风暴载荷形态（R256 翻案：载荷=resolve 调用口径；≥90% 帧在载容忍敌群换血帧）
+	var form_ok := peak_calls >= STORM_FORM and over_calls >= MEASURE_FRAMES * 9 / 10
+	print("[storm] 断言①a 风暴载荷 ≥ %d 调用/帧（≥90%% 帧在载）：%s" % [
+		STORM_FORM, "PASS" if form_ok else "FAIL"])
 	if not form_ok:
+		_fails += 1
+	# ①b 派发帽削峰（R221 Fix C：超帽顺延——派发峰值必须被钳在帽内）+
+	# 饱和下限锚（R256 修轮 QA-03/评审 M3：①a 载荷在载时派发应钉帽=管线派发链
+	# 活性证明——峰值 0 也 ≤帽的「死链假绿」由此堵死；帽读有效值非 60Hz 常量，
+	# sim30 档 96 不假红）
+	var cap_ok := peak_resolve >= cap_now
+	print("[storm] 断言①b 派发帽削峰+饱和 峰值 %d 恰钉帽 %d：%s" % [
+		peak_resolve, cap_now, "PASS" if cap_ok else "FAIL"])
+	if not cap_ok:
 		_fails += 1
 	# ② 风暴满载判定线（R189 重锚：真闸门 + 文档回写）
 	# 原门「P95 < 8.3 ms（全帧，含 300 真管线结算注入）」经真实语境分账证实结构性

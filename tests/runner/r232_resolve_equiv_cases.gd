@@ -266,8 +266,15 @@ func _compare(p_override: int, p_a: Dictionary, p_b: Dictionary) -> void:
 	_check("%s 击杀总数 |Δ|≤%d（小样本轴容差）" % [tag, 4 if p_override == 2 else 2],
 		absi(int(p_a["kills"]) - int(p_b["kills"])) <= (4 if p_override == 2 else 2),
 		"%d vs %d" % [int(p_a["kills"]), int(p_b["kills"])])
-	_check("%s 末帧活弹数 |Δ|≤%d（回收时序漂移容差）" % [tag, 12 if p_override == 2 else 2],
-		absi(int(p_a["live_tail"]) - int(p_b["live_tail"])) <= (12 if p_override == 2 else 2),
+	# 腿2 活弹带 2→8 校准（2026-10-09 修复轮）：电池负载下双臂活弹数现 ±4 漂移
+	#（200 vs 196 / 196 vs 200 双向各一见，约 1/9 频次）。归因探针（tests/probe_r232_drift.gd）
+	# 实测：同旗标对照臂（off/off）在负载下同样漂移 ±2~4——漂移与 CTX_REUSE 等被审
+	# 开关无关（腿3 逐位硬等价墙 + 值谱 distinct 断言全绿佐证），是跨臂环境噪声；
+	# 静机下四臂 ×4 进程逐位恒 196/25/81。量纲：击杀带容差 2 × MULTI×3 四连 volley
+	# 每击杀事件级联 ±4 活弹 → 8 为击杀带自洽级联上界（两倍实测余量）。漏网大面
+	# 回收回归（池阀/回收路径破坏）Δ≫8 仍拦截。
+	_check("%s 末帧活弹数 |Δ|≤%d（回收时序漂移容差）" % [tag, 12 if p_override == 2 else 8],
+		absi(int(p_a["live_tail"]) - int(p_b["live_tail"])) <= (12 if p_override == 2 else 8),
 		"%d vs %d" % [int(p_a["live_tail"]), int(p_b["live_tail"])])
 	if p_override == 2:
 		_check("腿1 饱和面真实在位（A 臂顺延+冲刷 >0——复合场景非空转）",
