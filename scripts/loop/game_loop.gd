@@ -65,6 +65,46 @@ static func sim_hz_target() -> int:
 	# 30Hz 档=决策1 方案A Engine.physics_ticks_per_second=30）。
 	return SIM_HZ_30HZ if sim30_effective() else SIM_HZ_60
 
+
+# ── R285：弹侧 boost 网格命中/死亡冲刷双门（设计 §3.0；R223 pool_valve_override /
+#    R235 PLAYER_BULLET_FAST_PATH 静态注入口先例） ─────────────────────────
+# 架构红线（§0.3）：boost 关（桌面/headless/测试默认）→ 帧级缓存恒 false → ④ 相执行序
+# 与现网逐字相同（关态可执行新增面=④ 头一次 boost_mode() 求值 + 静态 bool 写读，
+# 弹/敌热路径零字典查零门调用）。boost 开（mobile 保帧模式）→ T1 收集-冲刷两段式 +
+# T3 死亡链批量冲刷。RNG 契约变更声明（boost 开侧限定）：命中时点允许帧级偏移（设计
+# §3.1.5——单体结算链数值/命中率统计期望/穿透预算语义/E-03 去重契约不变；同帧多杀
+# 击杀连锁读数单向收窄漂移明示不在承诺内），声明全文见 projectile_base._collect_hit_pairs
+# 与 enemy._death_fanout 头注。
+static var grid_hit_override: int = -1        # -1=真值（跟 boost_mode）/ 0=强关（A/B 对拍臂）/ 1=强开（QA 直驱路径）
+static var death_flush_override: int = -1     # 同款三态（T1/T3 可独立裁定）
+static var grid_hit_frame: bool = false       # 当帧网格命中路径开关（④ 相头写，帧内只读——〔v2·M2〕帧级缓存）
+static var death_flush_frame: bool = false    # 当帧死亡冲刷开关（同上）
+static var prof_buckets_frame: bool = false   # R285 P0：四分键计时门（随 stage_probe_enabled 逐帧写——
+                                              # 命/结/死/回 四桶只在本门内 begin/end；关态 死/回/ip 键照累计）
+static var shortcircuit_ip_pass: bool = false # R285 S8：ip 双遍历短路臂注入口（默认 false=零短路零成本）
+static var hit_pairs_flushed: int = 0         # 会话累计冲刷命中对数（G 臂 effect check/诊断直读）
+static var deaths_flushed: int = 0            # 会话累计冲刷死亡数（同上）
+
+
+static func grid_hit_on() -> bool:
+	# R285：网格命中路径读口（仅 ④ 相头调用，每帧恰一次——非热路径）。
+	# 读序：grid_hit_override(0/1) > PerfGovernor.boost_mode()（boost_override 0/1 >
+	# Meta.settings("perf_boost")）。boost_mode() 的设置字典查只发生在本求值点。
+	if grid_hit_override == 0:
+		return false
+	if grid_hit_override == 1:
+		return true
+	return PerfGovernor.boost_mode()
+
+
+static func death_flush_on() -> bool:
+	# R285：死亡冲刷路径读口（诊断/QA 直读口——④ 相头实际用共享求值零二次 boost 查）。
+	if death_flush_override == 0:
+		return false
+	if death_flush_override == 1:
+		return true
+	return PerfGovernor.boost_mode()
+
 # 状态机（复用 GameConst.GameStatus：BOOT/MENU/PLAYING/PAUSED/LEVEL_UP/GAME_OVER）
 # 合法迁移矩阵（冻结；非法迁移 change_state 拒绝 + 计数）。
 # ★ PAUSED → MENU 为暂停面板「回主菜单」新增合法迁移（用户反馈 2026-08-29；pkg4 非法
@@ -508,6 +548,11 @@ func _ip_restore_pass() -> void:
 	# 弹池内非本层桩对象（as ProjectileBase null 短路）。零分配（活跃表引用遍历）。
 	# R233 修轮（MED-3+QA LOW-1）：全程计时喂 ip_sim_us_total（诊断 only 两次 usec 读，
 	# 挂点/次序零改动；谓词关态本函数不被调用=零计入）。
+	# R285 S8：短路臂注入口（deeprepro ipµs 份额定谳臂——默认 false 零短路零成本）；
+	# R285 P0：ipµs 桶（&"ip_pass"——双遍历合计秒窗键，同 R269 桶器只加计时不改行为）。
+	if shortcircuit_ip_pass:
+		return
+	DebugStats.bucket_begin(&"ip_pass")
 	var us_r := Time.get_ticks_usec()
 	if player != null and is_instance_valid(player) and player.is_inside_tree():
 		player.global_position = player._ip_curr
@@ -533,6 +578,7 @@ func _ip_restore_pass() -> void:
 		if is_instance_valid(shard) and shard.is_inside_tree():
 			shard.global_position = shard._ip_curr
 	ip_sim_us_total += int(Time.get_ticks_usec() - us_r)
+	DebugStats.bucket_end(&"ip_pass")
 
 
 func _ip_snapshot_pass() -> void:
@@ -552,6 +598,9 @@ func _ip_snapshot_pass() -> void:
 	# tests/*，无运行期生产写者——grep 证实）；现网测试均「先注入后驱动」不触发。
 	if not sim30_effective() and sim30_override == -1:
 		return
+	if shortcircuit_ip_pass:                # R285 S8：ip 短路臂（快照遍历同款早退）
+		return
+	DebugStats.bucket_begin(&"ip_pass")     # R285 P0：ipµs 桶（恢复+快照双遍历合计）
 	var us_s := Time.get_ticks_usec()
 	if player != null and is_instance_valid(player) and player.is_inside_tree():
 		player._ip_prev = player._ip_curr
@@ -582,6 +631,7 @@ func _ip_snapshot_pass() -> void:
 			shard._ip_prev = shard._ip_curr
 			shard._ip_curr = shard.global_position
 	ip_sim_us_total += int(Time.get_ticks_usec() - us_s)
+	DebugStats.bucket_end(&"ip_pass")
 
 
 func _ip_render_write(p_alpha: float) -> void:
@@ -859,6 +909,21 @@ func _physics_process(p_raw_delta: float) -> void:
 				_probe_t0 = Time.get_ticks_usec()
 			# ④ 双网格重建（当前实体位置确定性快照）→ 投射物运动/碰撞/结算
 			frame_order.append(&"grid_projectile")
+			# R285：boost 门帧级缓存（④ 相头每帧恰一次求值——grid_hit_on() 的
+			# Meta.settings 字典查只发生在本点；死亡冲刷门共享同一次求值零二次查；
+			# 弹/敌热路径只读静态 bool，关态执行序与现网逐字相同）
+			grid_hit_frame = grid_hit_on()
+			match death_flush_override:      # T1/T3 可独立裁定；缺省臂=与网格门同真值
+				0:
+					death_flush_frame = false
+				1:
+					death_flush_frame = true
+				_:
+					death_flush_frame = grid_hit_frame
+			prof_buckets_frame = stage_probe_enabled   # R285 P0：四分键计时门（帧级）
+			_hp_proj.clear()                 # R285：对缓冲帧头清（防跨帧滞留——t1b 断言面）
+			_hp_target.clear()
+			_hp_serial.clear()
 			enemy_grid.rebuild(spawner.active)
 			enemy_bullet_grid.rebuild(_collect_enemy_bullets())
 			if stage_probe_enabled:
@@ -868,6 +933,10 @@ func _physics_process(p_raw_delta: float) -> void:
 				stage_probe_us_peak[&"grid_rebuild"] = maxi(int(stage_probe_us_peak.get(&"grid_rebuild", 0)), int(stage_probe_us[&"grid_rebuild"]))
 				_probe_t0 = Time.get_ticks_usec()
 			_tick_projectiles(gd)
+			if grid_hit_frame:
+				_flush_hit_pairs()           # R285 T1 冲刷点：④ 尾统一提交（收集制命中）
+			if death_flush_frame:
+				_flush_deaths()              # R285 T3 冲刷点①：命中杀 fan-out 统一执行
 			if stage_probe_enabled:
 				stage_probe_us[&"grid_projectile"] = Time.get_ticks_usec() - _probe_t0
 				stage_probe_us_peak[&"grid_projectile"] = maxi(int(stage_probe_us_peak.get(&"grid_projectile", 0)), int(stage_probe_us[&"grid_projectile"]))
@@ -890,6 +959,9 @@ func _physics_process(p_raw_delta: float) -> void:
 			# E-10 敌间软分离（R256 序2：10Hz 全量单帧尖峰→分片轮转；网格为 ④ 阶段
 			# 重建快照——上一帧位置确定性口径不变）
 			_tick_separation(gd)
+			if death_flush_frame:
+				_flush_deaths()              # R285 T3 冲刷点②：⑤ 尾（DOT/反应杀——
+			                                 # elemental.tick+detect_reactions+分离之后、⑥ 前）
 			if stage_probe_enabled:
 				stage_probe_us[&"enemy"] = Time.get_ticks_usec() - _probe_t0
 				stage_probe_us_peak[&"enemy"] = maxi(int(stage_probe_us_peak.get(&"enemy", 0)), int(stage_probe_us[&"enemy"]))
@@ -1054,6 +1126,9 @@ func _physics_process(p_raw_delta: float) -> void:
 			_maybe_start_phase0_calib()     # R235 搭车④：菜单停留门后一次性挂载六臂校准件
 		_:
 			pass                                  # BOOT：无战斗帧序（MENU 见上臂）
+	if death_flush_frame:
+		_flush_deaths()                     # R285 T3 冲刷点③：帧末兜底（pipeline.end_frame
+		                                    # 同位——防 ⑥⑦ 段意外入队跨帧滞留，同帧内闭合）
 	if pipeline != null:
 		pipeline.end_frame()
 	EventBus.end_frame()                          # 事件风暴计数清零（§六.4）
@@ -3983,6 +4058,83 @@ func _tick_projectiles(p_gd: float) -> void:
 	# 防「尾元素移入当前槽」的重入错位；快照同时承担刀9 team 分区）
 	_tick_one_pool(_projectile_pool, p_gd)
 	_tick_one_pool(_homing_pool, p_gd)
+
+
+# ── R285 T1/T3：boost 网格命中对缓冲 + 死亡冲刷队列（帧头 clear 复用零分配——
+#    R188 档0 纪律；三平行成员缓冲消除逐对 Dictionary/对象分配） ─────────
+# 静态化注记（实现层对设计 §3.1.6「成员缓冲」的一处形变，机制等价）：GDScript 禁止
+# 以 `GameLoop.xxx` 类名语法调用实例方法（弹/敌热路径收集段/入队口唯一可用的调用
+# 形态），故缓冲与冲刷函数落 static——与 R223 pool_valve_override / 本批两门同构的
+# 静态注入口先例；零分配/帧头清/快照冲刷语义逐字保留（生产单实例，测试双 boot 经
+# 帧头清/兜底冲刷天然复位）。
+static var _hp_proj: Array[ProjectileBase] = []   # 命中对：弹（tick 序收集自然序）
+static var _hp_target: Array[Node2D] = []         # 命中对：目标（格行主序×桶内插入序候选）
+static var _hp_serial: PackedInt32Array = []      # 命中对：落对时弹的 run_serial（序守卫）
+static var _death_queue: Array[Enemy] = []        # T3 死亡冲刷队列（FIFO=死亡发生序）
+
+
+static func append_hit_pair(p_proj: ProjectileBase, p_target: Node2D) -> void:
+	# R285 T1：收集段落对口（projectile_base._collect_hit_pairs 窄相通过者调用——
+	# 不结算不派发，④ 尾 _flush_hit_pairs 统一提交）。
+	_hp_proj.append(p_proj)
+	_hp_target.append(p_target)
+	_hp_serial.append(p_proj.run_serial)
+
+
+static func _flush_hit_pairs() -> void:
+	# R285 T1 冲刷段：④ 尾按「弹 tick 序×格行主序×桶内插入序」统一提交 _submit_hit
+	#（提交链零改动——帧聚合/生命周期去重/反弹盾/回旋 ICD/词条/管线/暴击/附着/穿透/
+	# 回收全在原函数内）。冲刷段以冲刷开始时的对数快照为准（段内不会再落对——击杀爆
+	# AOE 走 settle_aoe 直结算不入对；防御口）。关态恒空直返（零遍历）。
+	var n0 := _hp_proj.size()
+	if n0 == 0:
+		return
+	var timed := prof_buckets_frame
+	if timed:
+		DebugStats.bucket_begin(&"hit_flush")     # R285 P0：结µs（提交链）
+	for i in range(n0):
+		var proj: ProjectileBase = _hp_proj[i]
+		# R285 序守卫：冲刷中段弹被回收（pierce 耗尽 _recycle）→ 同节点可能被 FRACTAL
+		# 子代 pool.acquire 复用（projectile_base.request_split）——serial 变/失活即跳过
+		# 该弹剩余对（等价关态 _check_collision 的 `if not _live: break`，防幻影对以
+		# 「子代身份」误结算）。
+		if not is_instance_valid(proj) or not proj._live or proj.run_serial != _hp_serial[i]:
+			continue
+		proj._submit_hit(_hp_target[i])
+	hit_pairs_flushed += n0
+	_hp_proj.clear()
+	_hp_target.clear()
+	_hp_serial.clear()
+	if timed:
+		DebugStats.bucket_end(&"hit_flush")
+
+
+static func enqueue_death(p_enemy: Enemy) -> void:
+	# R285 T3：死亡 fan-out 入队口（enemy._on_died 死亡冲刷模式调用——FIFO=死亡序）。
+	_death_queue.append(p_enemy)
+
+
+static func _flush_deaths() -> void:
+	# R285 T3 冲刷段（〔v2·M3〕快照计数制）：只处理冲刷开始时已在队的快照段 n0——
+	# 冲刷期间新入队（防御面）不顺延执行、留给下一冲刷点（⑤尾）或帧末兜底点吸收
+	#（同帧闭合，循环有界、读数确定）。逐敌 is_instance_valid ∧ dead ∧ 非 in-pool
+	# 复验（防看门狗/其他路径先行归还后误 fan-out——in-pool meta 直读 ObjectPool 真源）。
+	var n0 := _death_queue.size()
+	if n0 == 0:
+		return
+	for i in range(n0):
+		var e: Enemy = _death_queue[i]
+		if is_instance_valid(e) and e.dead \
+				and not bool(e.get_meta(ObjectPool._META_IN_POOL, false)):
+			e._death_fanout()
+	deaths_flushed += n0
+	if _death_queue.size() == n0:
+		_death_queue.clear()                # 常态：冲刷期零入队——O(1) 清空
+	else:
+		# 防御面：冲刷期再入队——保留新段（FIFO 尾段原样），当帧兜底点吸收
+		var tail: Array[Enemy] = []
+		tail.assign(_death_queue.slice(n0))
+		_death_queue = tail
 
 
 # R220 刀9 分区开关（false=原统一 tick 路径——快照缓冲迭代但全走 proj.tick 慢路径）

@@ -89,6 +89,12 @@ func run(p_tree: SceneTree, p_archive := false) -> void:
 	await _arm("S6 全弹清空（逐帧 release 活弹）", {"s6": true})
 	await _arm("S7 桶宿主同步环短路", {"s7": true})
 	await _arm("S2 敌监控短路（monitoring 批量 false+玩家面惰化）", {"s2": true})
+	# R285 P0 增臂（设计 §3.4）：缺省强关（下）保 BASE/S 臂与 R271 postcut 同口径；
+	# G0=刀后关态基线 / G1=T1 单独 A/B / G2=T3 单独 A/B / S8=ipµs 份额定谳臂
+	await _arm("G0 现状臂（grid_hit_override=0 强关）", {"g0": true})
+	await _arm("G1 网格命中臂（grid_hit_override=1 强开——T1 单独 A/B）", {"g1": true})
+	await _arm("G2 死亡冲刷臂（death_flush_override=1 grid 关——T3 单独 A/B）", {"g2": true})
+	await _arm("S8 ip 双遍历短路臂（shortcircuit_ip_pass——ipµs 份额定谳）", {"s8": true})
 	await _arm("BASE2 基线复测臂（会话漂移对照——塌缩基线取双基线均值）", {})
 	await _arm("BAD 坏臂（敌注入数=0——M4 门回归；末位=零敌期波次通关会把状态带离 PLAYING，污染后继臂）", {"bad": true})
 	_report_verdict()
@@ -311,11 +317,24 @@ func _set_arm_flags(p_cfg: Dictionary) -> void:
 	_skip_marks = {
 		"s1": int(TexBucketHost.place_skip_count), "s4": int(ProjectileBase.tick_skip_count),
 		"s5": int(PopupManager.spawn_reject_count), "s7": int(TexBucketHost.sync_skip_count),
+		"g": int(GameLoop.hit_pairs_flushed), "gd": int(GameLoop.deaths_flushed),
 	}
 	TexBucketHost.shortcircuit_place = bool(p_cfg.get("s1", false))
 	TexBucketHost.shortcircuit_sync = bool(p_cfg.get("s7", false))
 	ProjectileBase.shortcircuit_tick = bool(p_cfg.get("s4", false))
 	PopupManager.shortcircuit_spawn = bool(p_cfg.get("s5", false))
+	# R285 G 臂注入口（缺省强关——BASE/S 臂与 R271 postcut 历史口径可比；G/S8 臂各自翻旗）
+	GameLoop.grid_hit_override = 0
+	GameLoop.death_flush_override = 0
+	GameLoop.shortcircuit_ip_pass = false
+	if p_cfg.has("g0"):
+		GameLoop.grid_hit_override = 0
+	if p_cfg.has("g1"):
+		GameLoop.grid_hit_override = 1
+	if p_cfg.has("g2"):
+		GameLoop.death_flush_override = 1
+	if p_cfg.has("s8"):
+		GameLoop.shortcircuit_ip_pass = true
 
 
 func _clear_arm_flags() -> void:
@@ -511,6 +530,31 @@ func _arm_effect_check(p_label: String) -> void:
 			_check("r2 S2 注入生效：活敌 HitArea monitoring 全 false ∧ 玩家面惰化",
 				enemy_off and not _gl.player.monitoring and _gl.player.collision_layer == 0,
 				"敌off=%s 玩家monitoring=%s layer=%d" % [enemy_off, _gl.player.monitoring, _gl.player.collision_layer])
+		"G0":
+			# R285：强关臂——冲刷对数零增量 ∧ 命/结µs 窗零累计（段不存在）
+			var d0 := int(GameLoop.hit_pairs_flushed) - int(_skip_marks.get("g", 0))
+			var hf0 := int(DebugStats.diag_bucket_window_us(&"hit_flush"))
+			_check("r2 G0 注入生效：网格命中强关（冲刷对数零增量 ∧ 结µs 零累计）",
+				d0 == 0 and hf0 == 0, "对数+%d 结µs=%d" % [d0, hf0])
+		"G1":
+			# R285：强开臂——T1 生效（冲刷对数增量 >0 ∧ 命/结µs 在账）
+			var d1 := int(GameLoop.hit_pairs_flushed) - int(_skip_marks.get("g", 0))
+			var hc1 := int(DebugStats.diag_bucket_window_us(&"hit_collect"))
+			var hf1 := int(DebugStats.diag_bucket_window_us(&"hit_flush"))
+			_check("r2 G1 注入生效：网格命中强开（冲刷对数增量 >0 ∧ 命/结µs 在账）",
+				d1 > 0 and hc1 > 0 and hf1 > 0, "对数+%d 命µs=%d 结µs=%d" % [d1, hc1, hf1])
+		"G2":
+			# R285：T3 单独臂——死亡冲刷增量 >0 ∧ 网格门仍关（冲刷对数零增量）
+			var dd := int(GameLoop.deaths_flushed) - int(_skip_marks.get("gd", 0))
+			var d2 := int(GameLoop.hit_pairs_flushed) - int(_skip_marks.get("g", 0))
+			_check("r2 G2 注入生效：死亡冲刷强开（冲刷死亡数增量 >0 ∧ 网格门仍关）",
+				dd > 0 and d2 == 0, "死冲+%d 对数+%d" % [dd, d2])
+		"S8":
+			# R285：ip 短路臂——注入口在账；ipµs 窗读数披露（headless 关态双遍历本近零，
+			# 份额定谳以本读数为准——全零=ip 非主源，如实登记不硬编归因）
+			var ip_us := int(DebugStats.diag_bucket_window_us(&"ip_pass"))
+			_check("r2 S8 注入生效：ip 双遍历短路在账", GameLoop.shortcircuit_ip_pass,
+				"ipµs=%d（窗内读数披露——headless 关态双遍历本近零，份额定谳以本读数为准）" % ip_us)
 
 
 func _m4_gate(p_w: Dictionary, p_phys_adv: int, p_label: String) -> bool:
@@ -840,6 +884,11 @@ func _finish_teardown() -> void:
 	TexBucketHost.shortcircuit_sync = false
 	ProjectileBase.shortcircuit_tick = false
 	PopupManager.shortcircuit_spawn = false
+	GameLoop.grid_hit_override = -1             # R285：注入口出厂态复位（-1=真值跟 boost）
+	GameLoop.death_flush_override = -1
+	GameLoop.shortcircuit_ip_pass = false
+	GameLoop.grid_hit_frame = false
+	GameLoop.death_flush_frame = false
 	Enemy.CONTACT_RADIAL = false
 	PerfGovernor.boost_override = -1
 	PerfGovernor.mode_override = -1

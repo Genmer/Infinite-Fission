@@ -1283,9 +1283,34 @@ func is_elite() -> bool:
 
 func _on_died() -> void:
 	# 一次性死亡：置 dead → EventBus.emit_enemy_killed → 池归还（EnemySpawner 订阅承担）
+	# R285 T3：死亡链拆分——inline 面（dead 旗+marks 清零）保持即时（死亡短路/E-06
+	# 一次性语义不动）；fan-out 四件（DeathPop/毒溅/元素释放/击杀广播）在 boost 死亡
+	# 冲刷模式（〔v2·M2〕静态 bool 帧级缓存）下入队、冲刷点统一执行（快照计数制），
+	# 关态直调与现网调用序逐字相同。RNG/读数漂移声明见 _death_fanout 头注。
 	dead = true
 	_reset_marks()                              # R187 敌亡回收：引信/蓄能随死亡清零
 	                                            #（蓄能池以 uid 单例——亡敌残留档位会污染复用实例）
+	if GameLoop.death_flush_frame:
+		GameLoop.enqueue_death(self)
+	else:
+		_death_fanout()
+
+
+func _death_fanout() -> void:
+	# 原 _on_died 尾段（DeathPop→毒溅→元素释放→emit_enemy_killed）逐字搬移——
+	# R285 T3 冲刷段（命中杀在冲刷点①/④尾、DOT·反应杀在冲刷点②/⑤尾、意外入队在
+	# 兜底点③/帧末统一执行）。
+	# ── R285 同帧多杀击杀连锁读数漂移声明（boost 开侧限定；设计 §3.1.5 声明④/
+	# §0.2 迁移点④）── dead 旗全部在入队时点（apply_damage 时点）置位、先于任何
+	# fan-out 执行：燎原 _on_enemy_killed_spread_burn 的 dead 过滤目标集较关态收窄
+	# （关态下 A 死时同帧稍后才死的 B 仍活可被满槽点燃，T3 下 B 已 dead 被跳过=燎原
+	# DOT 伤害分布单向收窄漂移）；连杀狂热/精英首杀/回声·共鸣叠层在后续命中乘区的
+	# 读数同族漂移。**承诺不变面**：伤害数值分布、命中率统计、穿透/去重契约、
+	# fan-out 内部派发序（挂载序）——击杀连锁读数漂移明示不在承诺内，按统计带验收。
+	# boost 关侧零入队零延迟（fan-out 即时，pkg4 零位移）。
+	var timed := GameLoop.prof_buckets_frame
+	if timed:
+		DebugStats.bucket_begin(&"death_flush")     # R285 P0：死µs（fan-out 冲刷段——关态也累计）
 	# R19 打击质感：死亡弹爆（白环扩散 + 四向碎屑，0.2s 自清——击杀瞬间重量感）
 	# R188 档0：入池复用（DeathPop.pop——原每杀 instantiate+自毁）
 	if get_parent() != null and _fx_q() > 0:
@@ -1296,6 +1321,8 @@ func _on_died() -> void:
 	_death_poison_splash()
 	_death_element_discharge()
 	EventBus.emit_enemy_killed(self)
+	if timed:
+		DebugStats.bucket_end(&"death_flush")
 
 
 func _death_element_tint() -> Color:

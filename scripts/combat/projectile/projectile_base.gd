@@ -12,6 +12,11 @@ class_name ProjectileBase
 extends Node2D
 
 var uid: int = 0                              # GameConst.next_uid()
+# R285 T1：弹运行序号（spawn 递增、单调不清——_reset_state 不复位的刻意例外）。
+# 冲刷序守卫真源：命中对落缓冲时记录落对时刻的 serial，冲刷时 serial≠现值=该节点已
+# 被回收且被 FRACTAL 子代 pool.acquire 复用 → 该弹剩余对全跳过（防幻影对以「子代
+# 身份」误结算；关态无缓冲存活不受影响）。
+var run_serial: int = 0
 var team: int = 0                             # 0=玩家弹 1=敌方弹（消弹/命中判定分流）
 var velocity: Vector2 = Vector2.ZERO
 var lifetime_left: float = 0.0                # 寿命（超程/超时 → EXPIRED）
@@ -219,6 +224,7 @@ func spawn(p_params: Dictionary) -> void:
 	#   便捷扩展键（可选）：{traits（直接词条数组——测试/过渡期）, position（出生点）}
 	# 依赖注入（非初始值，不走参数字典）：damage_pipeline / enemy_grid / pool / elemental 由武器侧 acquire 后设置。
 	uid = GameConst.next_uid()
+	run_serial += 1                              # R285 T1：运行序号递增（单调——_reset_state 不清）
 	velocity = p_params.get("velocity", Vector2.ZERO)
 	lifetime_left = maxf(float(p_params.get("lifetime", 2.0)), 0.0)
 	pierce_left = maxi(int(p_params.get("pierce", 1)), 0)
@@ -460,7 +466,13 @@ func tick(p_game_delta: float) -> void:
 			and not _traits_cache.is_empty()):
 		_dispatch_event(GameConst.TraitEvent.ON_TICK,
 			{"game_delta": p_game_delta})
-	_check_collision()
+	# R285 T1：boost 门内命中步分流（〔v2·M2〕静态 bool 帧级缓存——非 boost_mode() 直读；
+	# 关态零新增调用=现状逐字路径）。boost 开=收集制（查询+窄相同口径，命中对落
+	# GameLoop 帧缓冲、④ 尾统一提交）；RNG 契约变更声明见 _collect_hit_pairs 头注。
+	if team == 0 and GameLoop.grid_hit_frame:
+		_collect_hit_pairs()
+	else:
+		_check_collision()
 
 
 func _tick_fast(p_gd: float, p_player: Node2D, p_player_r: float) -> void:
@@ -568,7 +580,11 @@ func _tick_fast_player(p_gd: float) -> void:
 	# （er + 30Hz 弦半膨胀；er==_fast_radius 判据下 ≥ 原 pre_r 恒成立），结果直接复制进
 	# _candidates（R5 别名纪律：复制后不持返回缓冲），非空回落 _check_collision(true)
 	# 跳过重查直走窄相+提交链（候选=同口径超集，窄相裁定不变）；空=现状直通。
-	if enemy_grid != null:
+	# R285 T1：boost 门内命中步分流（收集制——同口径查询在 _collect_hit_pairs 内完成，
+	# 不复制候选、不即时结算；〔v2·M2〕静态 bool 帧级缓存读零字典查）。
+	if GameLoop.grid_hit_frame:
+		_collect_hit_pairs()
+	elif enemy_grid != null:
 		var er := effective_radius()
 		var query_r := er
 		if GameLoop.sim30_effective():
@@ -707,6 +723,52 @@ func effective_radius() -> float:
 
 
 # ── 碰撞（SpaceGrid 自管查询，Q-15） ────────────────────────────
+func _collect_hit_pairs() -> void:
+	# R285 T1：boost 网格命中路径收集段——查询+窄相与 _check_collision 逐字同口径
+	# （三守卫同序同判定、同 query_r 式、同 _in_reach/_in_reach_swept 本体），差异仅
+	# 两点：①候选**不复制**进 _candidates（复用 query_circle_snap 返回缓冲就地窄相
+	# ——R235 4b 的 append_array 复制消除；R5 别名纪律：窄相循环内不再发起任何网格
+	# 查询）；②**不即时 _submit_hit**——窄相通过者落 GameLoop 帧对缓冲，④ 尾
+	# _flush_hit_pairs 按收集自然序统一提交。
+	# ── R285 RNG 契约变更声明（boost 开侧限定；照 R226 拆帽/R268 P1 先例）──
+	# boost 开启时命中结算时点从「各弹 tick 槽内即时」改为「④ 尾统一冲刷」，由此允许：
+	# ①同帧内 ctx.player_hp_pct / ctx.is_first_hit_of_wave 条件读取先后序漂移；
+	# ②homing 弹在「同帧 AOE 击杀原目标」场景下的重索敌时点漂移（收集段先于冲刷段）；
+	# ③死亡 fan-out 内全局 rng 消费相对管线结算法（独立流）的交错序漂移；④同帧多杀
+	# 击杀连锁读数漂移（dead 旗全部在对提交段置位先于任何 fan-out——燎原点燃目标集
+	# 单向收窄等，详见 enemy._death_fanout 头注）。**承诺不变面**：单体结算链数值
+	#（乘区/暴击概率/抗性九步管线零改动）、命中率统计期望（命中判定距离式零改动）、
+	# 穿透/反弹预算语义、E-03/R196 去重契约、六大生命周期事件派发序。boost 关侧零
+	# 执行（pkg4 seed=42 116 项零位移）。
+	if team == 1:
+		return
+	if _flight_axe:
+		return                              # R243 掷斧幽灵飞行守卫（与 _check_collision 同位）
+	if enemy_grid == null:
+		return
+	var timed := GameLoop.prof_buckets_frame
+	if timed:
+		DebugStats.bucket_begin(&"hit_collect")   # R285 P0：命µs（收集段查询+窄相）
+	var er := effective_radius()
+	var swept := GameLoop.sim30_effective()
+	var query_r := er
+	if swept:
+		query_r += (global_position - _swept_prev).length() * 0.5
+	var reach := er
+	var cands := enemy_grid.query_circle_snap(global_position, query_r)
+	for target in cands:
+		if not _live:
+			break                           # 序守卫（与 _check_collision 同款——收集段内
+			                                # 自身被回收即弃余候选）
+		if swept:
+			if _in_reach_swept(target, reach):
+				GameLoop.append_hit_pair(self, target)
+		elif _in_reach(target, reach):
+			GameLoop.append_hit_pair(self, target)
+	if timed:
+		DebugStats.bucket_end(&"hit_collect")
+
+
 func _check_collision(p_skip_query: bool = false) -> void:
 	# p_skip_query（R235 4b）：调用方（_tick_fast_player 预检）已按同口径 query_r 复制好
 	# _candidates 时跳过重查，直走窄相+提交链——候选超集与窄相裁定口径与全查逐位一致。
@@ -1457,6 +1519,10 @@ func _recycle(p_reason: int, p_released_by_pool: bool = false) -> void:
 		return
 	_in_recycle = true
 	_live = false
+	var timed := GameLoop.prof_buckets_frame
+	if timed:
+		DebugStats.bucket_begin(&"recycle")       # R285 P0：回µs（_recycle→release 链
+		                                          # ——关态也累计，零行为）
 	DebugStats.count(&"projectile_recycled")
 	# R225（弹tick侧刀）：原因键查表（零格式化分配；越界值回退旧格式化路径保底——
 	# 枚举五值内行为逐位一致）。
@@ -1477,6 +1543,8 @@ func _recycle(p_reason: int, p_released_by_pool: bool = false) -> void:
 	_reset_state()
 	if not p_released_by_pool and pool != null:
 		pool.release(self)                    # 池再调 _reset_state（幂等清零）
+	if timed:
+		DebugStats.bucket_end(&"recycle")
 	_in_recycle = false
 
 
