@@ -14,7 +14,9 @@ signal exhausted(pool_id: StringName)         # 转发 EventBus.pool_exhausted
 var pool_id: StringName = &""                 # 池标识（遥测键）
 var bucket_host: Node = null                  # R214 E' 树序分桶 host（TexBucketHost；null=关）：
                                               # release 开头统一 unplace 归位池根；place 由实体
-                                              # 激活期自报（贴图定后）——见 TexBucketHost 头注
+                                              # 激活期自报（贴图定后）——见 TexBucketHost 头注。
+                                              # R272 V-C2 起 enemy/xp 池同 projectile 池走
+                                              # lazy 态（见下旗）——空闲件可能在桶下而非池根
 var lazy_bucket_release: bool = false         # R271 V-C1（弹池惰性归位，boost 门内默认）：
                                               # true 时 release 按 PerfGovernor.boost_mode()
                                               # 分派 unplace_lazy（留桶不 reparent）/unplace；
@@ -103,7 +105,8 @@ func trim_free_to(p_target: int) -> int:
 	#   裁闲不会重开运行期 instantiate（ri）口子；live 超标的钳制兜底=容量至少让件。
 	# · 再裁闲：超额项从 _free_list 尾部弹出后 queue_free()（先出栈后释放——空闲栈永不
 	#   持有已释放节点；弹出即不可再被 acquire 复用，queue_free 帧末摘树）。
-	# · 无桶悬挂：空闲件已在池根下（release 开头 bucket_host.unplace 已归位）；
+	# · 无桶悬挂：空闲件在池根下（unplace 归位）**或 lazy 态留桶下**（V-C1/V-C2 留桶
+	#   不 reparent——queue_free 不依赖父节点，两形态均安全出树）；
 	#   空闲件 meta 保持 true——已裁件若被误 release 会被成员校验按「重复归还/外来」
 	#   拒绝（rejected_release_count 防御原样，不回灌已释放节点）。
 	_capacity = maxi(p_target, _live_count)

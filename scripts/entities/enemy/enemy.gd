@@ -2996,6 +2996,11 @@ func _restore_flash_tex() -> void:
 	# bucket_host.unplace 已把敌归位池根，此时敌不在桶下 → is_ancestor_of 不成立跳过
 	# 回桶（防释放中敌被重新挂桶违反 R214 池根生命周期；复取 spawn 由 _sync_visual
 	# 尾 _place_in_bucket 正常落桶）。桶 host 为 null（老测试直连池）仅复位贴图。
+	# R272 V-C2 评审#1（满载档暗门）：V-C1/C2 惰性归位后归还敌**留桶**，is_ancestor_of
+	# 恒真——原守卫失守，满载档（fullload_dim 换白变体贴图路径）_reset_state 期间
+	# 重新落桶+MM 镜像重注册（非 grunt 死亡换桶 reparent / grunt 闪白窗内死亡 1 次）。
+	# 修=守卫加 dead 门：_reset_state 先置 dead=true（:2246）后调本口，归还路径
+	# dead==true 跳过回桶；活跃期闪毕/门回落 dead==false 路径逐位不变。
 	_flash_tex_on = false
 	if _sprite == null:
 		return
@@ -3003,7 +3008,7 @@ func _restore_flash_tex() -> void:
 	var r_kind: StringName = spec[0]
 	var r_angry: bool = spec[1]
 	_sprite.texture = TextureFactory.enemy_tex(r_kind, r_angry)
-	if bucket_host != null and bucket_host.is_ancestor_of(self):
+	if bucket_host != null and bucket_host.is_ancestor_of(self) and not dead:
 		_place_in_bucket()
 
 

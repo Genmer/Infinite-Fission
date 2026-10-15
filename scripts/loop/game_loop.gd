@@ -2867,7 +2867,6 @@ func _boot_build_pools() -> void:
 	_projectile_pool.hard_limit = int(GameConfig.balance.projectile_hard_limit)
 	# R271 V-C1（verdict：S1 延µs 塌缩 49%+加摘 17k/s 相关坐实 → §3.3 刀 C1 boost 门内默认）：
 	# 弹池惰性归位接线——boost 开时 release 留桶不 reparent（同变体复用零树进出）。
-	# homing/xp 池未接线（周流量级差 1-2 个数量级——升全局刀需 verdict+soak 双证主会话授权）。
 	_projectile_pool.lazy_bucket_release = true
 	# R94 homing 池（追踪/爆炸/AoE 真件）：容量与软硬限沿 projectile 同源（导弹量级小）
 	_homing_pool = ProjectilePool.new()
@@ -2920,6 +2919,17 @@ func _boot_build_pools() -> void:
 	_attach_bucket_host(_projectile_pool)
 	_attach_bucket_host(enemy_pool)
 	_attach_bucket_host(pools[&"xp"] as ObjectPool)
+	# R272 V-C2（vc82 真机定谳敌侧桶链→升格接线，用户「最大程度保帧」授权）：敌每次死亡
+	# 归池 unplace 整子树 reparent 回池根+波补 acquire place 再 reparent——深载敌周转
+	# ~1300 组/s×两次整树摘挂（子树含 Area2D=物理空间重注册），直方图 enemy.gd/Area2D/
+	# CollisionShape2D 各 7923 added 同数坐实；步µs 27-33ms/步顶死 30Hz 档 33.3ms 步预算
+	# =深载 fps 22-30 主因。本刀=V-C1 同款升格：boost 开 release 留桶（unplace_lazy 仅
+	# 镜像注销防幽灵绘制），acquire 同贴图 place 免搬零 reparent、换贴图自然换桶（低频）；
+	# boost 关侧 unplace 现状逐位（r214「release 归位池根」旧断言=关态口径不受扰）。
+	# xp 池同款接线（周流量小一级，接线零成本顺手收口）；homing 池未挂桶（无 reparent
+	# 链）不在刀面。
+	enemy_pool.lazy_bucket_release = true
+	(pools[&"xp"] as ObjectPool).lazy_bucket_release = true
 
 
 func _attach_bucket_host(p_pool: ObjectPool) -> void:
