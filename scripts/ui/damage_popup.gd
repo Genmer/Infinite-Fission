@@ -496,6 +496,22 @@ func _reset_state() -> void:
 	_clear_reaction_overrides()
 
 
+const REACTION_SIZE_CACHE: Dictionary = {
+	2: Vector2(136.0, 80.0),
+	4: Vector2(210.0, 80.0),
+	6: Vector2(290.0, 80.0),
+	8: Vector2(360.0, 80.0),
+}
+
+static func get_cached_reaction_size(p_text: String) -> Vector2:
+	var l := p_text.length()
+	if l <= 2: return REACTION_SIZE_CACHE[2]
+	elif l <= 4: return REACTION_SIZE_CACHE[4]
+	elif l <= 6: return REACTION_SIZE_CACHE[6]
+	elif l <= 8: return REACTION_SIZE_CACHE[8]
+	return Vector2(360.0 + float(l - 8) * 35.0, 80.0)
+
+
 func _refresh_label() -> void:
 	# 数值 + 样式刷新（圆胖数字：CRIT 加大字号；量级档叠乘字号 + 档位配色——
 	# 仅直击样式 NORMAL/CRIT 吃量级档，REACTION/DOT/HEAL/XP 沿既有配色观感）
@@ -517,8 +533,13 @@ func _refresh_label() -> void:
 		_hide_glyphs()
 		_label.visible = true
 		_apply_reaction_look()
-		_label.reset_size()
-		_label.position = -_label.size * 0.5
+		if PerfGovernor.boost_mode():
+			var sz := get_cached_reaction_size(_label.text)
+			_label.size = sz
+			_label.position = -sz * 0.5
+		else:
+			_label.reset_size()
+			_label.position = -_label.size * 0.5
 		return
 	# 非 REACTION 分支：复位反应覆盖（池复用串色防线——R186 起每次刷新先还原贴纸底色）
 	_clear_reaction_overrides()

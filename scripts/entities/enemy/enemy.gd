@@ -276,6 +276,83 @@ var _vis_sy_q: int = 0
 var _vis_rot_q: int = 0
 var _vis_off_q: Vector2 = Vector2.INF
 
+# 单帧玩家几何缓存（仅单 tick 内惰性解算复用）
+var _frame_geom_valid: bool = false
+var _frame_geom_stamp: int = -1
+var _to_player: Vector2 = Vector2.ZERO
+var _dist_sq_to_player: float = -1.0
+var _dist_to_player: float = -1.0
+var _dir_to_player: Vector2 = Vector2.ZERO
+
+const VIS_CULL_MARGIN := 64.0
+const VIS_CULL_RECT := Rect2(-VIS_CULL_MARGIN, -VIS_CULL_MARGIN, 720.0 + 2.0 * VIS_CULL_MARGIN, 1280.0 + 2.0 * VIS_CULL_MARGIN)
+
+
+func _reset_frame_geom() -> void:
+	_frame_geom_valid = false
+	_frame_geom_stamp = -1
+	_dist_sq_to_player = -1.0
+	_dist_to_player = -1.0
+	_dir_to_player = Vector2.ZERO
+
+
+func _ensure_frame_geom(p_player: Node2D = null) -> bool:
+	if not PerfGovernor.boost_mode():
+		return false
+	if _frame_geom_valid and _frame_geom_stamp == GameConfig.frame_stamp:
+		return true
+	var pl := p_player if p_player != null else _player()
+	if pl == null or not is_instance_valid(pl):
+		return false
+	_to_player = pl.global_position - global_position
+	_dist_sq_to_player = _to_player.length_squared()
+	_dist_to_player = -1.0
+	_dir_to_player = Vector2.ZERO
+	_frame_geom_valid = true
+	_frame_geom_stamp = GameConfig.frame_stamp
+	return true
+
+
+func _get_dist_to_player(p_player: Node2D = null) -> float:
+	var pl := p_player if p_player != null else _player()
+	if pl == null or not is_instance_valid(pl):
+		return 999999.0
+	if not PerfGovernor.boost_mode():
+		return global_position.distance_to(pl.global_position)
+	if not _ensure_frame_geom(pl):
+		return global_position.distance_to(pl.global_position)
+	if _dist_to_player < 0.0:
+		_dist_to_player = sqrt(_dist_sq_to_player)
+	return _dist_to_player
+
+
+func _get_dir_to_player(p_player: Node2D = null) -> Vector2:
+	var pl := p_player if p_player != null else _player()
+	if pl == null or not is_instance_valid(pl):
+		return Vector2.ZERO
+	if not PerfGovernor.boost_mode():
+		return (pl.global_position - global_position).normalized()
+	if not _ensure_frame_geom(pl):
+		return (pl.global_position - global_position).normalized()
+	if _dir_to_player == Vector2.ZERO:
+		var d := _get_dist_to_player(pl)
+		_dir_to_player = _to_player / d if d > 0.0001 else Vector2.ZERO
+	return _dir_to_player
+
+
+func _is_vis_cullable() -> bool:
+	if not PerfGovernor.boost_mode():
+		return false
+	if is_boss():
+		return false
+	if _fuse_armed or _fuse_left > 0.0:
+		return false
+	if _dash_state == 1 or _blink_state == 1:
+		return false
+	if _spawn_left > 0.0 or _wobble_left > 0.0 or _flash_left > 0.0:
+		return false
+	return not VIS_CULL_RECT.has_point(global_position)
+
 # E2 疾冲冲刺周期（视觉+走位表现；数值真源 = 本块常量，用户裁定方向 C 敌人角色化：
 # 蓄力 0.3s telegraph（果冻压扁+微抖）→ 冲刺 0.35s×1.9 速（拉长 1.4×）→ 回弹 0.25s 半速）
 const DASH_CHARGE_TIME := 0.3               # 蓄力 telegraph 时长 s
@@ -786,6 +863,7 @@ func tick(p_game_delta: float) -> void:
 	# 行为机（追击/远程）+ 状态效果速度因子 + 接触伤害 + Boss 阶段检查
 	if dead:
 		return
+	_reset_frame_geom()
 	_tick_visual(p_game_delta)
 	if _fade_left > 0.0:
 		_fade_left -= p_game_delta
@@ -836,12 +914,13 @@ func tick(p_game_delta: float) -> void:
 				if _kind == &"dart" or _kind == &"woodbird" or _kind == &"bogleaper":
 					_tick_dart_chase(p_game_delta, player, sf)
 				else:
-					var dir := (player.global_position - global_position).normalized()
+					var dir := _get_dir_to_player(player)
 					var spd := speed * sf * _enrage_speed_mult * (0.0 if _stagger_left > 0.0 else 1.0)   # R18 P3 狂暴提速；R23 硬直停摆
 					if _fuse_armed:
 						spd = VOLATILE_CHARGE_SPEED    # 警报后冲刺（A3 §2.2 E4 行；自爆冲刺不受寒滞减速修正口径）
 					global_position += dir * spd * p_game_delta
-				_tick_volatile_fuse(p_game_delta, player)
+					_reset_frame_geom()
+					_tick_volatile_fuse(p_game_delta, player)
 			if is_boss():
 				# R23：硬直期停摆（不移动不放技能），韧性免疫窗照常衰减
 				if _stagger_left > 0.0:
@@ -899,13 +978,14 @@ func tick(p_game_delta: float) -> void:
 			and not is_boss():
 		var sanctuary_r: float = (player as Player).melee_sanctuary_r
 		if sanctuary_r > 0.0:
-			sanctuary = global_position.distance_squared_to(player.global_position) \
-				<= sanctuary_r * sanctuary_r
+			sanctuary = _dist_sq_to_player <= sanctuary_r * sanctuary_r if _ensure_frame_geom(player) \
+				else global_position.distance_squared_to(player.global_position) <= sanctuary_r * sanctuary_r
 	if CONTACT_RADIAL:
 		var pl := _player()
 		if pl != null and is_instance_valid(pl):
 			var reach := hitbox_r + float(pl.hitbox_radius)
-			if global_position.distance_squared_to(pl.global_position) <= reach * reach:
+			var dsq := _dist_sq_to_player if _ensure_frame_geom(pl) else global_position.distance_squared_to(pl.global_position)
+			if dsq <= reach * reach:
 				if sanctuary:
 					DebugStats.count(&"melee_enemy_suppressed")
 				else:
@@ -928,7 +1008,8 @@ func take_result(p_result: DamageResult) -> void:
 		var shield_player := _player()
 		if shield_player != null and is_instance_valid(shield_player):
 			var to_hit := (p_result.pos - global_position).normalized()
-			var to_player := (shield_player.global_position - global_position).normalized()
+			var to_player := _get_dir_to_player(shield_player) if _ensure_frame_geom(shield_player) \
+				else (shield_player.global_position - global_position).normalized()
 			if to_hit.dot(to_player) >= cos(_shield_arc * 0.5):
 				final_dmg *= (1.0 - _frontal_shield)
 	apply_damage(final_dmg)
@@ -2132,6 +2213,7 @@ func _reset_cast_state() -> void:
 
 func _reset_state() -> void:
 	# R72 新形态机制复位（池化归还清零——E-04）
+	_reset_frame_geom()
 	_mm_on = false                            # R240：镜像在册标志清零（unplace 已注销，
 	                                          # 防池内 _apply_flash(0.0) 误判贴图路径）
 	_frontal_shield = 0.0
@@ -2561,6 +2643,9 @@ func _tick_visual(p_game_delta: float) -> void:
 	# 表现层状态机（game_delta 通道——顿帧自然冻结；零碰撞、零数值副作用）：
 	# 出生弹入 / 受击果冻 / 分型动画（E1 摇摆呼吸 / E2 冲刺形变 / E3 甲板错位 /
 	# E4 充能三段变脸 / E5 悬浮微光 / Boss 公转 + 二阶段变脸）。
+	if _is_vis_cullable():
+		_anim_t += p_game_delta
+		return
 	_apply_fullload_decor()                  # R225：门翻转随 tick 落位（开=隐/关=复显；
 	                                         # 置于分型动画前——隐藏期 _tick_elite_extras/
 	                                         # _tick_boss 的装饰逐帧写点经 .visible 门自然跳过）

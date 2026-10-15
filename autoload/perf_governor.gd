@@ -62,6 +62,11 @@ static func boost_mode() -> bool:
 	return v == 1
 
 
+static func strategic_boost_active() -> bool:
+	# 策略级降载特性统一生效门，直接锚定既有 boost_mode()
+	return boost_mode()
+
+
 static func boost_res_notch() -> int:
 	# R269：分辨率档读口（85/75——仅 boost_mode() 为真时被消费；boost 关时值无意义但
 	# 保持档值不回写，重开沿用 §3.1 写口关系）。脏值归 85（_normalized_setting 同口径）。

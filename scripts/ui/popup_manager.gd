@@ -135,6 +135,33 @@ var _pool_sample_counter: int = 0              # R202 层2：满池采样全局�
                                                # 非 per-uid：每目标独立采样在高密度下几乎全显、节流失效）
 var _numbers_on_cache: bool = true             # R202 入口缓存：damage_numbers_on（settings_changed 刷新）
 var _quality_cache: int = 2                    # R202 入口缓存：fx_quality（settings_changed 刷新）
+
+# 策略降载：视口裁剪与小怪单帧空间网格汇聚
+const VIEWPORT_CULL_MARGIN := 64.0
+const VIEWPORT_CULL_RECT := Rect2(-VIEWPORT_CULL_MARGIN, -VIEWPORT_CULL_MARGIN, 720.0 + 2.0 * VIEWPORT_CULL_MARGIN, 1280.0 + 2.0 * VIEWPORT_CULL_MARGIN)
+const CLUSTER_GRID_SIZE := 96.0
+var _cluster_registry: Dictionary = {}
+var _cluster_frame_stamp: int = -1
+
+
+static func is_in_viewport(p_pos: Vector2) -> bool:
+	return VIEWPORT_CULL_RECT.has_point(p_pos)
+
+
+static func _is_cluster_exempt(p_result: DamageResult) -> bool:
+	if p_result.is_crit or p_result.popup_style == GameConst.PopupStyle.CRIT:
+		return true
+	if p_result.popup_style == GameConst.PopupStyle.REACTION:
+		return true
+	if (p_result.target_tags & (GameConst.TAG_BOSS | GameConst.TAG_ELITE)) != 0:
+		return true
+	return false
+
+
+static func _cluster_key(p_pos: Vector2) -> int:
+	var gx := int(floorf(p_pos.x / CLUSTER_GRID_SIZE))
+	var gy := int(floorf(p_pos.y / CLUSTER_GRID_SIZE))
+	return (gx & 0xFFFF) << 16 | (gy & 0xFFFF)
 # R271 S5：台架短路注入口（设计 §3.2 短路臂——trail_halffreq_override 同款先例：static
 # 面 + 默认零短路；三入口统一拒收=跳字链短路，产品默认逐位现状；计数仅供台架断言）
 static var shortcircuit_spawn: bool = false
@@ -223,6 +250,8 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 		return
 	if not _numbers_on_cache:                                    # R202 入口缓存
 		return
+	if PerfGovernor.boost_mode() and not is_in_viewport(p_result.pos):
+		return
 	# R187 W8 引爆大字数据源：逐帧按目标聚合结算值（w8_detonated 消费后清除——
 	# CHARGE_BURST 大字 = 该敌本帧全部结算之和，含引爆 AoE 溅射）
 	if GameConfig.frame_stamp != _w8_agg_frame:
@@ -232,6 +261,16 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 		+ maxf(float(p_result.final_value), 0.0)
 	var uid := p_result.target_uid
 	var style := p_result.popup_style
+	# 保帧模式单帧空间网格汇聚（仅非豁免小怪普通伤害）
+	if PerfGovernor.boost_mode() and not _is_cluster_exempt(p_result):
+		if GameConfig.frame_stamp != _cluster_frame_stamp:
+			_cluster_frame_stamp = GameConfig.frame_stamp
+			_cluster_registry.clear()
+		var ckey := _cluster_key(p_result.pos)
+		var cpop: DamagePopup = _cluster_registry.get(ckey, null)
+		if is_instance_valid(cpop) and cpop.is_active:
+			cpop.merge(p_result.final_value, style, p_result.element)
+			return
 	# R4c（R186）：反应结算值 ≤0.5 短路不起新字——碎裂基数为剩余 DOT 可为 0
 	# （≤0.5 口径：DOT ceil 下 0.5 会显示为 1，round 下 0.4 已显「0」，均防 54px 大「0」）
 	if style == GameConst.PopupStyle.REACTION and p_result.final_value <= 0.5:
@@ -253,6 +292,8 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 			# tier>=3/>=2 先例，重复触发由 SfxBank 70ms 节流承担。
 			var host_was_normal := popup.style == GameConst.PopupStyle.NORMAL
 			popup.merge(p_result.final_value, style, p_result.element)
+			if PerfGovernor.boost_mode() and not _is_cluster_exempt(p_result):
+				_cluster_registry[_cluster_key(p_result.pos)] = popup
 			if host_was_normal and popup.style == GameConst.PopupStyle.CRIT:
 				popup.tier = clampi(_tier_for(GameConst.PopupStyle.CRIT, popup.merged_value),
 					0, DamagePopup.TIER_SCALES.size() - 1)
@@ -310,6 +351,9 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 		p_result.element)
 	_active_list.append(popup)
 	_merge_registry[key] = {"popup": popup, "window_left": merge_window_for(_quality())}
+	if PerfGovernor.boost_mode() and not _is_cluster_exempt(p_result):
+		var ckey := _cluster_key(p_result.pos)
+		_cluster_registry[ckey] = popup
 	active_popups = _active_list.size()
 	if bucket == 1:
 		_rxn_frame_pops.append(popup)
@@ -332,6 +376,8 @@ func on_reaction_triggered(p_rxn: int, p_pos: Vector2, p_uid: int) -> void:
 	# DamagePopup.REACTION 文字分支显示反应名（超导另带 rxn_stat 统计段「-30%」）。
 	# 碎裂/过载/蒸发/绽放禁在此处理：管线每次 settle 已广播 reaction_triggered——
 	# 二次起字会翻倍刷屏。
+	if PerfGovernor.boost_mode() and not is_in_viewport(p_pos):
+		return
 	if shortcircuit_spawn:                   # R271 S5：台架短路（默认 false=零短路零成本）
 		spawn_reject_count += 1
 		return
@@ -585,6 +631,8 @@ func clear_all() -> void:
 			popup_pool.release(popup)
 		idx -= 1
 	_merge_registry.clear()
+	_cluster_registry.clear()
+	_cluster_frame_stamp = -1
 	active_popups = 0
 
 

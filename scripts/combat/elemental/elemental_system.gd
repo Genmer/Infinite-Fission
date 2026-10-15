@@ -86,6 +86,69 @@ var _uid_dot: int = 0                          # DOT 结算幂等键 source_uid�
 var _uid_chain: int = 0                        # 连锁跳伤 source_uid
 var _uid_reaction: int = 0                     # 反应结算 source_uid
 
+# 策略降载：DamageContext 借还复用池与单帧同怪反应阻尼器
+var _ctx_pool: Array[DamageContext] = []
+const CTX_POOL_MAX := 32
+var _frame_rxn_hits: Dictionary = {}
+var _rxn_hit_frame_stamp: int = -1
+
+
+func _acquire_ctx() -> DamageContext:
+	var ctx: DamageContext
+	if not _ctx_pool.is_empty():
+		ctx = _ctx_pool.pop_back()
+	else:
+		ctx = DamageContext.make()
+	_reset_ctx(ctx)
+	return ctx
+
+
+func _release_ctx(p_ctx: DamageContext) -> void:
+	if p_ctx == null or _ctx_pool.size() >= CTX_POOL_MAX:
+		return
+	_reset_ctx(p_ctx)
+	_ctx_pool.append(p_ctx)
+
+
+func _reset_ctx(ctx: DamageContext) -> void:
+	ctx.source_uid = 0
+	ctx.target_uid = 0
+	ctx.target = null
+	ctx.frame_stamp = 0
+	ctx.rng_stream_id = 0
+	ctx.base_atk = 0.0
+	ctx.flat_bonus = 0.0
+	ctx.crit_chance = 0.0
+	ctx.crit_mult = 2.0
+	ctx.element = GameConst.Element.KIN
+	ctx.hit_flags = 0
+	ctx.target_resist = 0.0
+	ctx.bounce_count = 0
+	ctx.pierce_index = 0
+	ctx.generation = 0
+	ctx.is_first_hit_of_wave = false
+	ctx.player_hp_pct = 1.0
+	ctx.pos = Vector2.ZERO
+	ctx.kill_backlink = null
+	ctx.add_entries.clear()
+	ctx.mult_pools.clear()
+	ctx.local_pools.clear()
+
+
+func _get_rxn_damping_factor(p_target_uid: int) -> float:
+	if not PerfGovernor.boost_mode():
+		return 1.0
+	if GameConfig.frame_stamp != _rxn_hit_frame_stamp:
+		_rxn_hit_frame_stamp = GameConfig.frame_stamp
+		_frame_rxn_hits.clear()
+	var count: int = int(_frame_rxn_hits.get(p_target_uid, 0))
+	_frame_rxn_hits[p_target_uid] = count + 1
+	if count == 0:
+		return 1.0
+	elif count == 1:
+		return 0.6
+	return 0.35
+
 # R192-low1（R198）：结算臂级硬默认缺键告警会话一次闸（"rxn|键" → true）——照
 # wave_director.gd:43 _empty_comp_errored 先例（一次性旗防同键同帧刷屏；成员域即
 # 本系统实例生命周期一次，测试可观测）。
@@ -429,10 +492,11 @@ func _settle_reaction(p_enemy: Node2D, p_snapshot: float, p_coef: float, p_rxn: 
 	# 名额/整体钳）聚合为乘积乘入系数 χ；真/桩两路同折（桩路折进面板口径）。
 	if pipeline == null or p_enemy == null or bool(p_enemy.get("dead")):
 		return
-	var ctx := DamageContext.make()
+	var ctx := _acquire_ctx()
 	ctx.source_uid = _uid_reaction
 	ctx.target = p_enemy
-	ctx.target_uid = int(p_enemy.get("uid"))
+	var tuid := int(p_enemy.get("uid"))
+	ctx.target_uid = tuid
 	ctx.frame_stamp = GameConfig.frame_stamp
 	ctx.base_atk = p_snapshot
 	ctx.element = p_rxn                         # 反应通道承载 ReactionType 中性 ID（广播约定）
@@ -440,7 +504,7 @@ func _settle_reaction(p_enemy: Node2D, p_snapshot: float, p_coef: float, p_rxn: 
 	ctx.pos = (p_enemy as Node2D).global_position
 	_inject_relic_pools(ctx, p_enemy)
 	var relic_mult := _relic_pool_product(ctx)
-	var eff_coef := p_coef * relic_mult
+	var eff_coef := p_coef * relic_mult * _get_rxn_damping_factor(tuid)
 	var result: DamageResult = null
 	if pipeline is DamagePipeline:
 		result = (pipeline as DamagePipeline).resolve_reaction(p_snapshot, eff_coef, ctx)
@@ -448,6 +512,7 @@ func _settle_reaction(p_enemy: Node2D, p_snapshot: float, p_coef: float, p_rxn: 
 		# 桩路径适配（接口差异：桩单参签名，系数折算进面板）
 		ctx.base_atk = p_snapshot * eff_coef
 		result = pipeline.call(&"resolve_reaction", ctx)
+	_release_ctx(ctx)
 	if result != null:
 		DebugStats.count(&"reaction_settled")
 
@@ -553,7 +618,7 @@ func _dot_tick(p_enemy: Node2D, p_state: ElementalState) -> void:
 	while p_state.consume_dot_due():
 		var dot := maxf(p_state.burn_dot_ratio * p_state.burn_snapshot_atk
 			* float(p_state.burn_layers), float(p_state.burn_layers))
-		var ctx := DamageContext.make()
+		var ctx := _acquire_ctx()
 		ctx.source_uid = _uid_dot
 		ctx.target = p_enemy
 		ctx.target_uid = int(p_enemy.get("uid"))
@@ -566,6 +631,7 @@ func _dot_tick(p_enemy: Node2D, p_state: ElementalState) -> void:
 		_inject_relic_pools(ctx, p_enemy)       # R199 D07：DOT 通道遗物乘区（管线⑤主通道直消费）
 		if pipeline.has_method(&"resolve"):
 			pipeline.call(&"resolve", ctx)
+		_release_ctx(ctx)
 		EventBus.emit_elemental_dot_fired((p_enemy as Node2D).global_position)   # 表现层火星
 		DebugStats.count(&"elemental_dot_tick")
 
@@ -584,6 +650,8 @@ func _shock_chain(p_origin: Node2D, p_hit_damage: float, p_targets_per_hop: int)
 		decay = float(shock.get("chain_decay", 0.6))
 		ratio = float(shock.get("chain_ratio", 0.35))
 		radius = float(shock.get("chain_radius", 160.0))
+	if PerfGovernor.boost_mode():
+		depth = mini(depth, 2)
 	var origin_pos: Vector2 = (p_origin as Node2D).global_position
 	var dedup: Dictionary = {int(p_origin.get("uid")): true}
 	var frontier: Array[Node2D] = [p_origin]
@@ -668,12 +736,14 @@ func _nearest_targets(p_from: Node2D, p_radius: float, p_dedup: Dictionary,
 
 func _settle_chain_jump(p_target: Node2D, p_damage: float) -> void:
 	# 连锁跳伤（HIT_IS_DOT 不掷暴击；走管线主通道）
-	var ctx := DamageContext.make()
+	var tuid := int(p_target.get("uid"))
+	var eff_dmg := p_damage * _get_rxn_damping_factor(tuid)
+	var ctx := _acquire_ctx()
 	ctx.source_uid = _uid_chain
 	ctx.target = p_target
-	ctx.target_uid = int(p_target.get("uid"))
+	ctx.target_uid = tuid
 	ctx.frame_stamp = GameConfig.frame_stamp
-	ctx.base_atk = p_damage
+	ctx.base_atk = eff_dmg
 	ctx.element = GameConst.Element.LTG
 	ctx.hit_flags = GameConst.HIT_IS_DOT
 	ctx.crit_chance = 0.0
@@ -681,6 +751,7 @@ func _settle_chain_jump(p_target: Node2D, p_damage: float) -> void:
 	_inject_relic_pools(ctx, p_target)          # R199 D07：连锁通道遗物乘区（管线⑤主通道直消费）
 	if pipeline.has_method(&"resolve"):
 		pipeline.call(&"resolve", ctx)
+	_release_ctx(ctx)
 	DebugStats.count(&"shock_chain_jump")
 
 

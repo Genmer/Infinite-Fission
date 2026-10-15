@@ -213,13 +213,29 @@ func resolve_reaction(snapshot_atk: float, coefficient: float, p_ctx: DamageCont
 		_stats["dropped_invalid"] += 1
 		return null
 	p_ctx.hit_flags |= GameConst.HIT_IS_REACTION    # 强制反应标记（⑦ 跳过掷骰 + REACTION 表现级）
-	var cached: DamageResult = _check_idempotent(p_ctx)
+	var key := _idem_key(p_ctx)
+	var cached: DamageResult = _check_idempotent(p_ctx, key)
 	if cached != null:
 		_stats["dropped_dupe"] += 1
 		return cached
 	if not _target_alive(p_ctx):
 		_stats["dropped_dead"] += 1
 		return null
+
+	# 保帧模式削峰顺延：预算耗尽时顺延至次帧冲刷
+	if PerfGovernor.boost_mode() and _settle_cap_now() > 0:
+		if _settle_left <= 0:
+			p_ctx.base_atk = coefficient * snapshot_atk
+			p_ctx.flat_bonus = snapshot_atk
+			var ph := _synthetic_deferred(p_ctx)
+			_defer_settle(p_ctx, ph, key)
+			return ph
+		_settle_left -= 1
+
+	return _resolve_reaction_core(snapshot_atk, coefficient, p_ctx, key)
+
+
+func _resolve_reaction_core(snapshot_atk: float, coefficient: float, p_ctx: DamageContext, p_key: int = -1) -> DamageResult:
 	# R220 刀8③：反应通道同构复用（ModifierStack 借出重置；DamageAudit 每命中 new）
 	var stack := _acquire_stack()
 	stack.audit = DamageAudit.new()
@@ -243,10 +259,17 @@ func resolve_reaction(snapshot_atk: float, coefficient: float, p_ctx: DamageCont
 		_rxn_alarm_emitted = true
 		EventBus.emit_damage_alarm(result)
 	EventBus.emit_reaction_triggered(int(p_ctx.element), p_ctx.pos, p_ctx.target_uid)
-	_cache_result(p_ctx, result)
+	_cache_result(p_ctx, result, p_key)
 	_resolve_depth -= 1                        # R220 刀8③：复用栈深度哨兵
 	_stats["reaction_settles"] += 1
 	return result
+
+
+func _resolve_reaction_core_flushed(p_ctx: DamageContext) -> DamageResult:
+	var snap := p_ctx.flat_bonus
+	var total_d := p_ctx.base_atk
+	var coef := total_d / snap if snap > 0.0001 else 1.0
+	return _resolve_reaction_core(snap, coef, p_ctx)
 
 
 @warning_ignore("unused_parameter")
@@ -729,12 +752,13 @@ func _flush_entry(p_e: Dictionary) -> int:
 		return 1
 	# R232 T1b：冲刷路径真结算同入结算轴计时窗（预算冲刷/过期强冲共用本口）
 	var result: DamageResult
+	var is_rxn := (ctx.hit_flags & GameConst.HIT_IS_REACTION) != 0
 	if SETTLE_PROBE:
 		var tf := Time.get_ticks_usec()
-		result = _resolve_core(ctx)
+		result = _resolve_reaction_core_flushed(ctx) if is_rxn else _resolve_core(ctx)
 		_settle_us_total += Time.get_ticks_usec() - tf
 	else:
-		result = _resolve_core(ctx)
+		result = _resolve_reaction_core_flushed(ctx) if is_rxn else _resolve_core(ctx)
 	if result != null and result.killed and ctx.kill_backlink != null:
 		var proj: Object = ctx.kill_backlink.get_ref()
 		if proj != null and is_instance_valid(proj) and bool(proj.get(&"_live")):
@@ -905,6 +929,7 @@ func _populate_result(p_ctx: DamageContext, p_stack: ModifierStack, p_crit: bool
 	p_result.element = p_ctx.element
 	p_result.source_uid = p_ctx.source_uid
 	p_result.target_uid = p_ctx.target_uid
+	p_result.target_tags = int(p_ctx.target.get("tags")) if p_ctx.target != null and is_instance_valid(p_ctx.target as Object) else 0
 	p_result.frame_stamp = p_ctx.frame_stamp
 	p_result.pos = p_ctx.pos
 	p_result.audit = p_stack.audit

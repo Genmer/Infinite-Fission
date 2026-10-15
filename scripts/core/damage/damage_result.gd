@@ -19,6 +19,7 @@ var target_factor: float = 1.0                # (1−r) × 状态修正
 var pool_breakdown: Dictionary = {}           # pool_id -> agg（乘区明细，M2 HUD 峰值统计）
 var feel_level: int = 0                       # GameConst.FeelLevel（HIT/CRIT/CATALYST）
 var popup_style: int = 0                      # GameConst.PopupStyle
+var target_tags: int = 0                      # 目标实体 tags 快照 (TAG_BOSS/TAG_ELITE，供跳字分簇判定)
 var audit: DamageAudit = null
 var deferred_merge: bool = false              # R223 刀R：预算顺延占位结果（final=0/不落血/
                                               # 不入派发队；真实伤害并入后续冲刷结算——调用方

@@ -110,6 +110,9 @@ var _thin_burst_tick: int = 0                 # 中档隔次粒子计数器（R1
 
 func on_damage_resolved(p_result: DamageResult) -> void:
 	# feel_level 分级入口（0/30/50ms 顿帧 + trauma + 色差；粒子按 CRIT/HIT 优先级）。
+	if PerfGovernor.boost_mode():
+		if not Rect2(-64.0, -64.0, 720.0 + 128.0, 1280.0 + 128.0).has_point(p_result.pos):
+			return
 	# R19 特效质量档位：低=仅暴击粒子 / 中=隔次粒子（高频命中减负——buff 叠多层卡顿主源之一）。
 	# R188 档2：CRIT 顿帧密集场自动关（滚动窗内申请达限即停发——密集场 30ms 顿帧近连续
 	# 拖慢游戏时钟；Boss/精英路径走 on_enemy_killed 直发不经此处，保留不受影响）
