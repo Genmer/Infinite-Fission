@@ -239,16 +239,18 @@ func _test_b_gem_cap7() -> void:
 	if content == null:
 		return
 	var gems := _content_kids(content, "Gem")
-	var names_ok := gems.size() == 7
+	# R284 声明迁移（buff 显示不全批）：词条列 7→9 动态扩容——8 词条夹具从「恰 7 枚
+	# 截断」迁移为「恰 8 枚全显」（行距 228/8=28.5 压缩承载；B④ 底沿守卫随动态化）
+	var names_ok := gems.size() == 8
 	for i in range(gems.size()):
 		if String(gems[i].name) != "Gem%d" % i:
 			names_ok = false
-	_check("B③ 截断：恰渲染 7 枚 Gem0..Gem6（第 8 枚不建节点）", names_ok,
+	_check("B③ 扩容全显：恰渲染 8 枚 Gem0..Gem7（R284：8≤9 行距 28.5 全承载，无截断）", names_ok,
 		"gems=%d" % gems.size())
 	var last_bottom := -1.0
-	if gems.size() == 7:
-		last_bottom = gems[6].position.y + 22.0
-	_check("B④ 最末宝石底沿 ≤ content 高 228（y=184+22=206）",
+	if gems.size() == 8:
+		last_bottom = gems[7].position.y + 22.0
+	_check("B④ 最末宝石底沿 ≤ content 高 228（R284 动态：8 枚 step 28.5 → y≈202.75+22=224.75）",
 		last_bottom > 0.0 and last_bottom <= 228.0, "bottom=%.1f" % last_bottom)
 
 

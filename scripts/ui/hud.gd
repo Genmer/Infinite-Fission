@@ -1258,7 +1258,11 @@ func _refresh_build() -> void:
 					row_y + (row_h - lock_sz) * 0.5)
 				lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				content.add_child(lock)
-	# ② 右列·词条宝石竖排（跨武器聚合挂载序，最多 7 枚：类别章形 + ×层数右侧）
+	# ② 右列·词条宝石竖排（跨武器聚合挂载序：R284 动态扩容——原硬上限 7 枚行距 30
+	# 固定，R226 拆叠层帽后困难局词条种类轻松超 7，第 8 枚起只剩「+N」小字=用户
+	# 反馈「两列 buff 显示不全」。修=行距动态均分：≤7 枚行距 30 现状逐位；8-9 枚
+	# 压缩至 content 高 228 均分（28.5/25.3px，宝石 22 仍放下）；>9 枚显示 9 枚，
+	# 第 9 枚行层数字位替换为「+N」角标（第 9 枚宝石保留）
 	var gems: Array = []
 	for w in slots:
 		if w == null or not is_instance_valid(w):
@@ -1272,17 +1276,25 @@ func _refresh_build() -> void:
 			if td != null:
 				gems.append({"pool": int(td.get("pool")), "layers": int(tb.get("layers")),
 					"tid": StringName(str(td.get("id")))})
-	for gi in range(mini(gems.size(), 7)):
-		var gy := float(gi) * 30.0
+	var gem_show := mini(gems.size(), 9)
+	var gem_step := 30.0
+	if gems.size() > 7:
+		gem_step = 228.0 / float(maxi(gem_show, 1))
+	var gem_last := gem_show - 1
+	for gi in range(gem_show):
+		var gy := float(gi) * gem_step
 		var gem_icon := TextureRect.new()
 		gem_icon.name = "Gem%d" % gi
 		gem_icon.texture = TextureFactory.type_icon(1, int(gems[gi]["pool"]))
-		gem_icon.position = Vector2(74.0, gy + 4.0)
+		gem_icon.position = Vector2(74.0, gy + (gem_step - 22.0) * 0.5)
 		gem_icon.custom_minimum_size = Vector2(22.0, 22.0)
 		gem_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		gem_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		gem_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		content.add_child(gem_icon)
+		# 第 9 枚行在溢出态让出层数字位给「+N」（>9 枚才有溢出态）
+		if gi == gem_last and gems.size() > gem_show:
+			continue
 		if int(gems[gi]["layers"]) > 1:
 			# R200（真机反馈「buff 显示的字很小」）：字号 10→14；R203 二次反馈→16、
 			# 宽 24→28；R208 面板收窄 140→118——x 96→92→88（右沿 88+28=116 ≤ 118，
@@ -1293,21 +1305,22 @@ func _refresh_build() -> void:
 			var cnt := StickerTheme.label_sticker(Label.new(), 16, StickerTheme.label_color(StickerTheme.LabelRole.INK), 0, Color.WHITE, true)
 			cnt.text = "×%d" % int(gems[gi]["layers"])
 			cnt.size = Vector2(36.0, 18.0)
-			cnt.position = Vector2(80.0, gy + 6.0)
+			cnt.position = Vector2(80.0, gy + (gem_step - 18.0) * 0.5)
 			cnt.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			content.add_child(cnt)
-	# R198（r197-1）：第 8 枚起静默截断 → 补「+N」溢出提示（挂最后一枚宝石行下方，
-	# R200 字号 10→14；R203 二次反馈→16 高 18、y 212→210：210+18=228 == content 高
-	# 恰等保持）。节点名取「OverflowGem」——规划字面「GemOverflow」
-	# 恰以 Gem 开头，会使 r197 B③「Gem0..Gem6 恰 7 枚」的 begins_with("Gem") 计数断裂
-	# （r197_build_panel_cases.gd:233-236 / r196_growth_cases.gd:436 三处同名前缀消费），
+	# R198（r197-1）：第 gem_show+1 枚起静默截断 → 补「+N」溢出提示（R284：位置从
+	# 固定 y=210 改第 9 枚行层数字位——面板满排后无独立溢出行；第 9 枚宝石保留可辨）。
+	# 节点名取「OverflowGem」——规划字面「GemOverflow」
+	# 恰以 Gem 开头，会使「Gem0..GemN 恰 N 枚」的 begins_with("Gem") 计数断裂
+	# （r197_build_panel_cases.gd B③ / r198 G③ / r196_growth_cases 同名前缀消费），
 	# 本条自身的「非 Gem* 前缀」约束优先，令名保留语义 token
-	if gems.size() > 7:
+	if gems.size() > gem_show:
 		var overflow := StickerTheme.label_sticker(Label.new(), 16, StickerTheme.label_color(StickerTheme.LabelRole.SOFT))
 		overflow.name = "OverflowGem"
-		overflow.text = "+%d" % (gems.size() - 7)
-		overflow.position = Vector2(74.0, 210.0)
-		overflow.size = Vector2(44.0, 18.0)
+		overflow.text = "+%d" % (gems.size() - gem_show)
+		overflow.position = Vector2(80.0, float(gem_last) * gem_step + (gem_step - 18.0) * 0.5)
+		overflow.size = Vector2(36.0, 18.0)
+		overflow.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		content.add_child(overflow)
 
 

@@ -289,32 +289,51 @@ func _test_g_gem_overflow() -> void:
 	if content == null:
 		return
 	var gems := _content_kids(content, "Gem")
-	var names_ok := gems.size() == 7              # B③ 同口径：溢出提示不得混入 Gem* 计数
+	# R284 声明迁移：8 词条从「恰 7 枚+溢出 +1」迁移为「恰 8 枚全显」（上限 7→9）
+	var names_ok := gems.size() == 8              # B③ 同口径：溢出提示不得混入 Gem* 计数
 	for i in range(gems.size()):
 		if String(gems[i].name) != "Gem%d" % i:
 			names_ok = false
-	_check("G③ 截断不回退：恰 Gem0..Gem6 恰 7 枚（溢出提示不占 Gem* 名额）",
+	_check("G③ 扩容全显：恰 Gem0..Gem7 恰 8 枚（R284：8≤9 全承载，无截断无溢出提示）",
 		names_ok, "gems=%d" % gems.size())
-	_check("G④ 无 Gem7：第 8 枚不建 Gem* 节点", content.find_child("Gem7", true, false) == null)
-	var overflow: Label = content.find_child("OverflowGem", true, false) as Label
-	_check("G⑤ +N 提示：OverflowGem.text==\"+1\"（8-7=1）", overflow != null
-		and overflow.text == "+1",
-		"text=%s" % (overflow.text if overflow != null else "null"))
-	if overflow != null:
-		_check("G⑥ 溢出位：position==(74,210)（Gem 列起点、末行下方；R203 16pt 上移 2px）",
-			overflow.position.distance_to(Vector2(74.0, 210.0)) < 0.01,
-			str(overflow.position))
-		# R198 实测注：Label 实际行高按字体度量结算（headless @10pt ≈23px，全站 Label
-		# 同律——名义盒高 ≠ 实结行高），「不出 content」契约落在规划名义设计槽
-		# （R203：210+18=228 == content 高恰等）+ 面板出界由 r197 E② 全量守卫
-		_check("G⑦ 设计槽：position.y==210 ∧ 名义高 18 → 底沿 228 ≤ content 高 228（R203）",
-			absf(overflow.position.y - 210.0) < 0.01
-			and overflow.position.y + 18.0 <= content.size.y + 0.01,
-			"y=%s nominal_bottom=%s content_h=%s actual_h=%s" % [
-				str(overflow.position.y), str(overflow.position.y + 16.0),
-				str(content.size.y), str(overflow.size.y)])
-		_check("G⑧ 非 Gem* 前缀：节点名不以 Gem 开头（r197 B③/r196 ③ 前缀消费方零污染）",
-			not String(overflow.name).begins_with("Gem"), String(overflow.name))
+	_check("G④ 无溢出态：8 枚时无 OverflowGem（size==gem_show）",
+		content.find_child("OverflowGem", true, false) == null)
+	# R284 新增溢出臂：直塞 TraitBase 凑 11 枚（traits 是 Array[TraitBase] 强类型——
+	# Dictionary append 静默失败，首版夹具实锤；data 复用真 TraitData 资源，layers=2）
+	var stack_v: Variant = w0.get("trait_stack")
+	if stack_v != null and stack_v.get("traits") != null:
+		var traits_arr: Array = stack_v.get("traits")
+		var fake_td: TraitData = _gl.registry.get_trait(&"AFF_ATK_UP")
+		if fake_td != null:
+			for fi in range(3):
+				var tb_fake := TraitBase.new()
+				tb_fake.data = fake_td
+				tb_fake.layers = 2
+				traits_arr.append(tb_fake)
+		var content2 := await _refresh_and_get_content()
+		if content2 != null:
+			var gems2 := _content_kids(content2, "Gem")
+			_check("G2① 溢出截断：11 枚 → 恰 Gem0..Gem8 恰 9 枚（R284 上限 9）",
+				gems2.size() == 9, "gems2=%d" % gems2.size())
+			var ov: Label = content2.find_child("OverflowGem", true, false) as Label
+			_check("G2② +N 提示：OverflowGem.text==\"+2\"（11-9=2）", ov != null
+				and ov.text == "+2",
+				"text=%s" % (ov.text if ov != null else "null"))
+			if ov != null:
+				# 第 9 枚行层数字位：y=8×25.333+(25.333-18)/2≈206.3、x=80（右对齐同 cnt）
+				_check("G2③ 溢出位：第 9 枚行层数字位 (80, 8×228/9+(228/9-18)/2)",
+					absf(ov.position.x - 80.0) < 0.01
+					and absf(ov.position.y - (8.0 * 228.0 / 9.0 + (228.0 / 9.0 - 18.0) * 0.5)) < 0.01,
+					str(ov.position))
+				_check("G2④ 非 Gem* 前缀：节点名不以 Gem 开头（前缀消费方零污染）",
+					not String(ov.name).begins_with("Gem"), String(ov.name))
+			_check("G2⑤ 满排底沿：第 9 枚宝石底沿 ≤ content 高 228",
+				gems2.size() == 9 and gems2[8].position.y + 22.0 <= content2.size.y + 0.01,
+				"y9=%.1f content_h=%s" % [gems2[8].position.y + 22.0, str(content2.size.y)])
+		# 夹具清理：假词条弹出（TraitBase 对象引用，pop_back 三个即可）
+		if fake_td != null:
+			for fi in range(3):
+				traits_arr.pop_back()
 
 
 # ══ F 字号（r197-2） ═════════════════════════════════════════════
