@@ -116,20 +116,44 @@ func tick(p_game_delta: float) -> void:
 		return
 	_hold_shell_cadence()
 	inner.tick(p_game_delta)                     # 激光束重定向/力场公转/枪口闪光衰减/词条冷却
-	if cooldown_left > 0.0:
-		cooldown_left = maxf(cooldown_left - p_game_delta, 0.0)
-		if _tempo_mult > 1.0:
-			# MEC_MIRROR_TEMPO：仅镜面攻速——冷却额外推进 ×(mult−1)
-			cooldown_left = maxf(cooldown_left - p_game_delta * (_tempo_mult - 1.0), 0.0)
-	elif has_target_now():                       # R33 无敌不开火门（继承口径：敌现即射）
-		var shots := _estimate_shots()
-		if try_fire():
-			cooldown_left = _fire_interval()
-			_last_interval = cooldown_left
-			fired_shots_total += shots
-			if prism.has_method(&"budget_spend"):
-				prism.call(&"budget_spend", shots)
-
+	if WeaponBase.lod_dt_doubled:
+		# R289 修轮 3（QA-R289-R2-01 同源）：逐逻辑拍复刻关态递推（含奏鸣加速扣减），
+		# 避免 ceil 反推在整数拍边界的系统性漂移；第 1 子拍命中时补跑第 2 子拍。
+		var _sub := p_game_delta * 0.5
+		var _fire_logical := 0
+		for _k in range(2):
+			if cooldown_left > 0.0:
+				cooldown_left = maxf(cooldown_left - _sub, 0.0)
+				if _tempo_mult > 1.0:
+					cooldown_left -= _sub * (_tempo_mult - 1.0)
+			elif _fire_logical == 0:
+				_fire_logical = _k + 1
+		if _fire_logical > 0 and has_target_now():
+			var shots := _estimate_shots()
+			if try_fire():
+				_last_interval = _fire_interval()      # 名义间隔（与主武器同口径）
+				cooldown_left = _last_interval
+				if _fire_logical == 1:
+					cooldown_left = maxf(cooldown_left - _sub, 0.0)
+					if _tempo_mult > 1.0:
+						cooldown_left -= _sub * (_tempo_mult - 1.0)
+				fired_shots_total += shots
+				if prism.has_method(&"budget_spend"):
+					prism.call(&"budget_spend", shots)
+	else:
+		if cooldown_left > 0.0:
+			cooldown_left = maxf(cooldown_left - p_game_delta, 0.0)
+			if _tempo_mult > 1.0:
+				# MEC_MIRROR_TEMPO：仅镜面攻速——冷却额外推进 ×(mult−1)
+				cooldown_left = maxf(cooldown_left - p_game_delta * (_tempo_mult - 1.0), 0.0)
+		elif has_target_now():                       # R33 无敌不开火门（继承口径：敌现即射）
+			var shots := _estimate_shots()
+			if try_fire():
+				cooldown_left = _fire_interval()
+				_last_interval = cooldown_left
+				fired_shots_total += shots
+				if prism.has_method(&"budget_spend"):
+					prism.call(&"budget_spend", shots)
 
 func try_fire() -> bool:
 	# 开火入口 = 内壳形态行为（弹道散射锥/激光常驻束/自导寻的/近战力场场判定全保真）

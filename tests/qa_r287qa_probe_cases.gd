@@ -24,6 +24,9 @@ const PLAYER_HOME := Vector2(360.0, 980.0)
 const HP_BIG := 1.0e9
 # 十五键尾段连续正则（键序+邻接一次锁定；\d+ 保证数值整形可解析）
 const TAIL_PATTERN := "命µs(\\d+) 提µs(\\d+) 灭µs(\\d+) 回µs(\\d+) ipµs(\\d+) 段和µs(\\d+) 弹段µs(\\d+) 网段µs(\\d+) 敌段µs(\\d+) 跳段µs(\\d+) 玩段µs(\\d+) 特段µs(\\d+) UI段µs(\\d+) 他段µs(\\d+) 派段µs(\\d+)"
+# R289 行尾十三键续段（十五键段之后、尖峰标记之前；F2 位序断言剥离用——同
+# qa_r228_diagfreeze_cases.gd:171 第 11 次迁移协议，全量键强制在场）
+const R289_PATTERN := "^ 武1µs(\\d+) 武2µs(\\d+) 武3µs(\\d+) 武4µs(\\d+) 武5µs(\\d+) 武6µs(\\d+) 武7µs(\\d+) 武8µs(\\d+) 武9µs(\\d+) 副武µs(\\d+) 深(\\d+) 武跳(\\d+) 弹拒(\\d+)"
 
 var tree: SceneTree
 var _gl: GameLoop = null
@@ -35,6 +38,7 @@ var _dmg_sum: float = 0.0
 var _settle_n: int = 0
 var _metric_connected: bool = false
 var _tail_re: RegEx
+var _r289_re: RegEx
 
 
 func run(p_tree: SceneTree) -> void:
@@ -44,6 +48,11 @@ func run(p_tree: SceneTree) -> void:
 	var cerr := _tail_re.compile(TAIL_PATTERN)
 	if cerr != OK:
 		print("FAIL | 探针正则编译失败：%s" % str(cerr))
+		_fail += 1
+	_r289_re = RegEx.new()
+	var cerr289 := _r289_re.compile(R289_PATTERN)
+	if cerr289 != OK:
+		print("FAIL | R289 续段正则编译失败：%s" % str(cerr289))
 		_fail += 1
 	_saved_settings = Meta._settings.duplicate()      # 入口快照（收尾还原——磁盘不留测试痕）
 	_boot()
@@ -219,10 +228,16 @@ func _f_line_format() -> void:
 		return                      # 后续 F 项依赖捕获组——F1 红即止（已计 1 FAIL）
 	var i_peak := line.rfind("渲峰ms")
 	var rest := line.substr(m.get_end())
-	_check("F2 位序：十五键段起点在 渲峰ms 之后；段尾后仅允许 尖峰 标记或行尾",
-		i_peak >= 0 and m.get_start() > i_peak
-			and (rest.is_empty() or rest.begins_with(" 尖峰")),
-		"渲峰ms@%d 段起@%d 段后残='%s'" % [i_peak, m.get_start(), rest.left(24)])
+	# R289 续段剥离（十五键段尾 → 武1..武9/副武/深/武跳/弹拒 → 尖峰/行尾）
+	var m289 := _r289_re.search(rest)
+	var rest_after289 := rest
+	if m289 != null:
+		rest_after289 = rest.substr(m289.get_end())
+	_check("F2 位序：十五键段起点在 渲峰ms 之后；段尾后仅允许 R289 十三键续段 + 尖峰 标记或行尾",
+		i_peak >= 0 and m.get_start() > i_peak and m289 != null
+			and (rest_after289.is_empty() or rest_after289.begins_with(" 尖峰")),
+		"渲峰ms@%d 段起@%d 段后残='%s' 289残='%s'" % [i_peak, m.get_start(),
+			rest.left(24), rest_after289.left(24)])
 	var keys15 := ["命µs", "提µs", "灭µs", "回µs", "ipµs", "段和µs", "弹段µs", "网段µs",
 		"敌段µs", "跳段µs", "玩段µs", "特段µs", "UI段µs", "他段µs", "派段µs"]
 	var ok_once := true

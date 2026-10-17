@@ -127,6 +127,8 @@ var _label_ctr: int = 0                        # 蓄能读数节流计数（60Hz
 var _label_cache: Array[Dictionary] = []       # 蓄能档位读数缓存 [{lp, text, col}]（查询帧重建）
 var _label_atk_text: String = ""               # 底缘数值标注缓存（build_panel_snapshot 每 12 重绘刷一次）
 var _block_left: int = 0                       # R243 §3.3 刀位挡弹帽余额（4/tick，判定帧首重置）
+var _lod_judge: bool = false                   # R289 A：本判定帧为深载隔帧执行步（dt×2——
+                                               # 挡弹概率/帽按两帧等效折算）
 
 
 func _init() -> void:
@@ -259,7 +261,10 @@ func tick(p_game_delta: float, p_center: Vector2) -> void:
 		return
 	# W8 环绕模式（口径不变）：刀位 = 轨道槽 + 逐球周期接触蓄能判定
 	_sync_knife_arrays()
-	_block_left = BULLET_BLOCK_CAP_PER_TICK     # R243 §3.3：挡弹帽每判定帧重置（4/tick）
+	# R289 A：隔帧执行步（weapon.tick 收到 dt×2）把挡弹帽 ×2——两次判定并一次的等效帽；
+	# 概率在 _block_bullets_near 内按 1−(1−p)² 折算。
+	_lod_judge = WeaponBase.lod_dt_doubled
+	_block_left = BULLET_BLOCK_CAP_PER_TICK * (2 if _lod_judge else 1)
 	for i in range(orbs):
 		_knife_pos[i] = _orbit_slot(i)
 		_knife_face[i] = _knife_pos[i].angle() + PI * 0.5
@@ -283,7 +288,9 @@ func _request_redraw() -> void:
 	# 注：_label_ctr 读数节流（%12/%4，纯表现低危）不在本刀四处清单内（设计决策2 定案
 	# 未列入——重绘频率回升后其刷新率随之上行，披露不改动）。
 	_redraw_ctr += 1
-	if GameLoop.sim30_effective() or _redraw_ctr % 2 == 0:
+	# R289 修轮（评审 P2-5）：深载 15fps 时武器块仅 7.5 次/s，再叠 %2 节流会掉到
+	# 3.75Hz（读感「刀环瞬移」）——深载态短路节流（=执行拍 7.5Hz，与移动同步）。
+	if GameLoop.sim30_effective() or PerfGovernor.deep_load() or _redraw_ctr % 2 == 0:
 		queue_redraw()
 
 
@@ -314,11 +321,15 @@ func _block_bullets_near(p_orb_pos: Vector2) -> void:
 	# 掷 weapon.bullet_block_chance()（W8 基线 0.30，MEC_BULLET_PARRY add_block 池成长）
 	# → 命中掷骰即 nullify()（统一收束 OnExpire(NULLIFIED)）+ 青涟漪 + bullet_parry 计数。
 	# 帽 4/tick：跨刀共享余额（_block_left，tick 判定帧首重置）——防弹幕洪峰逐刀翻倍。
+	# R289 A：隔帧执行步（两次判定并一次）概率折算 1−(1−p)²，帽 ×2 由 tick 首置——
+	# 期望挡弹率按模拟时间守恒（浮点域近似：弹集跨步变化属披露近似，非精确等价）。
 	if enemy_bullet_grid == null or weapon == null or not is_instance_valid(weapon):
 		return
 	if _block_left <= 0:
 		return
 	var chance := weapon.bullet_block_chance()
+	if _lod_judge and chance > 0.0:
+		chance = 1.0 - (1.0 - chance) * (1.0 - chance)
 	if chance <= 0.0:
 		return
 	var bullets := enemy_bullet_grid.query_circle(p_orb_pos,

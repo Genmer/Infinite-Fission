@@ -11,6 +11,18 @@ const SOFT_LIMIT_FIELD := &"projectile_soft_limit"    # 全场软上限 1500（B
 const BOOST_TEAM1_CAP: int = 320                # R269 A-5：保帧模式敌弹（team-1）活口帽
                                                 #（深载观测量级 450 的 0.71——拒N 持续高=帽过紧
                                                 # 第一轮回调信号，§4 待调参；关模式门恒不触）
+const BOOST_DEEP_VOLLEY_RESERVE: int = 16      # R289 修轮 4（评审 P1-1）：深载帽沿给多丸武器
+                                                # 预留的容量（=并排全链硬帽 16）。单发武器在 headroom
+                                                # ≤16 时停火，保证 W3 等整轮武器在槽序靠后仍能齐射；
+                                                # 只影响深载，boost 关恒不触。
+const BOOST_DEEP_TEAM0_CAP: int = 200           # R289 B：深载（boost ∧ 滞回闩）玩家弹（team-0）
+                                                # 活口帽——vc88 空敌窗实测 225-343 颗,弹段 5.6-18.9ms/步；
+                                                # 帽 200 截去尾部 ~40% 稳态成本。超帽=该弹丸未生成（武器侧
+                                                # try_fire 若整轮 0 丸返回 false → 不写冷却，容量恢复即续射；
+                                                # 部分丸被拒的轮次仍按 fired>0 写冷却——多丸武器披露近似）。
+                                                # 弹拒N 键直读（按弹丸/执行拍计）；boost 关恒不触。
+                                                # 判据用 total_active−team1_live（避免新增 team0 计数器的
+                                                # R269 翻转非对称坑）。
 var soft_limit: int = 1500
 var hard_limit: int = 2000                            # 硬上限（BalanceTables.projectile_hard_limit）
 var forced_recycle_count: int = 0                     # FORCED 路径计数（遥测）
@@ -70,6 +82,13 @@ func acquire(p_team: int = 0) -> ProjectileBase:
 	if p_team == 1 and PerfGovernor.boost_mode() and team1_live >= BOOST_TEAM1_CAP:
 		_register_miss()
 		DebugStats.count(&"boost_bullet_capped", 1)
+		return null
+	# R289 B：深载玩家弹帽（门序在敌弹帽之后、软上限之前——超帽拒绝即返，不进腾位链）。
+	# boost 关/deep 关恒不触（deep_load 内含 boost 门）。
+	if p_team == 0 and PerfGovernor.deep_load() \
+			and total_active() - team1_live >= BOOST_DEEP_TEAM0_CAP:
+		_register_miss()
+		DebugStats.count(&"deep_bullet_capped", 1)
 		return null
 	if total_active() >= soft_limit:
 		if p_team == 1 and _force_recycle_oldest_of_team(0):
@@ -163,3 +182,10 @@ func force_recycle_oldest() -> void:
 func total_active() -> int:
 	# 全场投射物计数（软/硬闸门判据）
 	return _live_count
+
+
+func team0_headroom() -> int:
+	# R289 修轮（评审 P2-3）：深载玩家弹帽剩余容量（=帽 − team0 活口；钳 0）。
+	# 多丸武器开火前整轮容量预检用——不足整轮时整轮跳（不写 CD），防 W3 等 9 丸
+	# 武器在帽沿只出 1 丸的 1/9 残轮悬崖。
+	return maxi(BOOST_DEEP_TEAM0_CAP - (total_active() - team1_live), 0)

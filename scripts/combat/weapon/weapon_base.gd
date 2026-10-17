@@ -19,6 +19,23 @@ const MILESTONE_VALUE_MULT: float = 1.6         # 满层质变乘区（ADD 池�
 # （同名方法才是遮蔽），故本副本常量独立命名；w2-melee 删除 OrbitWeapon 本地 const 后
 # 由 w2 统一收回单源命名）
 const R243_GIANT_BLADE_BASE := 0.25
+# R289 A：武器族分键映射（诊断 武1µs..武9µs 与 Player 逐武器计时桶同源；未知 id → 9 副桶）。
+# 键=WeaponData.id；索引=族号−1（W1→0 … W9→8）。只服务诊断/节流补偿，不做行为分派。
+const WPN_FAMILY_INDEX := {
+	&"W1_pistol": 0, &"W2_gatling": 1, &"W3_shotgun": 2, &"W4_pulse_beam": 3,
+	&"W5_prism": 4, &"W6_micro_missile": 5, &"W7_cluster_rocket": 6,
+	&"W8_orbit_field": 7, &"W9_arc_slash": 8,
+}
+const WPN_FAMILY_OTHER := 9
+# R289 A：本步 weapon.tick 收到 dt×2（深载隔帧节流的执行步）——W8 挡弹概率/帽按此
+# 折算（两次判定的等效概率），只读不写（Player.tick 唯一写点）。
+static var lod_dt_doubled: bool = false
+
+
+static func wpn_family_index(p_id: Variant) -> int:
+	if p_id == null:
+		return WPN_FAMILY_OTHER
+	return int(WPN_FAMILY_INDEX.get(StringName(str(p_id)), WPN_FAMILY_OTHER))
 
 var data: WeaponData = null                    # 形态参数（M-14 注入）
 var uid: int = 0
@@ -284,22 +301,47 @@ func tick(p_game_delta: float) -> void:
 	_tick_quota_defer()                        # R220 刀12：顺延到期推进（开火前并入）
 	if trait_stack != null:
 		trait_stack.advance_cooldowns(p_game_delta)
-	if cooldown_left > 0.0:
-		cooldown_left = maxf(cooldown_left - p_game_delta, 0.0)
-	elif has_target_now():                  # R33：无敌人不开火（冷却保持就绪，敌现即射）
-		if try_fire():
-			cooldown_left = _fire_interval()
-			_last_interval = cooldown_left
-			# R186 每击谐振计费口（开火口径：一枪=一击，霰弹 9 丸仍 1 击——relic_handler
-			# .on_attack_fired 注释裁定；不走 damage_resolved：结算侧幂等键折叠多弹丸）。
-			# try_fire 成功位 = 全形态唯一真实开火咽喉（四形态子类均经本 tick 基类；
-			# 直调 try_fire 的测试/技能特殊通道不计费）。此前接线缺失成「假遗物」：
-			# 激活横幅照播、技能 CD 永不直减——仅测试直调 push 口掩盖死卡。
-			# R198（二aw-2）：传本次开火节拍 _last_interval（上方刚赋值）——慢速武器按
-			# 间隔比例折算计费（relic_handler.on_attack_fired 口径 9），每秒 CDR 收益与
-			# 射速解耦。
-			if relic_handler != null:
-				relic_handler.on_attack_fired(_last_interval)
+	var _fired := false
+	if lod_dt_doubled:
+		# R289 修轮 3（QA-R289-R2-01）：逐逻辑拍复刻关态冷却递推，而不是用 ceil 反推
+		# 拍数——W2 冷/热档恰为 5/4 拍整数边界，关态浮点残差会多耗 1 拍，ceil 反推
+		# 却跨过该拍，长窗系统性偏快（300 步 58/50=+16%）。此处的两个子拍与 60Hz
+		# 路径同一减法顺序（maxf(cd−dt,0)），整数边界/浮点残差逐位同构。
+		var _sub := p_game_delta * 0.5
+		var _fire_logical := 0                # 0=本执行拍不开火 / 1=第 1 子拍 / 2=第 2 子拍
+		for _k in range(2):
+			if cooldown_left > 0.0:
+				cooldown_left = maxf(cooldown_left - _sub, 0.0)
+			elif _fire_logical == 0:
+				_fire_logical = _k + 1
+		if _fire_logical > 0 and has_target_now():
+			_fired = try_fire()
+			if _fired:
+				_last_interval = _fire_interval()      # 名义间隔（遗物 CDR/间隔缩放口径）
+				cooldown_left = _last_interval
+				if _fire_logical == 1:
+					# 第 1 子拍该开火：实际在拍尾补开（晚 1 拍），把第 2 子拍的冷却推进
+					# 立即补跑——相位补偿后长跑射速与关态一致（单发 ≤1 拍抖动）。
+					cooldown_left = maxf(cooldown_left - _sub, 0.0)
+	else:
+		if cooldown_left > 0.0:
+			cooldown_left = maxf(cooldown_left - p_game_delta, 0.0)
+		elif has_target_now():                  # R33：无敌人不开火（冷却保持就绪，敌现即射）
+			_fired = try_fire()
+			if _fired:
+				cooldown_left = _fire_interval()
+				_last_interval = cooldown_left
+	if _fired:
+		# R186 每击谐振计费口（开火口径：一枪=一击，霰弹 9 丸仍 1 击——relic_handler
+		# .on_attack_fired 注释裁定；不走 damage_resolved：结算侧幂等键折叠多弹丸）。
+		# try_fire 成功位 = 全形态唯一真实开火咽喉（四形态子类均经本 tick 基类；
+		# 直调 try_fire 的测试/技能特殊通道不计费）。此前接线缺失成「假遗物」：
+		# 激活横幅照播、技能 CD 永不直减——仅测试直调 push 口掩盖死卡。
+		# R198（二aw-2）：传本次开火节拍 _last_interval（LOD 分支=名义间隔）——慢速
+		# 武器按间隔比例折算计费（relic_handler.on_attack_fired 口径 9），每秒 CDR
+		# 收益与射速解耦。
+		if relic_handler != null:
+			relic_handler.on_attack_fired(_last_interval)
 	_on_tick_post(p_game_delta)
 	_in_tick = false                           # R220 刀7：缓存纪元关闭（tick 栈外真查）
 

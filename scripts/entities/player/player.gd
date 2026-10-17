@@ -180,6 +180,10 @@ var _ip_curr: Vector2 = Vector2.ZERO
 # stage_probe_us（键 player_mv「移」/player_wp「火」）。static：GameLoop 持实例读数。
 static var probe_pre_us: int = 0
 static var probe_weapons_us: int = 0
+# R289 A：逐武器族窗口计时（0..8=W1..W9，9=僚机/镜面/护航舰副本桶）——GameLoop 帧头
+# 累计进 武1µs..武9µs/副武µs 秒窗键，回答「哪把武器吃了 火 段」。只加计时不改行为。
+static var probe_wpn_us: PackedInt64Array = PackedInt64Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+var _wpn_lod_phase: int = 0                   # R289 A：深载隔帧节流相位（0=执行步 1=跳步）
 
 # ── R220 刀12：帧率优先弹生成配额（护栏刀——主控决策#4 终值 32 发/物理步） ──
 # 仅 PerfGovernor.frame_priority()==true 生效（特效优先=无配额恒放行）；超配丸经
@@ -198,6 +202,7 @@ var _quota_queue_size: int = 0                 # 顺延队列占用（帽判定�
 static func reset_stage_probe() -> void:
 	probe_pre_us = 0
 	probe_weapons_us = 0
+	probe_wpn_us.fill(0)
 var _drag_accum: Vector2 = Vector2.ZERO       # 相对拖动采样累计（E-15）
 var _active_drag_index: int = -1              # R194 首指锁定（-1=无锁）：首条 ScreenDrag 认领，
                                               # 异 index 丢弃，released 清锁——修单指双计数/多指串扰
@@ -659,30 +664,53 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 	else:
 		_quota_due_pool = 0
 		_spawn_quota_left = _QUOTA_UNLIMITED
-	# 二cv#6：贴脸豁免圈随武器循环逐帧折算（零新增遍历——≤7 槽 × has_method 微秒级，
-	# 落在 probe_weapons_us 计时段内；逐帧而非事件刷新是防升级/换卡/出售/超凡漏接）
-	melee_sanctuary_r = 0.0
-	for weapon in weapon_slots:
-		if weapon != null:
-			weapon.tick(p_game_delta)
-			if weapon.data != null and weapon.data.form == GameConst.WeaponForm.MELEE \
-					and weapon.has_method(&"effective_slash_radius"):
-				melee_sanctuary_r = maxf(melee_sanctuary_r,
-					float(weapon.call(&"effective_slash_radius")))
-	# R183 僚机复制武器同拍驱动（副本不在 weapon_slots——独立数组，到期回收）
-	for copy in _summon_copies:
-		if copy != null:
-			copy.tick(p_game_delta)
-	# R187 W5 镜面军团同拍驱动（永久会话态——无 10s 到期，只在回收口/重开清空；
-	# 镜面实体按鸭子协议驱动——WeaponBase 子类或自备 tick() 的 Node2D 均可）
-	for mirror in _mirror_images:
-		if mirror != null and is_instance_valid(mirror) and mirror.has_method(&"tick"):
-			mirror.call(&"tick", p_game_delta)
-	# R198（P2-escort）：护航舰同拍驱动——SummonDrone._process 自驱改吃副本 game_delta
-	#（引擎不再自驱；时间缩放/暂停冻结下僚机与主循环同步，不独走墙上时钟）
-	for drone in _summon_drones:
-		if drone != null and is_instance_valid(drone):
-			drone.tick(p_game_delta)
+	# R289 A：深载隔帧节流——武器块每 2 物理步执行一次，执行步 dt×2 折算。冷却/射速/
+	# 蓄能闸/词条计时全部秒基 ⇒ 模拟时间守恒（同秒内开火次数与伤害不变，只省执行税）；
+	# 命中判定频次减半（W8 接触/挡弹已按概率折算，W9 挥砍窗饱和略降——设计披露）。
+	# boost 关/deep 关 → _wp_run 恒 true、dt 原值（逐位不变）。
+	var _wp_dt := p_game_delta
+	var _wp_run := true
+	if PerfGovernor.weapon_lod_on():
+		_wpn_lod_phase = 1 - _wpn_lod_phase
+		if _wpn_lod_phase == 1:
+			_wp_run = false
+			DebugStats.count(&"weapon_lod_skip", 1)
+		else:
+			_wp_dt = p_game_delta * 2.0
+	WeaponBase.lod_dt_doubled = _wp_run and _wp_dt > p_game_delta
+	if _wp_run:
+		# 二cv#6：贴脸豁免圈随武器循环逐帧折算（零新增遍历——≤7 槽 × has_method 微秒级，
+		# 落在 probe_weapons_us 计时段内；逐帧而非事件刷新是防升级/换卡/出售/超凡漏接）
+		melee_sanctuary_r = 0.0
+		for weapon in weapon_slots:
+			if weapon != null:
+				var _w_t0 := Time.get_ticks_usec()
+				weapon.tick(_wp_dt)
+				var _w_us := int(Time.get_ticks_usec() - _w_t0)
+				if weapon.data != null:
+					probe_wpn_us[WeaponBase.wpn_family_index(weapon.data.id)] += _w_us
+				else:
+					probe_wpn_us[WeaponBase.WPN_FAMILY_OTHER] += _w_us
+				if weapon.data != null and weapon.data.form == GameConst.WeaponForm.MELEE \
+						and weapon.has_method(&"effective_slash_radius"):
+					melee_sanctuary_r = maxf(melee_sanctuary_r,
+						float(weapon.call(&"effective_slash_radius")))
+		# R183 僚机复制武器同拍驱动（副本不在 weapon_slots——独立数组，到期回收）
+		var _c_t0 := Time.get_ticks_usec()
+		for copy in _summon_copies:
+			if copy != null:
+				copy.tick(_wp_dt)
+		# R187 W5 镜面军团同拍驱动（永久会话态——无 10s 到期，只在回收口/重开清空；
+		# 镜面实体按鸭子协议驱动——WeaponBase 子类或自备 tick() 的 Node2D 均可）
+		for mirror in _mirror_images:
+			if mirror != null and is_instance_valid(mirror) and mirror.has_method(&"tick"):
+				mirror.call(&"tick", _wp_dt)
+		# R198（P2-escort）：护航舰同拍驱动——SummonDrone._process 自驱改吃副本 game_delta
+		#（引擎不再自驱；时间缩放/暂停冻结下僚机与主循环同步，不独走墙上时钟）
+		for drone in _summon_drones:
+			if drone != null and is_instance_valid(drone):
+				drone.tick(_wp_dt)
+		probe_wpn_us[WeaponBase.WPN_FAMILY_OTHER] += int(Time.get_ticks_usec() - _c_t0)
 	probe_weapons_us += int(Time.get_ticks_usec() - _wp_t0)
 	_tick_visual(p_game_delta, total)
 

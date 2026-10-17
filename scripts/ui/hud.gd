@@ -693,6 +693,24 @@ func _refresh_r187_readout() -> void:
 		return
 	_r187_readout.visible = true
 	_r187_readout.text = "  ".join(segments)
+	_fit_r187_readout()
+
+
+func _fit_r187_readout() -> void:
+	# R289 修轮 2（评审 P2）：75% 自动应急档 540 逻辑宽下原坐标 368..592 右段被裁，且
+	# 左段压 HP 胶囊（24..364, y24..54）。notch 2 时下移到顶部 HUD 带之外的
+	# 空槽（y200..225，避开护盾 306..454/y92..128、临时护盾 y132..168、目标条
+	# 24..304/y136..162 与 Boss 条 y112..184），右沿停在波次徽章左侧（≤vw−130）。其余档恒原坐标/原 y
+	#（85/关态逐位不变，r195 布局断言零扰动）。
+	if _r187_readout == null:
+		return
+	if GameLoop.boost_applied_notch() == 2:
+		var _vw := 540.0
+		if get_viewport() != null:
+			_vw = get_viewport().get_visible_rect().size.x
+		_r187_readout.position = Vector2(maxf(_vw - 354.0, 186.0), 200.0)
+	else:
+		_r187_readout.position = Vector2(368.0, 30.0)
 
 
 func _trait_layers_of(p_weapon: Node, p_tid: StringName) -> int:

@@ -261,6 +261,24 @@ var _stage_win_fx_us: int = 0                 # R287：特段（fx 特效件）�
 var _stage_win_ui_us: int = 0                 # R287：UI 段（ui 非跳字部分）秒窗累计
 var _stage_win_other_us: int = 0              # R287：他段（other 未归段胶水）秒窗累计
 var _stage_win_dispatch_us: int = 0           # R287：派段（dispatch 结算派发）秒窗累计
+# R289 A：逐武器族秒窗累计（0..8=W1..W9，9=僚机/镜面/护航舰副本桶）——Player.tick
+# 内逐武器计时，帧头读上一完整步值累计（与段窗同点）；回答「哪把武器吃了火段」。
+var _stage_win_wpn_us: PackedInt64Array = PackedInt64Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+# R289 A/B/C：深载滞回闩（boost 门内，唯一写点=_update_deep_load_at——GameLoop._process
+# 战斗态驱动；fps<34 持续 2s 置位 / >45 持续 4s 清位；选卡/暂停冻结，菜单/结算清位）
+# 三刀共用 PerfGovernor.deep_load() 单谓词：A 武器隔帧节流 / B 敌 60+玩家弹 200 /
+# C 75% 渲染应急档。boost 关 → 谓词恒 false（关态逐位不变）。
+const DEEP_ON_FPS := 34.0
+const DEEP_OFF_FPS := 45.0
+const DEEP_ON_SUSTAIN_S := 2.0
+const DEEP_OFF_SUSTAIN_S := 4.0
+# R289 修轮（评审 P2-1）：最小驻留——三刀同时撤档后 fps 可能反弹回 <34（极限环 6s）；
+# 驻留期内不撤，防分辨率/密度/节流每 6s 抽搐一次。
+const DEEP_MIN_DWELL_S := 10.0
+const DEEP_DELTA_CLAMP_S := 0.1               # R289 修轮（评审 P2-2）：后台恢复巨 delta 钳制
+var _deep_on_acc: float = 0.0
+var _deep_off_acc: float = 0.0
+var _deep_dwell_s: float = 0.0                # R289 修轮：本次深载已驻留时长（最小驻留判据）
 var _ui_subtick_left: int = 1                 # R206：mobile 跳字半频相位（1=本帧驱动；桌面每帧恒 1）
 var _fx_subtick_left: int = 1                 # R207：mobile 元素特效层半频相位（同上）
 
@@ -720,6 +738,9 @@ func _process(p_delta: float) -> void:
 	# （_menu_dwell_s——物理侧 60Hz 累计，读法不变）原样保留；本节点
 	# PROCESS_MODE_ALWAYS（:208）⇒ 暂停/菜单态 _process 恒被驱动。headless 下
 	# _process 仍被引擎驱动（主循环在跑）→ 测试侧预热路径行为不变。
+	# R289 A/B/C：深载滞回闩推进（战斗态 fps 采样；纯观测+一个静态闩写——不碰物理步序）
+	# 修轮：delta 钳 0.1s——后台恢复单帧补数秒不得一帧满足 2s 低帧门（评审 P2-2）。
+	_update_deep_load_at(float(Engine.get_frames_per_second()), p_delta)
 	if state == GameConst.GameStatus.MENU:
 		# R260 评审 MED-2：弹层模态期（祝福/设置）tex 泵同停——menu 侧泵挂起谓词为
 		# 合并门（三泵合计 12ms/帧全让给前景动画；boss 预热单项 88-245ms 尖峰同被
@@ -900,6 +921,10 @@ func _physics_process(p_raw_delta: float) -> void:
 					_stage_win_ui_us += int(stage_probe_us.get(&"ui", 0))
 					_stage_win_other_us += int(stage_probe_us.get(&"other", 0))
 					_stage_win_dispatch_us += int(stage_probe_us.get(&"dispatch", 0))
+				# R289 A：逐武器族计时（Player.tick 内累计，②前 reset_stage_probe 清零——
+				# 本点读到的是上一完整步值；与段窗同累计/同清零时序）。
+				for _wi in range(_stage_win_wpn_us.size()):
+					_stage_win_wpn_us[_wi] += Player.probe_wpn_us[_wi]
 				stage_probe_us.clear()
 				_probe_active = true
 				# R244 物理相冲刷桶批：帧入口键——函数头→PLAYING 首段计时点之间的全部
@@ -3623,6 +3648,9 @@ func _boot_build_presentation() -> void:
 	# R269 A-1：保帧分辨率 boot 期初应用（相机创建后——mobile 垫值默认开即生效；桌面
 	# 默认关=关态零写点，§3.2「恒不被写」红线）+ 设置订阅热切（perf_boost/boost_res
 	# 两键短路——设置行 cycle 写口即时应用/回退）
+	# R289 修轮（评审 P3-4）：静态镜像随新实例复位——测试/重开多 GameLoop 时防上实例
+	# 残留 notch 让幂等早退跳过同步。
+	_s_boost_applied_notch = _boost_applied_notch
 	_apply_boost_resolution()
 	Meta.settings_changed.connect(_on_boost_setting_changed)
 	# R269 修3（评审中#3）：mobile 首启垫值默认开的一次性告知——mechanics_intro 横幅
@@ -3769,6 +3797,12 @@ static func boost_world_div() -> float:
 	return 1.0
 
 
+static func boost_applied_notch() -> int:
+	# R289 修轮：已应用档只读口（HUD 等 Control 布局按 540 逻辑宽适配的判据——
+	# 与 boost_world_div 同源静态镜像，避免各处重算设置/深载态）
+	return _s_boost_applied_notch
+
+
 func _boost_live_state() -> bool:
 	# R270 修复①：分辨率降档仅活战态（世界活动画面——PLAYING/PAUSED/LEVEL_UP）；
 	# MENU/GAME_OVER/BOOT 恒全分辨率：菜单与结算 UI 按 720×1280 布点，612×1088/540×960
@@ -3784,9 +3818,18 @@ func _apply_boost_resolution() -> void:
 	# 回退=关模式即回 720×1280 + zoom 1.0（单函数单点，§6 回滚共用开关）。桌面默认关 →
 	# content_scale 与 camera.zoom 恒不被写（含 headless 全部既有套件）。
 	# R270 修复①：生效条件加活战态门（_boost_live_state）——非活战态一律回退档 0。
+	# R289 C：深载应急档——用户档 85 但深载闩成立时应用到 75%（内容缩放 540×960）；
+	# 深载解除后幂等回用户档（85）。促键报 2=应用态真值。
+	# R289 修轮（评审 P1-2）：自动应急档只作用于 state==PLAYING——选卡/暂停画面恒回
+	# 用户档（540 逻辑宽下卡牌/暂停详情按 720 布点会两侧裁切；自动档不得把布局缺陷
+	# 扩大到 85 档用户）。用户手选 75 档的 LEVEL_UP/PAUSED 行为不变（既有 75 档语义）。
 	var notch := 0
+	var _auto_deep := false
 	if PerfGovernor.boost_mode() and _boost_live_state():
-		notch = 1 if PerfGovernor.boost_res_notch() == 85 else 2
+		_auto_deep = PerfGovernor.deep_load() and state == GameConst.GameStatus.PLAYING
+		notch = 2 if (PerfGovernor.boost_res_notch() == 75 or _auto_deep) else 1
+	# 修轮 2（评审）：促键只看“自动档是否真的应用到画布”（选卡/暂停回 85 时报 1）。
+	PerfGovernor.set_auto_deep_applied(_auto_deep and notch == 2)
 	if notch == _boost_applied_notch:
 		return                              # 同档零写（关态首调亦零写——_boost_applied_notch 初值 0）
 	var t := _boost_target_scale(notch)
@@ -3800,11 +3843,73 @@ func _apply_boost_resolution() -> void:
 	if camera != null:
 		camera.zoom = Vector2(t.z, t.z)
 	_boost_applied_notch = notch
+	# 修轮 2：档变瞬间立即重排 HUD 读数位（不等 refresh_stats 的 1Hz 节拍）
+	if hud != null and hud.has_method(&"_fit_r187_readout"):
+		hud.call(&"_fit_r187_readout")
+
+
+func _update_deep_load_at(p_fps: float, p_delta: float) -> void:
+	# R289 深载滞回闩（A/B/C 共用谓词的真值写点——PerfGovernor._deep_active 唯一写口）。
+	# 判据：boost 开 ∧ 战斗态（PLAYING ∧ ¬paused）fps<34 持续 2s → 置位；
+	# fps>45 持续 4s → 清位；34..45 死区清零双侧计时（防边界抖动）。
+	# 选卡/暂停期冻结（ LEVEL_UP/PAUSED 不清位——避免选卡回来重走 2s 才恢复降载）；
+	# MENU/GAME_OVER/BOOT 清位并复位计时（结算/菜单画布恒全分辨率语义不动）。
+	# 只写着色闩+应用画布（档变瞬间一次），无每帧物理成本。
+	# R289 修轮（评审 P2-2）：单帧 delta 钳 0.1s（后台恢复可能补数秒——不得一帧满足
+	# 「低帧持续 2s」；钳在后台架可直测）。
+	p_delta = minf(p_delta, DEEP_DELTA_CLAMP_S)
+	if not PerfGovernor.boost_mode():
+		PerfGovernor.set_deep_active(false)
+		_deep_on_acc = 0.0
+		_deep_off_acc = 0.0
+		_deep_dwell_s = 0.0
+		return
+	var st := state
+	if st == GameConst.GameStatus.MENU or st == GameConst.GameStatus.GAME_OVER \
+			or st == GameConst.GameStatus.BOOT:
+		if PerfGovernor.deep_active():
+			PerfGovernor.set_deep_active(false)
+			_apply_boost_resolution()
+		_deep_on_acc = 0.0
+		_deep_off_acc = 0.0
+		_deep_dwell_s = 0.0
+		return
+	if st != GameConst.GameStatus.PLAYING or (get_tree() != null and get_tree().paused):
+		return                               # 选卡/暂停：冻结（闩值保持）
+	if p_fps < DEEP_ON_FPS:
+		_deep_on_acc += p_delta
+		_deep_off_acc = 0.0
+	elif p_fps > DEEP_OFF_FPS:
+		_deep_off_acc += p_delta
+		_deep_on_acc = 0.0
+	else:
+		_deep_on_acc = 0.0
+		_deep_off_acc = 0.0
+	if PerfGovernor.deep_active():
+		_deep_dwell_s += p_delta
+	if not PerfGovernor.deep_active() and _deep_on_acc >= DEEP_ON_SUSTAIN_S:
+		PerfGovernor.set_deep_active(true)
+		_deep_on_acc = 0.0
+		_deep_dwell_s = 0.0
+		_apply_boost_resolution()            # C：85→75 应急档
+	elif PerfGovernor.deep_active() and _deep_off_acc >= DEEP_OFF_SUSTAIN_S \
+			and _deep_dwell_s >= DEEP_MIN_DWELL_S:
+		PerfGovernor.set_deep_active(false)
+		_deep_off_acc = 0.0
+		_deep_dwell_s = 0.0
+		_apply_boost_resolution()            # C：回用户档
 
 
 func _on_boost_setting_changed(p_key: String) -> void:
 	# R269：设置行写口 → 即时热切（仅两键短路，其余键零成本——_on_fx_opacity_setting_changed 先例）
+	# R289：关模式同时清深载闩（防关态残留臂在重开瞬间抢先生效——deep_load 本已内含
+	# boost 门，此处只清真值保持状态干净）。
 	if p_key == "perf_boost" or p_key == "boost_res":
+		if not PerfGovernor.boost_mode():
+			PerfGovernor.set_deep_active(false)
+			_deep_on_acc = 0.0
+			_deep_off_acc = 0.0
+			_deep_dwell_s = 0.0
 		_apply_boost_resolution()
 
 
@@ -4403,6 +4508,7 @@ func diag_reset_stage_win_sums() -> void:
 	_stage_win_ui_us = 0
 	_stage_win_other_us = 0
 	_stage_win_dispatch_us = 0
+	_stage_win_wpn_us.fill(0)
 
 
 func _apply_camera_shake() -> void:

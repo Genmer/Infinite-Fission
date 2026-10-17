@@ -48,13 +48,19 @@ static func max_onscreen() -> int:
 	# R269 A-5：同屏敌上限读口（§3.4——boost 开=90 模式帽 / 关=MAX_ONSCREEN 120 逐位）。
 	# 排队不丢弃契约保持（超帽留队，波次不卡死——只是到场节奏放缓 §6 披露）。产品代码
 	# 唯一消费点=tick 同屏比较处；const MAX_ONSCREEN 保留供符号直引（r212_poolwarm:118）。
+	# R289 B：深载（boost ∧ 滞回闩）再降到 60——已在场敌不回收，只放缓到场节奏；
+	# 深载解除即回 90（boost 关恒 120，逐位不变）。
+	if PerfGovernor.deep_load():
+		return 60
 	return 90 if PerfGovernor.boost_mode() else MAX_ONSCREEN
 
 
-func enqueue(p_entry: Dictionary) -> void:
+func enqueue(p_entry: Dictionary, p_priority: bool = false) -> void:
 	# WaveDirector 投放生成请求：{data_id, wave, tags, pos}（pos 可缺省→出生点抽样）。
 	# R188 档3：高水位 600 拒收（深层无尽建波投放无界——队列积压 = 帧尖峰与 RSS 缓升
 	# 根源之一；拒收请求直接丢弃，WaveDirector 侧已按 ≤200/波钳制，正常局不触线）
+	# R289 修轮 2（评审 P2-4）：Boss 优先入队（p_priority=true）——深载 60 帽只放缓
+	# 出队，若 Boss 排整波小怪之后可能被拖过硬上限/埋进下一波（终局不可接受）。
 	if spawn_queue.size() >= SPAWN_QUEUE_HIGH_WATER:
 		queue_rejected += 1
 		DebugStats.count(&"spawn_queue_rejected")
@@ -63,7 +69,10 @@ func enqueue(p_entry: Dictionary) -> void:
 			push_warning("[EnemySpawner] spawn_queue 达高水位 %d：拒收后续投放请求（一次告警）"
 				% SPAWN_QUEUE_HIGH_WATER)
 		return
-	spawn_queue.append(p_entry)
+	if p_priority:
+		spawn_queue.push_front(p_entry)
+	else:
+		spawn_queue.append(p_entry)
 
 
 func tick(p_game_delta: float, p_grid: SpaceGrid) -> void:

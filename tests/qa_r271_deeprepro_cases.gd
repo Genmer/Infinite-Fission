@@ -137,6 +137,11 @@ func _boot() -> bool:
 	PerfGovernor.mode_override = 0
 	PerfGovernor.tier_override = 2
 	PerfGovernor.boost_override = 1              # 促1：85% 保帧深载态（vc79 配置面）
+	# R289 夹具迁移：本台架=受控「boost 85 + 敌90 + 弹448」原始负载（跨版本 S1-S7 对照
+	# 基准）。R289 起真跑低帧会在 2s 后自动进深载态（敌60/弹200/A 节流），负载被三刀
+	# 改写→台架失去对照意义。此处显式钉 deep 关（注入口 0）——深载三刀自证归
+	# qa_r289_weaponlod；收尾复位 -1。
+	PerfGovernor.deep_override = 0
 	# r2 断言面：短路注入口默认零短路（产品行为逐位——pkg0 池面复跑在电池门）
 	_check("r2 默认零短路：S1/S4/S5/S7/S9 注入口出厂态 false",
 		not TexBucketHost.shortcircuit_place and not TexBucketHost.shortcircuit_sync
@@ -925,6 +930,8 @@ func _finish_teardown() -> void:
 	PerfGovernor.boost_override = -1
 	PerfGovernor.mode_override = -1
 	PerfGovernor.tier_override = -1
+	PerfGovernor.deep_override = -1             # R289 夹具迁移复位
+	PerfGovernor.set_deep_active(false)
 	PerfGovernor.set_process(true)
 	DebugStats._diag_last_ms = Time.get_ticks_msec()
 	if _gl != null:

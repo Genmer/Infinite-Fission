@@ -107,9 +107,23 @@ func try_fire() -> bool:
 	_maybe_enter_volley()                         # TH_VOLLEY_STATE 发射驱动触发检查
 	_refresh_eternal_quota()                      # 永存弹配额刷新（断供判定先行）
 	var due := _quota_pending                   # 刀12：到期顺延丸并入本拍（优先通道放行；
+	var _pellet_nominal := _volley_pellet_count()
+	# R289 修轮 2（评审 P2-3）：深载整轮容量预检必须在「清零 _quota_pending / 扣配额」
+	# **之前**——否则拒绝时 due 丸被吞、本拍配额白扣（其他武器挨饿）。容量不足整轮
+	# （新丸+顺延）时整轮跳：return false → 基类不写 CD，due 原样保留，下一执行拍重试。
+	# boost/deep 关恒不触（逐位不变）。
+	# R289 修轮 4（评审 P1-1）：单发武器额外让出多丸预留帽（16）——否则槽序靠后的
+	# W3 会被 W1/W2 持续吃光刚释放的容量而长期哑火。只影响深载。
+	var _reserve := 0
+	if PerfGovernor.deep_load() and _pellet_nominal <= 1:
+		_reserve = ProjectilePool.BOOST_DEEP_VOLLEY_RESERVE
+	if PerfGovernor.deep_load() \
+			and projectile_pool.team0_headroom() < _pellet_nominal + due + _reserve:
+		DebugStats.count(&"deep_bullet_capped", 1)
+		return false
 	_quota_pending = 0                          # 编队 offset 随新总数重排）
-	var pellets := _volley_pellet_count() + due
-	var allowed := _spawn_quota_allow(_volley_pellet_count(), due)   # 刀12 闸（特效优先恒全放）
+	var pellets := _pellet_nominal + due
+	var allowed := _spawn_quota_allow(_pellet_nominal, due)   # 刀12 闸（特效优先恒全放）
 	var speed := _projectile_speed()   # AFF_PROJ_SPD 弹速池消费在 _projectile_speed 内（勿二次叠乘）
 	var size_mult := _proj_size_mult()                    # AFF_AREA 体积池（死卡接线）
 	var formation := _formation_enabled()
