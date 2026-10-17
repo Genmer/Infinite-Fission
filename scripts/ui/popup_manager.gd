@@ -143,6 +143,23 @@ const CLUSTER_GRID_SIZE := 96.0
 var _cluster_registry: Dictionary = {}
 var _cluster_frame_stamp: int = -1
 
+# ── R288 刀B：boost 门内逐跳字关——秒窗聚合数字 ──────────────────────
+# vc87 定谳：深战期 跳段=步 25-45%%（最大单段）、死谷尖峰 29-46ms 仍指向跳字管线；
+# 用户授权「伤害数字可全屏粗糙大数字甚至不显示——帧率优先」。boost 门内
+# on_damage_resolved 在 W8 聚合账之后聚合进秒窗直返（簇采样/反应短路/合并/升格/
+# 池起字全跳）；W8 引爆大字（on_w8_detonated）与超导文字标签（on_reaction_triggered）
+# 独立入口保留。boost 关侧路径逐字节不变（pkg4 位保不变量）。聚合显示=独立
+# CanvasLayer 顶层 Label，1Hz 落值，零伤连续 AGG_IDLE_HIDE_WINDOWS 窗隐藏。
+var _agg_window_value: float = 0.0              # 秒窗聚合伤害总和
+var _agg_window_hits: int = 0                   # 秒窗聚合结算跳数（观测面——测试/诊断读，
+                                               # 生产显示不消费）
+var _agg_window_start_ms: int = -1              # 秒窗起点（-1=窗未开——首伤开窗）
+var _agg_idle_windows: int = 0                  # 连续零伤窗计数（静默隐藏判据）
+var _agg_label: Label = null                    # 聚合秒伤 Label（懒建——首窗落值时）
+var _agg_layer: CanvasLayer = null              # Label 独立屏幕空间层（世界相机不带动）
+const AGG_LABEL_Y := 150                        # 顶部落位 y（设计坐标——两画布档均居中安全）
+const AGG_IDLE_HIDE_WINDOWS := 3                # 零伤静默隐藏阈值（窗）
+
 
 static func is_in_viewport(p_pos: Vector2) -> bool:
 	return VIEWPORT_CULL_RECT.has_point(p_pos)
@@ -259,6 +276,19 @@ func on_damage_resolved(p_result: DamageResult) -> void:
 		_w8_frame_agg.clear()
 	_w8_frame_agg[p_result.target_uid] = float(_w8_frame_agg.get(p_result.target_uid, 0.0)) \
 		+ maxf(float(p_result.final_value), 0.0)
+	# R288 刀B：boost 门内逐跳字全关——结算值聚合进秒窗（_agg_tick 1Hz 落值）后直返：
+	# 簇采样/反应短路/合并/升格/池起字全跳（W8 引爆大字走 on_w8_detonated 独立入口
+	# 不受影响——本门在 W8 聚合账之后，引爆数据不饿死）。S5 台架短路臂计数在此
+	# 复刻（shortcircuit_spawn 开=本应拒收——计数语义与原短路位同源，deeprepro r2 锚）。
+	if PerfGovernor.boost_mode():
+		if shortcircuit_spawn:
+			spawn_reject_count += 1
+		else:
+			_agg_window_value += maxf(float(p_result.final_value), 0.0)
+			_agg_window_hits += 1
+			if _agg_window_start_ms < 0:
+				_agg_window_start_ms = Time.get_ticks_msec()
+		return
 	var uid := p_result.target_uid
 	var style := p_result.popup_style
 	# 保帧模式单帧空间网格汇聚（仅非豁免小怪普通伤害）
@@ -546,11 +576,99 @@ func _label_refresh_cap() -> int:
 	return LABEL_REFRESH_CAP_MOBILE if OS.has_feature("mobile") else 0
 
 
+func reset_agg() -> void:
+	# R288 刀B（P4 修）：聚合态整体复位（Label 隐藏 + 秒窗四字段清零）。出战斗态
+	#（GAME_OVER/MENU——game_loop change_state 钩）与 clear_all（_reset_run_state 局清
+	# 面）调用——防死亡/回菜单后大字冻结在结算屏与新局首窗混入上局残余。
+	if _agg_label != null:
+		_agg_label.visible = false
+	_agg_window_start_ms = -1
+	_agg_window_value = 0.0
+	_agg_window_hits = 0
+	_agg_idle_windows = 0
+
+
+func _agg_tick() -> void:
+	# R288 刀B：聚合秒伤落值（tick 头调用——boost 关态直返〔仅私有聚合态复位写，
+	# 零可观测行为〕）。1Hz 滚动窗：窗值按实际 elapsed 归一（帧粒度 ~16ms 抖动不进
+	# 读数）；零伤连续 AGG_IDLE_HIDE_WINDOWS 窗隐藏 Label（boost 仍开——静默期不占
+	# 屏）；boost 关时隐藏并复位（逐跳字路径接管）。
+	if not PerfGovernor.boost_mode():
+		if _agg_label != null and _agg_label.visible:
+			_agg_label.visible = false
+		_agg_window_start_ms = -1
+		_agg_window_value = 0.0
+		_agg_window_hits = 0
+		_agg_idle_windows = 0
+		return
+	if get_tree() != null and get_tree().paused:
+		# QA288-4 修：冻结模态期（LEVEL_UP 选卡/PAUSED——game_loop _tick_ui 照驱动本
+		# tick）Label 隐藏让位模态弹层（同 layer 1 CanvasLayer 添加序不可控——隐藏是
+		# 唯一确定序；settings/blessing/first_encounter 等显式抬层弹层本就在上）。
+		# 窗起点弃置（暂停时长不进秒窗归一——恢复后首伤重开窗，残余值并窗一窗自愈）。
+		if _agg_label != null:
+			_agg_label.visible = false
+		_agg_window_start_ms = -1
+		return
+	if _agg_window_start_ms < 0:
+		return                                  # 窗未开（首伤开窗——on_damage_resolved 刀B门置位）
+	var now := Time.get_ticks_msec()
+	var elapsed := now - _agg_window_start_ms
+	if elapsed < 1000:
+		return
+	var per_sec := _agg_window_value * 1000.0 / float(maxi(elapsed, 1))
+	_agg_ensure_label()
+	if _agg_label != null:
+		_agg_label.text = _agg_format(per_sec)
+		_agg_label.visible = _agg_window_value > 0.0 or _agg_idle_windows < AGG_IDLE_HIDE_WINDOWS - 1
+	if _agg_window_value <= 0.0:
+		_agg_idle_windows += 1
+	else:
+		_agg_idle_windows = 0
+	_agg_window_value = 0.0
+	_agg_window_hits = 0
+	_agg_window_start_ms = now
+
+
+static func _agg_format(p_per_sec: float) -> String:
+	# 万位缩写（用户授权「模糊渲染粗糙的大数字」——纯 str 拼接无 % 格式坑）
+	if p_per_sec >= 10000.0:
+		return str(snappedf(p_per_sec / 10000.0, 0.1)) + "万/秒"
+	return str(int(p_per_sec + 0.5)) + "/秒"
+
+
+func _agg_ensure_label() -> void:
+	# 懒建：首窗落值时（boost 关态永不建——零节点零成本）；独立 CanvasLayer 屏幕
+	# 空间（世界相机缩放/平移不带动）；PRESET_CENTER_TOP + GROW_DIRECTION_BOTH=
+	# 锚画布水平中心向两侧生长（R270 两画布档均居中——85%% 档 612 宽同安全）。
+	# P5 修：定位用 offset_top 直赋（position setter 依赖挂树期父锚矩形——挂树前
+	# 调用是踩引擎错误路径的偶然正确）；layer 显式 1=与 HUD 同层，模态让位走
+	# _agg_tick paused 隐藏（同层添加序不可控——见 _agg_tick QA288-4 注）。
+	if _agg_label != null:
+		return
+	_agg_layer = CanvasLayer.new()
+	_agg_layer.name = "AggDpsLayer"
+	_agg_layer.layer = 1
+	add_child(_agg_layer)
+	_agg_label = Label.new()
+	_agg_label.name = "AggDpsLabel"
+	_agg_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	_agg_label.offset_top = float(AGG_LABEL_Y)      # 锚 0.5/0 中心顶——offset 直赋
+	_agg_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_agg_label.add_theme_font_size_override("font_size", 52)
+	_agg_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.55, 0.92))
+	_agg_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.85))
+	_agg_label.add_theme_constant_override("outline_size", 10)
+	_agg_label.visible = false
+	_agg_layer.add_child(_agg_label)
+
+
 func tick(p_raw_delta: float) -> void:
 	# 跳字动画（raw 通道，顿帧期间照常）+ 合并窗推进 + 到期归还
 	# R212 刀5：脏跳字排版限批（mobile）——本 tick 帧排版数超帽后，剩余脏弹字
 	# tick(delta,false) 只推进动画（脏标记保留），排版让渡后续帧；不限批时（桌面/
 	# 覆写 0）逐位走原路径
+	_agg_tick()   # R288 刀B：boost 聚合秒伤 1Hz 落值（关态静态读直返）
 	var cap := _label_refresh_cap()
 	var refreshed := 0
 	var idx := _active_list.size() - 1
@@ -622,7 +740,9 @@ func _tier_for(p_style: int, p_value: float) -> int:
 
 func clear_all() -> void:
 	# 清场归还（GameLoop._reset_run_state 重开口径，审查 Fix 1）：全部活跃跳字归还池 +
-	# 注册表清空（防重开后残留跳字/合并窗指向已归还实例）
+	# 注册表清空（防重开后残留跳字/合并窗指向已归还实例）+ R288 聚合态复位
+	#（P4 修——防新局首窗混入上局残余秒窗值）
+	reset_agg()
 	var idx := _active_list.size() - 1
 	while idx >= 0:
 		var popup := _active_list[idx]

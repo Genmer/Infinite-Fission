@@ -1224,7 +1224,18 @@ func change_state(p_new: int) -> bool:
 				state, p_new, rejected_transitions])
 		return false
 	DebugStats.event("状态 %d→%d" % [state, p_new])   # R257：迁移入环（出发链事件间的骨架）
+	var prev_state := state
 	state = p_new
+	# R288 刀A：选卡应用后回战——构筑快照刷新（开局态由 start_run/restart_run/
+	# continue_run 尾部显式捕获，本钩只认 LEVEL_UP→PLAYING 选卡回窗；PAUSED 回不刷
+	# ——构筑未变）
+	if prev_state == GameConst.GameStatus.LEVEL_UP and p_new == GameConst.GameStatus.PLAYING:
+		_capture_build_snapshot()
+	# R288 刀B（P4 修）：出战斗态聚合秒伤 Label 收屏（GAME_OVER/MENU 期 popup tick 不
+	# 再驱动——Label 冻结叠在结算屏/主菜单上；reset_agg 隐藏+复位，新局首伤重开窗）
+	if (p_new == GameConst.GameStatus.GAME_OVER or p_new == GameConst.GameStatus.MENU) \
+			and popup_manager != null:
+		popup_manager.reset_agg()
 	# R262e ②：菜单态帧率帽 60（mobile 门内——桌面/headless 零写护 120Hz 基准口径）。
 	# vc71 真机日志实证：菜单动画期渲ms 9.2-10.8 波动、模 44-59=fps 79-120 抖动
 	# （超 120 档预算线 8.33ms 即掉档）——抖动帧率比稳定 60 更卡眼（「不丝滑」观感
@@ -1966,7 +1977,63 @@ func start_run(p_daily_seed: int = -1) -> bool:
 	DebugStats.event("start_run 链 %.1fms（map=%s 难度=%d）" % [
 		float(Time.get_ticks_usec() - _start_run_t0) / 1000.0,
 		String(current_map_id), _difficulty])
+	_capture_build_snapshot()                 # R288 刀A：开局构筑快照（祝福/保底遗物/波1 全落定后）
 	return true
+
+
+func _capture_build_snapshot() -> void:
+	# R288 刀A：构筑快照捕获（用户点名「把武器、buff 所有配置都打出来」——vc87 定谳
+	# 玩段µs 死谷爆发 3× 但无从归因构筑面）。捕获点=start_run/restart_run/continue_run
+	# 尾 + 选卡回 P（LEVEL_UP→PLAYING）+ 溢出批消化末（QA288-5）。纯读快照零游戏态写；
+	# 落 DebugStats 导出前置段（快照波次↔同窗 玩段µs 对读定位构筑突变）+ 事件环紧凑
+	# 构筑史一行（P3 修：快照只留最新态，死谷构筑会被谷后选卡污染——事件环 [ev] 墙钟
+	# 时间轴天然带构筑演变史，归因时可对读死谷时刻）。
+	var lines: Array[String] = []
+	var wcount := 0                             # QA R288R-1：实件数（weapon_slots.resize(7)
+	for wv in player.weapon_slots:              # 后空位为 null——size() 恒 7 非真件数）
+		if wv != null and (wv as WeaponBase).data != null:
+			wcount += 1
+	var bless_txt := "无"
+	if Meta.is_run_daily():
+		# QA288-3 修 + 评审 R1：每日局大厅祝福记忆被挂载守卫自拒（从未生效）——打实际
+		# 生效的当日 bless 词缀，防归因到从未挂载的祝福面。选择器用 Meta.is_run_daily()
+		#（start_run/continue_run 双路径置位）而非 _active_daily_seed（仅 start_run 赋值
+		# ——冷启动续 daily 存档时该变量为 -1，原选择器会把续档局误导向大厅记忆分支）
+		var daily_bless := String(Meta.daily_affixes(Meta.daily_date_key()).get("bless", ""))
+		bless_txt = "每日词缀:%s（大厅记忆不参与）" % (daily_bless if daily_bless != "" else "无")
+	else:
+		var bless := Meta.blessing_trait()
+		if not bless.is_empty():
+			bless_txt = "%s(%s)" % [bless, "已购" if _run_blessing_paid else "未购"]
+	lines.append("[构筑] 难度%s 波次%d 促%d 武器%d件 祝福%s 遗物%d件" % [
+		GameConst.difficulty_name(_difficulty),
+		wave_director.current_wave,
+		PerfGovernor.boost_diag_state(),
+		wcount,
+		bless_txt,
+		relic_handler.owned_count()])       # QA288-2 修：relic_handler.owned=serialize 真源
+		                                    #（card_generator.owned_relics 在 continue 路径
+		                                    # 不同步——quit 清空后继续局恒 0 件假读）
+	for rdata in relic_handler.owned:
+		lines.append("[遗物] %s(%s)" % [String(rdata.display_name), String(rdata.id)])
+	var compact_parts: Array[String] = []
+	for i in player.weapon_slots.size():
+		var w: WeaponBase = player.weapon_slots[i]
+		if w == null or w.data == null:
+			continue
+		var tparts: Array[String] = []
+		if w.trait_stack != null:
+			for tb in w.trait_stack.traits:
+				var td: Variant = tb.get("data")   # TraitBase 对象（Object.get 单参——weapon_base :187 同式）
+				if td != null:
+					tparts.append("%s×%d" % [String((td as TraitData).display_name),
+						int(tb.get("layers"))])
+		lines.append("[武器] 槽%d %s(%s) Lv%d 词条%d:%s" % [i, String(w.data.display_name),
+			String(w.data.id), w.level, tparts.size(), "、".join(tparts)])
+		compact_parts.append("槽%d%sLv%d条%d" % [i, String(w.data.id), w.level, tparts.size()])
+	DebugStats.diag_push_build(lines)
+	DebugStats.event("[构筑] 波%d %s 遗%d" % [wave_director.current_wave,
+		" ".join(compact_parts), relic_handler.owned_count()])
 
 
 func _on_menu_start_daily() -> void:
@@ -2442,6 +2509,7 @@ func restart_run() -> bool:
 		_run_intro_lines.clear()
 	_reorder_tex_prewarm_wave_first()         # R267 刀P1：重开同图波表在册——队列波序重排
 	wave_director.start_wave(1)
+	_capture_build_snapshot()                 # R288 刀A：重开构筑快照（重挂/清档/波1 落定后）
 	return true
 
 
@@ -2909,6 +2977,9 @@ func _tick_merged_overflow() -> void:
 		_merged_overflow_draining = false
 		_merged_overflow_deferred = {}
 		Meta.end_persist_defer()
+		_capture_build_snapshot()             # R288 刀A（QA288-5 修）：溢出批消化末快照
+		                                      # 刷新——连升自动选卡不弹卡窗无 LEVEL_UP 迁移，
+		                                      # 构筑膨胀主源不入快照=归因盲区
 
 
 # ── Boot 各段 ─────────────────────────────────────────────────────
@@ -3932,6 +4003,9 @@ func continue_run() -> bool:
 	hud.kills = int(data.get("kills", 0))
 	hud.run_elapsed = float(data.get("elapsed", 0.0))
 	hud.refresh_stats()
+	_capture_build_snapshot()                 # R288 刀A（QA288-1 修）：继续局构筑恢复后
+	                                          # 快照刷新（MENU→P 直迁不经 LEVEL_UP 钩——否则
+	                                          # 导出段=旧局构筑，归因误导）
 	return true
 
 
