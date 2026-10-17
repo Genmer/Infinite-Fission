@@ -95,6 +95,9 @@ func run(p_tree: SceneTree, p_archive := false) -> void:
 	await _arm("G1 网格命中臂（grid_hit_override=1 强开——T1 单独 A/B）", {"g1": true})
 	await _arm("G2 死亡冲刷臂（death_flush_override=1 grid 关——T3 单独 A/B）", {"g2": true})
 	await _arm("S8 ip 双遍历短路臂（shortcircuit_ip_pass——ipµs 份额定谳）", {"s8": true})
+	await _arm("S9 ④弹段整段短路臂（shortcircuit_proj_stage——R286 新增：④ 段份额定谳；"
+		+ "S4 历史读数作废重测——原臂漏检快路径，真机快N/弹N≈10-17%=83-90% 弹走慢路径外"
+		+ " 台架弹多走快路径为空臂）", {"s9": true})
 	await _arm("BASE2 基线复测臂（会话漂移对照——塌缩基线取双基线均值）", {})
 	await _arm("BAD 坏臂（敌注入数=0——M4 门回归；末位=零敌期波次通关会把状态带离 PLAYING，污染后继臂）", {"bad": true})
 	_report_verdict()
@@ -131,9 +134,10 @@ func _boot() -> bool:
 	PerfGovernor.tier_override = 2
 	PerfGovernor.boost_override = 1              # 促1：85% 保帧深载态（vc79 配置面）
 	# r2 断言面：短路注入口默认零短路（产品行为逐位——pkg0 池面复跑在电池门）
-	_check("r2 默认零短路：S1/S4/S5/S7 注入口出厂态 false",
+	_check("r2 默认零短路：S1/S4/S5/S7/S9 注入口出厂态 false",
 		not TexBucketHost.shortcircuit_place and not TexBucketHost.shortcircuit_sync
 			and not ProjectileBase.shortcircuit_tick and not PopupManager.shortcircuit_spawn
+			and not GameLoop.shortcircuit_proj_stage
 			and not Enemy.CONTACT_RADIAL,
 		"place=%s sync=%s tick=%s spawn=%s radial=%s" % [
 			TexBucketHost.shortcircuit_place, TexBucketHost.shortcircuit_sync,
@@ -327,6 +331,7 @@ func _set_arm_flags(p_cfg: Dictionary) -> void:
 	GameLoop.grid_hit_override = 0
 	GameLoop.death_flush_override = 0
 	GameLoop.shortcircuit_ip_pass = false
+	GameLoop.shortcircuit_proj_stage = false   # R286 S9：④弹段整段短路（缺省强关）
 	if p_cfg.has("g0"):
 		GameLoop.grid_hit_override = 0
 	if p_cfg.has("g1"):
@@ -335,6 +340,8 @@ func _set_arm_flags(p_cfg: Dictionary) -> void:
 		GameLoop.death_flush_override = 1
 	if p_cfg.has("s8"):
 		GameLoop.shortcircuit_ip_pass = true
+	if p_cfg.has("s9"):
+		GameLoop.shortcircuit_proj_stage = true
 
 
 func _clear_arm_flags() -> void:
@@ -430,6 +437,7 @@ func _arm(p_label: String, p_cfg: Dictionary) -> void:
 	# 测量窗：1Hz 采样门推离（秒窗累计器直读全窗值）；R271 窗复位+隙界清位
 	DebugStats._diag_last_ms = Time.get_ticks_msec() + 10000000
 	DebugStats._diag_reset_window_acc()
+	_gl.diag_reset_stage_win_sums()          # R286：段窗和臂内定界（防跨臂累计污染披露读数）
 	DebugStats._diag_gap_mark_us = -1
 	_min_enemies = 99999
 	_min_bullets = 99999
@@ -509,7 +517,12 @@ func _arm_effect_check(p_label: String) -> void:
 				"hidden=%d" % _s3_hidden.size())
 		"S4":
 			var d4 := int(ProjectileBase.tick_skip_count) - int(_skip_marks.get("s4", 0))
-			_check("r2 S4 注入生效：弹 tick 早退计数 >0", d4 > 0, "skip=%d" % d4)
+			# R286 修臂强化：漏检快路径后 >0 弱断言无法区分「部分跳过」与「全跳过」
+			#（历史假绿根因）——补弹存活面（tick 体全跳=无寿命/超程回收，弹冻结存活）。
+			_check("r2 S4 注入生效：弹 tick 早退计数 >0（快/慢路径全计入——R286 修臂）",
+				d4 > 0, "skip=%d" % d4)
+			_check("r2 S4 池态断言：tick 体全跳下弹冻结存活（弹min ≥420）",
+				_min_bullets >= BULLET_FLOOR, "弹min=%d" % _min_bullets)
 		"S5":
 			var d5 := int(PopupManager.spawn_reject_count) - int(_skip_marks.get("s5", 0))
 			_check("r2 S5 注入生效：跳字拒收计数 >0（活跳字骤降）", d5 > 0, "reject=%d" % d5)
@@ -555,6 +568,17 @@ func _arm_effect_check(p_label: String) -> void:
 			var ip_us := int(DebugStats.diag_bucket_window_us(&"ip_pass"))
 			_check("r2 S8 注入生效：ip 双遍历短路在账", GameLoop.shortcircuit_ip_pass,
 				"ipµs=%d（窗内读数披露——headless 关态双遍历本近零，份额定谳以本读数为准）" % ip_us)
+		"S9":
+			# R286：④弹段整段短路臂——弹冻结全存活（无寿命/超程/出界回收）∧ 注入口在账。
+			# ④ 份额定谳走 verdict 表 步µs/s 塌缩列（G0/BASE 双基线 vs S9）——不在此断言。
+			var alive9 := 0
+			for p9 in _gl._projectile_pool.active_projectiles():
+				var pb9 := p9 as ProjectileBase
+				if pb9 != null and pb9.team == 0:
+					alive9 += 1
+			_check("r2 S9 注入生效：④弹段整段短路在账（弹冻结存活 ≥420）",
+				GameLoop.shortcircuit_proj_stage and alive9 >= BULLET_FLOOR,
+				"活弹=%d（份额定谳看 verdict 步µs/s 塌缩列）" % alive9)
 
 
 func _m4_gate(p_w: Dictionary, p_phys_adv: int, p_label: String) -> bool:

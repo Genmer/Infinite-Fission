@@ -82,6 +82,8 @@ static var death_flush_frame: bool = false    # 当帧死亡冲刷开关（同�
 static var prof_buckets_frame: bool = false   # R285 P0：四分键计时门（随 stage_probe_enabled 逐帧写——
                                               # 命/结/死/回 四桶只在本门内 begin/end；关态 死/回/ip 键照累计）
 static var shortcircuit_ip_pass: bool = false # R285 S8：ip 双遍历短路臂注入口（默认 false=零短路零成本）
+static var shortcircuit_proj_stage: bool = false # R286 S9：④弹段整段短路臂注入口（跳过 _tick_projectiles
+                                                 # 调用——弹仍活仍可见，④ 段份额定谳；默认 false=零短路零成本）
 static var hit_pairs_flushed: int = 0         # 会话累计冲刷命中对数（G 臂 effect check/诊断直读）
 static var deaths_flushed: int = 0            # 会话累计冲刷死亡数（同上）
 
@@ -242,6 +244,14 @@ var _xp_tier_anchor_base: float = 3.0         # R202 四色分档锚：注册表
 var stage_probe_enabled: bool = false         # 分阶段采样开关（架构 §5.5：P95 超线按阶段定位）
 var stage_probe_us: Dictionary = {}           # {StringName 阶段: 累计 usec}（仅 PLAYING 帧，逐帧重建）
 var stage_probe_us_peak: Dictionary = {}      # R206：{阶段: 秒内峰值 usec}（诊断日志采样后由 DebugStats 清零；stage_probe_us 逐帧重建看不见秒内尖峰）
+# R286 段窗和：单帧末值口径的秒窗累计补全（段探针每帧清零→1Hz 只见末帧=负载不可和；
+# 累计点=帧入口 clear 前〔此刻段表=上一完整步〕，M/D/B 态无段表不累计；读走清零同
+# diag_reset_stage_peaks 先例）。段和µs=全段（含 entry/dispatch 不进段序的键）；弹段/
+# 网段/敌段=grid_projectile/grid_rebuild/enemy 三段分键——步µs−段和µs=步内未探针暗区直读。
+var _stage_win_sum_us: int = 0                # R286：十六段+entry+dispatch 秒窗累计和
+var _stage_win_proj_us: int = 0               # R286：弹段（grid_projectile）秒窗累计
+var _stage_win_grid_us: int = 0               # R286：网段（grid_rebuild 双网格重建）秒窗累计
+var _stage_win_enemy_us: int = 0              # R286：敌段（enemy AI/元素/反应）秒窗累计
 var _ui_subtick_left: int = 1                 # R206：mobile 跳字半频相位（1=本帧驱动；桌面每帧恒 1）
 var _fx_subtick_left: int = 1                 # R207：mobile 元素特效层半频相位（同上）
 
@@ -862,6 +872,18 @@ func _physics_process(p_raw_delta: float) -> void:
 			frame_order.clear()
 			var _probe_t0 := Time.get_ticks_usec() if stage_probe_enabled else 0
 			if stage_probe_enabled:
+				# R286 段窗和：此刻 stage_probe_us=上一完整步的段表（仅 PLAYING 产生、
+				# 逐帧只在本点清零）——先累计再清零；首步空表天然跳过。
+				# R286 修轮（QA D1）：player_mv/player_wp 为 玩段 严格子集键（R217 拆键
+				# 双计——debug_stats 既有两处段和口径 :375/:485 同款跳过），不入段和µs。
+				if not stage_probe_us.is_empty():
+					for _win_k in stage_probe_us:
+						if _win_k == &"player_mv" or _win_k == &"player_wp":
+							continue
+						_stage_win_sum_us += int(stage_probe_us[_win_k])
+					_stage_win_proj_us += int(stage_probe_us.get(&"grid_projectile", 0))
+					_stage_win_grid_us += int(stage_probe_us.get(&"grid_rebuild", 0))
+					_stage_win_enemy_us += int(stage_probe_us.get(&"enemy", 0))
 				stage_probe_us.clear()
 				_probe_active = true
 				# R244 物理相冲刷桶批：帧入口键——函数头→PLAYING 首段计时点之间的全部
@@ -932,7 +954,8 @@ func _physics_process(p_raw_delta: float) -> void:
 				stage_probe_us[&"grid_rebuild"] = Time.get_ticks_usec() - _probe_t0
 				stage_probe_us_peak[&"grid_rebuild"] = maxi(int(stage_probe_us_peak.get(&"grid_rebuild", 0)), int(stage_probe_us[&"grid_rebuild"]))
 				_probe_t0 = Time.get_ticks_usec()
-			_tick_projectiles(gd)
+			if not shortcircuit_proj_stage:      # R286 S9：④弹段整段短路（台架臂——弹仍活仍可见，
+				_tick_projectiles(gd)            # 分区循环/调用全跳；两冲刷点保留=无收集自然空转）
 			if grid_hit_frame:
 				_flush_hit_pairs()           # R285 T1 冲刷点：④ 尾统一提交（收集制命中）
 			if death_flush_frame:
@@ -4091,7 +4114,7 @@ static func _flush_hit_pairs() -> void:
 		return
 	var timed := prof_buckets_frame
 	if timed:
-		DebugStats.bucket_begin(&"hit_flush")     # R285 P0：结µs（提交链）
+		DebugStats.bucket_begin(&"hit_flush")     # R285 P0：提µs（提交链——R286 行键名，避撞 R232 结µs）
 	for i in range(n0):
 		var proj: ProjectileBase = _hp_proj[i]
 		# R285 序守卫：冲刷中段弹被回收（pierce 耗尽 _recycle）→ 同节点可能被 FRACTAL
@@ -4275,6 +4298,15 @@ func _tick_ui(p_raw_delta: float) -> void:
 func diag_reset_stage_peaks() -> void:
 	# R206：诊断日志每秒采样读走峰值后清零（DebugStats 调用；探针关时零成本空字典）
 	stage_probe_us_peak.clear()
+
+
+func diag_reset_stage_win_sums() -> void:
+	# R286：诊断日志每秒采样读走段窗和后清零（DebugStats 调用——diag_reset_stage_peaks
+	# 同款时序；非 PLAYING 态窗不累计，读数天然 0）
+	_stage_win_sum_us = 0
+	_stage_win_proj_us = 0
+	_stage_win_grid_us = 0
+	_stage_win_enemy_us = 0
 
 
 func _apply_camera_shake() -> void:

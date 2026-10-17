@@ -476,6 +476,9 @@ func tick(p_game_delta: float) -> void:
 
 
 func _tick_fast(p_gd: float, p_player: Node2D, p_player_r: float) -> void:
+	if shortcircuit_tick:                   # R286 S4 修臂：快路径短路（原臂仅 tick() 检查——
+		tick_skip_count += 1                # 台架弹多走快路径=空臂，"S4≈0%"结论链作废重测）
+		return
 	# R220 刀9：敌弹内联快路径（game_loop._tick_one_pool team 分区专用；判据在 spawn 期
 	# 缓存 _fast_path——见 spawn 内 ⚠PR 检查单）。与 tick() 慢路径的四断言语义逐位等价，
 	# 分支序保持慢路径原序（寿命 → 位移 → 出界 → 撞玩家）。跳过项逐条 no-op 证据：
@@ -518,6 +521,9 @@ func _tick_fast(p_gd: float, p_player: Node2D, p_player_r: float) -> void:
 
 
 func _tick_fast_player(p_gd: float) -> void:
+	if shortcircuit_tick:                   # R286 S4 修臂：快路径短路（同 _tick_fast——原臂漏检）
+		tick_skip_count += 1
+		return
 	# R231 刀B：玩家弹内联快路径（game_loop._tick_one_pool 三缓冲分区驱动；资格判据
 	# 在 spawn 期 ON_SPAWN 派发后缓存 _pfast——清单见 spawn 尾部）。分支序=慢路径原序：
 	# 寿命 → 直线运动 → range 超程 → 贴边带预检回落（R235 4a——跳弹弹专属，见下）→

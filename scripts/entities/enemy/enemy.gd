@@ -1310,7 +1310,7 @@ func _death_fanout() -> void:
 	# boost 关侧零入队零延迟（fan-out 即时，pkg4 零位移）。
 	var timed := GameLoop.prof_buckets_frame
 	if timed:
-		DebugStats.bucket_begin(&"death_flush")     # R285 P0：死µs（fan-out 冲刷段——关态也累计）
+		DebugStats.bucket_begin(&"death_flush")     # R285 P0：灭µs（fan-out 冲刷段——R286 行键名避撞 R269 死µs；关态也累计）
 	# R19 打击质感：死亡弹爆（白环扩散 + 四向碎屑，0.2s 自清——击杀瞬间重量感）
 	# R188 档0：入池复用（DeathPop.pop——原每杀 instantiate+自毁）
 	if get_parent() != null and _fx_q() > 0:
