@@ -1,0 +1,26 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R287 空场查询早退（is_empty 判据链/零命中等价/有敌命中常在） 回归 ══════════
+── e1 is_empty 真值链（快照唯一真源 + 帧间复位） ──
+  PASS | e1a rebuild([]) → is_empty()=true（空场判据基准态）
+  PASS | e1b rebuild([敌]) → is_empty()=false（快照非空翻转）
+  PASS | e1c 再 rebuild([]) → is_empty()=true（帧间复位——上帧敌不滞留）
+  PASS | e1d 真链空场驱动 1 步 → is_empty()=true（④ 实际重建路径同步空态）
+── e2 空场零命中等价（boost 开/无敌弹阵 ×60 步） ──
+  PASS | e2a 空场+弹阵驱动 → 结算数=0（早退前空查询本就零命中——逐位等价）
+  PASS | e2b 空场+弹阵驱动 → 伤害=0
+── e3 有敌命中常在（巨血敌+贴身弹——boost 开/关两态） ──
+  PASS | e3a boost 开：巨血敌在场 → 结算数>0（收集位点早退未丢真命中）
+  PASS | e3b boost 关：巨血敌在场 → 结算数>0（通用位点早退未丢真命中）
+── e4 弹运动不受扰（空场早退激活期 tick 正常） ──
+  PASS | e4 空场驱动 20 步 → 弹位移 >100px（早退只在命中查询位点、不触 tick）
+────────────────────────────────────────
+汇总：PASS 9 / FAIL 0（共 9 项）
+验收汇总：9/9 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 19 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 78 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

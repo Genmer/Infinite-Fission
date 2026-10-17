@@ -1,0 +1,42 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R287 QA 独立探针（行格式/段和恒等式/第三位点/直驱等价） ══════════
+── F 行格式冻结（十五键连续正则——MENU 态） ──
+  PASS | F1 十五键连续整段匹配（键序 命提灭回ip 段和 弹网敌 跳玩特UI他派 + 键间零夹带）
+  PASS | F2 位序：十五键段起点在 渲峰ms 之后；段尾后仅允许 尖峰 标记或行尾
+  PASS | F3 十五键各恰出现一次（无重复、无键名互含碰撞）
+  PASS | F4 MENU 态 R287 六新键读数全 0（非 PLAYING 态窗不累计契约）
+  PASS | F5 口径声明头 R287 句在场（六键名序列原文）
+── R 含敌台架（boost 开热路径：段和包含恒等式 + popup>0 + 上墙） ──
+  窗读数µs：和=25016 弹=5222 网=1328 敌=8054 跳=736 玩=1426 特=1246 UI=2179 他=1541 派=1523（九键和=23255 残差=1761）
+  PASS | R1 台架有效性：90 步内真结算>0（伤害链活——popup 断言的前提）
+  PASS | R2 popup 段>0 真值（真伤害→真跳字→跳字管线计时入账——开发套件未断言面）
+  PASS | R3 玩/网/敌段>0（台架三基础段活）
+  PASS | R4 段和 ≥ 九分键之和（R287 六键 ⊆ 段和——包含恒等式，AC④）
+  PASS | R5 复位口十累计器归零（diag_reset_stage_win_sums 扩展生效）
+  PASS | R6 复位后复驱 2 步 → 段和复活 >0（累计点活——读走清零非死账）
+  PASS | R7 1Hz 行上墙读数：弹段µs/敌段µs/跳段µs/玩段µs 四键 >0（累计器→行链路活）
+── S 第三位点（_tick_fast_player 预检 elif 门——boost 关快路径） ──
+  PASS | S0a 快路径出厂开关 PLAYER_BULLET_FAST_PATH==true（产品默认）
+  PASS | S0b pfast 弹资格（trait_stack 注入 → _pfast==true ∧ 快N≥1——弹确走 _tick_fast_player）
+  PASS | S1 空场 boost 关：pfast 弹阵 60 步 → 零结算/零伤害/零冲刷对（elif 门空场直通等价）
+  PASS | S2 有敌 boost 关：pfast 弹贴身 → 结算>0（elif 门非空放行预检——真命中不丢）
+  PASS | S3 空场 boost 开：pfast 弹阵 60 步 → 零结算/零伤害/零冲刷对（位点1 boost 态复核）
+  PASS | S4 空场 pfast 弹 20 步位移 >100px（运动链不受早退扰动）
+── G 直驱单元探针（位点1/2 空场零副作用 + is_empty 真链） ──
+  PASS | G3a is_empty 真值链：rebuild([])→true / 空上insert(敌)→false / 再rebuild([])→true（快照唯一真源+帧间复位）
+  PASS | G3b 真链三态：清场驱动→true / 有敌驱动→false / 再清→true（④ 实际重建同步空态）
+  PASS | G1 位点1 直驱：空网格 _collect_hit_pairs 零对追加；有敌贴身恰+1 对（早退边界两侧）
+  PASS | G2 位点2 直驱：空网格 _check_collision 零结算；有敌贴身恰+1 结算（通用路径即时链活）
+────────────────────────────────────────
+汇总：PASS 22 / FAIL 0（共 22 项）
+验收汇总：22/22 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 90 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

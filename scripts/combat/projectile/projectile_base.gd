@@ -590,7 +590,9 @@ func _tick_fast_player(p_gd: float) -> void:
 	# 不复制候选、不即时结算；〔v2·M2〕静态 bool 帧级缓存读零字典查）。
 	if GameLoop.grid_hit_frame:
 		_collect_hit_pairs()
-	elif enemy_grid != null:
+	elif enemy_grid != null and not enemy_grid.is_empty():
+		# R287 空场早退（is_empty 并入 elif 门）：空网格时查询必然空集——现状本就
+		# 不回落 _check_collision（空候选直通），早退省 er 计算+查询+clear，逐位等价。
 		var er := effective_radius()
 		var query_r := er
 		if GameLoop.sim30_effective():
@@ -752,6 +754,10 @@ func _collect_hit_pairs() -> void:
 		return                              # R243 掷斧幽灵飞行守卫（与 _check_collision 同位）
 	if enemy_grid == null:
 		return
+	if enemy_grid.is_empty():
+		return                              # R287 空场早退：快照空=任何查询必然零候选（vc86 实测
+	                                        # 清场/弹重窗口 ~5-6µs/弹/步 × 2.4 万次/秒纯废查归零；
+	                                        # 行为等价——零候选→零命中对本函数本就恒成立）
 	var timed := GameLoop.prof_buckets_frame
 	if timed:
 		DebugStats.bucket_begin(&"hit_collect")   # R285 P0：命µs（收集段查询+窄相）
@@ -786,6 +792,10 @@ func _check_collision(p_skip_query: bool = false) -> void:
 		                                    # （敌弹不分流：本守卫仅 team==0 路径可达，零波及）
 	if enemy_grid == null:
 		return
+	if enemy_grid.is_empty():
+		return                              # R287 空场早退（与 _collect_hit_pairs 同款）：p_skip_query
+	                                        # 预检候选非空 ⇒ 快照当时非空 ⇒ ④ 内快照单调只增此处必非空——
+	                                        # 早退到达时 _candidates 必为空、循环本就空转，逐位等价。
 	# 候选复制（query_circle_snap 返回内部复用缓冲；提交链路内的 AOE/重索敌查询会复用同一缓冲）
 	# + 窄相判定（§4.4 候选语义：网格保守半径超集 → 实际 hitbox_r 收窄）。
 	# R188 档0：复制进成员缓冲（原每弹每帧新建数组；复制语义承重墙保留不动）

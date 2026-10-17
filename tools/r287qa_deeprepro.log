@@ -1,0 +1,81 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R271 headless 深载复现台架（复现臂+S1-S7 短路二分+M4 有效性门+verdict 表） ══════════
+══ R271 深载台架：敌90 驻场 + 弹448 顶格 + boost 促1 + 600 物理帧/臂 ×（基线+S1-S7+坏臂） ══
+落盘模式：复跑态（postcut）
+  PASS | r2 默认零短路：S1/S4/S5/S7/S9 注入口出厂态 false
+boot：grove w16 构成 42 敌种池，压血×0.30；W2 L5 五词条；boost_override=1
+── BASE 基线复现臂 ──
+── S1 桶周转短路（place/unplace 早退） ──
+  PASS | r2 S1 注入生效：place/unplace 早退计数 >0（桶µs 归零面）
+  PASS | r2 S1 池态断言：桶µs 短路后骤降（<1000µs/窗）
+── S3 自绘件隐藏（树扫 visible=false） ──
+  PASS | r2 S3 注入生效：树扫自绘件隐藏非空（重罩含新生件）
+── S4 弹 tick 短路 ──
+  PASS | r2 S4 注入生效：弹 tick 早退计数 >0（快/慢路径全计入——R286 修臂）
+  PASS | r2 S4 池态断言：tick 体全跳下弹冻结存活（弹min ≥420）
+── S5 跳字拒收 ──
+  PASS | r2 S5 注入生效：跳字拒收计数 >0（活跳字骤降）
+  PASS | r2 S5 池态断言：测量末活跳字 ≈0
+── S6 全弹清空（逐帧 release 活弹） ──
+  PASS | r2 S6 池态断言：活弹骤降（<50 驻场）
+── S7 桶宿主同步环短路 ──
+  PASS | r2 S7 注入生效：同步环早退计数 >0
+── S2 敌监控短路（monitoring 批量 false+玩家面惰化） ──
+  PASS | r2 S2 注入生效：活敌 HitArea monitoring 全 false ∧ 玩家面惰化
+── G0 现状臂（grid_hit_override=0 强关） ──
+  PASS | r2 G0 注入生效：网格命中强关（冲刷对数零增量 ∧ 结µs 零累计）
+── G1 网格命中臂（grid_hit_override=1 强开——T1 单独 A/B） ──
+  PASS | r2 G1 注入生效：网格命中强开（冲刷对数增量 >0 ∧ 命/结µs 在账）
+── G2 死亡冲刷臂（death_flush_override=1 grid 关——T3 单独 A/B） ──
+  PASS | r2 G2 注入生效：死亡冲刷强开（冲刷死亡数增量 >0 ∧ 网格门仍关）
+── S8 ip 双遍历短路臂（shortcircuit_ip_pass——ipµs 份额定谳） ──
+  PASS | r2 S8 注入生效：ip 双遍历短路在账
+── S9 ④弹段整段短路臂（shortcircuit_proj_stage——R286 新增：④ 段份额定谳；S4 历史读数作废重测——原臂漏检快路径，真机快N/弹N≈10-17%=83-90% 弹走慢路径外 台架弹多走快路径为空臂） ──
+  PASS | r2 S9 注入生效：④弹段整段短路在账（弹冻结存活 ≥420）
+── BASE2 基线复测臂（会话漂移对照——塌缩基线取双基线均值） ──
+── BAD 坏臂（敌注入数=0——M4 门回归；末位=零敌期波次通关会把状态带离 PLAYING，污染后继臂） ──
+  坏臂排空：释放活敌 90
+  [diag] wave_cleared w1（会话时钟 235.5s）
+  [diag] wave_started w2（会话时钟 237.3s）
+  [diag] wave_cleared w2（会话时钟 241.5s）
+  [diag] wave_started w3（会话时钟 243.3s）
+══ verdict 表（判读规则 §3.2：塌缩 ≥60% 坐实；全臂不塌+基线过门+基线延µs<5k → H5） ══
+  基线漂移：BASE1 延µs/s=30.1k → BASE2 31.2k（drift=4%——容差内=可靠）
+  BASE  延µs/s=    30.1k 隙µs/s=    59.2k 步µs/s=  910.6k 物步µs/s=   130.3k 加/s= 2875 摘/s= 2869 绘µs/s=    3.8k 塌缩延=  2% 并集=  4% M4=过
+  S1    延µs/s=    24.0k 隙µs/s=    51.0k 步µs/s=  924.8k 物步µs/s=   115.5k 加/s=    4 摘/s=    0 绘µs/s=    3.3k 塌缩延= 22% 并集= 22% M4=过
+  S3    延µs/s=    27.8k 隙µs/s=    59.6k 步µs/s=  912.2k 物步µs/s=   116.6k 加/s= 2993 摘/s= 2991 绘µs/s=    3.1k 塌缩延=  9% 并集= 14% M4=过
+  S4    延µs/s=     4.6k 隙µs/s=   412.4k 步µs/s=  582.7k 物步µs/s=  1005.1k 加/s=   55 摘/s=   55 绘µs/s=    1.8k 塌缩延= 85% 并集= 85% M4=过
+  S5    延µs/s=    31.5k 隙µs/s=    27.5k 步µs/s=  940.8k 物步µs/s=   131.9k 加/s= 3720 摘/s= 3717 绘µs/s=    4.4k 塌缩延=  0% 并集= 41% M4=过
+  S6    延µs/s=    15.3k 隙µs/s=   596.9k 步µs/s=  387.5k 物步µs/s=  1290.5k 加/s=  256 摘/s=  256 绘µs/s=   10.0k 塌缩延= 50% 并集= 50% M4=过
+  S7    延µs/s=    31.2k 隙µs/s=    26.9k 步µs/s=  941.7k 物步µs/s=   139.7k 加/s= 4090 摘/s= 4088 绘µs/s=    4.0k 塌缩延=  0% 并集= 43% M4=过
+  S2    延µs/s=    31.3k 隙µs/s=    30.8k 步µs/s=  937.7k 物步µs/s=   147.0k 加/s= 4288 摘/s= 4287 绘µs/s=    4.0k 塌缩延=  0% 并集= 34% M4=过
+  G0    延µs/s=    30.0k 隙µs/s=    31.8k 步µs/s=  938.1k 物步µs/s=   136.2k 加/s= 4366 摘/s= 4364 绘µs/s=    3.9k 塌缩延=  2% 并集= 32% M4=过
+  G1    延µs/s=    29.6k 隙µs/s=    30.5k 步µs/s=  939.8k 物步µs/s=   119.5k 加/s= 4354 摘/s= 4353 绘µs/s=    3.7k 塌缩延=  3% 并集= 35% M4=过
+  G2    延µs/s=    30.4k 隙µs/s=    33.6k 步µs/s=  935.8k 物步µs/s=   128.5k 加/s= 4535 摘/s= 4534 绘µs/s=    3.9k 塌缩延=  1% 并集= 28% M4=过
+  S8    延µs/s=    31.0k 隙µs/s=    32.8k 步µs/s=  936.0k 物步µs/s=   124.6k 加/s= 4659 摘/s= 4658 绘µs/s=    4.0k 塌缩延=  0% 并集= 30% M4=过
+  S9    延µs/s=     5.1k 隙µs/s=   520.6k 步µs/s=  472.4k 物步µs/s=   904.3k 加/s=   56 摘/s=   56 绘µs/s=    2.3k 塌缩延= 83% 并集= 83% M4=过
+  BASE2 延µs/s=    31.2k 隙µs/s=    34.8k 步µs/s=  933.8k 物步µs/s=   141.4k 加/s= 4723 摘/s= 4722 绘µs/s=    4.0k 塌缩延=  0% 并集= 26% M4=过
+  BAD   延µs/s=    13.2k 隙µs/s=   605.0k 步µs/s=  381.4k 物步µs/s=   721.6k 加/s=  507 摘/s=  504 绘µs/s=    3.5k 塌缩延= 57% 并集= 57% M4=无效
+  - H1 窗口结构性（哨兵窗含引擎物理服步）：隙µs=47.0k/s vs 延µs=30.7k/s ——隙为主载=否（隙≫延 → 引擎物理相位工作为主，A 轴刀应看物步µs/隙µs 面）。
+  - H2 物理监控事件（90 敌 Area2D monitoring）：S2 塌缩=34%；V-A 触发（并集 ≥60%）=否。
+  - H3 queue_redraw 自绘链：S3 塌缩=9%；绘µs/延µs=13%；V-B 触发（S3 ≥50% 或占比 ≥40%）=否。
+  - H4 池周转树进出：S1 塌缩=22%、S5 塌缩=0%；加N+摘N=7595/s（>600/s 闸=过；S1 加摘塌缩=100% → 相关性判据=未坐实）；V-C 触发=否。
+  - H5 设备渲染邻接：**不成立**（短路臂已坐实模拟侧来源：S4、S9——台架可定谳面优先于 H5）。
+  - **刀单宣告（§3.3 触发判据逐档）**：V-A=未触发（登记）；V-B=未触发（登记）；V-C=未触发（登记）；V-D=未触发。未触发档=登记不动刀（cutAB 按 §5-a1 记判据读数跳过），触发档=开刀序 per §3.3。
+  - B1 候选① MM 排除面本体（boss/elite/bastion 逐敌 Sprite）：台架构成=90 杂兵驻场（无 elite/boss 波段）→ **台架不可定谳**，待 vc81 敌波段/杂兵波段 dc 分段账。
+  - B1 候选② MM 每帧同步 idle：S7 短路（同步环早退）延µs 塌缩=0%（<60% → 台架不坐实；刀向=脏标/30Hz 量化同步，vc81 复核）。
+  - B1 候选③ 填充率：headless 无渲染不可测 → **待 B-0 三键制定谳**（呈帧N 铁证）后重查。
+  - B-0 渲ms 语义（判据 A/B'）：真机三键专属（vc81），台架不含渲染轴读数。
+verdict 表已落盘：res://docs/qa/2026-10-14-R271-deeprepro-postcut.md
+  PASS | r5 verdict 表落盘（复跑态档）
+  PASS | r1 基线臂跑通+量级断言（敌 ≥85/弹 ≥420 池活口直读）
+  PASS | r4 坏臂回归：敌注入 0 → verdict 记「台架无效」
+  PASS | r4 坏臂不产出 H5 判定行（防假触发）
+  PASS | r3 headless 通道先验：哨兵键有值（基线 延µs>0）
+  PASS | r3 绘µs 通道先验：基线 绘µs≥0（0=本构筑自绘件不重绘/不入场，通道结构性存在由 stepacct p4 锁）
+池遥测：projectile(ri=0 live=0 free=820 cap=820) homing(ri=0 live=0 free=24 cap=24) enemy(ri=0 live=5 free=123 cap=128) popup(ri=0 live=7 free=73 cap=80) particle(ri=0 live=42 free=22 cap=64) laser(ri=0 live=0 free=12 cap=12) xp(ri=0 live=0 free=160 cap=160)
+加N 节点级直方图 top-14：Sprite2D=396350 | Node2D=88412 | Area2D=88381 | CollisionShape2D=88381 | enemy.gd:@Node2D@940=1251 | enemy.gd:@Node2D@947=1179 | enemy.gd:@Node2D@914=1173 | enemy.gd:@Node2D@929=1164 | enemy.gd:@Node2D@963=1155 | enemy.gd:@Node2D@950=1146 | enemy.gd:@Node2D@894=1119 | enemy.gd:@Node2D@921=1118 | enemy.gd:@Node2D@932=1116 | enemy.gd:@Node2D@918=1111
+────────────────────────────────────────
+汇总：PASS 22 / FAIL 0（共 22 项）
+验收汇总：22/22 通过

@@ -39,6 +39,10 @@ const POSTCUT_PATH := "res://docs/qa/2026-10-14-R271-deeprepro-postcut.md"
                                               # 缺省=复跑态档（postcut，可覆写）；archive=1 才写归档
                                               # 档且已存在即拒绝覆写（防复跑破坏 md5 基线）。参化
                                               # 手法照 qa_r228_diagfreeze「-- compare=」cmd 参先例。
+const POSTCUT_RERUN_PATH := "res://tools/r271_deeprepro_postcut_rerun.txt"
+                                              # R287 修轮（评审 #1/DEF-QA-002 复发）：postcut 自
+                                              # R272 追记制起=归档证据，复跑改道痕档（可覆写）——
+                                              # docs/qa/ 原档永不再被 bench 覆写。
 # R271 P4 绘µs wrap 清单（grep `func _draw` 派生全量——verdict 表头披露面）：
 # projectile_base（拖尾）/mirror_image/arc_slash/ground_axe 内嵌/orbit_field/
 # telegraph 内嵌×3（Circle/Line/Fan）/enemy 主+W8 读数+内嵌×5（毒圈/雷/光束/雷区/爆环）/
@@ -803,12 +807,16 @@ func _report_verdict() -> void:
 	for h in h_lines:
 		lines.append(h)
 		print("  " + h)
-	# 落盘（修轮 M1：路径参化——缺省复跑态 postcut 可覆写；archive=1 写归档且拒覆写已存在）
+	# 落盘（修轮 M1：路径参化——archive=1 写归档且拒覆写已存在；R287 修轮【评审 #1/
+	# DEF-QA-002 复发】：postcut 复跑缺省改道痕档——docs/qa/ 归档证据永不被 bench 覆写）
 	var out_path := VERDICT_PATH if _archive_mode else POSTCUT_PATH
 	var wrote := false
 	if _archive_mode and FileAccess.file_exists(VERDICT_PATH):
 		print("  归档已存在，如需重归档先人工移走（本跑继续、不写档）：%s" % VERDICT_PATH)
 	else:
+		if not _archive_mode and FileAccess.file_exists(POSTCUT_PATH):
+			out_path = POSTCUT_RERUN_PATH
+			print("  postcut 已存在（R272 追记制归档证据）——本次改道重跑痕档（原档不动）：%s" % out_path)
 		var f := FileAccess.open(out_path, FileAccess.WRITE)
 		if f != null:
 			f.store_string("\n".join(lines) + "\n")

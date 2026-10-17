@@ -1,0 +1,33 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R286 诊断收口（五键上墙/段窗和/S9 出厂态/行格式冻结） 回归 ══════════
+── boot（main.tscn 真链 → MENU 冻结） ──
+── k1 行格式冻结（R286 九键+R287 六键上墙） ──
+  PASS | k1 R286 九键子串逐位在场
+  PASS | k1 R287 六键子串逐位在场
+  PASS | k1 R271 键子串保持在场
+  PASS | k1 十五键位在 渲峰ms 之后、尖峰段之前/行尾
+  PASS | k1 十五键内部键序冻结（命提灭回ip 段和 弹网敌 跳玩特UI他派）
+── k2 五桶记账链路（begin/end → 窗读数） ──
+  PASS | k2 五桶 begin/end 夹 2ms → 窗读数 ≥1000µs（链路活）
+── k3 段窗和（探针开 + PLAYING 直驱 30 步） ──
+  PASS | k3 复位口存在（diag_reset_stage_win_sums）
+  PASS | k3 段和µs > 0（PLAYING 段表累计）
+  PASS | k3 段和 ≥ 弹段+网段+敌段（全段包含三段分键）
+  PASS | k3 段和 ≥ 九分键之和（R287 六键包含恒等式）
+  PASS | k3 R287 六分键非负（缺段帧 .get 兜底 0 生效）
+  PASS | k3 复位归零（十累计器清零）
+── k4 S9 出厂态 ──
+  PASS | k4 GameLoop.shortcircuit_proj_stage 出厂 false（产品行为逐位）
+────────────────────────────────────────
+汇总：PASS 13 / FAIL 0（共 13 项）
+验收汇总：13/13 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 22 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 116 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

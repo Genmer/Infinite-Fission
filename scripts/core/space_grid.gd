@@ -117,6 +117,14 @@ func max_entity_radius() -> float:
 	return _max_entity_radius
 
 
+func is_empty() -> bool:
+	# R287 空场早退口：_snap_items 为全部查询的唯一实体真源（rebuild 全量重建 +
+	# insert 同步追加、原生镜像与之平行同长）——快照空 ⇒ 任何 query_* 必然零候选。
+	# 逐弹查询方以此 O(1) 判空跳过整条格坐标计算+桶扫链（vc86 实测空场仍耗
+	# ~5-6µs/弹/步 × 2.4 万次/秒 ≈ 10 万µs/s 纯废查——清场/弹重窗口归零）。
+	return _snap_items.is_empty()
+
+
 func rebuild(p_items: Array[Node2D]) -> void:
 	# 每帧重建：按 _occupied 清桶（O(used)）→ 全量插入（O(n)）。
 	# R231 刀A：插入同时建自有快照（_pos_of 取位，保留树外回退 position 语义）——

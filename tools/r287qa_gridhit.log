@@ -1,0 +1,81 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R285 弹侧根治批 QA（T1 网格命中 sweep + T2 物面守门 + T3 死亡冲刷） ══════════
+── t2.p1 弹场景零物理件（ballistic/homing 深扫） ──
+  PASS | t2.p1 ballistic_projectile.tscn 子树 CollisionObject2D/CollisionShape2D==0（弹×弹不检测的结构性证伪键）
+  PASS | t2.p1 homing_projectile.tscn 子树 CollisionObject2D/CollisionShape2D==0（弹×弹不检测的结构性证伪键）
+── t2.p2/p4 全树 Area2D 白名单（敌 HitArea×N + 玩家本体）+ boost 两态逐位 ──
+  PASS | t2.p2 全树 Area2D ⊆ {敌 HitArea, 玩家本体}（白名单锁，敌×3 在场）
+  PASS | t2.p2 玩家本体在场 ∧ collision_layer==3（R235 搭车① 现状锁）
+  PASS | t2.p2 敌 HitArea collision_mask==2 全数（敌只与玩家配对）
+  PASS | t2.p4 boost 开/关 Area2D 集合与 mask/layer 逐位（R269 保帧模式关态逐位同源）
+── t1a 序守卫：穿透弹双候选 → 只结第一对、无幻影结算 ──
+  PASS | t1a 序守卫：pierce=1 双候选 → 只结第一对（A 掉血 ∧ B 分毫未动）
+  PASS | t1a 穿透耗尽回收：弹已离场（PIERCE_DEPLETED 统一收束）
+  PASS | t1a 无幻影结算：结N 增量==1（第二对被序守卫吸收）
+  PASS | t1a 冲刷后对缓冲恒空（快照冲刷语义）
+  PASS | t1a serial 复用守卫：过期 serial 残对零结算（合法命中恰 1 结不增）
+── t1c3/t1d 受控对拍：单弹单敌（A=关态真值 / B=强关压 boost / C=boost 网格） ──
+  PASS | t1d 关态逐位：A(关态真值) ≡ B(强关压 boost) 全项逐位（pkg4 承重墙语义）
+  PASS | t1c3 单弹单敌对拍：A ≡ C 全项逐位（命中判定/穿透/结N/伤值同帧同序等价）
+── t1b 收集/冲刷同帧：boost 态 300 帧跨帧滞留==0 ∧ 关态缓冲恒空 ──
+  PASS | t1b 开态 300 帧：帧帧冲刷完毕（跨帧滞留计数==0）
+  PASS | t1b 开态命中在账：会话冲刷对数增量 >0
+  PASS | p0 命/结µs 桶在账：开态窗内 命µs>0 ∧ 结µs>0（收集段/冲刷段计时落账）
+  PASS | t1b 关态 120 帧：两缓冲恒空 ∧ 冲刷对数零增量（强关压过 boost——t1d 注入口语义）
+── t1e 掷斧零命中对 ∧ 敌弹撞玩家时序两态逐位 ──
+  PASS | t1e 掷斧：boost 网格开态零命中对 ∧ 敌分毫未动 ∧ 弹仍在飞
+  PASS | t1e 敌弹撞玩家（网格开 态）：命中发生 ∧ 弹回收
+  PASS | t1e 敌弹撞玩家（强关 态）：命中发生 ∧ 弹回收
+  PASS | t1e 敌弹时序两态逐位：命中帧/掉血值/回收态 A≡B（team1 面零扰动）
+── t1c2 命中对拍台架：W2 真开火 × 5 seed × override 0/1（±2% 声明带） ──
+  PASS | t1c2① 确定性锁：seed=11 override=0 两跑全指标逐位
+  读数（逐 seed）：seed=11 关[dmg=378 结=41 杀=14] 开[dmg=378 结=41 杀=14]  seed=23 关[dmg=405 结=41 杀=14] 开[dmg=405 结=41 杀=14]  seed=37 关[dmg=378 结=40 杀=14] 开[dmg=378 结=40 杀=14]  seed=41 关[dmg=387 结=42 杀=14] 开[dmg=387 结=42 杀=14]  seed=53 关[dmg=387 结=40 杀=14] 开[dmg=387 结=40 杀=14]
+  PASS | t1c2② 跨 override 聚合带（dmg）：|开−关|/关 ≤ 2%
+  PASS | t1c2② 跨 override 聚合带（settles）：|开−关|/关 ≤ 2%
+  PASS | t1c2② 跨 override 聚合带（kills）：|开−关|/关 ≤ 2%
+── t3a 死亡冲刷批量化：冲刷点前==0 后==3 / FIFO / 再入队当帧闭合 ──
+  PASS | t3a 批量化：冲刷点前 emit 计数==0（帧内击杀全在队）
+  PASS | t3a 批量化：冲刷后 emit 计数==3（快照冲刷一次到位）
+  PASS | t3a FIFO：死亡序=派发序（A→B→C）
+  PASS | t3a 收窄在冲刷点：spawner.active 已收窄 ∧ 冲刷队列排空
+  PASS | t3a 冲刷计数在账：deaths_flushed ≥3
+  PASS | t3a 当帧闭合：冲刷中再入队残段当帧被后续冲刷点吸收（4 杀 ∧ 队空 ∧ 无跨帧滞留）
+── t3b inline 面：dead 冲刷前即置位 ∧ 穿透不浪费（死亡短路） ──
+  PASS | t3b dead 即时置位：apply_damage 返回即 dead==true（冲刷前）
+  PASS | t3b 死亡短路：dead 目标零结算（结N==1 恰为活敌）∧ 活敌掉血（穿透未被亡敌浪费）
+── t3c 关态即时：death_flush 关 → apply_damage 调用点 fan-out 已执行 ──
+  PASS | t3c 关态即时：emit 计数调用点即 +1（零入队零延迟）
+  PASS | t3c 关态收尸即时：spawner.active 已收窄 ∧ 队恒空
+── t3d 兜底：长跑 200 帧队恒空 ∧ 中途 free 亡敌不崩 ──
+  PASS | t3d 长跑 200 帧：每帧末队列恒空（兜底冲刷后零滞留）
+  PASS | t3d 复验：中途 free 亡敌被 is_instance_valid 守卫吸收（零崩溃零误 fan-out）
+── t3e 燎原连锁：同帧双杀 dead 过滤收窄（关=点燃 / 开=跳过——声明带） ──
+  PASS | t3e① 关侧确定性：两跑读数逐位（fan-out 即时——刀前一致）
+  PASS | t3e① 开侧确定性：两跑读数逐位（快照冲刷确定序）
+  PASS | t3e③ 关态燎原面逐位：A 死时 B 活 → 点燃发生（spread==1 ∧ B 满槽）
+  PASS | t3e② 声明带（方向单向收窄）：开侧 B 被 dead 过滤跳过（spread==0 ∧ 未点燃）
+  PASS | t3e② 漂移方向锁：开侧 ≤ 关侧（燎原 DOT 收益单向收窄——§0.2 迁移点④）
+── p0 四分键/ipµs 桶在账 + S8 ip 短路机制 ──
+  PASS | p0 死µs：关态 fan-out 也入账（现状路径计时——零行为）
+  PASS | p0 回µs：弹回收链入账（关态也累计）
+  PASS | p0 ipµs：30Hz 态双遍历入账（恢复+快照合计）
+  PASS | p0 S8 ip 短路：注入口置位 → 双遍历零执行（ipµs 零增量）
+── t2.p3 CONTACT_RADIAL 旗语义锁（产品无写口事实锁 + A2K 重挂） ──
+  PASS | t2.p3 产品无写口：enemy.gd 零『CONTACT_RADIAL = true』赋值点（V-A 未实施事实锁）
+  PASS | t2.p3 旗出厂态：Enemy.CONTACT_RADIAL==false（桌面/boost 两态同）
+  PASS | t2.p3 清退刀态：旗 on → 新构敌 _hit_area==null（敌 HitArea 从不构建）
+  PASS | t2.p3 清退刀态：玩家面惰化（monitoring==false ∧ monitorable==false ∧ layer==0）
+  PASS | t2.p3 旗复位回挂：出厂态 boot 正常（旗 off → 玩家 layer==3）
+────────────────────────────────────────
+汇总：PASS 51 / FAIL 0（共 51 项）
+验收汇总：51/51 通过
+WARNING: 12 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 18 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 94 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

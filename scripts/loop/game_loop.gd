@@ -252,6 +252,15 @@ var _stage_win_sum_us: int = 0                # R286：十六段+entry+dispatch 
 var _stage_win_proj_us: int = 0               # R286：弹段（grid_projectile）秒窗累计
 var _stage_win_grid_us: int = 0               # R286：网段（grid_rebuild 双网格重建）秒窗累计
 var _stage_win_enemy_us: int = 0              # R286：敌段（enemy AI/元素/反应）秒窗累计
+# R287 深载分键补全：vc86 判读定谳深载（敌90）弹+敌+网仅占步 30-42%，其余 58-70% 散在
+# 未分窗段且尖峰归因 45/47 指向 popup——六段秒窗分键补齐判读面（跳段=popup 跳字管线/
+# 玩段=player 含移火子键/特段=fx/UI段=ui 非跳字部分/他段=other/派段=dispatch 结算派发）。
+var _stage_win_popup_us: int = 0              # R287：跳段（popup 跳字管线）秒窗累计
+var _stage_win_player_us: int = 0             # R287：玩段（player 全段，移/火为其子键已内含）秒窗累计
+var _stage_win_fx_us: int = 0                 # R287：特段（fx 特效件）秒窗累计
+var _stage_win_ui_us: int = 0                 # R287：UI 段（ui 非跳字部分）秒窗累计
+var _stage_win_other_us: int = 0              # R287：他段（other 未归段胶水）秒窗累计
+var _stage_win_dispatch_us: int = 0           # R287：派段（dispatch 结算派发）秒窗累计
 var _ui_subtick_left: int = 1                 # R206：mobile 跳字半频相位（1=本帧驱动；桌面每帧恒 1）
 var _fx_subtick_left: int = 1                 # R207：mobile 元素特效层半频相位（同上）
 
@@ -884,6 +893,13 @@ func _physics_process(p_raw_delta: float) -> void:
 					_stage_win_proj_us += int(stage_probe_us.get(&"grid_projectile", 0))
 					_stage_win_grid_us += int(stage_probe_us.get(&"grid_rebuild", 0))
 					_stage_win_enemy_us += int(stage_probe_us.get(&"enemy", 0))
+					# R287 六段分键：与上三键同表同点累计（.get 缺键 0 兜底——段未执行帧天然 0）
+					_stage_win_popup_us += int(stage_probe_us.get(&"popup", 0))
+					_stage_win_player_us += int(stage_probe_us.get(&"player", 0))
+					_stage_win_fx_us += int(stage_probe_us.get(&"fx", 0))
+					_stage_win_ui_us += int(stage_probe_us.get(&"ui", 0))
+					_stage_win_other_us += int(stage_probe_us.get(&"other", 0))
+					_stage_win_dispatch_us += int(stage_probe_us.get(&"dispatch", 0))
 				stage_probe_us.clear()
 				_probe_active = true
 				# R244 物理相冲刷桶批：帧入口键——函数头→PLAYING 首段计时点之间的全部
@@ -4307,6 +4323,12 @@ func diag_reset_stage_win_sums() -> void:
 	_stage_win_proj_us = 0
 	_stage_win_grid_us = 0
 	_stage_win_enemy_us = 0
+	_stage_win_popup_us = 0
+	_stage_win_player_us = 0
+	_stage_win_fx_us = 0
+	_stage_win_ui_us = 0
+	_stage_win_other_us = 0
+	_stage_win_dispatch_us = 0
 
 
 func _apply_camera_shake() -> void:
