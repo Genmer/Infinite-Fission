@@ -78,34 +78,24 @@ static func boost_res_notch() -> int:
 static func boost_diag_state() -> int:
 	# R269：促%d 单源纯函数（0=关/1=开85%/2=开75%——诊断行状态键与设置行文案同源，
 	# 防显示态与 促%d 不一致；「模式没生效」类报障预防，R230 帽N 零激活盲区教训）。
-	# R289 C：深载应急档生效期（用户档 85 但实际应用画布=75%）促键报 2（应用态真值）——
-	# 否则真机判读会把自动降档误读成「没生效」。
-	# R289 修轮 2（评审）：自动档只认「已应用到画布」的旗（GameLoop 写）——深载闩在
-	# LEVEL_UP/PAUSED 仍真但画布已回用户档，此时促键须报 1 而非 2（应用态真值）。
+	# R291 UI 定格（用户反馈 vc89「连血条都动态…页面变来变去互相遮挡」）：深载自动
+	# 降档整刀删除——促键恒=用户档真值（战斗中画布不再变档，2 仅出现在用户手选 75；
+	# 真机实证促2 生效期 fps 仍 19-24=降档不买帧，瓶颈在物理侧）。
 	if not boost_mode():
 		return 0
-	return 2 if (boost_res_notch() == 75 or _auto_deep_applied) else 1
+	return 2 if boost_res_notch() == 75 else 1
 
 
 # ── R289 深载门（A/B/C 三刀共用单源谓词） ─────────────────────────────
 # 判据：boost_mode() ∧ 深载闩（GameLoop._update_deep_load_at 战斗态滞回写入：
-# fps<34 持续 2s 置位 / fps>45 持续 4s 清位；选卡/暂停冻结、菜单/结算清位）。
-# 消费面（禁任何一刀脱钩）：A weapon_lod_on（武器隔帧节流）/ B max_onscreen 60 与
-# 玩家弹帽 200 / C _apply_boost_resolution 75% 应急档。boost 关 → deep_load 恒 false
-# （关态/桌面/headless 逐位不变承重墙）。
+# fps<34 持续 2s 置位 / fps>45 持续 4s 且驻留≥10s 且场地安静（R290 负载门）清位；
+# 34..45 死区清高帧侧计时、保留低帧累计（R290）；选卡/暂停冻结、菜单/结算清位）。
+# 消费面（禁任何一刀脱钩）：A weapon_lod_on（武器隔帧节流）/ B max_onscreen 40 与
+# 玩家弹帽 120（R290：200→120）/ C 分辨率应急档已删（R291 UI 定格）+ R291 新增：
+# 副武四分频（Player）/ W9 命中帽减半+消弹查询半频（arc_slash）/ 弹道拖尾重绘深载
+# 门×2（projectile_base）。boost 关 → deep_load 恒 false（关态/桌面/headless 逐位不变承重墙）。
 static var deep_override: int = -1            # 测试注入口（-1 真值 / 0 强关 / 1 强开）
 static var _deep_active: bool = false         # 滞回闩真值（GameLoop 唯一写点）
-static var _auto_deep_applied: bool = false   # R289 修轮 2：自动 75 档已应用到画布（
-                                              # GameLoop._apply_boost_resolution 写——促键
-                                              # 应用态真值的唯一判据；菜单/选卡/暂停=假）
-
-
-static func set_auto_deep_applied(p_on: bool) -> void:
-	_auto_deep_applied = p_on
-
-
-static func auto_deep_applied() -> bool:
-	return _auto_deep_applied
 
 
 static func deep_load() -> bool:

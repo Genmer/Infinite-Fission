@@ -117,6 +117,9 @@ var _tint_gen: int = -1                       # 二cv 评审收口：tint 缓存
 var _tint_cache := Color(0.0, 0.0, 0.0, 0.0)  # 同上：世代未变时的 tint 直出缓存（零分配）
 var _tint_elem: bool = false                  # R267 视觉刀：同缓存代的「元素池含非 KIN」位
                                               #（水晶路径激活判——与 tint 同源同代更新）
+var _bc_gen: int = -1                         # R290：挡弹概率缓存的词条世代锚（TraitStack.runtime_generation）
+var _bc_owner: int = 0                        # R290：同上——缓存归属宿主实例 id（换宿主即失效）
+var _bc_cache: float = 0.0                    # R290：同上——世代/宿主未变时的直出值（免每拍聚合+call）
 var _cand_buf: Array[Node2D] = []             # R188⑧：扇形判定候选拷贝缓冲——query_arc 返回
                                               # space_grid 内部缓冲（space_grid.gd:228 契约：
                                               # 不得跨查询持有），_slash_hit→管线 resolve 可能
@@ -151,6 +154,7 @@ func spawn(p_params: Dictionary) -> void:
 	_echo_left = -1.0
 	_dash_shown = false
 	_dash_radius = -1.0                          # R245 §3.4-3：重铺后首帧虚线必重绘（半径锚复位）
+	_bc_gen = -1                                 # R290：重铺后挡弹概率缓存失效（换宿主/换构筑必重算）
 	_clear_children()
 	visible = false
 	z_index = 5                                  # 敌/玩家之上（R7：原默认 z 被怪精灵压住）
@@ -200,8 +204,8 @@ func tick(p_game_delta: float, p_center: Vector2) -> void:
 		window_left = maxf(window_left - p_game_delta, 0.0)
 		_judge_arc(center)
 		var chance := _bullet_block_chance()         # ⑥：>0 才查询掷骰（0 = 零消弹零网格开销）
-		if chance > 0.0:
-			_nullify_enemy_bullets(center, chance)
+		if chance > 0.0 and _nullify_due():
+			_nullify_enemy_bullets(center, _nullify_fold(chance))
 		if window_left <= 0.0 and not _expire_fired:
 			# ⑧ 窗末一次性 ON_EXPIRE（§4.5 通道 B 载体侧）+ melee_split_request 消费
 			_expire_fired = true
@@ -241,12 +245,48 @@ func _bullet_block_chance() -> float:
 	# ⑥ 统一掷骰口（§3.1）：spawn 快照 >= 0 优先（W13 传 melee.block_chance 快照）；
 	# 缺省 -1 = 旧口径——weapon 真件在侧回落 weapon.bullet_block_chance()（nullify
 	# 优先 1.0 + add_block 池即时聚合；W9 恒 1.0 行为逐位不变），无宿主回落 nullify。
+	# R290 修轮（vc89 判读：武9µs 占整步 32%）：宿主回落路径按「词条世代 + 宿主实例」缓存
+	# 逐拍税（weapon.call 动态派发 + trait_stack.aggregate_panel 全量聚合——W13 概率消弹
+	# 非 nullify 路径每拍全量聚合是真税；W9 早退路径也免掉每拍一次 call）。世代 +1
+	#（attach/取优/质变）或换宿主即下次调用重取——取值与逐拍直算逐位同源（_live_blade_tint
+	# 同款锚）。无 trait_stack 的宿主（桩/旧夹具）不缓存＝直算，行为逐位不变。
 	if block_chance >= 0.0:
 		return clampf(block_chance, 0.0, 1.0)
 	if weapon != null and is_instance_valid(weapon) \
 			and weapon.has_method(&"bullet_block_chance"):
+		var ts: Variant = weapon.get("trait_stack")
+		if ts is TraitStack:
+			var gen: int = int((ts as TraitStack).runtime_generation)
+			var owner: int = weapon.get_instance_id()
+			if gen == _bc_gen and owner == _bc_owner:
+				return _bc_cache
+			var out := clampf(float(weapon.call(&"bullet_block_chance")), 0.0, 1.0)
+			_bc_gen = gen
+			_bc_owner = owner
+			_bc_cache = out
+			return out
 		return clampf(float(weapon.call(&"bullet_block_chance")), 0.0, 1.0)
 	return 1.0 if nullify else 0.0
+
+
+var _nullify_ctr: int = 0     # R291 峰值刀：深载消弹查询半频相位（0=查询拍）
+
+
+func _nullify_due() -> bool:
+	# R291 峰值刀：深载期敌弹网格查询隔执行拍一次（查询频次 ×0.5）；boost 关/deep
+	# 关 → 恒真（逐拍查询，关态逐位不变）。相位只在深载期翻转——闩解除即刻恢复逐拍。
+	if not PerfGovernor.deep_load():
+		return true
+	_nullify_ctr = 1 - _nullify_ctr
+	return _nullify_ctr == 0
+
+
+func _nullify_fold(p_c: float) -> float:
+	# R291：半频折算——两拍合一概率 1−(1−p)²（R289 W8 挡弹同族先例）。W9 nullify
+	# 恒 1.0 → 折算不变（纯省查询）；关态原值直传。
+	if PerfGovernor.deep_load():
+		return 1.0 - (1.0 - p_c) * (1.0 - p_c)
+	return p_c
 
 
 func _judge_arc(p_center: Vector2) -> void:
@@ -260,8 +300,15 @@ func _judge_arc(p_center: Vector2) -> void:
 	_cand_buf.append_array(enemy_grid.query_arc(p_center, slash_radius,
 		facing, deg_to_rad(arc_deg) * 0.5))
 	var hit := 0
+	# R291 峰值刀：深载命中帽减半——命中管线是事件率税（build_damage_context+词条
+	# 派发每命中数百 µs，dt 折算省不掉；vc89 真机 武9µs 占整步 32-43%），帽减半=该
+	# 税按扇内候选溢出程度折半。DPS 披露：溢出时 0~50%（被帽截断目标不入 _struck，
+	# 同窗后续拍仍可命中——跨拍补偿；候选 ≤ 帽半时零损失零节省）。关态原值逐位不变。
+	var cap := max_targets
+	if PerfGovernor.deep_load():
+		cap = maxi(1, cap >> 1)
 	for target in _cand_buf:
-		if hit >= max_targets:
+		if hit >= cap:
 			break
 		if target == null or bool(target.get("dead")):
 			continue

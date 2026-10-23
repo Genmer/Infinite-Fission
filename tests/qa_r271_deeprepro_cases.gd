@@ -138,7 +138,8 @@ func _boot() -> bool:
 	PerfGovernor.tier_override = 2
 	PerfGovernor.boost_override = 1              # 促1：85% 保帧深载态（vc79 配置面）
 	# R289 夹具迁移：本台架=受控「boost 85 + 敌90 + 弹448」原始负载（跨版本 S1-S7 对照
-	# 基准）。R289 起真跑低帧会在 2s 后自动进深载态（敌60/弹200/A 节流），负载被三刀
+	# 基准）。R289 起真跑低帧会在 2s 后自动进深载态（敌60/弹200/A 节流；R290 再压到
+	# 敌40/弹120），负载被三刀
 	# 改写→台架失去对照意义。此处显式钉 deep 关（注入口 0）——深载三刀自证归
 	# qa_r289_weaponlod；收尾复位 -1。
 	PerfGovernor.deep_override = 0

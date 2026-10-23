@@ -1,0 +1,108 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R289 深载三刀（A 节流+B 密度帽+C 应急档） 回归 ══════════
+── d1 深载滞回（2s 进 / 4s 出+10s 驻留 / 死区 / delta 钳制 / boost 门 / 菜单清位） ──
+  PASS | d1 低帧 1.9s 未置位（滞回需 2s）
+  PASS | d1 fps<34 累计 2s → 置位
+  PASS | d1 34..45 死区不清零
+  PASS | d1 高帧 3s 未清位（需 4s）
+  PASS | d1 fps>45 持续 4s → 清位（驻留已满 10s）
+  PASS | d1 再次置位（驻留测试前置）
+  PASS | d1 高帧 4s 但驻留<10s → 不撤（防极限环）
+  PASS | d1 驻留≥10s 且高帧 4s → 撤档
+  PASS | d1 巨 delta×2 不置位（钳 0.1s/帧）
+  PASS | d1 正常 0.1s 步进累计 2s → 置位（钳制不破坏正常累积）
+  PASS | d1 MENU → 清位
+  PASS | d1 boost 关 → deep_load 恒 false
+── d2 单谓词四消费点一致（A 节流 / B 敌帽 / C 促键 / 关态正对照） ──
+  PASS | d2 deep 开 → weapon_lod_on
+  PASS | d2 deep 开 → 敌帽 40
+  PASS | d2 deep 开（PLAYING 已应用）→ 促1（R291：促键=用户档真值，闩不改画布）
+  PASS | d2 deep 关 → 敌帽 90
+  PASS | d2 deep 关 → 促1
+  PASS | d2 boost 关 → 敌帽 MAX_ONSCREEN（逐位不变）
+  PASS | d2 boost 关 → 促0
+  PASS | d2 boost 关 → weapon_lod_on false
+── d3 C 渲染档（R291 UI 定格：深载不改画布；跨态恒定；解除零写） ──
+  PASS | d3 深载+PLAYING → 画布定格 612×1088（R291 删自动降档）
+  PASS | d3 深载+PLAYING → zoom .85（不降 .75）
+  PASS | d3 深载+PLAYING → world_div .85
+  PASS | d3 LEVEL_UP 定格 612×1088
+  PASS | d3 LEVEL_UP zoom .85
+  PASS | d3 LEVEL_UP 促1（用户档真值）
+  PASS | d3 回 PLAYING 定格 612×1088（零写幂等）
+  PASS | d3 PAUSED 定格 612×1088
+  PASS | d3 再回 PLAYING 定格 612×1088
+  PASS | d3 解除 → 仍 612×1088（零写）
+  PASS | d3 解除 → zoom .85
+  PASS | d3 解除回用户档 world_div=.85
+── d4 B 深载玩家弹帽（120 拒绝 + 弹拒键 / 解除恢复） ──
+  PASS | d4 前置：玩家弹活口 < 120
+  PASS | d4 深载 acquire 至玩家弹帽上限
+  PASS | d4 超帽返 null
+  PASS | d4 弹拒计数递增
+  PASS | d4 解除深载后可再获
+── d12 帽沿竞争：单发武器预留帽不得饿死多丸武器（P1-1 修轮） ──
+  PASS | d12 真实 W1+W3 同场装入
+  PASS | d12 帽沿前置：剩余容量=一轮（7）
+  PASS | d12 多丸 W3 在帽沿竞争下不哑火（300 步 ≥2 轮）
+  PASS | d12 单发 W1 仍有开火（预留不反向饿死单发）
+  PASS | d12 无单拍多轮齐射（Δ≤pellets+1）
+── d5 A 隔帧节拍 + dt×2 模拟时间守恒（关态正对照） ──
+  PASS | d5 深载 10 步只执行 5 次
+  PASS | d5 深载执行步 dt×2 → 模拟时间守恒 10/60
+  PASS | d5 武跳计数=5
+  PASS | d5 关态 10 步全执行
+  PASS | d5 关态 dt 原值（累计同 10/60）
+── d6 A 仪器（副本桶计时 / 武器族映射真值） ──
+  PASS | d6 副武桶计时>0（stub 无 data → 副本桶）
+  PASS | d6 族映射 W1→0
+  PASS | d6 族映射 W8→7
+  PASS | d6 族映射 W9→8
+  PASS | d6 族映射 未知/空→副武桶 9
+── d7 诊断行十三键（位序 / 直读 / 深1） ──
+  PASS | d7 行含 武1µs777
+  PASS | d7 行含 武8µs333
+  PASS | d7 行含 副武µs 键
+  PASS | d7 行含 深1/武跳/弹拒
+  PASS | d7 武键紧跟 派段µs 之后（行尾新段先例）
+  PASS | d7 关态行 深0
+── d8 导出口径头（R289 句 / 三刀披露 / % 转义） ──
+  PASS | d8 口径头含 R289 句
+  PASS | d8 口径头含 深N/武跳N/弹拒N
+  PASS | d8 口径头含 三刀/关态逐位不变披露
+── d9 HUD 读数位 540 逻辑宽适配（P1-2 修轮；R291 起 notch2 由用户手选 75 驱动） ──
+  PASS | d9 读数位存在
+  PASS | d9 notch2 读数盒完全在视口内
+  PASS | d9 notch2 读数盒不压波次徽章（右沿 ≤ vw−130）
+  PASS | d9 notch2 读数盒与HP不相交
+  PASS | d9 notch2 读数盒与XP不相交
+  PASS | d9 notch2 读数盒与Lv不相交
+  PASS | d9 notch2 读数盒与击杀不相交
+  PASS | d9 notch2 读数盒与计时不相交
+  PASS | d9 notch2 读数盒与护盾不相交
+  PASS | d9 notch2 读数盒与临时护盾不相交
+  PASS | d9 notch2 读数盒与目标条不相交
+  PASS | d9 notch2 读数盒与徽章不相交
+  PASS | d9 notch2 读数位在顶部 HUD 带下方空槽（y=200）
+  PASS | d9 85 档读数盒回原坐标 (368,30)（既有布局零扰动）
+── d10 多丸武器整轮容量预检（P2-3 修轮：帽沿不出 1/9 残轮） ──
+  PASS | d10 真实 W3_shotgun 装入
+  PASS | d10 丸数≥2（多丸前置）
+  PASS | d10 帽沿状态：剩余容量不足整轮
+  PASS | d10 容量不足 → 整轮不发射
+  PASS | d10 整轮跳不写冷却（容量恢复即续射）
+  PASS | d10 预检拒绝保留顺延丸（due 不被清零）
+  PASS | d10 容量恢复 → 整轮齐射（新丸+顺延）
+── d11 Boss 优先入队（P2-4 修轮：60 帽下不排队尾） ──
+  PASS | d11 优先项插到队首（不排队尾）
+  PASS | d11 普通项仍按 FIFO 追加（队首后两只为普通）
+── 收尾（夹具还原） ──
+验收汇总：84/84 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 70 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

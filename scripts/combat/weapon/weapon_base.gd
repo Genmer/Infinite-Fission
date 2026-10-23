@@ -30,6 +30,9 @@ const WPN_FAMILY_OTHER := 9
 # R289 A：本步 weapon.tick 收到 dt×2（深载隔帧节流的执行步）——W8 挡弹概率/帽按此
 # 折算（两次判定的等效概率），只读不写（Player.tick 唯一写点）。
 static var lod_dt_doubled: bool = false
+static var lod_beats: int = 2                  # R291：本执行拍逻辑子拍数（主武器组 2=dt×2 原语义；
+                                              # 副武组深载 4=dt×4 四分频——子拍=dt/beats，
+                                              # 逐拍复刻守恒对任意 N 成立，Player 每组 tick 前写入）
 
 
 static func wpn_family_index(p_id: Variant) -> int:
@@ -302,27 +305,32 @@ func tick(p_game_delta: float) -> void:
 	if trait_stack != null:
 		trait_stack.advance_cooldowns(p_game_delta)
 	var _fired := false
+	var _billed := false
 	if lod_dt_doubled:
 		# R289 修轮 3（QA-R289-R2-01）：逐逻辑拍复刻关态冷却递推，而不是用 ceil 反推
 		# 拍数——W2 冷/热档恰为 5/4 拍整数边界，关态浮点残差会多耗 1 拍，ceil 反推
-		# 却跨过该拍，长窗系统性偏快（300 步 58/50=+16%）。此处的两个子拍与 60Hz
-		# 路径同一减法顺序（maxf(cd−dt,0)），整数边界/浮点残差逐位同构。
-		var _sub := p_game_delta * 0.5
-		var _fire_logical := 0                # 0=本执行拍不开火 / 1=第 1 子拍 / 2=第 2 子拍
-		for _k in range(2):
+		# 却跨过该拍，长窗系统性偏快（300 步 58/50=+16%）。子拍与 60Hz 路径同一减法
+		# 顺序（maxf(cd−dt,0)），整数边界/浮点残差逐位同构。
+		# R291 修轮（QA-R291-D1）：子拍内联开火——每子拍「cd>0 推进 / cd==0 且有目标
+		# 即开火」，批内 N 子拍与关态 N 步同一减法链逐位同序（QA 240 拍×8 组 bit 级
+		# 锁步复验）；快武器（间隔 < 执行拍子拍数）单执行拍可多次开火。原「拍尾一次
+		# 开火+补偿」在 4 拍执行拍下会把副武组开火率钳到 15/s（QA 实测 tempo 镜 480
+		# 步系统性 −25%）。lod_beats 由 Player 写点配对（主组 2 / 副武组深载 4）。
+		var _n := lod_beats
+		var _sub := p_game_delta / float(_n)
+		for _k in range(_n):
 			if cooldown_left > 0.0:
 				cooldown_left = maxf(cooldown_left - _sub, 0.0)
-			elif _fire_logical == 0:
-				_fire_logical = _k + 1
-		if _fire_logical > 0 and has_target_now():
-			_fired = try_fire()
-			if _fired:
-				_last_interval = _fire_interval()      # 名义间隔（遗物 CDR/间隔缩放口径）
-				cooldown_left = _last_interval
-				if _fire_logical == 1:
-					# 第 1 子拍该开火：实际在拍尾补开（晚 1 拍），把第 2 子拍的冷却推进
-					# 立即补跑——相位补偿后长跑射速与关态一致（单发 ≤1 拍抖动）。
-					cooldown_left = maxf(cooldown_left - _sub, 0.0)
+			elif has_target_now():
+				if try_fire():
+					_fired = true
+					_last_interval = _fire_interval()      # 名义间隔（遗物 CDR/间隔缩放口径）
+					cooldown_left = _last_interval
+					# 多开火拍逐次计费（拍外单次计费会漏计本拍第 2+ 发）。
+					if relic_handler != null:
+						relic_handler.on_attack_fired(_last_interval)
+						_billed = true
+			# cd==0 且无目标：保持就绪零推进（R33）——与关态逐步同序
 	else:
 		if cooldown_left > 0.0:
 			cooldown_left = maxf(cooldown_left - p_game_delta, 0.0)
@@ -331,7 +339,7 @@ func tick(p_game_delta: float) -> void:
 			if _fired:
 				cooldown_left = _fire_interval()
 				_last_interval = cooldown_left
-	if _fired:
+	if _fired and not _billed:
 		# R186 每击谐振计费口（开火口径：一枪=一击，霰弹 9 丸仍 1 击——relic_handler
 		# .on_attack_fired 注释裁定；不走 damage_resolved：结算侧幂等键折叠多弹丸）。
 		# try_fire 成功位 = 全形态唯一真实开火咽喉（四形态子类均经本 tick 基类；

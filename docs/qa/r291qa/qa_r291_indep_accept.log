@@ -1,0 +1,49 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R291 独立 QA · UI 定格 + 峰值四刀验收（点 1-6） ══════════
+  PASS | boot 成功（main.tscn 真链）
+── 点1 UI 定格（deep 不改画布 / 用户档恒定 / 手选 75 语义在） ──
+  PASS | 1a deep 0→1（PLAYING）→ 画布零写（css/zoom/notch 前后相等）
+  PASS | 1b deep 开 → 促键 1（用户档真值，非 2）
+  PASS | 1c deep 开 → boost_world_div 用户档 .85
+  PASS | 1d deep 1→0 → 画布仍零写
+  PASS | 1e 用户手选 75 → 540×960/.75（促2）
+  PASS | 1f 用户 75 ∧ deep → 仍 540×960（deep 不改用户档）
+  PASS | 1g 回 85 后 deep 仍在 → 612×1088（用户档切换本身有效）
+── 点2 副武四分频（频次/dt/beats/守恒/关态） ──
+  PASS | 2a deep 40 步 → 主武器 20 次
+  PASS | 2b deep 40 步 → 副武 10 次（每 4 物理步 1 执行拍）
+  PASS | 2c 副武执行拍 dt×4（累计 10×4/60=40/60 守恒）
+  PASS | 2d 主武器执行拍 dt×2（累计 20×2/60=40/60 守恒）
+  PASS | 2e 主武器组 lod_beats 恒 2（原语义）
+  PASS | 2f 副武组 lod_beats 恒 4（dt×4 配对）
+  PASS | 2g 关态首拍静态复位 lod_beats=2（tick 入口写点）
+  PASS | 2h 关态 10 步主武器全执行
+  PASS | 2i 关态 10 步副武全执行（每步 dt 原值）
+── 点3 W9 命中帽（deep ×0.5 / 关态原帽） ──
+  PASS | 3a deep ∧ max_targets=8 ∧ 10 候选 → 单窗命中 4（帽减半）
+  PASS | 3b 关态同条件 → 命中 8（原帽逐位）
+── 点4 消弹半频（相位半真 / 折算 / W9 恒 1.0 不变） ──
+  PASS | 4a deep 下 100 拍恰 50 次查询（半频）
+  PASS | 4b 折算 p=0.25 → 1−0.75²=0.4375
+  PASS | 4c 折算 p=1.0 → 1.0（W9 nullify 恒 1.0 不变）
+  PASS | 4d 关态 100 拍全查询（逐位）
+  PASS | 4e 关态折算原值直传（p=0.25 → 0.25）
+── 点5 拖尾深载门（1/15s vs 1/30s） ──
+  PASS | 5a deep 8 拍（1/60）→ 恰 2 次置脏（1/15s 门）
+  PASS | 5b 关态 8 拍 → 4 次置脏（1/30s 门原值）
+── 点6 关态零位移（boost 关 → 四刀恒不触） ──
+  PASS | 6a boost 关 → deep_load false
+  PASS | 6b boost 关 → 消弹逐拍恒真
+  PASS | 6c boost 关 → 折算原值直传
+  PASS | 6d boost 关 → 拖尾门原值（4/8）
+  PASS | 6e lod_beats 默认 2
+── 收尾（设置/画布/闩/静态还原） ──
+验收汇总：31/31 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 110 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

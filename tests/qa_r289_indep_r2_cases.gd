@@ -293,7 +293,8 @@ func _p2_3_volley_cap() -> void:
 	_clear_projectiles()
 	var pool: ProjectilePool = _gl._projectile_pool
 	var pellets := int(_w3.call(&"_volley_pellet_count"))
-	_check("r2-v1 池空时 team0 headroom=200", pool.team0_headroom() == 200,
+	_check("r2-v1 池空时 team0 headroom=%d（R290：200→120）" % ProjectilePool.BOOST_DEEP_TEAM0_CAP,
+		pool.team0_headroom() == ProjectilePool.BOOST_DEEP_TEAM0_CAP,
 		"headroom=%d" % pool.team0_headroom())
 
 	# 填帽至剩余容量不足一整轮
@@ -406,9 +407,10 @@ func _assert_hud(p_label: String, p_expect_x: float) -> void:
 
 
 func _p1_2_state_hud() -> void:
-	print("── r2-P1-2 状态迁移 / 自动 HUD fit / 85 与 boost 关坐标 ──")
+	print("── r2-P1-2 状态迁移 / 自动 HUD fit / 85 与 boost 关坐标（R291：notch2=用户手选 75；deep 零画布影响） ──")
 	PerfGovernor.boost_override = 1
 	PerfGovernor.deep_override = 1
+	Meta.set_setting("boost_res", 75)
 	_gl.state = GameConst.GameStatus.PLAYING
 	tree.paused = false
 	_force_window(540, 960)
@@ -416,8 +418,8 @@ func _p1_2_state_hud() -> void:
 	var vw_play: float = _gl.hud.get_viewport().get_visible_rect().size.x
 	_check("r2-c0 PLAYING 强制窗口后逻辑宽=540（真机 540 视口）",
 		is_equal_approx(vw_play, 540.0), "vw=%.1f" % vw_play)
-	_assert_resolution("r2-c1 PLAYING 深载", Vector2i(540, 960), 0.75, 2, 0.75)
-	_check("r2-c2 PLAYING 深载促键=2", PerfGovernor.boost_diag_state() == 2,
+	_assert_resolution("r2-c1 PLAYING 用户75∧deep", Vector2i(540, 960), 0.75, 2, 0.75)
+	_check("r2-c2 PLAYING 用户75促键=2（R291：促2 仅手选档）", PerfGovernor.boost_diag_state() == 2,
 		str(PerfGovernor.boost_diag_state()))
 
 	# 让 HUD 读数位有内容（W4 → 束 ×N 段），验证真实 refresh_stats 路径
@@ -440,44 +442,40 @@ func _p1_2_state_hud() -> void:
 			str(_gl.hud._r187_readout.size)])
 	_assert_hud("r2-c5 PLAYING 540 读数位", maxf(vw0 - 354.0, 186.0))
 
-	# PLAYING → LEVEL_UP：真实 change_state，HUD 依赖 state_changed→refresh_stats 自动 fit
-	_force_window(612, 1088)
+	# PLAYING → LEVEL_UP：R291 定格——用户档跨态恒定（自动回 85 已删，540 保持）
 	_change_state_checked(GameConst.GameStatus.LEVEL_UP, "r2-c6 PLAYING→LEVEL_UP")
-	_assert_resolution("r2-c7 LEVEL_UP", Vector2i(612, 1088), 0.85, 1, 0.85)
+	_assert_resolution("r2-c7 LEVEL_UP 定格（用户75 恒 540）", Vector2i(540, 960), 0.75, 2, 0.75)
 	var diag_lu := int(PerfGovernor.boost_diag_state())
 	print("  OBSERVE | LEVEL_UP deep: applied_notch=%d diag_state=%d css=%s "
 		% [int(_gl._boost_applied_notch), diag_lu, str(_gl.get_window().content_scale_size)]
-		+ "（促N=应用态真值契约；此处实际应用档=1）")
-	_assert_hud("r2-c8 LEVEL_UP 读数位", 368.0)
+		+ "（R291：促N=用户档真值恒定，跨态画布定格）")
+	_assert_hud("r2-c8 LEVEL_UP 读数位（定格 540 布局）", maxf(vw0 - 354.0, 186.0))
 
-	# 回 PLAYING：自动 fit 回 notch2
-	_force_window(540, 960)
+	# 回 PLAYING：定格幂等
 	_change_state_checked(GameConst.GameStatus.PLAYING, "r2-c9 LEVEL_UP→PLAYING")
-	_assert_resolution("r2-c10 回 PLAYING", Vector2i(540, 960), 0.75, 2, 0.75)
+	_assert_resolution("r2-c10 回 PLAYING 定格幂等", Vector2i(540, 960), 0.75, 2, 0.75)
 	var vw1: float = _gl.hud.get_viewport().get_visible_rect().size.x
 	_assert_hud("r2-c11 回 PLAYING 读数位", maxf(vw1 - 354.0, 186.0))
 
-	# PLAYING → PAUSED：自动回 85 档
-	_force_window(612, 1088)
+	# PLAYING → PAUSED：定格（不再回 85 档）
 	_change_state_checked(GameConst.GameStatus.PAUSED, "r2-c12 PLAYING→PAUSED")
-	_assert_resolution("r2-c13 PAUSED", Vector2i(612, 1088), 0.85, 1, 0.85)
+	_assert_resolution("r2-c13 PAUSED 定格（用户75 恒 540）", Vector2i(540, 960), 0.75, 2, 0.75)
 	var diag_pa := int(PerfGovernor.boost_diag_state())
 	print("  OBSERVE | PAUSED deep: applied_notch=%d diag_state=%d css=%s "
 		% [int(_gl._boost_applied_notch), diag_pa, str(_gl.get_window().content_scale_size)]
-		+ "（促N=应用态真值契约；此处实际应用档=1）")
-	_assert_hud("r2-c14 PAUSED 读数位", 368.0)
-	_force_window(540, 960)
+		+ "（R291：促N=用户档真值恒定，跨态画布定格）")
+	_assert_hud("r2-c14 PAUSED 读数位（定格 540 布局）", maxf(vw1 - 354.0, 186.0))
 	_change_state_checked(GameConst.GameStatus.PLAYING, "r2-c15 PAUSED→PLAYING")
-	_assert_resolution("r2-c16 再回 PLAYING", Vector2i(540, 960), 0.75, 2, 0.75)
+	_assert_resolution("r2-c16 再回 PLAYING 定格", Vector2i(540, 960), 0.75, 2, 0.75)
 
-	# 85 档（deep 关）：612/.85，读数位 368
-	PerfGovernor.boost_override = 1
-	PerfGovernor.deep_override = 0
+	# 用户 85（deep 仍开）：R291 无自动档 → 612 定格，deep 零画布影响
+	Meta.set_setting("boost_res", 85)
+	PerfGovernor.deep_override = 1
 	_force_window(612, 1088)
 	_gl._apply_boost_resolution()
 	_gl.hud.refresh_stats()
-	_assert_resolution("r2-c17 用户85 deep关", Vector2i(612, 1088), 0.85, 1, 0.85)
-	_check("r2-c18 用户85 deep关促键=1", PerfGovernor.boost_diag_state() == 1,
+	_assert_resolution("r2-c17 用户85∧deep开（R291：无自动档）", Vector2i(612, 1088), 0.85, 1, 0.85)
+	_check("r2-c18 用户85∧deep开促键=1", PerfGovernor.boost_diag_state() == 1,
 		str(PerfGovernor.boost_diag_state()))
 	_assert_hud("r2-c19 用户85 读数位", 368.0)
 

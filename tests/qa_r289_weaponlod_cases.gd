@@ -2,11 +2,11 @@
 # 覆盖（A 武器分键+隔帧节流 / B 深载密度帽 / C 75% 应急档）：
 #   d1 深载滞回：fps<34×2s 置位 / 34..45 死区保持 / >45×4s 清位 / boost 关恒 false /
 #      MENU 清位。
-#   d2 单谓词四消费点一致：deep 开 → weapon_lod_on ∧ 敌帽 60 ∧ 促2；deep 关 → 90/促1；
+#   d2 单谓词四消费点一致：deep 开 → weapon_lod_on ∧ 敌帽 40（R290：60→40）∧ 促1（R291：促键=用户档真值）；deep 关 → 90/促1；
 #      boost 关 → MAX_ONSCREEN/促0（关态逐位不变的正对照）。
-#   d3 C 渲染应急档：用户 85 + deep → content_scale 540×960 + zoom .75 +
-#      world_div .75；解除 → 612×1088/.85（幂等回用户档）。
-#   d4 B 玩家弹帽：deep 开 acquire 至 200 → null + 弹拒计数；deep 关恢复可获。
+#   d3 C 渲染档（R291 UI 定格）：用户 85 + deep → 画布定格 612×1088 + zoom .85 +
+#      world_div .85（闩不改画布）；跨态（LEVEL_UP/PAUSED）同值；解除零写幂等。
+#   d4 B 玩家弹帽：deep 开 acquire 至 BOOST_DEEP_TEAM0_CAP（R290：200→120）→ null + 弹拒计数；deep 关恢复可获。
 #   d5 A 节拍+时间守恒：stub 武器 10 步深载 → tick 执行 5 次、累计 dt=10/60；
 #      关态 10 步 → 10 次、累计同值（关态逐位不变）。
 #   d6 A 仪器：副武桶计时>0（无 data 的副本桶）；族映射真值表（W1→0/W8→7/未知→9）。
@@ -177,12 +177,12 @@ func _d2_single_predicate() -> void:
 	PerfGovernor.boost_override = 1
 	PerfGovernor.deep_override = 1
 	_check("d2 deep 开 → weapon_lod_on", PerfGovernor.weapon_lod_on())
-	_check("d2 deep 开 → 敌帽 60", EnemySpawner.max_onscreen() == 60,
+	_check("d2 deep 开 → 敌帽 40", EnemySpawner.max_onscreen() == 40,
 		str(EnemySpawner.max_onscreen()))
 	_gl.state = GameConst.GameStatus.PLAYING
 	_gl._apply_boost_resolution()
-	_check("d2 deep 开（PLAYING 已应用）→ 促2（应用态真值）",
-		PerfGovernor.boost_diag_state() == 2, str(PerfGovernor.boost_diag_state()))
+	_check("d2 deep 开（PLAYING 已应用）→ 促1（R291：促键=用户档真值，闩不改画布）",
+		PerfGovernor.boost_diag_state() == 1, str(PerfGovernor.boost_diag_state()))
 	PerfGovernor.deep_override = 0
 	_gl._apply_boost_resolution()
 	_check("d2 deep 关 → 敌帽 90", EnemySpawner.max_onscreen() == 90,
@@ -201,69 +201,69 @@ func _d2_single_predicate() -> void:
 
 
 func _d3_render_notch() -> void:
-	print("── d3 C 渲染应急档（85+deep → 75 / 解除幂等回 85） ──")
+	print("── d3 C 渲染档（R291 UI 定格：深载不改画布；跨态恒定；解除零写） ──")
 	PerfGovernor.boost_override = 1
+	Meta.set_setting("boost_res", 85)
 	PerfGovernor.deep_override = 1
 	_gl.state = GameConst.GameStatus.PLAYING
 	_gl._apply_boost_resolution()
 	var win := _gl.get_window()
-	_check("d3 深载应急档 content_scale=540×960", win.content_scale_size == Vector2i(540, 960),
-		str(win.content_scale_size))
-	_check("d3 深载应急档 zoom=.75", _gl.camera.zoom.is_equal_approx(Vector2(0.75, 0.75)),
-		str(_gl.camera.zoom))
-	_check("d3 深载应急档 world_div=.75", is_equal_approx(GameLoop.boost_world_div(), 0.75),
-		str(GameLoop.boost_world_div()))
-	# 修轮（评审 P1-2）：自动应急档仅 PLAYING——选卡/暂停回用户档 85（540 宽裁切防线）
+	_check("d3 深载+PLAYING → 画布定格 612×1088（R291 删自动降档）",
+		win.content_scale_size == Vector2i(612, 1088), str(win.content_scale_size))
+	_check("d3 深载+PLAYING → zoom .85（不降 .75）",
+		_gl.camera.zoom.is_equal_approx(Vector2(0.85, 0.85)), str(_gl.camera.zoom))
+	_check("d3 深载+PLAYING → world_div .85",
+		is_equal_approx(GameLoop.boost_world_div(), 0.85), str(GameLoop.boost_world_div()))
+	# R291：自动档状态回退（R289 修轮 P1-2）随自动档一并删除——跨态恒定为定格断言
 	_gl.state = GameConst.GameStatus.LEVEL_UP
 	_gl._apply_boost_resolution()
-	_check("d3 LEVEL_UP 自动档回用户档 612×1088", win.content_scale_size == Vector2i(612, 1088),
+	_check("d3 LEVEL_UP 定格 612×1088", win.content_scale_size == Vector2i(612, 1088),
 		str(win.content_scale_size))
-	_check("d3 LEVEL_UP zoom=.85", _gl.camera.zoom.is_equal_approx(Vector2(0.85, 0.85)),
+	_check("d3 LEVEL_UP zoom .85", _gl.camera.zoom.is_equal_approx(Vector2(0.85, 0.85)),
 		str(_gl.camera.zoom))
-	_check("d3 LEVEL_UP 促1（应用态真值，非深载闩）",
+	_check("d3 LEVEL_UP 促1（用户档真值）",
 		PerfGovernor.boost_diag_state() == 1, str(PerfGovernor.boost_diag_state()))
 	_gl.state = GameConst.GameStatus.PLAYING
 	_gl._apply_boost_resolution()
-	_check("d3 回 PLAYING 自动档恢复 540×960", win.content_scale_size == Vector2i(540, 960),
-		str(win.content_scale_size))
-	_check("d3 回 PLAYING 促2", PerfGovernor.boost_diag_state() == 2,
-		str(PerfGovernor.boost_diag_state()))
+	_check("d3 回 PLAYING 定格 612×1088（零写幂等）",
+		win.content_scale_size == Vector2i(612, 1088), str(win.content_scale_size))
 	_gl.state = GameConst.GameStatus.PAUSED
 	_gl._apply_boost_resolution()
-	_check("d3 PAUSED 自动档回用户档 612×1088", win.content_scale_size == Vector2i(612, 1088),
+	_check("d3 PAUSED 定格 612×1088", win.content_scale_size == Vector2i(612, 1088),
 		str(win.content_scale_size))
 	_gl.state = GameConst.GameStatus.PLAYING
 	_gl._apply_boost_resolution()
-	_check("d3 再回 PLAYING 540×960", win.content_scale_size == Vector2i(540, 960),
+	_check("d3 再回 PLAYING 定格 612×1088", win.content_scale_size == Vector2i(612, 1088),
 		str(win.content_scale_size))
 	PerfGovernor.deep_override = 0
 	_gl._apply_boost_resolution()
-	_check("d3 解除回用户档 content_scale=612×1088", win.content_scale_size == Vector2i(612, 1088),
+	_check("d3 解除 → 仍 612×1088（零写）", win.content_scale_size == Vector2i(612, 1088),
 		str(win.content_scale_size))
-	_check("d3 解除回用户档 zoom=.85", _gl.camera.zoom.is_equal_approx(Vector2(0.85, 0.85)),
+	_check("d3 解除 → zoom .85", _gl.camera.zoom.is_equal_approx(Vector2(0.85, 0.85)),
 		str(_gl.camera.zoom))
 	_check("d3 解除回用户档 world_div=.85", is_equal_approx(GameLoop.boost_world_div(), 0.85),
 		str(GameLoop.boost_world_div()))
 
 
 func _d4_player_bullet_cap() -> void:
-	print("── d4 B 深载玩家弹帽（200 拒绝 + 弹拒键 / 解除恢复） ──")
+	print("── d4 B 深载玩家弹帽（%d 拒绝 + 弹拒键 / 解除恢复） ──" % ProjectilePool.BOOST_DEEP_TEAM0_CAP)
 	PerfGovernor.boost_override = 1
 	PerfGovernor.deep_override = 1
 	var pool: ProjectilePool = _gl._projectile_pool
 	var base := pool.total_active() - pool.team1_live
-	_check("d4 前置：玩家弹活口 < 200", base < 200, "base=%d" % base)
+	_check("d4 前置：玩家弹活口 < %d" % ProjectilePool.BOOST_DEEP_TEAM0_CAP,
+		base < ProjectilePool.BOOST_DEEP_TEAM0_CAP, "base=%d" % base)
 	var c0 := int(DebugStats.get_counter(&"deep_bullet_capped"))
 	var n := 0
-	for _i in range(260):
+	for _i in range(ProjectilePool.BOOST_DEEP_TEAM0_CAP + 60):
 		var p: ProjectileBase = pool.acquire(0)
 		if p == null:
 			break
 		n += 1
 		_acquired.append(p)
-	_check("d4 深载 acquire 至玩家弹 200 上限", base + n == ProjectilePool.BOOST_DEEP_TEAM0_CAP,
+	_check("d4 深载 acquire 至玩家弹帽上限", base + n == ProjectilePool.BOOST_DEEP_TEAM0_CAP,
 		"base=%d n=%d" % [base, n])
-	_check("d4 超帽返 null", n < 260, "n=%d" % n)
+	_check("d4 超帽返 null", n < ProjectilePool.BOOST_DEEP_TEAM0_CAP + 60, "n=%d" % n)
 	_check("d4 弹拒计数递增", int(DebugStats.get_counter(&"deep_bullet_capped")) - c0 > 0,
 		"Δ=%d" % (int(DebugStats.get_counter(&"deep_bullet_capped")) - c0))
 	# 解除深载 → 同池恢复可获（帽门恒不触）
@@ -460,9 +460,10 @@ func _d8_export_header() -> void:
 
 
 func _d9_hud_fit() -> void:
-	print("── d9 HUD 读数位 540 逻辑宽适配（P1-2 修轮） ──")
+	print("── d9 HUD 读数位 540 逻辑宽适配（P1-2 修轮；R291 起 notch2 由用户手选 75 驱动） ──")
 	PerfGovernor.boost_override = 1
 	PerfGovernor.deep_override = 1
+	Meta.set_setting("boost_res", 75)
 	_gl.state = GameConst.GameStatus.PLAYING
 	_gl._apply_boost_resolution()
 	var ro: Control = _gl.hud._r187_readout
@@ -498,6 +499,7 @@ func _d9_hud_fit() -> void:
 			"ro=%s %s=%s" % [str(ro_rect), str(_nm), str(hud_rects[_nm])])
 	_check("d9 notch2 读数位在顶部 HUD 带下方空槽（y=200）",
 		is_equal_approx(ro.position.y, 200.0), "y=%.1f" % ro.position.y)
+	Meta.set_setting("boost_res", 85)
 	PerfGovernor.deep_override = 0
 	_gl._apply_boost_resolution()
 	_gl.hud._fit_r187_readout()

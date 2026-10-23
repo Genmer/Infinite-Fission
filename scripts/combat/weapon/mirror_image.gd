@@ -118,28 +118,27 @@ func tick(p_game_delta: float) -> void:
 	inner.tick(p_game_delta)                     # 激光束重定向/力场公转/枪口闪光衰减/词条冷却
 	if WeaponBase.lod_dt_doubled:
 		# R289 修轮 3（QA-R289-R2-01 同源）：逐逻辑拍复刻关态递推（含奏鸣加速扣减），
-		# 避免 ceil 反推在整数拍边界的系统性漂移；第 1 子拍命中时补跑第 2 子拍。
-		var _sub := p_game_delta * 0.5
-		var _fire_logical := 0
-		for _k in range(2):
+		# 避免 ceil 反推在整数拍边界的系统性漂移。
+		# R291 修轮（QA-R291-D1）：子拍内联开火（与 WeaponBase 同款）——批内 N 子拍与
+		# 关态 N 步同减法链逐位同序（含奏鸣加速逐子拍扣减）；快镜面单执行拍可多次
+		# 开火。原「拍尾一次开火+补偿」在 4 拍执行拍下把镜面开火率钳到 15/s（QA 实测
+		# tempo 镜 480 步 off=160/deep=120 系统性 −25%）。
+		var _n := WeaponBase.lod_beats
+		var _sub := p_game_delta / float(_n)
+		for _k in range(_n):
 			if cooldown_left > 0.0:
 				cooldown_left = maxf(cooldown_left - _sub, 0.0)
 				if _tempo_mult > 1.0:
 					cooldown_left -= _sub * (_tempo_mult - 1.0)
-			elif _fire_logical == 0:
-				_fire_logical = _k + 1
-		if _fire_logical > 0 and has_target_now():
-			var shots := _estimate_shots()
-			if try_fire():
-				_last_interval = _fire_interval()      # 名义间隔（与主武器同口径）
-				cooldown_left = _last_interval
-				if _fire_logical == 1:
-					cooldown_left = maxf(cooldown_left - _sub, 0.0)
-					if _tempo_mult > 1.0:
-						cooldown_left -= _sub * (_tempo_mult - 1.0)
-				fired_shots_total += shots
-				if prism.has_method(&"budget_spend"):
-					prism.call(&"budget_spend", shots)
+			elif has_target_now():
+				var shots := _estimate_shots()
+				if try_fire():
+					_last_interval = _fire_interval()      # 名义间隔（与主武器同口径）
+					cooldown_left = _last_interval
+					fired_shots_total += shots
+					if prism.has_method(&"budget_spend"):
+						prism.call(&"budget_spend", shots)
+			# cd==0 且无目标：保持就绪零推进（R33 继承口径）
 	else:
 		if cooldown_left > 0.0:
 			cooldown_left = maxf(cooldown_left - p_game_delta, 0.0)

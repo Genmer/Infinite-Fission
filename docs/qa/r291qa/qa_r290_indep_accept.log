@@ -1,0 +1,40 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R290 独立 QA · 保帧三刀验收（点 1-5） ══════════
+  PASS | boot 成功（main.tscn 真链）
+── 点1 闩可靠置位（死区 fps=40 先行 → fps=20 累计 2s 置位） ──
+  PASS | 1a 死区 40×1.0s → 20×2.0s ⇒ deep_active true
+  PASS | 1b 死区保留低帧累计：20×1.0→40×1.0(保留 1.0)→20×1.0 ⇒ 置位
+── 点2 清位负载门（满载不撤 / 清空必撤） ──
+  PASS | 2a 闩置位且驻留≥10s，场地满载敌≥30 高帧 4s 不撤深载
+  PASS | 2b 场地清空后再高帧 4s ⇒ 撤档
+── 点3 深载档位（敌帽 40 / 弹帽 120；deep 关 90；boost 关 120） ──
+  PASS | 3a ProjectilePool.BOOST_DEEP_TEAM0_CAP==120
+  PASS | 3b boost∧deep ⇒ EnemySpawner.max_onscreen()==40
+  PASS | 3c deep_override=0 ⇒ max_onscreen()==90
+  PASS | 3d boost_override=0 ⇒ max_onscreen()==120（且 deep_load false）
+── 点4 W9 挡弹概率缓存等价（同世代直算一致 / 世代+1 重取 / 无栈不缓存） ──
+  PASS | 4a 首次调用=直算值且缓存锚就位
+  PASS | 4b 同世代 20 次调用取值一致且命中缓存（宿主仅被调 1 次）
+  PASS | 4c 世代+1 后下次调用重取（新聚合值 0.70）
+  PASS | 4d 换宿主（同世代）→ 宿主 id 失效重取 0.10
+  PASS | 4e 无 trait_stack 宿主走直算不缓存（5 次调用宿主 5 次，锚不写）
+  PASS | 4f block_chance>=0 快照优先（不触宿主）
+  PASS | 4g spawn 重铺后缓存锚复位 -1（换宿主/换构筑必重算）
+── 点5 关态零位移（boost 关：恒 false / 敌帽 120 / 玩家弹无深载帽 / 写点复位） ──
+  PASS | 5a boost 关 ⇒ deep_load 恒 false
+  PASS | 5b boost 关 ⇒ 敌帽 120
+  PASS | 5c boost 关 ⇒ 玩家弹无深载帽（acquire 130 全获）
+  PASS | 5d boost 关 ⇒ acquire 不误计 deep_bullet_capped（增量 0，关态无深载帽）
+  PASS | 5e boost 关 ⇒ 写点清闩并复位 on/off/dwell
+── 收尾（池/设置/画布/闩还原） ──
+验收汇总：21/21 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 98 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

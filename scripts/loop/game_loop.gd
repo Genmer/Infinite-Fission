@@ -265,8 +265,9 @@ var _stage_win_dispatch_us: int = 0           # R287：派段（dispatch 结算�
 # 内逐武器计时，帧头读上一完整步值累计（与段窗同点）；回答「哪把武器吃了火段」。
 var _stage_win_wpn_us: PackedInt64Array = PackedInt64Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 # R289 A/B/C：深载滞回闩（boost 门内，唯一写点=_update_deep_load_at——GameLoop._process
-# 战斗态驱动；fps<34 持续 2s 置位 / >45 持续 4s 清位；选卡/暂停冻结，菜单/结算清位）
-# 三刀共用 PerfGovernor.deep_load() 单谓词：A 武器隔帧节流 / B 敌 60+玩家弹 200 /
+# 战斗态驱动；fps<34 持续 2s 置位 / >45 持续 4s ∧ 驻留≥10s ∧ 场地安静（R290）清位；
+# 34..45 死区清高帧侧计时保留低帧累计（R290）；选卡/暂停冻结，菜单/结算清位）
+# 三刀共用 PerfGovernor.deep_load() 单谓词：A 武器隔帧节流 / B 敌 40+玩家弹 120 /
 # C 75% 渲染应急档。boost 关 → 谓词恒 false（关态逐位不变）。
 const DEEP_ON_FPS := 34.0
 const DEEP_OFF_FPS := 45.0
@@ -276,6 +277,11 @@ const DEEP_OFF_SUSTAIN_S := 4.0
 # 驻留期内不撤，防分辨率/密度/节流每 6s 抽搐一次。
 const DEEP_MIN_DWELL_S := 10.0
 const DEEP_DELTA_CLAMP_S := 0.1               # R289 修轮（评审 P2-2）：后台恢复巨 delta 钳制
+# R290 修轮：清位负载门阈值——场地仍满载时不撤深载（vc89 真机 0:41-0:45 空场窗清位 →
+# 0:47-0:59 满载 13s 裸奔 `深0 武跳0 弹拒0`，fps 9-14）。取 O(1) 真源判定（敌活跃表
+# size / 玩家弹活口）；spawner 缺席（测试/非战斗）恒 quiet ⇒ 既有断言零位移。
+const DEEP_CLEAR_QUIET_ENEMIES := 30
+const DEEP_CLEAR_QUIET_BULLETS := 100
 var _deep_on_acc: float = 0.0
 var _deep_off_acc: float = 0.0
 var _deep_dwell_s: float = 0.0                # R289 修轮：本次深载已驻留时长（最小驻留判据）
@@ -3818,18 +3824,13 @@ func _apply_boost_resolution() -> void:
 	# 回退=关模式即回 720×1280 + zoom 1.0（单函数单点，§6 回滚共用开关）。桌面默认关 →
 	# content_scale 与 camera.zoom 恒不被写（含 headless 全部既有套件）。
 	# R270 修复①：生效条件加活战态门（_boost_live_state）——非活战态一律回退档 0。
-	# R289 C：深载应急档——用户档 85 但深载闩成立时应用到 75%（内容缩放 540×960）；
-	# 深载解除后幂等回用户档（85）。促键报 2=应用态真值。
-	# R289 修轮（评审 P1-2）：自动应急档只作用于 state==PLAYING——选卡/暂停画面恒回
-	# 用户档（540 逻辑宽下卡牌/暂停详情按 720 布点会两侧裁切；自动档不得把布局缺陷
-	# 扩大到 85 档用户）。用户手选 75 档的 LEVEL_UP/PAUSED 行为不变（既有 75 档语义）。
+	# R291 UI 定格（用户反馈 vc89「连血条都动态…页面变来变去互相遮挡」）：R289 C 深载
+	# 自动应急档与修轮 P1-2 状态门整段删除——战斗中画布恒用户档（促键=用户档真值；
+	# 真机实证促2 生效期 fps 仍 19-24，瓶颈在物理侧 44.8ms/步，降档不买帧）。用户手选
+	# 75 档语义不变（settings 档，本应用器照旧消费）。
 	var notch := 0
-	var _auto_deep := false
 	if PerfGovernor.boost_mode() and _boost_live_state():
-		_auto_deep = PerfGovernor.deep_load() and state == GameConst.GameStatus.PLAYING
-		notch = 2 if (PerfGovernor.boost_res_notch() == 75 or _auto_deep) else 1
-	# 修轮 2（评审）：促键只看“自动档是否真的应用到画布”（选卡/暂停回 85 时报 1）。
-	PerfGovernor.set_auto_deep_applied(_auto_deep and notch == 2)
+		notch = 2 if PerfGovernor.boost_res_notch() == 75 else 1
 	if notch == _boost_applied_notch:
 		return                              # 同档零写（关态首调亦零写——_boost_applied_notch 初值 0）
 	var t := _boost_target_scale(notch)
@@ -3851,10 +3852,13 @@ func _apply_boost_resolution() -> void:
 func _update_deep_load_at(p_fps: float, p_delta: float) -> void:
 	# R289 深载滞回闩（A/B/C 共用谓词的真值写点——PerfGovernor._deep_active 唯一写口）。
 	# 判据：boost 开 ∧ 战斗态（PLAYING ∧ ¬paused）fps<34 持续 2s → 置位；
-	# fps>45 持续 4s → 清位；34..45 死区清零双侧计时（防边界抖动）。
+	# fps>45 持续 4s ∧ 驻留≥10s ∧ 场地已安静（R290 负载门）→ 清位；
+	# 34..45 死区清高帧侧计时、保留低帧累计（R290）。
 	# 选卡/暂停期冻结（ LEVEL_UP/PAUSED 不清位——避免选卡回来重走 2s 才恢复降载）；
 	# MENU/GAME_OVER/BOOT 清位并复位计时（结算/菜单画布恒全分辨率语义不动）。
 	# 只写着色闩+应用画布（档变瞬间一次），无每帧物理成本。
+	# R290 修轮（vc89 判读）：①死区不清低帧累计（见下分支注释）②清位加负载门
+	# _deep_field_quiet()（满载不撤档——消除 13s 裸奔保护缺口）。
 	# R289 修轮（评审 P2-2）：单帧 delta 钳 0.1s（后台恢复可能补数秒——不得一帧满足
 	# 「低帧持续 2s」；钳在后台架可直测）。
 	p_delta = minf(p_delta, DEEP_DELTA_CLAMP_S)
@@ -3883,7 +3887,10 @@ func _update_deep_load_at(p_fps: float, p_delta: float) -> void:
 		_deep_off_acc += p_delta
 		_deep_on_acc = 0.0
 	else:
-		_deep_on_acc = 0.0
+		# R290 修轮：死区（34..45）不再清零低帧累计——只清高帧侧计时。真机 fps 在
+		# 34-45 边界抖动时，原「死区双侧清零」使置位判据长期不可达（vc89 0:16-0:23
+		# 连续 8s fps 9-23 全 <34 却深0，直到 0:24 才促2）；改后低帧累计单调
+		# （只被 fps>45 重置），保帧优先侧自愈。
 		_deep_off_acc = 0.0
 	if PerfGovernor.deep_active():
 		_deep_dwell_s += p_delta
@@ -3891,13 +3898,28 @@ func _update_deep_load_at(p_fps: float, p_delta: float) -> void:
 		PerfGovernor.set_deep_active(true)
 		_deep_on_acc = 0.0
 		_deep_dwell_s = 0.0
-		_apply_boost_resolution()            # C：85→75 应急档
+		_apply_boost_resolution()            # R291：C 档已删——同档幂等零写（调用保留=档变瞬间统一走应用器单点）
 	elif PerfGovernor.deep_active() and _deep_off_acc >= DEEP_OFF_SUSTAIN_S \
-			and _deep_dwell_s >= DEEP_MIN_DWELL_S:
+			and _deep_dwell_s >= DEEP_MIN_DWELL_S and _deep_field_quiet():
 		PerfGovernor.set_deep_active(false)
 		_deep_off_acc = 0.0
 		_deep_dwell_s = 0.0
-		_apply_boost_resolution()            # C：回用户档
+		_apply_boost_resolution()            # R291：同上——C 档已删，幂等零写
+
+
+func _deep_field_quiet() -> bool:
+	# R290 修轮：清位负载门——场地仍满载时不撤深载（vc89 0:46 空场窗误清 → 0:47-0:59
+	# 满载 13s 裸奔；空场高帧是「无载可压」的伪信号，不足以证明降载可撤）。
+	# 判据取 O(1) 真源（diag_counts 同款口径）：敌活跃表 size + 玩家弹活口差。
+	# spawner 缺席（测试直驱/非战斗环境）恒 true ⇒ a1-a11 既有断言零位移。
+	if spawner == null:
+		return true
+	if spawner.active.size() >= DEEP_CLEAR_QUIET_ENEMIES:
+		return false
+	if _projectile_pool != null and (_projectile_pool.total_active()
+			- _projectile_pool.team1_live) >= DEEP_CLEAR_QUIET_BULLETS:
+		return false
+	return true
 
 
 func _on_boost_setting_changed(p_key: String) -> void:

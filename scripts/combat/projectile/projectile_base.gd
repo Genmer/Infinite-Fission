@@ -1440,8 +1440,14 @@ func _trail_redraw_due(p_game_delta: float) -> bool:
 		halffreq = true
 	if not halffreq:
 		return true
+	# R291 峰值刀：深载拖尾重绘门再翻倍（1/30 → 1/15s 累计）——vc89 真机 绘µs 100-500k/s
+	# 为渲染侧最大自绘税（活弹 120-190 × 半频重绘仍 1-2k 次/s）；深载期尾迹按 1/15s
+	# 落脏（慢放期可接受的纯尾迹降频）。boost 关/deep 关 → 门原值逐位不变。
+	var min_dt := TRAIL_REDRAW_MIN_DT
+	if PerfGovernor.deep_load():
+		min_dt *= 2.0
 	_trail_redraw_acc += p_game_delta
-	if _trail_redraw_acc < TRAIL_REDRAW_MIN_DT:
+	if _trail_redraw_acc < min_dt:
 		return false
 	_trail_redraw_acc = 0.0
 	return true

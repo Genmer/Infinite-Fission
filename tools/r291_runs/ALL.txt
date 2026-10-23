@@ -1,0 +1,11 @@
+=== R291 battery 2026-10-23 20:19:04 ===
+[qa_r291_indep_accept] EXIT=0 | 验收汇总：33/33 通过
+[qa_r291qa_probe] EXIT=0 | 探针汇总：70/70 通过
+[qa_r289_weaponlod] EXIT=0 | 验收汇总：84/84 通过
+[qa_r289_indep_core] EXIT=0 | 验收汇总：57/57 通过
+[qa_r289_indep_r2] EXIT=0 | 验收汇总：79/79 通过
+[qa_r289_indep_weapon] EXIT=0 | 验收汇总：24/24 通过
+[qa_r290_indep_accept] EXIT=0 | 验收汇总：21/21 通过
+[qa_r271_deeprepro] EXIT=0 | 验收汇总：22/22 通过
+[qa_r269_boostmode] EXIT=0 | 验收汇总：69/69 通过
+=== done 2026-10-23 20:22:33 ===

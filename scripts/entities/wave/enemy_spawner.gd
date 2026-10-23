@@ -50,8 +50,10 @@ static func max_onscreen() -> int:
 	# 唯一消费点=tick 同屏比较处；const MAX_ONSCREEN 保留供符号直引（r212_poolwarm:118）。
 	# R289 B：深载（boost ∧ 滞回闩）再降到 60——已在场敌不回收，只放缓到场节奏；
 	# 深载解除即回 90（boost 关恒 120，逐位不变）。
+	# R290 修轮（vc89 判读：深载期 90 敌 + 250 弹下 per-entity 地板仍 46-78µs/敌/步，
+	# fps 只到 9-14）：深载档再压一档 60 → 40（保帧优先侧；到场节奏放缓，波次不卡死）。
 	if PerfGovernor.deep_load():
-		return 60
+		return 40
 	return 90 if PerfGovernor.boost_mode() else MAX_ONSCREEN
 
 
@@ -59,7 +61,7 @@ func enqueue(p_entry: Dictionary, p_priority: bool = false) -> void:
 	# WaveDirector 投放生成请求：{data_id, wave, tags, pos}（pos 可缺省→出生点抽样）。
 	# R188 档3：高水位 600 拒收（深层无尽建波投放无界——队列积压 = 帧尖峰与 RSS 缓升
 	# 根源之一；拒收请求直接丢弃，WaveDirector 侧已按 ≤200/波钳制，正常局不触线）
-	# R289 修轮 2（评审 P2-4）：Boss 优先入队（p_priority=true）——深载 60 帽只放缓
+	# R289 修轮 2（评审 P2-4）：Boss 优先入队（p_priority=true）——深载 40 帽只放缓
 	# 出队，若 Boss 排整波小怪之后可能被拖过硬上限/埋进下一波（终局不可接受）。
 	if spawn_queue.size() >= SPAWN_QUEUE_HIGH_WATER:
 		queue_rejected += 1

@@ -1,0 +1,93 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R291 QA 独立探针（a 守恒/bit 等价 · b 闩翻转 · c W8 · 点1-5 复测） ══════════
+  PASS | boot 成功（main.tscn 真链）
+── 点1' 真闩路径 UI 定格（fps 驱动闩真实置位/清位） ──
+  PASS | 1'p 真闩置位（fps20×2.2s）
+  PASS | 1'q 闩置位后画布仍 612×1088（零写）
+  PASS | 1'r 闩置位后 zoom .85 / 促1 / world_div .85
+  PASS | 1's 真闩清位（fps60×15.2s 安静场）
+  PASS | 1't 闩清位后画布零写（仍 612×1088/.85）
+  PASS | 1'u 手选 75 → 540×960 / 促2
+  PASS | 1'v 手选 75 ∧ 真闩置位 → 画布仍 540×960（促2=用户档）
+── b) 闩中途翻转（残留相位 ×4 → 副武不长期哑火） ──
+  PASS | b1 相位(0,0) off 段主/副武逐步全执行（6/6）
+  PASS | b2 相位(0,0) 翻转后 40 步副武执行 ≥8 次
+  PASS | b3 相位(0,0) 翻转后 40 步主武执行 ≥20 次
+  PASS | b4 相位(0,0) 副武最大执行间隙 ≤5 步（无长期哑火）
+  PASS | b1 相位(0,1) off 段主/副武逐步全执行（6/6）
+  PASS | b2 相位(0,1) 翻转后 40 步副武执行 ≥8 次
+  PASS | b3 相位(0,1) 翻转后 40 步主武执行 ≥20 次
+  PASS | b4 相位(0,1) 副武最大执行间隙 ≤5 步（无长期哑火）
+  PASS | b1 相位(1,0) off 段主/副武逐步全执行（6/6）
+  PASS | b2 相位(1,0) 翻转后 40 步副武执行 ≥8 次
+  PASS | b3 相位(1,0) 翻转后 40 步主武执行 ≥20 次
+  PASS | b4 相位(1,0) 副武最大执行间隙 ≤5 步（无长期哑火）
+  PASS | b1 相位(1,1) off 段主/副武逐步全执行（6/6）
+  PASS | b2 相位(1,1) 翻转后 40 步副武执行 ≥8 次
+  PASS | b3 相位(1,1) 翻转后 40 步主武执行 ≥20 次
+  PASS | b4 相位(1,1) 副武最大执行间隙 ≤5 步（无长期哑火）
+── c) W8 力场判定（30Hz 执行拍 / _lod_judge / 挡弹帽×2 / 公转守恒） ──
+  PASS | c0 真实 W8_orbit_field 装入
+  PASS | c1 力场实体存在
+  PASS | c2 deep 40 步力场 tick 恰 20 次（每执行拍 1 次）
+  PASS | c3 每力场 tick _lod_judge 真（dt×2 执行拍）且每次推进 dt×2
+  PASS | c4 每执行拍挡弹帽 = 4×2（R289 语义 ×2 折算不变）
+  PASS | c5 deep 40 步公转角位移 = 40×DT×ω（时间守恒）
+  PASS | c6 关态 40 步力场 tick 40 次（60Hz 原语义）
+  PASS | c7 关态 _lod_judge 恒假（dt 原值）
+  PASS | c8 关态同窗角位移与 deep 一致（±1e-6）
+── a) 副武长窗守恒（480 步 deep vs off，非整拍冷却） ──
+  PASS | a0a deep 40 步主武执行步序 = 1,3,..,39
+  PASS | a0b deep 40 步副武执行步序 = 3,7,..,39（每 4 步）
+  PASS | a0c 主武每次 dt 逐位 = DT×2 / 副武逐位 = DT×4
+  PASS | a0d 主武拍值恒 2 / 副武拍值恒 4
+  PASS | a0e 主/副武 lod_dt_doubled 全真
+  PASS | a1 副本 iv=7/60：deep/off 480 步开火 |Δ|≤2
+  PASS | a1 副本 iv=5/60：deep/off 480 步开火 |Δ|≤2
+  PASS | a1 副本 iv=3/60：deep/off 480 步开火 |Δ|≤2
+  PASS | a1 副本 iv=2.5/60：deep/off 480 步开火 |Δ|≤2
+  PASS | a1 副本 iv=13/60：deep/off 480 步开火 |Δ|≤2
+  PASS | a1 镜面 iv=7/60 tempo=1.0：deep/off 480 步开火 |Δ|≤2
+  FAIL | a1 镜面 iv=5/60 tempo=2.5：deep/off 480 步开火 |Δ|≤2（off=160 deep=120 Δ=-40）
+  FAIL | a1 镜面 iv=2.5/60 tempo=1.6：deep/off 480 步开火 |Δ|≤2（off=160 deep=120 Δ=-40）
+  PASS | a1 主武 iv=7/60（beats=2 对照）：deep/off 480 步开火 |Δ|≤2
+  PASS | a1 主武 iv=5/60（beats=2 对照）：deep/off 480 步开火 |Δ|≤2
+── a') beats=2 与 R289 基线锁步 bit 等价（主武/镜面含奏鸣） ──
+  PASS | a'1 主武 iv=0.116667：240 执行拍逐拍 cooldown_left 逐位相等
+  PASS | a'2 主武 iv=0.116667：开火次数与基线完全一致
+  PASS | a'1 主武 iv=0.083333：240 执行拍逐拍 cooldown_left 逐位相等
+  PASS | a'2 主武 iv=0.083333：开火次数与基线完全一致
+  PASS | a'1 主武 iv=0.066667：240 执行拍逐拍 cooldown_left 逐位相等
+  PASS | a'2 主武 iv=0.066667：开火次数与基线完全一致
+  PASS | a'1 主武 iv=0.183333：240 执行拍逐拍 cooldown_left 逐位相等
+  PASS | a'2 主武 iv=0.183333：开火次数与基线完全一致
+  PASS | a'3 镜面 iv=0.0833 tempo=1.0：逐拍 cooldown_left 逐位相等
+  PASS | a'4 镜面 iv=0.0833 tempo=1.0：开火次数与基线完全一致
+  PASS | a'3 镜面 iv=0.1167 tempo=2.5：逐拍 cooldown_left 逐位相等
+  PASS | a'4 镜面 iv=0.1167 tempo=2.5：开火次数与基线完全一致
+── 点3'/4'/5' 独立换参复测 ──
+  PASS | 3' 帽=6：deep 命中 3 / off 命中 6
+  PASS | 3' 帽=5：deep 命中 2 / off 命中 5
+  PASS | 3' 帽=1：deep 命中 1 / off 命中 1
+  PASS | 4'a deep 相位序列 FTFTFT（隔执行拍查询）
+  PASS | 4'b 折算 p=0.5 → 0.75
+  PASS | 4'c 折算 p=0.8 → 0.96
+  PASS | 4'd 折算 p=1.0 → 1.0
+  PASS | 4'e 关态恒 T / 原值直传
+  PASS | 5'a deep 16 拍 → 4 次置脏
+  PASS | 5'b 关态 16 拍 → 8 次置脏（1/30 原值）
+── 收尾（设置/画布/闩/静态还原） ──
+探针汇总：68/70 通过
+失败明细：
+  - a1 镜面 iv=5/60 tempo=2.5：deep/off 480 步开火 |Δ|≤2（off=160 deep=120 Δ=-40）
+  - a1 镜面 iv=2.5/60 tempo=1.6：deep/off 480 步开火 |Δ|≤2（off=160 deep=120 Δ=-40）
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 104 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

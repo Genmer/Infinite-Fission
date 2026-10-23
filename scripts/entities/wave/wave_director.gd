@@ -562,7 +562,7 @@ func _spawn_boss(p_wave: int) -> void:
 			if StringName(String(comp.get("enemy_id", ""))) == boss.id:
 				boss_tags |= int(comp.get("tags", 0))
 				break
-	# R289 修轮 2（评审 P2-4）：优先入队——深载 60 帽下 Boss 不被整波小怪排后。
+	# R289 修轮 2（评审 P2-4）：优先入队——深载 40 帽下 Boss 不被整波小怪排后。
 	# R289 修轮 4（评审 P1-2）：优先仅深载生效——boost 关/桌面/headless 仍追加队尾，
 	# 「boost 关侧逐位不变」承重墙不被全局行为变更击穿。
 	spawner.enqueue({

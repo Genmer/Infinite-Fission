@@ -1,10 +1,11 @@
 # tests/qa_r289_indep_core_cases.gd
 # R289 独立 QA 探针核心面。契约来源（用户任务/设计背景）：
-#   a) 深载滞回：fps<34 持续 2s 置位；1.99s 不置位；34..45 死区 10s 双侧计时清零；
-#      fps>45 持续 4s 清位；PLAYING+tree.paused / LEVEL_UP 冻结；MENU 清位；
+#   a) 深载滞回：fps<34 持续 2s 置位；1.99s 不置位；34..45 死区 10s 清高帧侧计时、
+#      保留低帧累计（R290）；fps>45 持续 4s ∧ 驻留≥10s ∧ 场地安静（R290 负载门）清位；
+#      PLAYING+tree.paused / LEVEL_UP 冻结；MENU 清位；
 #      boost 关恒 false；deep_override 0/1 单谓词。
-#   d) B：深载玩家弹（team0）活口帽 200（判据 total_active−team1_live），不误伤 team1；
-#      解除深载恢复可获；敌帽三态 120/90/60（boost 关 / boost 开 / boost∧deep）。
+#   d) B：深载玩家弹（team0）活口帽 BOOST_DEEP_TEAM0_CAP（R290：200→120），不误伤 team1；
+#      解除深载恢复可获；敌帽三态 120/90/40（boost 关 / boost 开 / boost∧deep）。
 #   e) C：boost 开 + deep → 540×960 + zoom .75 + world_div .75；解除 → 612×1088/.85；
 #      boost 关 → 应用器零写；用户 75 档不被深载改写。
 # 夹具：main.tscn 真链 boot 后冻结引擎自动 process，全部直驱；结束恢复设置/画布/闩。
@@ -127,7 +128,7 @@ func _a_hysteresis() -> void:
 		if not PerfGovernor.deep_active() or absf(float(_gl._deep_on_acc)) > 1.0e-9 \
 				or absf(float(_gl._deep_off_acc)) > 1.0e-9:
 			dead_ok = false
-	_check("a3 34..45 死区 10s 保持置位且双侧计时清零", dead_ok,
+	_check("a3 34..45 死区 10s 保持置位且高帧侧计时归零", dead_ok,
 		"active=%s on=%.4f off=%.4f" % [str(PerfGovernor.deep_active()),
 			float(_gl._deep_on_acc), float(_gl._deep_off_acc)])
 
@@ -139,7 +140,7 @@ func _a_hysteresis() -> void:
 	var edge34_ok := PerfGovernor.deep_active() and absf(float(_gl._deep_on_acc)) < 1.0e-9 		and absf(float(_gl._deep_off_acc)) < 1.0e-9
 	_deep_steps(45.0, 0.1)
 	var edge45_ok := PerfGovernor.deep_active() and absf(float(_gl._deep_on_acc)) < 1.0e-9 		and absf(float(_gl._deep_off_acc)) < 1.0e-9
-	_check("a3b fps=34/45 端点均属死区（保持闩+计时清零）", edge34_ok and edge45_ok,
+	_check("a3b fps=34/45 端点均属死区（保持闩+计时归零）", edge34_ok and edge45_ok,
 		"34=%s 45=%s" % [str(edge34_ok), str(edge45_ok)])
 
 	_deep_steps(60.0, 3.9)
@@ -148,6 +149,48 @@ func _a_hysteresis() -> void:
 	_deep_steps(60.0, 0.1)
 	_check("a5 fps60 累计 4.0s 且驻留≥10s → 清位", not PerfGovernor.deep_active(),
 		"active=%s off_acc=%.4f" % [str(PerfGovernor.deep_active()), float(_gl._deep_off_acc)])
+
+	# R290 修轮（vc89 判读）：死区（34..45）不再清零低帧累计——真机 fps 在边界抖动期
+	# 原「双侧清零」使置位长期不可达（0:16-0:23 连续 8s fps 9-23 却深0）。
+	_reset_deep()
+	_deep_steps(20.0, 1.9)
+	_deep_steps(40.0, 2.0)
+	_check("a3c 死区 2s 保留低帧累计（不清零）", not PerfGovernor.deep_active() \
+		and absf(float(_gl._deep_on_acc) - 1.9) < 1.0e-6,
+		"active=%s on=%.4f" % [str(PerfGovernor.deep_active()), float(_gl._deep_on_acc)])
+	_deep_steps(20.0, 0.2)
+	_check("a3d 死区后低帧续累计即置位（原实现下不可达）", PerfGovernor.deep_active(),
+		"active=%s on=%.4f" % [str(PerfGovernor.deep_active()), float(_gl._deep_on_acc)])
+
+	# R290 修轮：清位负载门——场地仍满载时不撤深载（vc89 0:46 空场误清 → 0:47-0:59
+	# 满载 13s 裸奔）。夹具：向 spawner.active 注 35 个 Node2D 占位 → 满载；清空 → 安静。
+	_reset_deep()
+	_deep_steps(20.0, 2.0)
+	_deep_steps(60.0, 11.0)
+	_check("a3e 无载（spawner 空）高帧 4s+驻留≥10s → 清位（基线）",
+		not PerfGovernor.deep_active(), "dwell=%.2f" % float(_gl._deep_dwell_s))
+	_reset_deep()
+	_deep_steps(20.0, 2.0)
+	var _sp: Variant = _gl.get("spawner")
+	var _act: Array = [] if _sp == null else (_sp.get("active") as Array)
+	var _inj: Array[Node2D] = []
+	if _sp != null:
+		for _i in range(GameLoop.DEEP_CLEAR_QUIET_ENEMIES + 5):
+			var _n := Node2D.new()
+			_inj.append(_n)
+			_act.append(_n)
+	_deep_steps(60.0, 11.0)
+	_check("a3f 场地满载（敌≥30）时高帧 4s+驻留≥10s 不撤深载（负载门）",
+		PerfGovernor.deep_active() and _act.size() == GameLoop.DEEP_CLEAR_QUIET_ENEMIES + 5,
+		"active=%s n=%d dwell=%.2f" % [str(PerfGovernor.deep_active()), _act.size(),
+			float(_gl._deep_dwell_s)])
+	if _sp != null:
+		for _n in _inj:
+			_act.erase(_n)
+			_n.free()
+	_deep_steps(60.0, 4.0)
+	_check("a3g 场地清空后再高帧 4s → 撤档",
+		not PerfGovernor.deep_active(), "active=%s" % str(PerfGovernor.deep_active()))
 
 	# R289 修轮：后台恢复巨 delta 钳制 + 最小驻留（10s 内不撤）
 	_reset_deep()
@@ -237,9 +280,11 @@ func _a_hysteresis() -> void:
 	PerfGovernor.set_deep_active(false)
 
 
-# ── d1：玩家弹（team0）200 帽 ─────────────────────────────────────
+# ── d1：玩家弹（team0）BOOST_DEEP_TEAM0_CAP 帽 ────────────────────
 func _d_bullet_cap() -> void:
-	print("── d1 B 深载玩家弹帽（team0 200；team1 不误伤；解除恢复） ──")
+	# R290：帽值 200→120——断言全部改符号 ProjectilePool.BOOST_DEEP_TEAM0_CAP（值变断言随动）
+	var cap: int = ProjectilePool.BOOST_DEEP_TEAM0_CAP
+	print("── d1 B 深载玩家弹帽（team0 %d；team1 不误伤；解除恢复） ──" % cap)
 	PerfGovernor.boost_override = 1
 	PerfGovernor.deep_override = 1
 	PerfGovernor.set_deep_active(false)
@@ -268,12 +313,12 @@ func _d_bullet_cap() -> void:
 			break
 		got0 += 1
 		_acquired.append(p0)
-	_check("d3 深载 team0 活口恰可到 200", got0 == 200,
+	_check("d3 深载 team0 活口恰可到 %d" % cap, got0 == cap,
 		"got=%d total=%d team1=%d" % [got0, pool.total_active(), pool.team1_live])
-	_check("d4 200 判据不含 team1（total=230）",
-		pool.total_active() == 230 and pool.team1_live == 30,
+	_check("d4 帽判据不含 team1（total=%d）" % (cap + 30),
+		pool.total_active() == cap + 30 and pool.team1_live == 30,
 		"total=%d team1=%d" % [pool.total_active(), pool.team1_live])
-	_check("d5 超帽第 201 颗被拒（deep_bullet_capped 递增）",
+	_check("d5 超帽第 %d 颗被拒（deep_bullet_capped 递增）" % (cap + 1),
 		int(DebugStats.get_counter(&"deep_bullet_capped")) - cap0 > 0,
 		"Δ=%d" % (int(DebugStats.get_counter(&"deep_bullet_capped")) - cap0))
 	var team1_alive := true
@@ -292,21 +337,22 @@ func _d_bullet_cap() -> void:
 	_check("d7 team0 满帽时 acquire(1) 仍可获", extra1 != null,
 		"team1_live=%d" % pool.team1_live)
 
-	# 解除深载：同池恢复可获（200 → 201）
+	# 解除深载：同池恢复可获（帽 → 帽+1）
 	PerfGovernor.deep_override = 0
 	var cap1 := int(DebugStats.get_counter(&"deep_bullet_capped"))
 	var p_off: ProjectileBase = pool.acquire(0)
 	if p_off != null:
 		_acquired.append(p_off)
-	_check("d8 解除深载后可再获 team0（>200 活口）", p_off != null,
+	_check("d8 解除深载后可再获 team0（活口>%d）" % cap,
+		p_off != null and pool.total_active() > cap,
 		"total=%d" % pool.total_active())
 	_check("d9 解除深载 acquire 不再计 deep_bullet_capped",
 		int(DebugStats.get_counter(&"deep_bullet_capped")) == cap1, "")
 
-	# 再开深载：201 已超帽 → 拒绝
+	# 再开深载：帽+1 已超帽 → 拒绝
 	PerfGovernor.deep_override = 1
 	var p_re: ProjectileBase = pool.acquire(0)
-	_check("d10 重开深载且 team0=201 → 立即拒绝", p_re == null,
+	_check("d10 重开深载且 team0=%d → 立即拒绝" % (cap + 1), p_re == null,
 		"acquire=%s" % str(p_re))
 
 	_clear_pool(pool)
@@ -315,7 +361,7 @@ func _d_bullet_cap() -> void:
 
 
 func _d_enemy_cap() -> void:
-	print("── d2 B 敌帽三态（boost 关 120 / boost 开 90 / boost∧deep 60） ──")
+	print("── d2 B 敌帽三态（boost 关 120 / boost 开 90 / boost∧deep 40） ──")
 	PerfGovernor.boost_override = 0
 	PerfGovernor.deep_override = 1
 	_check("d12 boost 关（deep_override=1）→ 120", EnemySpawner.max_onscreen() == 120,
@@ -325,11 +371,11 @@ func _d_enemy_cap() -> void:
 	_check("d13 boost 开 deep 关 → 90", EnemySpawner.max_onscreen() == 90,
 		str(EnemySpawner.max_onscreen()))
 	PerfGovernor.deep_override = 1
-	_check("d14 boost 开 deep 开 → 60", EnemySpawner.max_onscreen() == 60,
+	_check("d14 boost 开 deep 开 → 40", EnemySpawner.max_onscreen() == 40,
 		str(EnemySpawner.max_onscreen()))
 	PerfGovernor.deep_override = -1
 	PerfGovernor.set_deep_active(true)
-	_check("d15 真值闩 deep_active → 60", EnemySpawner.max_onscreen() == 60,
+	_check("d15 真值闩 deep_active → 40", EnemySpawner.max_onscreen() == 40,
 		str(EnemySpawner.max_onscreen()))
 	PerfGovernor.boost_override = 0
 	_check("d16 boost 关 + 闩真 → 120（boost 门优先）", EnemySpawner.max_onscreen() == 120,
@@ -338,9 +384,9 @@ func _d_enemy_cap() -> void:
 	PerfGovernor.set_deep_active(false)
 
 
-# ── e：C 渲染应急档 ───────────────────────────────────────────────
+# ── e：C 渲染档（R291 UI 定格后语义） ─────────────────────────────
 func _e_render_notch() -> void:
-	print("── e C 应急档（85+deep→75；解除回 85；boost 关零写；用户 75 幂等） ──")
+	print("── e C 档（R291 UI 定格：deep 不改画布；用户档恒定；boost 关零写；用户 75 幂等） ──")
 	_gl.state = GameConst.GameStatus.PLAYING
 	PerfGovernor.boost_override = 1
 	PerfGovernor.deep_override = 1
@@ -349,71 +395,68 @@ func _e_render_notch() -> void:
 	GameLoop._s_boost_applied_notch = 0
 	_gl._apply_boost_resolution()
 	var win := _gl.get_window()
-	_check("e1 85+deep → content_scale 540×960",
-		win.content_scale_size == Vector2i(540, 960), str(win.content_scale_size))
-	_check("e2 85+deep → camera.zoom .75",
-		_gl.camera != null and _gl.camera.zoom.is_equal_approx(Vector2(0.75, 0.75)),
+	_check("e1 85+deep（PLAYING）→ 画布定格 612×1088（R291 删自动降档）",
+		win.content_scale_size == Vector2i(612, 1088), str(win.content_scale_size))
+	_check("e2 85+deep → zoom .85（不降 .75）",
+		_gl.camera != null and _gl.camera.zoom.is_equal_approx(Vector2(0.85, 0.85)),
 		str(_gl.camera.zoom) if _gl.camera != null else "camera=null")
-	_check("e3 85+deep → boost_world_div .75",
-		is_equal_approx(GameLoop.boost_world_div(), 0.75), str(GameLoop.boost_world_div()))
-	_check("e4 85+deep → 促键 2（应用态真值）",
-		PerfGovernor.boost_diag_state() == 2, str(PerfGovernor.boost_diag_state()))
+	_check("e3 85+deep → boost_world_div .85",
+		is_equal_approx(GameLoop.boost_world_div(), 0.85), str(GameLoop.boost_world_div()))
+	_check("e4 85+deep → 促键 1（用户档真值——促2 只属用户手选 75）",
+		PerfGovernor.boost_diag_state() == 1, str(PerfGovernor.boost_diag_state()))
 
 	PerfGovernor.deep_override = 0
 	_gl._apply_boost_resolution()
-	_check("e5 deep 解除 → content_scale 612×1088",
+	_check("e5 deep 解除 → 画布幂等零写（仍 612×1088）",
 		win.content_scale_size == Vector2i(612, 1088), str(win.content_scale_size))
-	_check("e6 deep 解除 → zoom .85/.85",
-		_gl.camera != null and _gl.camera.zoom.is_equal_approx(Vector2(0.85, 0.85)),
-		str(_gl.camera.zoom) if _gl.camera != null else "camera=null")
-	_check("e7 deep 解除 → boost_world_div .85",
-		is_equal_approx(GameLoop.boost_world_div(), 0.85), str(GameLoop.boost_world_div()))
-	_check("e8 deep 解除 → 促键 1", PerfGovernor.boost_diag_state() == 1,
-		str(PerfGovernor.boost_diag_state()))
+	_check("e6 deep 解除 → 促键 1（闩不再影响画布/促键）",
+		PerfGovernor.boost_diag_state() == 1, str(PerfGovernor.boost_diag_state()))
 
 	# boost 关：回 720×1280/zoom1/div1，且再次调用零写
 	PerfGovernor.boost_override = 0
 	PerfGovernor.deep_override = 1
 	_gl._apply_boost_resolution()
-	_check("e9 boost 关 → 720×1280 + zoom1 + div1",
+	_check("e7 boost 关 → 720×1280 + zoom1 + div1",
 		win.content_scale_size == Vector2i(720, 1280) \
 			and _gl.camera.zoom.is_equal_approx(Vector2.ONE) \
 			and is_equal_approx(GameLoop.boost_world_div(), 1.0),
 		"css=%s zoom=%s div=%s" % [str(win.content_scale_size), str(_gl.camera.zoom),
 			str(GameLoop.boost_world_div())])
-	_check("e10 boost 关 ∧ deep_override=1 → deep_load false / 促0",
+	_check("e8 boost 关 ∧ deep_override=1 → deep_load false / 促0",
 		not PerfGovernor.deep_load() and PerfGovernor.boost_diag_state() == 0, "")
 	var css0 := win.content_scale_size
 	var zoom0: Vector2 = _gl.camera.zoom
 	var notch0 := int(_gl._boost_applied_notch)
 	_gl._apply_boost_resolution()
-	_check("e11 boost 关 → 应用器幂等零写（快照前后相等）",
+	_check("e9 boost 关 → 应用器幂等零写（快照前后相等）",
 		win.content_scale_size == css0 and _gl.camera.zoom.is_equal_approx(zoom0) \
 			and int(_gl._boost_applied_notch) == notch0,
 		"css=%s->%s notch=%d->%d" % [str(css0), str(win.content_scale_size),
 			notch0, int(_gl._boost_applied_notch)])
 
-	# 用户 75 档：deep 关仍 540（档值来自用户而非深载），deep 开同值
+	# 用户 75 档（手选语义不变）：deep 关/开均 540
 	PerfGovernor.boost_override = 1
 	Meta.set_setting("boost_res", 75)
 	PerfGovernor.deep_override = 0
 	_gl._apply_boost_resolution()
-	_check("e12 用户 75 ∧ deep 关 → 仍 540×960/.75（促2）",
+	_check("e10 用户 75 ∧ deep 关 → 540×960/.75（促2）",
 		win.content_scale_size == Vector2i(540, 960) \
 			and _gl.camera.zoom.is_equal_approx(Vector2(0.75, 0.75)) \
 			and PerfGovernor.boost_diag_state() == 2,
 		"css=%s diag=%d" % [str(win.content_scale_size), PerfGovernor.boost_diag_state()])
 	PerfGovernor.deep_override = 1
 	_gl._apply_boost_resolution()
-	_check("e13 用户 75 ∧ deep 开 → 540×960/.75（幂等）",
+	_check("e11 用户 75 ∧ deep 开 → 540×960/.75（幂等——deep 不改用户档）",
 		win.content_scale_size == Vector2i(540, 960) \
-			and _gl.camera.zoom.is_equal_approx(Vector2(0.75, 0.75)), "")
+			and _gl.camera.zoom.is_equal_approx(Vector2(0.75, 0.75)) \
+			and PerfGovernor.boost_diag_state() == 2,
+		"css=%s diag=%d" % [str(win.content_scale_size), PerfGovernor.boost_diag_state()])
 
 	# 恢复用户 85：deep 关 → 612
 	Meta.set_setting("boost_res", 85)
 	PerfGovernor.deep_override = 0
 	_gl._apply_boost_resolution()
-	_check("e14 回用户 85 → 612×1088/.85",
+	_check("e12 回用户 85 → 612×1088/.85",
 		win.content_scale_size == Vector2i(612, 1088) \
 			and _gl.camera.zoom.is_equal_approx(Vector2(0.85, 0.85)), "")
 

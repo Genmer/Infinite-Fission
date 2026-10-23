@@ -184,6 +184,7 @@ static var probe_weapons_us: int = 0
 # 累计进 武1µs..武9µs/副武µs 秒窗键，回答「哪把武器吃了 火 段」。只加计时不改行为。
 static var probe_wpn_us: PackedInt64Array = PackedInt64Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 var _wpn_lod_phase: int = 0                   # R289 A：深载隔帧节流相位（0=执行步 1=跳步）
+var _sub_lod_ctr: int = 0                     # R291 峰值刀：副武四分频相位（0=执行副武的武器执行拍）
 
 # ── R220 刀12：帧率优先弹生成配额（护栏刀——主控决策#4 终值 32 发/物理步） ──
 # 仅 PerfGovernor.frame_priority()==true 生效（特效优先=无配额恒放行）；超配丸经
@@ -678,6 +679,7 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 		else:
 			_wp_dt = p_game_delta * 2.0
 	WeaponBase.lod_dt_doubled = _wp_run and _wp_dt > p_game_delta
+	WeaponBase.lod_beats = 2                        # R291：主武器组子拍数（dt×2 原语义；副武组另行写 4）
 	if _wp_run:
 		# 二cv#6：贴脸豁免圈随武器循环逐帧折算（零新增遍历——≤7 槽 × has_method 微秒级，
 		# 落在 probe_weapons_us 计时段内；逐帧而非事件刷新是防升级/换卡/出售/超凡漏接）
@@ -695,21 +697,36 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 						and weapon.has_method(&"effective_slash_radius"):
 					melee_sanctuary_r = maxf(melee_sanctuary_r,
 						float(weapon.call(&"effective_slash_radius")))
+		# R291 峰值刀：深载副武四分频——副本/镜面/护航舰组每 2 个武器执行拍跑 1 次
+		#（=每 4 物理步），执行拍 dt×4 秒基守恒（冷却/词条计时/奏鸣加速全 dt 缩放，
+		# 与 A 刀 dt×2 同族数学，频次再折半）。vc89 真机：副武µs 100-204k/s 占玩段约
+		# 1/3 且事件量 dt 折算省不掉 ⇒ 唯一可直砍轴=执行频次。boost 关/deep 关 →
+		# _sub_run 恒真、dt 原值（关态逐位不变）。
+		var _sub_run := true
+		var _sub_dt := _wp_dt
+		if PerfGovernor.weapon_lod_on():
+			_sub_lod_ctr = 1 - _sub_lod_ctr
+			if _sub_lod_ctr == 1:
+				_sub_run = false
+			else:
+				_sub_dt = p_game_delta * 4.0
+				WeaponBase.lod_beats = 4            # 副武组执行拍子拍数（dt×4 配对）
 		# R183 僚机复制武器同拍驱动（副本不在 weapon_slots——独立数组，到期回收）
 		var _c_t0 := Time.get_ticks_usec()
-		for copy in _summon_copies:
-			if copy != null:
-				copy.tick(_wp_dt)
-		# R187 W5 镜面军团同拍驱动（永久会话态——无 10s 到期，只在回收口/重开清空；
-		# 镜面实体按鸭子协议驱动——WeaponBase 子类或自备 tick() 的 Node2D 均可）
-		for mirror in _mirror_images:
-			if mirror != null and is_instance_valid(mirror) and mirror.has_method(&"tick"):
-				mirror.call(&"tick", _wp_dt)
-		# R198（P2-escort）：护航舰同拍驱动——SummonDrone._process 自驱改吃副本 game_delta
-		#（引擎不再自驱；时间缩放/暂停冻结下僚机与主循环同步，不独走墙上时钟）
-		for drone in _summon_drones:
-			if drone != null and is_instance_valid(drone):
-				drone.tick(_wp_dt)
+		if _sub_run:
+			for copy in _summon_copies:
+				if copy != null:
+					copy.tick(_sub_dt)
+			# R187 W5 镜面军团同拍驱动（永久会话态——无 10s 到期，只在回收口/重开清空；
+			# 镜面实体按鸭子协议驱动——WeaponBase 子类或自备 tick() 的 Node2D 均可）
+			for mirror in _mirror_images:
+				if mirror != null and is_instance_valid(mirror) and mirror.has_method(&"tick"):
+					mirror.call(&"tick", _sub_dt)
+			# R198（P2-escort）：护航舰同拍驱动——SummonDrone._process 自驱改吃副本 game_delta
+			#（引擎不再自驱；时间缩放/暂停冻结下僚机与主循环同步，不独走墙上时钟）
+			for drone in _summon_drones:
+				if drone != null and is_instance_valid(drone):
+					drone.tick(_sub_dt)
 		probe_wpn_us[WeaponBase.WPN_FAMILY_OTHER] += int(Time.get_ticks_usec() - _c_t0)
 	probe_weapons_us += int(Time.get_ticks_usec() - _wp_t0)
 	_tick_visual(p_game_delta, total)
