@@ -1,0 +1,103 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R289 独立 QA · 第2轮复核（P1-1/P1-2/P2-3） ══════════
+  PASS | boot 成功（main.tscn 真链）
+  PASS | 夹具：真实 W2_gatling 装入
+  PASS | 夹具：真实 W1_pistol 装入
+  PASS | 夹具：真实 W3_shotgun 装入
+  PASS | 夹具：靶敌在网格内（三武器可索敌）
+── r2-P1-1 真武器长窗守恒（W2/W1/W3 各 300 物理步，deep vs off） ──
+  TRACE | deep=false steps=300 exec=300 skip=0 fire_ticks=50 bullets=50 max_delta=1 neg_cd_fire=0 first=[1, 7, 13, 19, 25, 31, 37, 43, 49, 55, 61, 67]
+  TRACE | deep=true steps=300 exec=150 skip=150 fire_ticks=50 bullets=50 max_delta=1 neg_cd_fire=0 first=[2, 8, 14, 20, 26, 32, 38, 44, 50, 56, 62, 68]
+  PASS | r2-b1 W2 300 步深载 exec=150 / skip=150
+  PASS | r2-b2 W2 长窗 deep/off 发数比 0.95..1.10（守恒）
+  PASS | r2-b3 W2 深载逐拍最多 1 发（负余量无单拍爆发）
+  TRACE | deep=false steps=300 exec=300 skip=0 fire_ticks=22 bullets=22 max_delta=1 neg_cd_fire=0 first=[1, 15, 29, 43, 57, 71, 85, 99, 113, 127, 141, 155]
+  TRACE | deep=true steps=300 exec=150 skip=150 fire_ticks=22 bullets=22 max_delta=1 neg_cd_fire=0 first=[2, 16, 30, 44, 58, 72, 86, 100, 114, 128, 142, 156]
+  PASS | r2-b4 W1 300 步深载 exec=150 / skip=150
+  PASS | r2-b5 W1 长窗 deep/off 发数比 0.95..1.10（守恒）
+  PASS | r2-b6 W1 深载逐拍最多 1 发（负余量无单拍爆发）
+  PASS | r2-b7 W3 L1 整轮丸数≥2（前置）
+  TRACE | deep=false steps=300 exec=300 skip=0 fire_ticks=8 bullets=56 max_delta=7 neg_cd_fire=0 first=[1, 40, 79, 118, 157, 196, 235, 274]
+  TRACE | deep=true steps=300 exec=150 skip=150 fire_ticks=8 bullets=56 max_delta=7 neg_cd_fire=0 first=[2, 40, 80, 118, 158, 196, 236, 274]
+  PASS | r2-b8 W3 300 步深载 exec=150 / skip=150
+  PASS | r2-b9 W3 长窗 deep/off 发数比 0.95..1.10（守恒）
+  PASS | r2-b10 W3 深载逐拍最多一轮齐射（max_delta≤pellets）
+  PASS | r2-b11 W3 深载无残轮/多轮叠加（bullets==fire_ticks×pellets）
+── r2-P2-3 W3 整轮容量预检（帽沿/team1 不计入/释放整轮） ──
+  PASS | r2-v1 池空时 team0 headroom=120（R290：200→120）
+  PASS | r2-v2 帽沿状态 headroom<pellets
+  PASS | r2-v3 team1 活弹不计入 team0 headroom
+  PASS | r2-v4 headroom<pellets → 整轮不发射
+  PASS | r2-v5 整轮跳不写冷却（cd 仍为 0）
+  PASS | r2-v6 整轮跳不回收 team1（5 颗仍在活口）
+  PASS | r2-v7 team1 归还后 headroom 仍为帽沿值
+  PASS | r2-v8 容量恢复 → 整轮齐射 fired==pellets
+  PASS | r2-v9 齐射成功写 CD
+── r2-P1-2 状态迁移 / 自动 HUD fit / 85 与 boost 关坐标（R291：notch2=用户手选 75；deep 零画布影响） ──
+  PASS | r2-c0 PLAYING 强制窗口后逻辑宽=540（真机 540 视口）
+  PASS | r2-c1 PLAYING 用户75∧deep content_scale=(540, 960)
+  PASS | r2-c1 PLAYING 用户75∧deep zoom=0.75
+  PASS | r2-c1 PLAYING 用户75∧deep applied_notch=2
+  PASS | r2-c1 PLAYING 用户75∧deep world_div=0.75
+  PASS | r2-c2 PLAYING 用户75促键=2（R291：促2 仅手选档）
+  PASS | r2-c3 真实 W4_pulse_beam 装入（HUD 段前置）
+  PASS | r2-c4 HUD 读数位可见且含束段
+  HUDDBG | hud_vp_vis=(540, 960) hud_vp_size=(540, 960) gl_vp_vis=(540, 960) window_size=(540, 960) css=(540, 960) ro_pos=(186, 200) ro_size=(224, 25)
+  PASS | r2-c5 PLAYING 540 读数位 读数盒在视口内
+  PASS | r2-c5 PLAYING 540 读数位 坐标=186.0
+  PASS | r2-c5 PLAYING 540 读数位 右沿 ≤ vw−130
+  PASS | r2-c6 PLAYING→LEVEL_UP 迁移被接受
+  PASS | r2-c7 LEVEL_UP 定格（用户75 恒 540） content_scale=(540, 960)
+  PASS | r2-c7 LEVEL_UP 定格（用户75 恒 540） zoom=0.75
+  PASS | r2-c7 LEVEL_UP 定格（用户75 恒 540） applied_notch=2
+  PASS | r2-c7 LEVEL_UP 定格（用户75 恒 540） world_div=0.75
+  OBSERVE | LEVEL_UP deep: applied_notch=2 diag_state=2 css=(540, 960) （R291：促N=用户档真值恒定，跨态画布定格）
+  PASS | r2-c8 LEVEL_UP 读数位（定格 540 布局） 读数盒在视口内
+  PASS | r2-c8 LEVEL_UP 读数位（定格 540 布局） 坐标=186.0
+  PASS | r2-c8 LEVEL_UP 读数位（定格 540 布局） 右沿 ≤ vw−130
+  PASS | r2-c9 LEVEL_UP→PLAYING 迁移被接受
+  PASS | r2-c10 回 PLAYING 定格幂等 content_scale=(540, 960)
+  PASS | r2-c10 回 PLAYING 定格幂等 zoom=0.75
+  PASS | r2-c10 回 PLAYING 定格幂等 applied_notch=2
+  PASS | r2-c10 回 PLAYING 定格幂等 world_div=0.75
+  PASS | r2-c11 回 PLAYING 读数位 读数盒在视口内
+  PASS | r2-c11 回 PLAYING 读数位 坐标=186.0
+  PASS | r2-c11 回 PLAYING 读数位 右沿 ≤ vw−130
+  PASS | r2-c12 PLAYING→PAUSED 迁移被接受
+  PASS | r2-c13 PAUSED 定格（用户75 恒 540） content_scale=(540, 960)
+  PASS | r2-c13 PAUSED 定格（用户75 恒 540） zoom=0.75
+  PASS | r2-c13 PAUSED 定格（用户75 恒 540） applied_notch=2
+  PASS | r2-c13 PAUSED 定格（用户75 恒 540） world_div=0.75
+  OBSERVE | PAUSED deep: applied_notch=2 diag_state=2 css=(540, 960) （R291：促N=用户档真值恒定，跨态画布定格）
+  PASS | r2-c14 PAUSED 读数位（定格 540 布局） 读数盒在视口内
+  PASS | r2-c14 PAUSED 读数位（定格 540 布局） 坐标=186.0
+  PASS | r2-c14 PAUSED 读数位（定格 540 布局） 右沿 ≤ vw−130
+  PASS | r2-c15 PAUSED→PLAYING 迁移被接受
+  PASS | r2-c16 再回 PLAYING 定格 content_scale=(540, 960)
+  PASS | r2-c16 再回 PLAYING 定格 zoom=0.75
+  PASS | r2-c16 再回 PLAYING 定格 applied_notch=2
+  PASS | r2-c16 再回 PLAYING 定格 world_div=0.75
+  PASS | r2-c17 用户85∧deep开（R291：无自动档） content_scale=(612, 1088)
+  PASS | r2-c17 用户85∧deep开（R291：无自动档） zoom=0.85
+  PASS | r2-c17 用户85∧deep开（R291：无自动档） applied_notch=1
+  PASS | r2-c17 用户85∧deep开（R291：无自动档） world_div=0.85
+  PASS | r2-c18 用户85∧deep开促键=1
+  PASS | r2-c19 用户85 读数位 读数盒在视口内
+  PASS | r2-c19 用户85 读数位 坐标=368.0
+  PASS | r2-c20 boost关 content_scale=(720, 1280)
+  PASS | r2-c20 boost关 zoom=1.00
+  PASS | r2-c20 boost关 applied_notch=0
+  PASS | r2-c20 boost关 world_div=1.00
+  PASS | r2-c21 boost关 ∧ deep_override=1 → deep_load false / 促0
+  PASS | r2-c22 boost关读数位 读数盒在视口内
+  PASS | r2-c22 boost关读数位 坐标=368.0
+── 收尾（弹/靶/设置/画布/闩还原） ──
+验收汇总：79/79 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 19 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 90 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

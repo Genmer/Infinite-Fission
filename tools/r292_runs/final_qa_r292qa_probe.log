@@ -1,0 +1,71 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R292 QA 独立探针 · 导出日志分段进度反馈 ══════════
+  PASS | boot 成功（main.tscn 真链）
+  PASS | boot 落 MENU（菜单根可见）
+  PASS | Z0 导出/清空按钮在位
+── 点1 按下当帧（真输入注入优先，直调降级兜底） ──
+  PASS | 1a 注入点击链路正向对照（清空按钮可被点到）
+  PASS | 1b 按下当帧即置锁（pressed 处理器已同步起跑）
+  PASS | 1c 当帧覆盖层挂树且可见
+  PASS | 1c2 覆盖层全屏锚定
+  PASS | 1d 进度条在位 0-100 且起步 5%
+  PASS | 1e 阶段文案=正在组装日志
+  PASS | 1e2 覆盖层标题=正在导出日志
+  PASS | 1f 遮罩全屏锚定且 MOUSE_FILTER_STOP
+  PASS | 1g 按钮禁用+锁置位
+  PASS | 1h 遮罩真实拦截底层点击（清空按钮计数不涨）
+── 点2/3 分段推进与收敛 ──
+  PASS | 2a 进度单调不减（逐帧采样）
+  PASS | 2b 三段阶值 5/45/85 均被观测（真分段非一跳）
+  PASS | 2c 阶段文案按序（首=组装，含剪贴板段）
+  PASS | 3a 预览对话框弹出且可见（收敛帧数=27）
+  PASS | 3b 对话框唯一
+  PASS | 3c 正文口径：剪贴板状态行+尾部 24 行说明
+  PASS | 3d 标题=诊断日志 · 版本（R205 同源）
+  PASS | 3e 确认键文案=关闭
+  PASS | 3f 收敛复位：覆盖层撤除+按钮恢复+锁复位
+── 点4 重入锁 ──
+  PASS | 4a 同帧二连击仅一覆盖层
+  PASS | 4a2 二连击不重置阶段（锁内直返）
+  PASS | 4b 二连击收敛后仅一对话框
+  PASS | 4c 前置：一帧后阶段=45（导出进行中）
+  PASS | 4d 导出中再按=无操作（仍一覆盖层且进度不重置）
+  PASS | 4e 该轮收敛后仍仅一对话框
+── 点7c 连续两次完整导出的文件互不覆盖 ──
+  PASS | 7c 两次导出文件路径互不相同（不覆盖）
+── 点5 导出产物 ──
+  PASS | 5a 导出路径非空且 user:// 文件在盘
+  PASS | 5b 文件内容头口径（R205：诊断日志头+版本行）
+── 点6 对话框关闭释放 ──
+  PASS | 6a 待关对话框在位
+  PASS | 6b 关后帧泵即无残留（visibility_changed→queue_free）
+── 点7a 菜单态外（真实 PLAYING 迁移）导出 ──
+  PASS | 7a 前置：真实迁移 PLAYING 且菜单根隐藏
+  PASS | 7a PLAYING 态导出不炸且收敛（对话框弹出）
+  PASS | 7a2 收敛后锁复位（无悬挂导出态）
+  PASS | 7a3 现场恢复：回 MENU 菜单根可见
+── 点7b-1 导出中 _root 释放悬挂安全 ──
+  PASS | 7b1 _root 释放后协程仍收敛（锁复位无悬挂）
+  PASS | 7b1-2 对话框仍弹出（挂在 CanvasLayer 不随 _root 亡）
+SCRIPT ERROR: Invalid assignment of property or key 'offset_left' with value of type 'float' on a base object of type 'previously freed'.
+          at: MenuScreen._apply_safe_area (res://scripts/ui/menu_screen.gd:186)
+  PASS | boot 成功（main.tscn 真链）
+  PASS | boot 落 MENU（菜单根可见）
+── 点7b-2 导出中整棵 GameLoop 释放悬挂安全 ──
+  PASS | 7b2 场景释放后进程存活无致命错（帧泵继续）
+  PASS | 7b2-2 树上无覆盖层残留（随宿主释放）
+── 点7d DebugStats.diag_export 直调契约 ──
+  PASS | 7d 直调#1 返回 {path,text} 且文件在盘
+  PASS | 7d-2 直调#1 正文含诊断头（口径不变）
+  PASS | 7d 直调#2 返回 {path,text} 且文件在盘
+  PASS | 7d-2 直调#2 正文含诊断头（口径不变）
+── 收尾（GL/对话框/产物文件/Meta 还原） ──
+探针汇总：47/47 通过
+WARNING: 68 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 37 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 179 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

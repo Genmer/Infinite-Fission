@@ -1,0 +1,17 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ QA 探针：诊断行冻结格式对拍（R229 裁N 追加） ══════════
+L1|[1:05 M] fpsF dc0 o0 | 玩0 移0 火0 碎0 网0 弹0 敌0 波0 磁0 感0 特0 跳0 UI0 开0 消0 他0 余Fms 敌0 弹0 态0 桶0+0+0 磁0 拾0 跳0 断0 组0 模0 st+0 p120 ri0  结0 自0 调2  顺0 冲0 弃0 帽0  位图1 翻0 补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs0 派µs0 渲ms14.8 挡0 死µs0 警µs0 桶µs0 延µs124 释0 敌弹0 拒0 促0 步µs538 隙µs61619 延早µs603 延渲µs110476 延峰µs43 加11 摘0 绘µs35 渲帧9 呈帧0 渲峰ms74.4 命µs0 提µs0 灭µs0 回µs0 ipµs0 段和µs0 弹段µs0 网段µs0 敌段µs0 跳段µs0 玩段µs0 特段µs0 UI段µs0 他段µs0 派段µs0 武1µs0 武2µs0 武3µs0 武4µs0 武5µs0 武6µs0 武7µs0 武8µs0 武9µs0 副武µs0 深0 武跳0 弹拒0
+L2|[1:05 M] fpsF dc0 o0 | 玩0 移0 火0 碎0 网0 弹0 敌0 波0 磁0 感0 特0 跳0 UI0 开0 消0 他0 余Fms 敌0 弹0 态0 桶0+0+0 磁0 拾0 跳0 断0 组0 模0* st+0 p120 ri0  结0 自0 调2  顺0 冲0 弃0 帽0  位图1 翻0 补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs0 派µs0 渲ms14.8 挡0 死µs0 警µs0 桶µs0 延µs124 释0 敌弹0 拒0 促0 步µs554 隙µs62061 延早µs603 延渲µs110476 延峰µs43 加11 摘0 绘µs35 渲帧9 呈帧0 渲峰ms74.4 命µs0 提µs0 灭µs0 回µs0 ipµs0 段和µs0 弹段µs0 网段µs0 敌段µs0 跳段µs0 玩段µs0 特段µs0 UI段µs0 他段µs0 派段µs0 武1µs0 武2µs0 武3µs0 武4µs0 武5µs0 武6µs0 武7µs0 武8µs0 武9µs0 副武µs0 深0 武跳0 弹拒0
+L3|[1:05 M] fpsF dc0 o0 | 玩0 移0 火0 碎0 网0 弹0 敌0 波0 磁0 感0 特0 跳0 UI0 开0 消0 他0 余Fms 敌0 弹0 态0 桶0+0+0 磁0 拾0 跳0 断0 组0 模0* st+0 p120 ri0  结0 自0 调2  顺0 冲0 弃0 帽0  位图1 翻0 补0 裁0 快0 结µs0 插µs0 插模拟µs0 派deferred0 派drop0 物步µs0 派µs0 渲ms14.8 挡0 死µs0 警µs0 桶µs0 延µs124 释0 敌弹0 拒0 促0 步µs554 隙µs62061 延早µs603 延渲µs110476 延峰µs43 加11 摘0 绘µs35 渲帧9 呈帧0 渲峰ms74.4 命µs0 提µs0 灭µs0 回µs0 ipµs0 段和µs0 弹段µs0 网段µs0 敌段µs0 跳段µs0 玩段µs0 特段µs0 UI段µs0 他段µs0 派段µs0 武1µs0 武2µs0 武3µs0 武4µs0 武5µs0 武6µs0 武7µs0 武8µs0 武9µs0 副武µs0 深0 武跳0 弹拒0
+MODE=capture（本轮为采集；对拍请以 compare=<采集档> 重跑）
+────────────────────────────────────────
+汇总：PASS 0 / FAIL 0（共 0 项）
+验收汇总：0/0 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 102 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

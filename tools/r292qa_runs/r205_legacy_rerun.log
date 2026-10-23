@@ -1,0 +1,60 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R205 真机诊断日志验收 ══════════
+── ① 版本真源 ──
+  PASS | 运行时版本==project.godot 烤入值
+  PASS | 版本格式 v0.1.x_vcNN（带 vc 防老数据混流）
+  PASS | 空值退化为占位（dev裸跑未打包）
+── ② 1Hz 环形缓冲（容量设置驱动） ──
+  PASS | 容量读口随档位（set 60 → _diag_capacity()==60）
+  PASS | 容量封顶不增长（档 60 驱动）
+  PASS | 最旧槽=游标位（覆盖写语义）
+  PASS | 1Hz 节拍窗内不重复采样
+── ③ 行格式·无 GameLoop ──
+  PASS | 时间戳+未启动态字 [2:03 -]
+  PASS | dc/o 字段安全退化（headless 渲染信息=0）
+── ④ 探针与计数数据源 ──
+  PASS | 桌面/headless 探针缺省关
+  PASS | 探针阶段填充：player
+  PASS | 探针阶段填充：grid_projectile
+  PASS | 探针阶段填充：enemy
+  PASS | 探针阶段填充：wave
+  PASS | 探针阶段填充：feel
+  PASS | 探针阶段填充：fx
+  PASS | 探针阶段填充：ui
+  PASS | diag_counts 键齐（敌/弹）
+  PASS | 敌/弹计数非负整数
+── ⑤ 行格式·接 GameLoop ──
+  PASS | 按 diag_counts 特征解析到测试实例
+  PASS | 战斗段七标签齐（玩/弹/敌/波/感/特/UI）
+  PASS | 引擎剩余「余」字段在位
+  PASS | 敌/弹计数+风暴差分+物理 Hz 尾段
+  PASS | headless 物理口径 120Hz（mobile 门不扰动基准）
+── ⑥ 导出 ──
+  PASS | 文件名带版本（防老数据混流）
+  PASS | 落盘 user://diag_*.txt
+  PASS | 头=标题行
+  PASS | 头含版本（与 version_string 同源）
+  PASS | 头含 Godot 版本与设备名
+  PASS | 头含渲染后端与物理 Hz
+  PASS | globalize 路径可示（dialog 展示）
+  PASS | 剪贴板 headless 门（静默 false 不炸）
+── ⑦ 主菜单导出按钮 ──
+  PASS | 按钮存在且文案正确
+  PASS | 左下角落位（下锚负偏移）
+  PASS | 版本脚注行在位（真源同 DebugStats）
+  PASS | 导出后弹出预览对话框
+  PASS | 对话框带预览正文（头部说明+尾行）
+── ⑧ 风暴告警节流 ──
+WARNING: [EventBus] 事件风暴：mirror_formed 本帧已派发 128 次（阈值 128）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+  PASS | 阈值命中计数 +1（节流不吞计数）
+  PASS | 节流游标已置位（5s 窗内日志层静默）
+  PASS | 阈值内不再计数（每帧每事件一次）
+────────────────────────────────────────
+汇总：PASS 40 / FAIL 0（共 40 项）
+验收汇总：40/40 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

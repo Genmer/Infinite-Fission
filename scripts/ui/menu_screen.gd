@@ -39,6 +39,15 @@ var _sel_difficulty: int = 0                   # R72 难度三档（0 普通/1 �
 var _diff_btns: Array[Button] = []             # 难度三档切换按钮（选中态刷新）
 var _export_log_btn: Button = null            # R205：诊断日志导出（左下角）
 var _clear_log_btn: Button = null             # R208：诊断日志主动清空（导出右侧）
+var _exporting: bool = false                  # R292：导出分段协程重入锁（进行中再按=无操作）
+var _export_overlay: Control = null           # R292：导出进度覆盖层（遮罩+进度条+阶段文案）
+var _export_bar: ProgressBar = null           # R292：覆盖层进度条（0-100 段阶：5/45/85/100）
+var _export_stage_lbl: Label = null           # R292：覆盖层阶段文案（组装/剪贴板/预览/完成）
+var _export_t0_msec: int = 0                  # R292-M1：按下时刻（最小展示时长的墙钟基准）
+
+# R292-M1（评审）：快路径整程仅 3-4 帧，全屏遮罩 <0.1s 一闪而过会被当闪屏 bug——
+# 不足此时长时覆盖层持有一瞬（100% 收尾帧再撤）；慢真机路径自然超时零影响。
+const EXPORT_OVERLAY_MIN_MS := 300
 var _panel_root: Control = null
 var _panel_title: Label = null
 var _panel_list: Control = null
@@ -560,16 +569,50 @@ func _on_clear_log_pressed() -> void:
 func _on_export_log_pressed() -> void:
 	# R205：导出诊断日志（DebugStats 1Hz 环形缓冲 15 分钟）——写 user:// 文件 +
 	# 全文进剪贴板（微信/QQ 直接粘贴发送）+ 滚动预览对话框（尾部最关键：卡点在最后）
+	# R292：分段跨帧+进度覆盖层（用户反馈：真机一键导出「跟卡了一样」——组装/写盘、
+	# 剪贴板大字符串、弹预览框全挤在按下那一帧同步跑且零反馈）。拆三段，段间
+	# await 让覆盖层先行渲染；进行中按钮禁用+重入锁，双击不叠开第二个对话框。
+	# 产物不变：同一 DebugStats.diag_export()/diag_copy_to_clipboard()，文件/剪贴板/
+	# 对话框口径逐位同前（runner r205 迁移为帧泵收敛后查框）。
+	if _exporting:
+		return
+	_exporting = true
+	_export_t0_msec = Time.get_ticks_msec()
+	if _export_log_btn != null:
+		_export_log_btn.disabled = true
+	_build_export_overlay()
+	_set_export_stage(5, "正在组装日志…")
+	await get_tree().process_frame
 	var res: Dictionary = DebugStats.diag_export()
-	var text := str(res["text"])
-	var copied := DebugStats.diag_copy_to_clipboard(text)
+	_set_export_stage(45, "正在复制到剪贴板…")
+	await get_tree().process_frame
+	var copied := DebugStats.diag_copy_to_clipboard(str(res["text"]))
+	_set_export_stage(85, "正在打开预览…")
+	await get_tree().process_frame
+	# R292-M1：最小展示时长——快路径在 100% 收尾帧上持有一瞬再弹框撤层；
+	# R292-L1：阶段文案保持中性（不宣称「已写入/复制完成」——写盘失败/剪贴板
+	# 不可用时对话框才是如实口径，覆盖层不先撒谎）。
+	var held_ms := Time.get_ticks_msec() - _export_t0_msec
+	_set_export_stage(100, "导出完成")
+	if held_ms < EXPORT_OVERLAY_MIN_MS:
+		await get_tree().create_timer((EXPORT_OVERLAY_MIN_MS - held_ms) / 1000.0).timeout
+	_show_export_dialog(res, copied)
+	_remove_export_overlay()
+	if _export_log_btn != null and is_instance_valid(_export_log_btn):
+		_export_log_btn.disabled = false
+	_exporting = false
+
+
+func _show_export_dialog(p_res: Dictionary, p_copied: bool) -> void:
+	# R292：从 _on_export_log_pressed 抽出的预览对话框构建（内容口径逐位同 R205）。
+	var text := str(p_res["text"])
 	var dlg := AcceptDialog.new()
 	dlg.name = "DiagExportDialog"                # 定名（脚本建节点缺省 @类@id 名，测试/定位需稳定名）
 	dlg.title = "诊断日志 · %s" % DebugStats.version_string()
 	dlg.ok_button_text = "关闭"
 	var head := "文件: %s\n剪贴板: %s（去聊天框粘贴即可发送）\n%s\n────────\n" % [
-		str(res["path"]),
-		"已复制全文" if copied else "本机不可用",
+		str(p_res["path"]),
+		"已复制全文" if p_copied else "本机不可用",
 		"尾部 24 行（完整内容见文件/剪贴板）:",
 	]
 	var lines := text.split("\n")
@@ -588,6 +631,86 @@ func _on_export_log_pressed() -> void:
 	dlg.visibility_changed.connect(func() -> void:
 		if not dlg.visible:
 			dlg.queue_free())
+
+
+func _build_export_overlay() -> void:
+	# R292：导出进度覆盖层——全屏半透遮罩挡底层点击（导出中不可再点其他按钮），
+	# 中心竖排 标题/进度条/阶段文案。挂 _root 尾部=兄弟绘制序最顶（同层后挂者盖上；
+	# 与 R257 hint 同款「靠创建顺序不可靠」问题不存在——覆盖层生命周期即导出期，
+	# 期间无懒挂兄弟入树）。防泄漏：残留旧覆盖层（异常路径）先清。
+	if _export_overlay != null and is_instance_valid(_export_overlay):
+		_remove_export_overlay()
+	var ov := Control.new()
+	ov.name = "DiagExportProgressOverlay"
+	ov.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var dim := ColorRect.new()
+	dim.name = "DiagExportDim"
+	dim.color = Color(0.0, 0.0, 0.0, 0.45)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	ov.add_child(dim)
+	var box := VBoxContainer.new()
+	box.name = "DiagExportProgressBox"
+	box.set_anchors_preset(Control.PRESET_CENTER)
+	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	box.add_theme_constant_override("separation", 10)
+	var title := Label.new()
+	title.name = "DiagExportTitleLabel"
+	title.text = "正在导出日志"
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_override("font", StickerTheme.font_bold())
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	_export_bar = ProgressBar.new()
+	_export_bar.name = "DiagExportProgressBar"
+	_export_bar.min_value = 0.0
+	_export_bar.max_value = 100.0
+	_export_bar.value = 0.0
+	_export_bar.show_percentage = false
+	_export_bar.custom_minimum_size = Vector2(340.0, 16.0)
+	# R292-L3（评审）：贴纸风格式——引擎默认灰蓝条游离于全局 UI 之外
+	var bar_bg := StyleBoxFlat.new()
+	bar_bg.bg_color = Color(0.13, 0.14, 0.18, 0.92)
+	bar_bg.corner_radius_top_left = 8
+	bar_bg.corner_radius_top_right = 8
+	bar_bg.corner_radius_bottom_left = 8
+	bar_bg.corner_radius_bottom_right = 8
+	_export_bar.add_theme_stylebox_override("background", bar_bg)
+	var bar_fill := StyleBoxFlat.new()
+	bar_fill.bg_color = Color(0.36, 0.78, 0.46)
+	bar_fill.corner_radius_top_left = 8
+	bar_fill.corner_radius_top_right = 8
+	bar_fill.corner_radius_bottom_left = 8
+	bar_fill.corner_radius_bottom_right = 8
+	_export_bar.add_theme_stylebox_override("fill", bar_fill)
+	box.add_child(_export_bar)
+	_export_stage_lbl = Label.new()
+	_export_stage_lbl.name = "DiagExportStageLabel"
+	_export_stage_lbl.add_theme_font_size_override("font_size", 14)
+	_export_stage_lbl.add_theme_font_override("font", StickerTheme.font_bold())
+	_export_stage_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_export_stage_lbl)
+	ov.add_child(box)
+	_root.add_child(ov)
+	_export_overlay = ov
+
+
+func _set_export_stage(p_pct: int, p_text: String) -> void:
+	# R292：段阶推进（进度条+文案一体刷新——文案自带百分数，进度条不显内嵌百分比）
+	if _export_bar != null and is_instance_valid(_export_bar):
+		_export_bar.value = float(p_pct)
+	if _export_stage_lbl != null and is_instance_valid(_export_stage_lbl):
+		_export_stage_lbl.text = "%s（%d%%）" % [p_text, p_pct]
+
+
+func _remove_export_overlay() -> void:
+	# R292：收尾撤覆盖层（queue_free 延迟释放——引用即清防悬挂）
+	if _export_overlay != null and is_instance_valid(_export_overlay):
+		_export_overlay.queue_free()
+	_export_overlay = null
+	_export_bar = null
+	_export_stage_lbl = null
 
 
 func _refresh_mascot() -> void:

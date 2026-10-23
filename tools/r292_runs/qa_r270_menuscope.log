@@ -1,0 +1,34 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R270 菜单域分辨率回归+真路径敌弹计数 回归 ══════════
+── m 状态域矩阵：MENU/结算全分辨率 ↔ 活战态降档 ──
+  PASS | m1 菜单域恒全分辨率：模式开 ∧ MENU → css==(720,1280) ∧ zoom==1.0 ∧ div==1.0
+  PASS | m2 菜单域云恒等：vis/div == vis（div=1.0 浮点逐位——r195 口径在菜单域保持）
+  PASS | m3 迁移链 MENU→PLAYING 成功（钩子路径）
+  PASS | m4 活战态应用：css==(612,1088) ∧ zoom==(0.85,0.85) ∧ div≈0.85
+  PASS | m5 战内冻结态保持：PLAYING→LEVEL_UP → 降档不收（世界画面仍在）
+  PASS | m6 收卡回战保持：LEVEL_UP→PLAYING → 仍 612×1088（幂等零写）
+  PASS | m7 结算域回全分辨率：PLAYING→GAME_OVER → css==(720,1280) ∧ zoom==1.0 ∧ div==1.0
+  PASS | m8 回菜单保持全分辨率：GAME_OVER→MENU → 720×1280（主页域=回归修复目标位）
+  PASS | m9 菜单域热切零应用：写 75 档 → css 仍==(720,1280)（活战态门优先于设置）
+  PASS | m10 再战按新档：入 PLAYING → css==(540,960) ∧ zoom==(0.75,0.75) ∧ div≈0.75
+  PASS | m11 迁移信号期除数一致：MENU→PLAYING 尺寸信号瞬间 div≈0.85（非旧档 1.0）
+── s 设置卡适配：fit=min(1, 画布宽/620, 画布高/1236) ──
+  PASS | s1 全分辨率域零扰动：open() 后卡 scale==ONE（fit=1.0）
+  PASS | s2 85 档卡缩放：scale≈(0.8803,0.8803)（1088/1236 底半受限）
+  PASS | s2b 卡可视底入画：底 1088.0 ≤ 画布高 1088.0（修P1——返回钮唯一关闭口）
+  PASS | s3 75 档卡缩放入画：scale≈0.7767 ∧ 卡底 960.0 ≤ 960.0（960/1236）
+── f 真路径敌弹计数：真敌开火 → 计数/实扫/帽门/归还 ──
+  PASS | f0 前置：弹池可达（game_loop._projectile_pool）
+  PASS | f1 真路径计数：真敌 _fire_at → team1_live +1（acquire 参计数环）
+  PASS | f2 真路径实扫：recount_team1() == rc+1（spawn 期 team=1 赋值与计数同调）
+  PASS | f3 真路径落弹：活弹 +1 且新敌弹 team==1
+  PASS | f4 帽门真路径拒绝：team1_live==320 ∧ boost 开 → 再开火零落弹且计数不动
+  PASS | f5 归还自愈：release 真弹 → recount_team1()==0（注入位被实扫覆盖）
+────────────────────────────────────────
+汇总：PASS 21 / FAIL 0（共 21 项）
+验收汇总：21/21 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 8 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

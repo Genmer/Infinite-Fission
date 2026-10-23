@@ -1,0 +1,92 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R269 A 轨保帧模式（五帽/分辨率/音效档口/C1） 回归 ══════════
+── a1 boost_mode 读序三态 / 垫值纯函数 / 首启垫值路径 ──
+  PASS | a1缺省（override -1 + settings 无键）→ 关
+  PASS | a1垫值纯函数：_boost_default_for(false)==0 / (true)==1（平台分叉单源）
+  PASS | a1强开直通：override=1 → true（压过 settings）
+  PASS | a1强关直通：override=0 ∧ settings=1 → false（注入最高优先）
+  PASS | a1真值通道：settings(perf_boost)=1 ∧ override=-1 → true（写口后下一读翻转）
+  PASS | a1真值通道回落：settings=0 → false
+  PASS | a1首启垫值：键缺省 → 垫值可达（headless 非 mobile → perf_boost==0 ∧ boost_res==85）
+  PASS | a1双注册：SETTINGS_DEFAULTS 含 perf_boost==0 / boost_res==85
+  PASS | a1归一化：perf_boost clampi(0,1)（7→1 / -3→0）+ boost_res 归 {85,75}（90→85 / 70→75 / 80→85 脏值归 85）
+  PASS | a1促N 单源：boost_diag_state 关=0（与诊断行/设置行文案同源）
+  PASS | a1促N 单源：强开（settings boost_res 缺省→85）→ 1
+  PASS | a1促N 单源：开 ∧ boost_res=75 → 2
+  PASS | a1修3 零触发：headless 垫 0 → consume_boost_intro()==''（desktop 口径不动）
+  PASS | a1修3 待播：consume 返回白话文案 ∧ boost_intro_seen 置位（一次性标志）
+  PASS | a1修3 一次性：二次 consume 空（勿每启重播）
+── a2 fx 钉 0：fx_quality_cap boost 分支 + 元素层 _fx_quality 尾分支 ──
+  PASS | a2调速器帽：boost 开（tier_override -1 真值路径）→ fx_quality_cap()==0
+  PASS | a2 Enemy._fx_q：boost 开 → 0（桌面 fx 档 2 被钉 0）
+  PASS | a2元素层：boost 开 → _fx_quality()==0（预算表 [0,2,4] 落 0 档）
+  PASS | a2关态逐位：tier_override=3 → cap 2
+  PASS | a2关态逐位：tier_override=2 → cap 1
+  PASS | a2关态逐位：tier_override=1 → cap 0
+  PASS | a2关态逐位：非 mobile 无注入 → 恒 2（桌面零扰动承重墙）
+  PASS | a2元素层关态：fx_quality 设置 2 → _fx_quality()==2（现状逐位）
+── a3 跳字帽：boost 开 12 / 关 80-40-20 逐位 ──
+  PASS | a3boost 开：max_active_for(2/1/0) 全=12（单向阀 mini）
+  PASS | a3boost 关（桌面默认）：80/40/20 逐位（r218 ④ 锁不动）
+── a4 敌帽 90/120 + MAX_ONSCREEN 保留 + 敌弹 320 帽注入 ──
+  PASS | a4敌帽读口：boost 开 → max_onscreen()==90
+  PASS | a4敌帽读口：boost 关 → max_onscreen()==120
+  PASS | a4const 保留：EnemySpawner.MAX_ONSCREEN==120（符号直引编译不破——r212_poolwarm:118）
+  PASS | a4敌弹帽：boost 开 ∧ team1_live≥320 → acquire(1) 返 null（该发未射）
+  PASS | a4敌弹帽：boost_bullet_capped 计数 +1（拒N 源）
+  PASS | a4敌弹帽只锁 team-1：acquire(0) 正常获取
+  PASS | a4敌弹帽关态：同计数 320 → acquire(1) 正常获取（门不触逐位）
+  PASS | a4BOOST_TEAM1_CAP 常量==320（设计 §3.4 帽值锚）
+── a5 死亡帽：门开不依赖环境 / 帽值 4 / -2 否决 / DeathPop 前置门整挡 ──
+  PASS | a5门：boost 开 → _deathpop_cap_on() 真（不依赖 fullload/tier/mobile）
+  PASS | a5否决：deathpop_cap_override=-2 恒关（用户否决压过 boost）
+  PASS | a5帽值：boost 开 → _death_fx_cap_now()==4（DEATHPOP_FX_CAP 10 收缩）
+  PASS | a5帽值：boost 关 → _death_fx_cap_now()==10（r230 哨兵四态逐位）
+  PASS | a5增量面：boost 开 PoisonSplash×6 → 注册表==4（帽 4 收缩 + 抢占 2）
+  PASS | a5对照：boost 关（fx 档 2）击杀 → DeathPop 发射 +1（门外语义逐位）
+  PASS | a5前置门整挡：boost 开击杀 → DeathPop 零发射（_fx_q()==0 门吸收——增量面确为 PoisonSplash）
+  PASS | a5结算链零触碰：两击杀 enemy_killed 全数派发（掉落/经验照走）
+── a6 分辨率数学：纯函数 / world_div / cloud 恒等 / 应用器幂等零写 ──
+  PASS | a6纯函数：_boost_target_scale 85→(612,1088,0.85) / 75→(540,960,0.75) / 关→(720,1280,1.0)
+  PASS | a6boost_world_div：关=1.0（x/1.0 浮点恒等——r195_adapt 逐位）
+  PASS | a6cloud 恒等：vis/div == vis（div=1.0 时 float 逐位不变）
+  PASS | a6boost_world_div：开85 → 0.85（zoom 分母——坐标空间除回可见世界域）
+  PASS | a6boost_world_div：开75 → 0.75
+  PASS | a6应用器关态零写：同档重入 content_scale_size/zoom 逐位不动
+  PASS | a6应用器开85：content_scale_size==(612,1088) ∧ camera.zoom==(0.85,0.85)
+  PASS | a6应用器幂等：同档二次调用零写
+  PASS | a6应用器回退：关模式 → content_scale_size/zoom 回原值（单函数单点回滚）
+── a8 音效档口：boost 开不受钉 0 影响 / 关态两口逐位同值 ──
+  PASS | a8两口分离：boost 开 → _sfx_q()==2（用户设置档直读）∧ _fx_q()==0（渲染钉 0）
+  PASS | a8两口分离：boost 开 → _sfx_q()==1（随用户档）∧ _fx_q()==0
+  PASS | a8两口分离：boost 开 → _sfx_q()==0（用户关=真关，非钉 0）∧ _fx_q()==0
+  PASS | a8源级 mobile 臂锚：_sfx_q 开模式含 mini(cache,1) mobile 降档（headless 不可翻转 OS 门——源文本锁）
+  PASS | a8关态逐位：_sfx_q()==_fx_q()（档 2）
+  PASS | a8关态含 tier 帽语义：tier_override=1 → 两口同 0（深载 tier1 静音=既有行为）
+  PASS | a8源级四消费点：_begin_cast/_release_cast/_affix_begin/_affix_release 换读完成（×4）
+── C1 装饰门并 boost：谓词矩阵 / 行为隐藏复显 / fullload_flips 不增 ──
+  PASS | C1谓词：关 ∧ fullload 0 → 不隐（现状逐位）
+  PASS | C1谓词：关 ∧ fullload 1 → 隐（既有满载门）
+  PASS | C1谓词：开 ∧ fullload 0 → 隐（敌<80 段也隐——boost 单向并）
+  PASS | C1谓词：开 ∧ fullload 1 → 隐
+  PASS | C1前置：精英敌皇冠在位且可见（want 语义建件）
+  PASS | C1行为：boost 开 → 皇冠隐藏（装饰门唯一点换 _decor_hidden_now 生效）
+  PASS | C1翻N 不增：boost 翻转不写 _fullload_latched（fullload_flips 计数不动）
+  PASS | C1行为：boost 关 → 皇冠复显（_ensure_* want 语义单源复显）
+  PASS | C1翻N 全程不增（boost 开关往返零计数）
+  PASS | C1既有满载门：fullload=1 → 皇冠隐藏（R225 语义原文保留）
+  PASS | C1既有满载门：回落 → 复显
+  PASS | C1本体零波及：_state_fx_q() 不读 boost（fullload 0 → _fx_q() 现值——boost 关态档 2）
+────────────────────────────────────────
+汇总：PASS 69 / FAIL 0（共 69 项）
+验收汇总：69/69 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 97 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

@@ -868,7 +868,10 @@ func diag_export() -> Dictionary:
 			"\n".join(_diag_build_lines), body]
 	var text := header + body
 	var dt := Time.get_time_string_from_system().replace(":", "")
-	var fname := "diag_%s_%s.txt" % [ver.replace(".", "_").replace("/", "_"), dt]
+	# R292-D1（QA）：补毫秒段——HHMMSS 粒度下同秒两次导出同名互覆（连点可复现）；
+	# 文件名契约=前缀 diag_+版本段不变（r205 contains/begins_with 断言零位移）。
+	var ms := "%03d" % (Time.get_ticks_msec() % 1000)
+	var fname := "diag_%s_%s_%s.txt" % [ver.replace(".", "_").replace("/", "_"), dt, ms]
 	var path := "user://%s" % fname
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f != null:

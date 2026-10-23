@@ -32,7 +32,7 @@ func run(p_tree: SceneTree) -> void:
 	await _test_4_probe_and_counts()
 	_test_5_format_line_with_gl()
 	_test_6_export()
-	_test_7_menu_button_and_dialog()
+	await _test_7_menu_button_and_dialog()
 	_test_8_storm_throttle_counter()
 	_teardown_game_loop()
 	print("────────────────────────────────────────")
@@ -223,7 +223,14 @@ func _test_7_menu_button_and_dialog() -> void:
 		menu.find_child("VersionFooter", true, false) != null
 			or _menu_has_version_text(menu), "无版本行")
 	# 对话框链路：按下 → 写文件 + AcceptDialog 弹出（headless 剪贴板 false 分支亦不炸）
+	# R292：导出分段协程化（进度覆盖层+三段跨帧）——帧泵收敛后再查框；
+	# R292-M1 修轮适配：最小展示时长 300ms 为墙钟语义——帧帽改墙钟死线（2.5s）
 	menu._on_export_log_pressed()
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 2500:
+		if menu.find_child("DiagExportDialog", true, false) != null:
+			break
+		await menu.get_tree().process_frame
 	if DebugStats.diag_last_export_path != "":
 		_exported_paths.append("user://" + DebugStats.diag_last_export_path.get_file())
 	var dlg: AcceptDialog = menu.find_child("DiagExportDialog", true, false) as AcceptDialog

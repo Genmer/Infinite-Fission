@@ -1,0 +1,42 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R292 独立验收 · 导出日志分段进度反馈 ══════════
+  PASS | boot 成功（main.tscn 真链）
+  PASS | boot 落 MENU（菜单根可见）
+  PASS | menu_screen 在位
+── 点1 按下当帧：覆盖层/进度条/禁用/锁 ──
+  PASS | 1a 导出按钮在位
+  PASS | 1b 当帧覆盖层已挂树
+  PASS | 1c 进度条在位且起步 5%
+  PASS | 1d 阶段文案=正在组装日志
+  PASS | 1e 覆盖层树内可见
+  PASS | 1f 遮罩全屏锚定且挡点击（STOP）
+  PASS | 1g 按钮禁用+重入锁置位
+── 点2/3 分段推进与收敛 ──
+  PASS | 2a 进度单调不减（≥2 采样）
+  PASS | 2b 阶段文案按序（首=组装，含剪贴板段）
+  PASS | 3a 预览对话框弹出（收敛帧数=26）
+  PASS | 3b 对话框口径不变（剪贴板行+尾部 24 行说明）
+  PASS | 3c 标题带版本（R205 同源）
+  PASS | 3d 覆盖层撤除+按钮恢复+锁复位
+── 点4 重入锁（二连击） ──
+  PASS | 4a 前轮对话框已释放
+  PASS | 4b 二连击仅一覆盖层
+  PASS | 4c 二连击不重置阶段（锁内直返）
+  PASS | 4d 收敛后仅一对话框
+── 点5 导出产物 ──
+  PASS | 5a 导出路径非空且文件在盘
+── 点6 对话框关闭释放 ──
+  PASS | 6a 待关对话框在位
+  PASS | 6b 关后帧泵即无残留（visibility_changed→queue_free）
+── 收尾（对话框/产物文件/Meta 还原） ──
+验收汇总：23/23 通过
+WARNING: 24 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 24 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 152 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

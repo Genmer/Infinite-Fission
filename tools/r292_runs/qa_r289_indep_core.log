@@ -1,0 +1,73 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R289 独立 QA · 深载核心面（滞回/双帽/应急档） ══════════
+  PASS | boot 成功（main.tscn 真链）
+── a 深载滞回（1.99/2.00 / 死区 / 4s / 暂停与选卡冻结 / MENU / boost 门） ──
+  PASS | a1 fps20 × 1.9s 不置位
+  PASS | a2 累计 2.0s 置位
+  PASS | a3 34..45 死区 10s 保持置位且高帧侧计时归零
+  PASS | a3b fps=34/45 端点均属死区（保持闩+计时归零）
+  PASS | a4 fps60 × 3.9s 仍置位（4s 门槛未到）
+  PASS | a5 fps60 累计 4.0s 且驻留≥10s → 清位
+  PASS | a3c 死区 2s 保留低帧累计（不清零）
+  PASS | a3d 死区后低帧续累计即置位（原实现下不可达）
+  PASS | a3e 无载（spawner 空）高帧 4s+驻留≥10s → 清位（基线）
+  PASS | a3f 场地满载（敌≥30）时高帧 4s+驻留≥10s 不撤深载（负载门）
+  PASS | a3g 场地清空后再高帧 4s → 撤档
+  PASS | a5b 巨 delta×2 不置位（单帧钳 0.1s）
+  PASS | a5c 0.1s 帧步进累计 2s → 置位
+  PASS | a5d 驻留<10s 时高帧 4s 不撤（防极限环）
+  PASS | a5e 驻留≥10s 后高帧 4s → 撤档
+  PASS | a6 PLAYING+paused 低位不置位（冻结）
+  PASS | a7 PLAYING+paused 高位不清位（冻结）
+  PASS | a8 LEVEL_UP 低位不置位（冻结）
+  PASS | a9 LEVEL_UP 高位不清位（冻结）
+  PASS | a10 MENU 清位
+  PASS | a11 MENU 双侧计时复位
+  PASS | a11b 状态5 → 清位+计时复位
+  PASS | a11b 状态0 → 清位+计时复位
+  PASS | a12 boost 关 → deep_load 恒 false（闩虽真）
+  PASS | a13 boost 关 → 写点清闩+计时
+  PASS | a14 boost 关 ∧ deep_override=1 → 仍 false（boost 门优先）
+  PASS | a15 boost 开 ∧ deep_override=0 → false（压过闩）
+  PASS | a16 boost 开 ∧ deep_override=1 → true（无需闩）
+── d1 B 深载玩家弹帽（team0 120；team1 不误伤；解除恢复） ──
+  PASS | d1 前置：弹池空（total=0 / team1=0）
+  PASS | d2 注入 30 颗 team1 活弹（计数与池一致）
+  PASS | d3 深载 team0 活口恰可到 120
+  PASS | d4 帽判据不含 team1（total=150）
+  PASS | d5 超帽第 121 颗被拒（deep_bullet_capped 递增）
+  PASS | d6 team1 活弹未被 team0 帽回收（30 颗仍在活口表）
+  PASS | d7 team0 满帽时 acquire(1) 仍可获
+  PASS | d8 解除深载后可再获 team0（活口>120）
+  PASS | d9 解除深载 acquire 不再计 deep_bullet_capped
+  PASS | d10 重开深载且 team0=121 → 立即拒绝
+  PASS | d11 归还后 total=0 / team1=0
+── d2 B 敌帽三态（boost 关 120 / boost 开 90 / boost∧deep 40） ──
+  PASS | d12 boost 关（deep_override=1）→ 120
+  PASS | d13 boost 开 deep 关 → 90
+  PASS | d14 boost 开 deep 开 → 40
+  PASS | d15 真值闩 deep_active → 40
+  PASS | d16 boost 关 + 闩真 → 120（boost 门优先）
+── e C 档（R291 UI 定格：deep 不改画布；用户档恒定；boost 关零写；用户 75 幂等） ──
+  PASS | e1 85+deep（PLAYING）→ 画布定格 612×1088（R291 删自动降档）
+  PASS | e2 85+deep → zoom .85（不降 .75）
+  PASS | e3 85+deep → boost_world_div .85
+  PASS | e4 85+deep → 促键 1（用户档真值——促2 只属用户手选 75）
+  PASS | e5 deep 解除 → 画布幂等零写（仍 612×1088）
+  PASS | e6 deep 解除 → 促键 1（闩不再影响画布/促键）
+  PASS | e7 boost 关 → 720×1280 + zoom1 + div1
+  PASS | e8 boost 关 ∧ deep_override=1 → deep_load false / 促0
+  PASS | e9 boost 关 → 应用器幂等零写（快照前后相等）
+  PASS | e10 用户 75 ∧ deep 关 → 540×960/.75（促2）
+  PASS | e11 用户 75 ∧ deep 开 → 540×960/.75（幂等——deep 不改用户档）
+  PASS | e12 回用户 85 → 612×1088/.85
+── 收尾（池/设置/画布/闩还原） ──
+验收汇总：57/57 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 120 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
