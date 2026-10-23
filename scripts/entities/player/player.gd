@@ -10,6 +10,10 @@
 class_name Player
 extends Area2D
 
+# R293 模拟刀 B：② 相位括号助手按路径引用（headless -s 不重扫类缓存——裸新
+# class_name 不可解析；Player 非 WeaponBase 子类，独立声明一份）。
+const SimQueryShare = preload("res://scripts/combat/weapon/sim_query_share.gd")
+
 # ── R246 击杀快照账本（static：脚本加载期抢订 enemy_killed，派发位早于 Boot 全部订阅） ──
 # 动机（「连接序 = 派发序」纪律，game_loop.gd _boot_build_actors ★注先例）：玩家节点在
 # Boot 序中晚于 EnemySpawner 入树（spawner :2440 / player :2451），实例侧 enemy_killed
@@ -680,6 +684,12 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 			_wp_dt = p_game_delta * 2.0
 	WeaponBase.lod_dt_doubled = _wp_run and _wp_dt > p_game_delta
 	WeaponBase.lod_beats = 2                        # R291：主武器组子拍数（dt×2 原语义；副武组另行写 4）
+	# R293 模拟刀 B：② 相位括号开——四组武器调度段内敌位/网格成员结构性冻结
+	#（击退速度型 ⑤ 才位移、rebuild/insert 在 ④、死亡回池位置不变），武器侧
+	# 查询帧级共享（SimQueryShare——索敌/追击/齐射候选跨武器同帧同键复用）只在
+	# 本括号内生效；括号外（含测试直驱武器拍）恒原查询路径。括号含在火段计时窗内
+	#（惰性首查者付费——武9µs/副武µs 归因链不断）。
+	SimQueryShare.begin_phase()
 	if _wp_run:
 		# 二cv#6：贴脸豁免圈随武器循环逐帧折算（零新增遍历——≤7 槽 × has_method 微秒级，
 		# 落在 probe_weapons_us 计时段内；逐帧而非事件刷新是防升级/换卡/出售/超凡漏接）
@@ -728,6 +738,7 @@ func tick(p_game_delta: float, p_move_delta: Vector2) -> void:
 				if drone != null and is_instance_valid(drone):
 					drone.tick(_sub_dt)
 		probe_wpn_us[WeaponBase.WPN_FAMILY_OTHER] += int(Time.get_ticks_usec() - _c_t0)
+	SimQueryShare.end_phase()                      # R293 模拟刀 B：② 相位括号闭（共享窗口结束）
 	probe_weapons_us += int(Time.get_ticks_usec() - _wp_t0)
 	_tick_visual(p_game_delta, total)
 

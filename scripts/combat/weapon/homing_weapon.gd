@@ -216,7 +216,11 @@ func _acquire_volley_targets(p_count: int) -> Array[Node2D]:
 	var origin := muzzle_position()
 	var dists: Array[float] = []                # 与 targets 平行（插入序=距离升序、并列 uid 升序）
 	var uids: Array[int] = []
-	for cand in enemy_grid.query_circle(origin, 1600.0):
+	# R293 模拟刀 B：1600 圆扫候选表经帧级共享（SimQueryShare——tick 栈内同帧同键
+	# 与 slash 索敌/W9 追击共用一条目；返回表只读迭代，环内无嵌套网格查询=原纪律；
+	# 禁用/栈外回落=原直接实查零复制迭代，逐位）。前-K 选择/uid tie-break 逐调用
+	# live 距离重算——② 内冻结快照下与原路径逐位同值。
+	for cand in SimQueryShare.shared_scan_cands(_in_tick, enemy_grid, origin):
 		if cand == null or bool(cand.get("dead")):
 			continue
 		var d := origin.distance_squared_to(cand.global_position)

@@ -1,0 +1,45 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+Vulkan 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 4070 Laptop GPU
+
+══════════ R293 QA 独立探针 · 弹本体 MultiMesh 合批 ══════════
+── 点0 夹具 ──
+  PASS | 0a boot 成功（main.tscn 真链）
+  PASS | 0b 关态默认：boost_mode 假 且 零册零层零分桶（懒建承诺+残留检测）
+── 点1 分桶对账（真源=pool.active_projectiles 池账本） ──
+  PASS | 1a grouped_counts==池账本口径（键=(贴图实例id,team)；KIN0×4/FIR0×3/敌1×2）
+  PASS | 1b host 在册：逐弹 mirror_tex_of==自身贴图 且 mirror_count==基线+活口数
+  PASS | 1d 实例序==place 序（KIN0 桶出生序索引严格递增——绘制序与桶序同构）
+  PASS | 1c 泵 2 帧后逐桶 visible_instance_count==该贴图活口数（4/3/2）
+  PASS | 1e 全释放后镜像回基线（release→unplace_lazy 注销链零泄漏）
+── 点2 transform 逐帧一致+染色保真（窗口 parity / headless 结构） ──
+  PASS | 2a LTG 自旋跟随：rotation 真增长+注册键在位（窗口态实例 transform==owner.global×body.local 逐位 parity）
+  PASS | 2b 移动+本体偏移/旋转跟随（泵 2 帧后实例 transform 与池状态逐帧一致——窗口态 parity）
+  PASS | 2e 实例色==root.modulate×body.modulate×self_modulate（弹侧恒白——染色走贴图通道零损失）
+  PASS | 2c 元素染色保真：六弹贴图实例互异（分桶即分色）且各桶 BodyMM.texture 身份等同弹贴图
+  PASS | 2d 弹侧染色不落 modulate 通道（六弹 modulate/self_modulate 恒白）
+── 点3 拖尾/特效未误伤 ──
+  PASS | 3a 回旋弹：镜像在册+根可见（拖尾画布=弹根 _draw 保留）+旋刃自旋通道活（tick 后 rotation 真增长）
+  PASS | 3b 灵剑：镜像在册+根可见+本体隐（刺击残影=弹根 _draw 绘制面不被镜像杀）
+  PASS | 3c R291 拖尾半频门倍率逐位（16 拍 deep 4 置脏 / 关 8 置脏——镜像注册下门零位移）
+── 点4 池契约/惰性归位 ──
+  PASS | 4a boost 开 release：镜像注销+留桶（parent≠池根）+根隐+is_clean+池账本剔除+零污染
+  PASS | 4b 同变体 LIFO 复用：同件复落桶=复注册+贴图回 ICE 缓存实例+sprite 复隐
+  PASS | 4c 幽灵负向探针：off→on 翻转追赶扫后 留桶空闲弹（栈顶之下）零复注册+根仍隐+sprite 已被拆收复原；新弹照常注册
+  PASS | 4d 12 轮混队混元素 acquire/release 环：镜像计数守恒+team1_live 归零+零污染
+  PASS | 4e FORCED 强收×3：镜像回基线+活口清零（强收链注销无泄漏）
+── 点5 boost 关侧逐位不变 ──
+  PASS | 5a 关态 spawn：sprite 照绘+零注册+零分桶+层无（懒建承诺——关态恒 null）
+  PASS | 4f 关态 release 归位池根（r214 现状口径逐位——unplace 非 lazy 分派）
+  PASS | 5d 关态新贴图桶（DEN 草）零 BodyMM（桶机制 R214 照走、镜像件不建）
+  PASS | 5b 深载承重墙：boost 关+deep_override=1 → deep_load 恒 false
+  PASS | 5c BODY_MM=false 单点回退：活弹真实换键链复显+注销 且 新 spawn 零注册零册记
+  PASS | 5c2 门恢复：同弹再换键复隐+复注册（单点双向无残留）
+── 点6 S1/S7 短路臂共门 ──
+  PASS | 6a S1 共门：短路期 2 spawn 零注册零隐藏 且 place_skip_count 恰 +2（host 独写——门面越权注册即爆）
+  PASS | 6b S7 共门：短路窗口 sync_skip_count 递增（≥3 帧）且复位后 visible 收敛==活口（计数器不脏）
+  PASS | 6c 短路旗复位+计数面静态（无短路时零增量——两旗默认 false）
+── 收尾（池件归还/静态面复位/Meta 消毒/树释放） ──
+  PASS | ⑧ 套件总项数（EXPECTED=30——假绿防线）
+────────────────────────────────────────
+汇总：PASS 30 / FAIL 0（共 30 项）
+探针汇总：30/30 通过

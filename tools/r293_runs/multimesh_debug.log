@@ -1,0 +1,56 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R293 独立验收 · 弹本体 MultiMesh 合批 ══════════
+── 点0 夹具 ──
+  PASS | 0a boot 成功（main.tscn 真链）
+  PASS | 0b 弹池桶宿主在位（TexBucketHost 且具备镜像能力）
+── 点1 分桶实例数==活口数（桶键含贴图与 team） ──
+  PASS | 1a 10 弹全员注册：sprite 恒隐 且 镜像键==本体贴图
+  PASS | 1b host.mirror_count==活口数（基线+10）
+  PASS | 1c 桶键含贴图与 team：分桶数==4（三玩家色+敌珠）
+  PASS | 1d 各桶实例数==活口数（3/2/2/3——grouped_counts 逐桶）
+  PASS | 1e 桶键 team 位口径（敌弹只计 team=1 桶）且四贴图互为异实例
+  PASS | 1f 各桶 BodyMM 挂桶首位且 texture==桶贴图（R240 同规格）
+  PASS | 1g 分桶实例数==活口数（visible_instance_count 逐桶 3/2/2/3）
+── 点2 transform 与池状态一致（双态） ──
+  PASS | 2a 实例容量≥活口 且 visible==2（结构口径——双态恒跑）
+  PASS | 2d 实例序==place 序（先注册低索引——绘制序与桶序同构）
+  PASS | 2b 实例 transform（headless 降级：Dummy 渲染器不落地 MM 缓冲——QA-R240-002 同口径，结构断言见 2a/2d）
+  PASS | 2c 移动跟随（headless 降级：注册面守恒——键仍在册且活口不变）
+  PASS | 2e 实例色通道（headless 降级：use_colors 在位——写路径不可读回）
+── 点3 元素染色保真 ──
+  PASS | 3a 同色同实例（TextureFactory 静态缓存键含 fill html）：在册键==期望缓存实例
+  PASS | 3b 染色不落 modulate 通道（全员恒白——MM 合成色==Sprite 渲染色，逐弹 tint 不丢）
+  PASS | 3c 换色升格链：变体失效→重排→落桶→镜像换键（新色贴图）
+  PASS | 3d 换色后分桶迁移（旧桶-1 新桶+1）
+── 点4 拖尾/自绘特效保留 ──
+  PASS | 4a 回旋弹：镜像在册 且 弹根可见（拖尾画布=弹根 Node2D _draw——不被镜像杀）
+SCRIPT ERROR: Invalid call. Nonexistent function 'is_queued_redraw' in base 'Node2D (BallisticProjectile)'.
+          at: _p4_trails (res://tests/qa_r293_multimesh_cases.gd:451)
+── 点5 深载门不动 ──
+  PASS | 5a boost 关 → deep_load 恒 false（deep_override=1 也不亮——perf_governor 承重墙）
+  PASS | 5b 拖尾深载门倍率逐位（deep 8 拍 2 置脏 / 关态 4 置脏——R291 套件同口径）
+  PASS | 5c boost∧deep 并存：镜像照常注册（注册面与深载门正交——合批不劫持门）
+── 点6 boost 关侧逐位不变（桌面/headless/测试默认=现状） ──
+  PASS | 6a 关态 spawn：sprite 照绘（逐弹 Sprite 现状）且零注册零册零层
+  PASS | 6b 新贴图桶零 BodyMM（关态不建镜像件）
+  PASS | 6c 关态 release 归位池根（r214 关态口径逐位）
+  PASS | 6d BODY_MM=false 单点回退：复显+注销（boost 开态仍逐弹 Sprite）
+  PASS | 6d2 门恢复：再落桶复注册（单点双向无残留）
+  PASS | 6e boost 翻转拆收（开→关）：全员 sprite 复原+注销+层自拆
+  PASS | 6f boost 重开追赶扫：已活弹补注册复隐（懒挂层首帧实扫）
+── 点7 生命周期/惰性归位交互 ──
+  PASS | 7a boost 开 release：镜像注销+留桶（lazy）+根不可见+零池污染
+  PASS | 7b 同变体复用（LIFO 同件）：重落桶即复注册+sprite 复隐
+  PASS | 7c 10 轮 acquire/release 环：镜像计数守恒（注销链无泄漏）
+── 收尾（池件归还/静态面复位/Meta 消毒/树释放） ──
+  FAIL | ⑧ 套件总项数（EXPECTED=36——R231 假绿教训）（实得 33）
+────────────────────────────────────────
+汇总：PASS 32 / FAIL 1（共 33 项）
+  FAIL 详情：⑧ 套件总项数（EXPECTED=36——R231 假绿教训）（实得 33）
+验收汇总：32/33 通过
+FAIL 合并明细：⑧ 套件总项数（EXPECTED=36——R231 假绿教训）（实得 33）｜计数缺口：34≠36（有用例中途未执行）｜阶段缺口：p4:1/4
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 7 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

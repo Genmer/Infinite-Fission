@@ -225,7 +225,9 @@ func _build_ui() -> void:
 	# ── 特效质量（R19：高/中/低三档循环——buff 叠多层卡顿救；R220 行距 52→46 自 354 起，
 	#    R269 46→44 自 330 起） ──
 	_fx_btn = _add_toggle_row("FxQualityButton", "特效质量", 330.0, _on_fx_quality_cycle)
-	# ── 帧率上限（R194：60/90/120/不限 循环；仅移动端应用 Engine.max_fps，桌面基准不变） ──
+	# ── 帧率上限（R194：60/90/120/不限 循环；仅移动端应用 Engine.max_fps，桌面基准不变。
+	#    R293 刀C 核实：本行即「帧率帽解锁」终态——四档（60/90/120/无帽=0）+Meta 存档
+	#    +默认 60 均为 R194 既有交付，接线原样保持；桌面/headless 零写是关侧承重墙） ──
 	_fps_btn = _add_toggle_row("FpsCapButton", "帧率上限", 374.0, _on_fps_cap_cycle)
 	# ── 优先模式（R220：帧率优先/特效优先 两态循环——PerfGovernor 升降档阈值与刀12-14
 	#    数值面的模式源；写即存 + frame_priority() 每读直查 → 立即生效） ──
@@ -405,7 +407,9 @@ func _on_fps_cap_cycle() -> void:
 	# settings_changed("fps_cap") 即时重应用；非循环值（如手改 144）一轮归位 60。
 	# R220 修轮补注：本键同时是 PerfGovernor 调速器目标读口——target=min(上限,120,
 	# 屏幕刷新率)：上限只是帽，vsync/面板达不到不会触发降档（帽语义修正，perf_governor
-	# _target_fps 同口径）
+	# _target_fps 同口径）。
+	# R293 刀C 核实：本写口+Meta._on_settings_changed→_apply_fps_cap 即「切档即时生效」
+	# 既有接线（启动读取=Meta._ready 同函数）——mobile 门内应用，桌面/headless 零写。
 	var cur := clampi(int(Meta.settings("fps_cap")), 0, 144)
 	var order: Array[int] = [60, 90, 120, 0]
 	var idx := order.find(cur)
@@ -585,6 +589,10 @@ func _refresh_toggles() -> void:
 	_fx_btn.text = fx_texts[q]
 	_fx_btn.add_theme_color_override("font_color", fx_colors[q])
 	# R194 帧率上限循环文案（60/90/120/不限；0=不限——仅移动端应用，桌面基准不变）
+	# R293 修轮 1 体验披露：切档仅解锁 Engine.max_fps 帽——物理模拟恒 60Hz、插值层门
+	# =sim30_effective() 且 SIM_30HZ_ENABLED=false → 90/120 档=60Hz 模拟交替重复帧非
+	# 顺滑、60Hz 屏+vsync 下 fps 读数不变（零反馈=已知口径非失效，全文见诊断导出
+	# 口径头 R293 段；插值门与 30Hz 解耦/物理提频 90Hz=第二批必做决策，本刀不实施）
 	var cap := clampi(int(Meta.settings("fps_cap")), 0, 144)
 	_fps_btn.text = "✓ 不限" if cap == 0 else "✓ %d" % cap
 	_fps_btn.add_theme_color_override("font_color", PopPalette.SUCCESS)

@@ -160,6 +160,19 @@ func mirror_count() -> int:
 	return n
 
 
+func mirror_resync(p_tex: Texture2D) -> void:
+	# R293 拆收期同步口：批量 mirror_unregister 后立即调——受影响桶的 MM 变换表/
+	# visible_instance_count 即刻与册对齐（不待下一 _process 拍）。teardown 同帧复原
+	# sprite.visible 场景防「复原精灵 + 陈旧 MM 实例」一帧双绘（QA-R293 修轮2 定罪）。
+	# 敌弹同桶共用时重排亦安全（同步体=全量重建非增量）；S7 短路期共门零写（verdict 保真）。
+	if shortcircuit_sync:
+		return
+	if p_tex == null or not _mm_meshes.has(p_tex) or not _mm_lists.has(p_tex):
+		return
+	if _sync_bucket(p_tex):
+		_compact_lists()
+
+
 func _build_mm(p_tex: Texture2D) -> MultiMeshInstance2D:
 	var b := _bucket_for(p_tex)
 	var mmi := MultiMeshInstance2D.new()
@@ -212,32 +225,41 @@ func _process(_delta: float) -> void:
 	                                   # 熄灭空桶（早退会留幽灵实例：vis 默认 -1=全绘）
 	var has_dead := false
 	for tex in _mm_lists:
-		var lst: Array = _mm_lists[tex]
-		var mm: MultiMesh = (_mm_meshes[tex] as MultiMeshInstance2D).multimesh
-		if lst.is_empty():
-			if mm.visible_instance_count != 0:
-				mm.visible_instance_count = 0   # 清空桶须熄灭（跳过会留幽灵实例绘制）
-			continue
-		var n := 0
-		for i in range(lst.size()):
-			var owner = lst[i]            # QA-R240-001：勿类型化——freed 实例类型化赋值即
-			                             # 运行时报错（先于下一行判亡），去类型化后 is_instance_valid 可达
-			if not is_instance_valid(owner):
-				has_dead = true           # 释亡实例——帧尾清理（防表膨胀）
-				continue
-			if not (owner as Node2D).is_visible_in_tree():
-				continue
-			var body: CanvasItem = _mm_owner_body.get(owner)
-			if body == null or not is_instance_valid(body):
-				continue
-			if n >= mm.instance_count:
-				mm.instance_count = n + 16   # 容量阶梯增长（realloc 罕见）
-			mm.set_instance_transform_2d(n, owner.global_transform * body.transform)
-			mm.set_instance_color(n, owner.modulate * body.modulate * body.self_modulate)
-			n += 1
-		mm.visible_instance_count = n
+		if _sync_bucket(tex):
+			has_dead = true
 	if has_dead:
 		_compact_lists()
+
+
+func _sync_bucket(p_tex: Texture2D) -> bool:
+	# 单桶同步体（_process 每帧环抽体——R293 mirror_resync 复用；返回桶内是否见释亡
+	# 实例——帧尾 _compact_lists 门同原）。
+	var lst: Array = _mm_lists[p_tex]
+	var mm: MultiMesh = (_mm_meshes[p_tex] as MultiMeshInstance2D).multimesh
+	if lst.is_empty():
+		if mm.visible_instance_count != 0:
+			mm.visible_instance_count = 0   # 清空桶须熄灭（跳过会留幽灵实例绘制）
+		return false
+	var n := 0
+	var has_dead := false
+	for i in range(lst.size()):
+		var owner = lst[i]            # QA-R240-001：勿类型化——freed 实例类型化赋值即
+		                             # 运行时报错（先于下一行判亡），去类型化后 is_instance_valid 可达
+		if not is_instance_valid(owner):
+			has_dead = true           # 释亡实例——帧尾清理（防表膨胀）
+			continue
+		if not (owner as Node2D).is_visible_in_tree():
+			continue
+		var body: CanvasItem = _mm_owner_body.get(owner)
+		if body == null or not is_instance_valid(body):
+			continue
+		if n >= mm.instance_count:
+			mm.instance_count = n + 16   # 容量阶梯增长（realloc 罕见）
+		mm.set_instance_transform_2d(n, owner.global_transform * body.transform)
+		mm.set_instance_color(n, owner.modulate * body.modulate * body.self_modulate)
+		n += 1
+	mm.visible_instance_count = n
+	return has_dead
 
 
 func _compact_lists() -> void:

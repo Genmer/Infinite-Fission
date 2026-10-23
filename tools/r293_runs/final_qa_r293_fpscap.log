@@ -1,0 +1,38 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R293 刀C 独立验收 · 帧率帽解锁 + drawcallsN 真机判读键 ════════
+── A 帧率帽解锁：fps_cap 四档读写 + 默认 60 + Engine.max_fps 接线 ──
+  PASS | a1 缺键读口回退 fps_cap=60（默认保持 60 不变）
+  PASS | a1 默认表本值 fps_cap==60（SETTINGS_DEFAULTS）
+  PASS | a2 四档写读往返（60/90/120/无帽0——0=无帽语义档）
+  PASS | a3 写口钳制 200→144 / -5→0（clampi 0~144 既有契约）
+  PASS | a4 入口 Engine.max_fps==0（headless 缺省不动）
+  PASS | a4 写档 90 后 Engine.max_fps 恒 0（mobile 门 false 零写——关侧承重墙）
+  PASS | a4 直调 _apply_fps_cap 后 Engine.max_fps/physics_ticks 双零写（r233 C1 同款）
+  PASS | a5 应用器在场：meta_manager 含 Engine.max_fps = int(settings("fps_cap")) 且恰 1 处
+  PASS | a5 mobile 门内应用（门守卫→应用器直连序列在场）
+  PASS | a5 启动读取+切档即时：_apply_fps_cap() 恰 3 处（定义+_ready+settings_changed）
+  PASS | a5 MENU 帽 60 单点 + 离菜单恢复用户档（game_loop R262e——qa_r262e U3 同锚）
+  PASS | a5 大厅+暂停卡双入口接线（menu/pause settings_requested 双 connect 同一面板）
+── B 设置面板「帧率上限」行：四档循环 + 无帽文案 + 脏档归位 ──
+  PASS | b1 面板实例化 + FpsCapButton 行在位（大厅/暂停卡共用的同一面板类）
+  PASS | b2 四拍循环 60→90→120→无帽→60（档值+文案含「✓ 不限」=无帽档即时刷新）
+  PASS | b3 脏档 144 一轮归位 60（find 不到归位首档）
+  PASS | b4 源锚：档序 [60, 90, 120, 0]（无帽=0 尾档）+ 行名「帧率上限」
+── C drawcallsN：1Hz 行尾新段（弹拒N 后、尖峰段前；headless 恒 0） ──
+  PASS | c1 行含 drawcallsN 键且为行尾段（其后仅允许 尖峰 标记/行尾）
+  PASS | c2 键位序：副武µs < 弹拒 < drawcalls（追加在 弹拒N 之后——既有子串零挪动）
+  PASS | c3 数值可解析且 ≥0（Performance 监视器整形口径）
+  PASS | c4 headless 恒 0 且与同源直读一致（无渲染=口径无意义，判读只在真机行）
+── D 导出口径头：R293 段在场 + 整头未崩（R287 百分号教训回归面） ──
+  PASS | d1 导出成功（整头起底未崩——R287 格式串整头炸的回归面）
+  PASS | d2 口径头含 R293 段（刀C 双面：drawcallsN + 帧率上限行）
+  PASS | d3 R293 段追加位：紧接 R291 承句之后（口径头段序 R220→…→R291→R293）
+  PASS | d4 R293 段口径披露：默认 60 不变 + headless 无意义声明 + mobile 门/桌面零写承重墙
+  PASS | d7 R293 修轮 1 体验披露：90/120 档=仅解锁 max_fps 帽（物理恒 60Hz/插值门关→交替重复帧）+ 第二批必做决策在场
+  PASS | d5 百分号纪律回归面：R269 促N 句单百分号渲染在场（源码双百分号转义链路活——R287 整头崩教训）
+  PASS | d6 产物在盘（user:// 文件——收尾统一删除）
+── 收尾（Meta 还原/R270 毒配方/产物删除） ──
+────────────────────────────────────────
+汇总：PASS 27 / FAIL 0（共 27 项）
+验收汇总：27/27 通过

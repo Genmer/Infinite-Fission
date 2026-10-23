@@ -104,16 +104,44 @@ func has_target_now() -> bool:
 	return true
 
 
+func acquire_target() -> Node2D:
+	# R293 模拟刀 B·缝隙A：slash 模式（W9 族）索敌改走 1600 圆扫帧级共享条目——
+	# 一次 query_circle(玩家位,1600) 同时供 ① nearest 派生（argmin 严格 <、遍历序
+	# 与 query_nearest 同构——space_grid 两查询共用 _cells_in_range 行主序×桶插入序，
+	# 平局同取首个，逐位等价）② OrbitField._tick_chase 的 leash 候选子集（同谓词
+	# 保序过滤）。本体+同拍同位副本/镜面同帧共享一条目（SimQueryShare 帧纪元键）。
+	# cleave/orbit 走基类（cleave 小 reach 交战门另走 shared_nearest 独立键——1600
+	# 条目不得顶替进圈判定语义）。R220 单拍缓存语义原样保留（_tick_seq 键先闸——
+	# 子拍坍缩不动；dead 过滤逐调用同基类口径）。
+	if not _is_slash_mode():
+		return super.acquire_target()
+	if _in_tick and _acq_cache_seq == _tick_seq:
+		return _acq_cache_target
+	var found: Node2D = null
+	if enemy_grid != null:
+		var cand := SimQueryShare.slash_nearest(_in_tick, enemy_grid,
+			muzzle_position())
+		if cand != null and not bool(cand.get("dead")):
+			found = cand
+	_acq_cache_seq = _tick_seq
+	_acq_cache_target = found
+	return found
+
+
 func _cleave_engage_target() -> Node2D:
 	# 二cx#2 W13 交战门目标口：query_nearest(reach = 有效半径×CLEAVE_ENGAGE_MULT)
 	# 最近活敌 + 中心距精判（query 口径含 +max_entity_radius(64px) 保守衬垫——超集
 	# 候选直放会隐性放宽门到 reach+64；本门要的是「敌进圈」中心距语义）。
 	# 网格缺席（装配中途/桩）→ null（门恒假不挥——防空挥主诉面优先）。返回值兼作
 	# 朝向源候选（try_fire 侧 aim_direction 与本查询同最近敌——门过时两者恒同目标）。
+	# R293 模拟刀 B：小 reach 门经 SimQueryShare 帧级共享（键含 reach——与 1600 条目
+	# 分立成条，不放宽门；tick 栈内同帧二门〔has_target_now+try_fire 复检〕坍缩为
+	# 每帧 1 实查，dead 过滤/中心距精判逐调用原样）。
 	if enemy_grid == null:
 		return null
 	var reach := effective_slash_radius() * CLEAVE_ENGAGE_MULT
-	var cand := enemy_grid.query_nearest(muzzle_position(), reach, null)
+	var cand := SimQueryShare.shared_nearest(_in_tick, enemy_grid,
+		muzzle_position(), reach)
 	if cand != null and not bool(cand.get("dead")) \
 			and cand.global_position.distance_to(muzzle_position()) <= reach:
 		return cand

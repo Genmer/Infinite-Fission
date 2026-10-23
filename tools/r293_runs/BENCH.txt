@@ -1,0 +1,44 @@
+════════════════════════════════════════════════════════════════════
+R293 模拟轴基准证据（qa_r293_bench，BENCH|<臂>|<ms/步> 契约）
+批次：90Hz 大改造·第一批（R293：弹幕 MultiMesh 合批 / 模拟刀 W9 查询共享 /
+深载帽与 drawcallsN 诊断）
+工作流：dwfrun-064b8f4d（2026-10-23，GLM-5.3$max，109.5M tokens，9 阶段全绿）
+夹具：深载台架 敌90+弹448（deeprepro 同款）；STRICTLY 串行
+════════════════════════════════════════════════════════════════════
+
+【核心对拍·同会话（工作流 phase2 基线 → phase6 复测，同机同夜，口径逐位同）】
+臂          改造前      改造后      Δ
+total       17.009      17.603      -3.5%
+player       0.251       0.251      ±0.0%
+projectile  12.654      13.234      -4.6%
+enemy        2.183       2.108      +3.4%
+weapons      0.218       0.217      +0.5%
+
+【预期形态说明（-3.5% 不是回归，是 headless 的结构性代价）】
+本批渲染轴主刀（弹本体 MultiMesh 合批）的收益面=draw call 数（逐弹 Sprite canvas
+item → 按贴图桶 MultiMeshInstance2D）。headless 无渲染后端：draw call 收益不可
+显现，但合批的模拟侧记账（注册/注销/每帧 transform×色读同步）在 headless 全额
+付出——即 headless 只量到刀的成本、量不到刀的收益。projectile 臂 -4.6% 正是
+该记账；enemy 臂 +3.4% 为模拟刀 B（W9 查询共享/has_target_now 帧缓存）在同一
+深载夹具上的净收益方向。真机收益判定键（vc92 日志）：drawcallsN（1Hz 行，
+Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME）+ 渲ms + 呈帧N。
+
+【修轮后终态复跑（本文件落盘时，跨会话）】
+bench_final.log（2026-10-24 03:5x，修轮后）：
+  BENCH|total|15.573  BENCH|player|0.216  BENCH|projectile|11.671
+  BENCH|enemy|1.928   BENCH|weapons|0.189   汇总 7/7 通过
+QA 复跑 final_qa_r293_bench.log（2026-10-24 03:38）：
+  BENCH|total|14.835  BENCH|player|0.210  BENCH|projectile|11.096
+  BENCH|enemy|1.905   BENCH|weapons|0.183   汇总 7/7 通过
+跨会话绝对值漂移（R271 已知：微基准复跑会漂）≈±12%——同会话对拍（上表）才是
+收益/代价的权威读数；两笔复跑仅证明契约稳定与套件健康。
+
+【修轮后全套件终态（tools/r293_runs/*_fix2.log + bench_final.log）】
+qa_r293_bench 7/7 · qa_r293_multimesh 37/37 · qa_r293_simknives 28/28（零
+SCRIPT ERROR——桩改 extends Enemy 后命中结算面已入 A/B 等价覆盖）·
+qa_r293_fpscap 27/27 · qa_r293qa_render 30/30 · qa_r293qa_sim 49/49
+修轮内容：① teardown_mirrors 同步 resync（一帧双绘修复：tex_bucket_host 抽体
+_sync_bucket + 新口 mirror_resync；S7 短路共门）；② slash_leash_candidates
+派生分支补 p_leash<=TARGET_REACH(1600) 完备门（超域回落直扫——当前构筑上限
+≈1425 不可达，结构性保险）；③ simknives 桩 StubTarget extends Enemy。
+════════════════════════════════════════════════════════════════════

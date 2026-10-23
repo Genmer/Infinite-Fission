@@ -37,6 +37,10 @@
 class_name OrbitField
 extends Node2D
 
+# R293 模拟刀 B：leash 候选共享助手按路径引用（headless -s 不重扫类缓存——裸
+# class_name 不可解析；OrbitField 非 WeaponBase 子类，独立声明一份）。
+const SimQueryShare = preload("res://scripts/combat/weapon/sim_query_share.gd")
+
 const HIT_FLASH_COUNT := 8                    # 命中冲击小环并发池（轮换）
 const HIT_FLASH_LIFE := 0.22                  # 命中小环时长 s
 const PATH_DASHES := 26                       # 轨道虚线段数（奇数段绘制 = 虚线观感）
@@ -731,9 +735,15 @@ func _tick_chase(p_game_delta: float, p_center: Vector2) -> void:
 	# R65 W9 追击 AI：逐刀在活动半径（leash_radius）内索最近敌 → 追至贴身悬停；
 	# 无敌 → 回轨道槽环绕。攻击判定不在本层（贴身开砍由 OrbitWeapon 消费
 	# collect_engaged_strikes → ArcSlash 弧形判定——攻击范围口径零变化）。
+	# R293 模拟刀 B：leash 候选经帧级共享（SimQueryShare.slash_leash_candidates）
+	# ——优先从同帧 1600 圆扫条目（本拍索敌已建）保序派生零查询；冷却期无索敌拍
+	# 时回落原小扫并按 (center,leash) 键共享同位副本。谓词与 query_circle(center,
+	# leash) 逐位同式（live _pos_of ≤ (leash+mr)²、行主序截断保序）⇒ _pick_chase_target
+	# 平局取向逐位不变。返回数组只读迭代（本函数环内无嵌套网格查询——原纪律）。
 	var candidates: Array[Node2D] = []
 	if weapon != null and is_instance_valid(weapon) and weapon.enemy_grid != null:
-		candidates.append_array(weapon.enemy_grid.query_circle(p_center, leash_radius))
+		candidates = SimQueryShare.slash_leash_candidates(weapon._in_tick,
+			weapon.enemy_grid, p_center, leash_radius)
 	var step := chase_speed * p_game_delta
 	for i in range(orbs):
 		var target: Node2D = _pick_chase_target(candidates, p_center + _knife_pos[i],

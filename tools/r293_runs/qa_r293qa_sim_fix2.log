@@ -1,0 +1,68 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+════════ R293 QA 独立验收 · 模拟轴刀（查询共享/帧缓存/空场早退）+ 帧率帽/drawcallsN ════════
+── S1 关态逐位对照（enabled off vs on，seed 2933，40 帧全量 trace） ──
+  PASS | 1a off 同 seed 双跑确定（off/off trace 逐位相等）
+  PASS | 1b off vs on 全量 trace 逐位相等（承重墙——共享刀逐位不变）
+  PASS | 1c on 路径共享确已生效（否则 1b 是空验证：fills/hits/derives 全 >0）
+  PASS | 1d 场景有效性：W9/W13 开窗 >0 且索敌/交战门/齐射序列全非空
+  PASS | 1e 场景有效性：dead 翻转后出现 -1（dead 过滤口径触发面在位）
+  PASS | 1f 场景有效性：追击刀位非恒定（chase 推进）且平局对不漂移（e1/e2 同距同选）
+── S2 深载守恒（lod_beats=2/4 隔帧执行 A/B 逐位） ──
+  PASS | 2a 深载 lod_beats=2：off vs on 全量 trace 逐位相等
+  PASS | 2b 深载 lod_beats=4（副武组深载口径）：off vs on 全量 trace 逐位相等
+  PASS | 2c 深载子拍语义在位：跳步帧零推进（帧1 seq==帧0）+ 执行帧恰 +1 拍
+  PASS | 2c2 深载 beats=4 同执行拍数（lod_beats 只改拍内子拍数——seq 终值同为 20）且索敌拍形非空
+  PASS | 2d 深载 beats=4 与 beats=2 拍形不同（两档确实走了不同子拍链）
+── S3 查询共享（计数口下降 + 结果逐帧等价） ──
+  PASS | 3a off 基线：3 同位 W9 × 20 帧 = nearest 60 + circle 60（每拍双查原口径）
+  PASS | 3b on：query_nearest 恒 0（slash 索敌 1600 圆扫条目派生）
+  PASS | 3c on：query_circle 恰 20（每帧 1 次 1600 圆扫三武共享）
+  PASS | 3d on：实查总量 120 → 20（-83%）
+  PASS | 3e 自证口账目：fills=20 / derives=20 / hits=80（每帧 1 填 1 派 4 命中）
+  PASS | 3f 结果等价：on/off 每帧每武器索敌 uid 逐帧相同（共享不换目标）
+── S4 共享 API 随机对拍（30 随机场 × 四口对拍） ──
+  PASS | 4a shared_nearest ≡ query_nearest（30 随机场逐节点同值）
+  PASS | 4b slash_nearest ≡ query_nearest(1600)（argmin 派生逐位）
+  PASS | 4c shared_scan_cands ≡ query_circle(1600)（逐元素同序）
+  PASS | 4d slash_leash_candidates(l) ≡ query_circle(l)（保序过滤逐元素，l∈[80,375]）
+  PASS | 4e 精确平局取向：P0 等距对先见者（西 1001）同取向——shared/slash/direct 同节点
+  PASS | 4f 空场四口全空（is_empty O(1) 早退口径=直查空结果）
+  PASS | 4g 空场自证口计数（stat_empty_skips=4）
+── S5 r220 契约 + 相位括号边界 ──
+  PASS | 5a 基类路径一拍 tick 全链 query_nearest 恰 1 次（r220 锁保持）
+  PASS | 5b 栈外直调恒真查（r220 锁保持——calls≥2）
+  PASS | 5c 同帧同位第二武器零实查（帧共享——新帧恰 +1 nearest）
+  PASS | 5d 括号外 tick 恒原查询路径（同位三武恰 +3 实查——无跨武器共享）
+  PASS | 5e 同位双 W6 齐射共享（同帧恰 1 次 1600 圆扫）
+  PASS | 5f W6 齐射目标非空且两武同目标表（shared_scan_cands 跨武等值）
+── S6 帧率帽：默认 60 + 四档读写 + 钳制 + headless 运行时墙 + 面板循环 ──
+  PASS | 6a 缺键读口回退 60 + 默认表本值 60（默认不动）
+  PASS | 6b 四档写读往返（60/90/120/无帽0）
+  PASS | 6c 写口钳制 200→144 / -5→0（clampi 0~144）
+  PASS | 6d headless 运行时墙：写档 90 + 直调 _apply_fps_cap 后 Engine.max_fps/物理 Hz 双零写
+  PASS | 6e 面板实例化 + FpsCapButton 行在位
+  PASS | 6f 四拍循环 60→90→120→无帽→60（值+文案即时刷新）
+  PASS | 6g 脏档 144 一轮归位 60
+── S7 drawcallsN：1Hz 行尾键 + 导出头 R293 段（%% 转义活链） ──
+  PASS | 7a 行含 drawcallsN 且为行尾段（其后仅允许 尖峰 标记/行尾）
+  PASS | 7b 键位序：副武µs < 弹拒 < drawcalls（行尾追加位——既有子串零挪动）
+  PASS | 7c 数值可解析 ≥0
+  PASS | 7d headless 恒 0 且与同源直读一致
+  PASS | 7e 导出成功（整头起底未崩——格式串活）
+  PASS | 7f 口径头含 R293 段（drawcallsN 语义 + 帧率上限行）
+  PASS | 7g R293 段位序：紧接 R291 承句之后
+  PASS | 7h %% 转义活链：促N 句单百分号渲染在场（85% 恰 1；75% 恰 2=促N 句+R290 修轮句——源级双 %% 各渲染一次，无 %% 残留）
+  PASS | 7i R293 段口径披露三锚（默认 60 不变/headless 恒 0/桌面零写承重墙）
+  PASS | 7j 产物在盘（收尾删除）
+── S8 取证探针（leash>1600 派生缺口 + 相位内冻结契约） ──
+  PASS | 8a【取证】leash=2000 派生口实测：derived=1 / direct=1（derived<direct 即环带漏取——当前数据上限 ~1425 不可达，详见报告）
+  PASS | 8b 相位冻结契约：相位内同键恒同值（q1==q2）+ 跨相位重查新值（q3==e1）
+── 收尾（静态还原/Meta 快照/产物删除） ──
+────────────────────────────────────────
+汇总：PASS 49 / FAIL 0（共 49 项）
+验收汇总：49/49 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
+ERROR: 2 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:604)

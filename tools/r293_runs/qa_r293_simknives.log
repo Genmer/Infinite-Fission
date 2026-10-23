@@ -1,0 +1,46 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R293 独立验收 · 模拟轴刀（查询共享/帧缓存/空场早退） ══════════
+  PASS | boot 成功（main.tscn 真链）
+── P1 关态逐位对照（enabled off vs on，全量 trace 相等） ──
+  PASS | 1a 关态同 seed 双跑确定（off/off trace 逐位相等）
+  PASS | 1b 关态 enabled=false vs true 全量 trace 逐位相等（承重墙）
+  PASS | 1c 场景有效性：W9 开窗 >0 且索敌序列非空
+  PASS | 1d 场景有效性：dead 翻转后索敌出现 -1（过滤口径触发）
+  PASS | 1e 场景有效性：追击刀位非恒定（chase 推进）
+  PASS | 1f 自证口：关态 on 路径缓存已生效（fills/hits/derives >0）
+── P2 深载守恒（deep A/B 逐位 + 子拍递推零漂移） ──
+  PASS | 2a 深载 enabled=false vs true 全量 trace 逐位相等（守恒）
+  PASS | 2b 深载跳步语义在位（奇数帧武器拍零推进 / 偶数帧恰 1 拍——seq 锁）
+  PASS | 2c 深载 W9 索敌拍数=执行拍数（隔帧索敌——acq 序列长度 < 帧数）
+── P3 查询计数口下降（off 120 扫 → on 20 扫） ──
+  PASS | 3a off 基线：20 帧 × 3 武 = nearest 60 + circle 60（每拍双查原口径）
+  PASS | 3b on：nearest 恒 0（slash 索敌 1600 圆扫派生——零 query_nearest）
+  PASS | 3c on：circle 恰 20（每帧 1 次 1600 圆扫，三武共享）
+  PASS | 3d on：扫描总量 120 → 20（-83%，计数口下降断言）
+  PASS | 3e 自证口：每帧恰 1 填充+1 派生+4 命中（fills=20/derives=20/hits=80——leash 条目同帧共享：首武派生存条，余二武命中不再派生）
+── P4 r220 契约（一拍恰 1 次 / 栈外恒真查 / 帧共享） ──
+  PASS | 4a 基类路径：一拍 tick 全链 query_nearest 恰 1 次（R220 锁保持）
+  PASS | 4b 栈外直调不共享缓存（R220 锁保持）
+  PASS | 4c 同帧同位第二武器零实查（帧共享——新帧恰 1 次 nearest）
+  PASS | 4d slash 路径：一拍 tick query_nearest 恒 0 + query_circle 恰 1（合并派生）
+── P5 语义墙（dead 过滤 / 帧纪元 / cleave 分键） ──
+  PASS | 5a 前序武器索敌成功（最近 e0）
+  PASS | 5b dead 翻转后同相位后续武器返 null（不假阳、无次近回落——原口径逐位）
+  PASS | 5c 相位纪元：跨相位条目作废（live 新位重查——答新最近 e1）
+  PASS | 5d _stamp 纪元前：最近=eA(50px)
+  PASS | 5e _stamp 纪元：rebuild 后条目作废（不吐陈旧 eA）
+  PASS | 5f cleave 小 reach 门不被 1600 条目顶替（门关 gate=-1 而基类索敌在）
+── P6 空场早退（零网格查询 + 计数口） ──
+  PASS | 6a 空场索敌 null（原口径——无敌不开火门）
+  PASS | 6b 空场零网格查询（is_empty O(1) 短路——nearest/circle 均 0）
+  PASS | 6c 自证口：stat_empty_skips >0
+── 收尾（静态还原/夹具释放） ──
+验收汇总：28/28 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 96 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

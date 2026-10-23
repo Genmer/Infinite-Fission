@@ -2119,3 +2119,18 @@
 - **测试账（tools/r292_runs/ALL.txt 终版，2026-10-23）**：15 套串行——qa_r292_export_progress 23/23（新：当帧反馈/单调收敛/重入二连击/产物/释放）、qa_r292qa_probe 47/47（QA 独立，含 7a 菜单态外/7b1 _root 中释/7b2 整树中释/7c 背靠背文件/7d 直调契约）、r205_legacy 40/40（迁移后）、menuscope 21/21、diagfreeze 0/0（skip 模式 EXIT=0）、diagkeys 14/14、R290/R291 电池 9 套全绿零位移。QA 报告 docs/qa/2026-10-23-R292-导出进度-测试报告.md。
 - **披露（不修，下轮候选）**：L2 键盘/手柄焦点导出期可达（移动端无此路径，窗口 3 帧+300ms 持有内）；L4 预览对话框 616px 最小宽在 540 逻辑宽档溢出（R205 既有）；L5 对话框未关再导出叠第二框（R205 既有——重入锁只挡进行中，不挡已完成后旧框未关）；O1 QA 探针人为「菜单活 _root 亡」诱发 _apply_safe_area 对已释放根 SCRIPT ERROR（生产不可达）。
 - **vc91 真机验收**：点「导出日志」应见全屏进度条（组装→剪贴板→预览→完成，全程 ≥0.3s）不再假死；导出中再点/点其他按钮无响应（遮罩+锁）；对话框口径与 vc90 前一致（文件+剪贴板+尾部 24 行）；文件名新增毫秒段。
+
+## R293 90Hz 大改造·第一批（2026-10-23/24，用户点名 /workflow）
+- **用户诉求**：「不管是换技术栈，还是什么，都给我干！开 /workflow 我要高频也稳定 90HZ，如果可以再追求一下画面特效保留，当前分支备份一个，然后就开始大改造」——旗舰 SoC（8gen5/天玑9400+）都该跑得动，目标=高负载稳定 90Hz，特效尽量保留；先备份分支。
+- **分支备份**：`backup/pre-90hz-vc91-20261024`（main@196076d vc91 出包位）。
+- **工作流账（dwfrun-064b8f4d，GLM-5.3$max，109.5M tokens，3h08m，9 阶段 70 步全 settled）**：三路侦察（渲染面/模拟面/原生工具链）→ 台架基线 5 臂 → 三路并行实施（甲弹幕合批 5 文件/乙模拟刀 8 文件/丙帽与诊断 7 文件）→ 四新套件门禁 3 轮过绿 → 15 套回归电池 15/15 → 基准复测前后对拍 → QA 双岗（渲染等价/模拟守恒）+玩家评审 → 修轮 2 → 战报交付。escalation 3 起（runSuite 细节缺 FAIL 行/`is_queued_redraw` Godot 4.3 不存在断链静丢/stat_leash_derives 期望差）全闭环。
+- **三刀落位**：
+  - **甲·弹本体 MultiMesh 合批**：`projectile_body_mm.gd`（门面：三重门 BODY_MM×boost_mode×host 能力/注册册记/翻转治理）+`projectile_mm_layer.gd`（懒挂层：boost 开追赶扫/关整体拆收）；渲染机构复用 `tex_bucket_host.gd` R240 敌本体镜像（弹池 Node2D 逻辑零动，本体绘制让位按贴图桶 MM——draw call 从逐弹 Sprite → 每贴图桶 1 次）。拖尾=弹根 _draw 不动（叠序翻转为体上——披露项非缺陷）；元素染色=换贴图分桶即分色保真；boost 关侧逐位不变承重墙（零注册零层零 sprite 触碰）。
+  - **乙·模拟刀**：`sim_query_share.gd`（②段武器侧查询帧级共享：W9 query_nearest/1600 圆扫/leash 候选三表按网格×相位×帧×纪元四轴缓存，相位括号=player.tick 武器调度段；enabled=false 一键逐位回退）+ has_target_now 帧缓存；敌60/弹200 深载帽收口。
+  - **丙·诊断**：`debug_stats.gd` 新 1Hz 键 **drawcallsN**（Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME——真机合批收益直读键）+ 图例段；诊断文件名 `%03d` 毫秒段（R292 D1 收口延续）。
+- **基准对拍（qa_r293_bench 深载台架 敌90+弹448，同会话口径，tools/r293_runs/BENCH.txt）**：total 17.009→17.603ms/步（-3.5%）——**预期形态非回归**：headless 无渲染后端，合批的 draw call 收益不可现、模拟记账（注册/每帧 transform×色读同步）全额付出；projectile 臂 -4.6%=记账本体，enemy 臂 +3.4%=乙刀净收益方向。真机收益判定键=drawcallsN+渲ms+呈帧N（vc92 日志）。跨会话复跑漂 ±12%（14.835/15.573 两笔仅证契约稳定）。
+- **修轮账（工作流内 2 轮+主会话接管 1 轮）**：①叠序披露断言补 4e；②`is_queued_redraw` Godot 4.3 不存在→5b 绘制计数器改写；③qa_r269 尾锚正则 `( 回µd+)?`→`( 回µs\d+)?`（刀C 批内引入批内修——引入轮次定谳 r290 电池绿基线在册）；④**MM teardown 一帧双绘**（boost 关翻转帧 sprite 复原+陈旧 MM 实例并绘）：`tex_bucket_host.gd` 抽体 `_sync_bucket`+新口 `mirror_resync`，teardown_mirrors 桶集先取后注再同步熄灭/重排（敌弹同桶共用安全；S7 短路共门零写）；⑤**leash>1600 派生缺员守卫**：`slash_leash_candidates` 派生分支补 `p_leash<=TARGET_REACH` 完备门（当前构筑上限≈1425 不可达——结构性保险非行为修复）；⑥simknives 桩 StubTarget 改 extends Enemy（消 50 条 SCRIPT ERROR——DamageContext.target 类型拒收 Node2D 桩致命中结算面失覆盖，改后 A/B 等价全覆盖）。
+- **测试账（tools/r293_runs/ALL.txt，2026-10-24 04:03-04:08）**：22 套串行 21 全绿——新 6 套 bench 7/7·multimesh 37/37·simknives 28/28（零 SCRIPT ERROR）·fpscap 27/27·qa_render 30/30·qa_sim 49/49；回归 15 套含 bucketprobe **35/35**（正则修复实证）·boostmode 69/69·weaponlod 84/84·r291qa 70/70·r292qa 47/47 等全绿零位移；r272_qa_indep 41/43=R290 在册存量红（≥2026-10-18，QA 差分实证与本批无关——注释 notify_place 复跑逐字同形，md5 复核），登记不修。QA 报告 docs/qa/2026-10-24-R293-render-batch-qa.md + simknives-fpscap-qa.md。
+- **主会话踩坑（新登记）**：`-s` 直跑 `_cases.gd` 文件=必然假红「Identifier not found: Meta」——cases 体 extends RefCounted 且裸引 autoload， autoload 全局在主脚本编译期未注册（runner 先编译后运行时载 cases 才可见）；复跑一律走 runner（`-s tests/qa_r293_<name>.gd`）。
+- **第二批路线（vc92 真机日志后）**：敌渲染合批（复用本批镜像机构）+ GDExtension C++ 原生热点核（工具链侦察结论在战报：MSVC/NDK 双端编译路径已探明）。
+- **vc92 真机验收键**：①`drawcallsN`（合批直读：深载期应从 ~400+ 显著落至 ~桶数量级〔敌90 桶×N 贴图+弹 448 同贴图桶〕）；②`渲ms`（渲染轴 ms/步——vsync 顶死位应下移）；③`呈帧N`（呈现帧率 90/120 档实跑值）；④fps 帽设置行（90/120 档可选性）；⑤深N/武跳N/弹拒N 延续键。

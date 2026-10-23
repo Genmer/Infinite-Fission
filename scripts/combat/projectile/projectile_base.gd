@@ -1489,6 +1489,9 @@ func _draw_r271() -> void:
 
 func _draw_boom_trail() -> void:
 	# G6 回旋刃拖尾：速度反方向渐隐金弧
+	# R293 刀A 叠序披露：boost 开侧本弧从「体下」翻为「体上」（原 _sprite 子件位=父 _draw
+	# 恒在体下；现 BodyMM 桶首位最低层、弹根恒在其上），且同桶全部拖尾恒压全部弹本体
+	# ——观感差已知披露项非缺陷（projectile_body_mm.gd 头注 + qa_r293 点4 4e 断言在册）。
 	var back := -velocity.normalized()
 	var side := back.orthogonal() * 0.35
 	var prev := Vector2.ZERO
@@ -1504,6 +1507,8 @@ func _draw_sword_stab_trail() -> void:
 	# R243 灵剑刺击残影（§2.2「拖刺击残影」；§7.2 质变「金色刺击残影」）：速度反方向
 	# 渐隐刺痕折线——默认 = 弹族元素表色（_plain_fill，KIN 即玩家蓝·银蓝剑读感），
 	# 万剑诀质变 = 金色（G6 拖尾同款 4 段渐隐折线，零新粒子系统）。
+	# R293 刀A 叠序披露：同 _draw_boom_trail——boost 开侧刺痕从「体下」翻为「体上」，
+	# 同桶全部拖尾恒压全部弹本体（projectile_body_mm.gd 头注 + qa_r293 点4 4e 在册）。
 	if velocity.length_squared() <= 1.0:
 		return
 	var col := PopPalette.GOLD if _host_transcended() else _plain_fill()
@@ -1807,6 +1812,13 @@ func _apply_visual_variant(p_variant: int, p_scale_f: float) -> void:
 	_place_in_bucket()
 
 
+# R293 刀A：弹本体 MultiMesh 合批门面（路径直引——新类不声明 class_name，防 -s headless
+# 全局类缓存未刷新，game_loop.gd:3155 同款纪律）。boost 关侧（桌面/headless/测试默认）
+# notify_place 零触碰=逐位现状；boost 开侧注册镜像后 _sprite 恒隐（本体绘制让位按贴图桶
+# 的 MultiMeshInstance2D——R240 敌 BodyMM 同构；拖尾=弹根 _draw 不受影响）。
+const ProjBodyMM := preload("res://scripts/render/projectile_body_mm.gd")
+
+
 func _place_in_bucket() -> void:
 	# R214 E'：弹体贴图定档后落同贴图桶（同变体/同阵营弹树序相邻 → 合批；阵营混排
 	# 断批的根治——R212 素材②）。桶为原点无变换，local position 语义恒等；
@@ -1817,6 +1829,10 @@ func _place_in_bucket() -> void:
 		return
 	if pool != null and pool.bucket_host != null and _sprite != null and _sprite.texture != null:
 		pool.bucket_host.place(self, _sprite.texture)
+		ProjBodyMM.notify_place(self, _sprite, pool.bucket_host)   # R293 刀A：place 尾镜像自报
+		                                                          # （敌方先例 enemy.gd:2432 同构——
+		                                                          # 贴图变化自动换 mm 键；注销挂
+		                                                          # unplace/unplace_lazy 既有链）
 
 
 func _apply_visual_rotation() -> void:

@@ -1,0 +1,46 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ R289 独立 QA · A 真武器节流守恒 + 键记账 ══════════
+  PASS | boot 成功（main.tscn 真链）
+  PASS | 夹具：真实 W2_gatling 装入
+  PASS | 夹具：真实 W1_pistol 装入
+  PASS | 夹具：靶敌在网格内（W1/W2 可索敌）
+── b A 真武器节流守恒（W2 120 步 ×2 轮 / W1 300 步补测） ──
+  PASS | b1 W2 关态 120 步 → 武器执行 120 次、武跳 0
+  PASS | b2 W2 深载 120 步 → 武器执行恰 60 次、武跳恰 60
+  PASS | b3 W2 模拟时间守恒（深载 60×2δ == 关态 120×δ）
+  PASS | b4 W2 深载玩家弹数 ≈ 关态（±10%）
+  TRACE W2-off shots=20 steps=[1, 7, 13, 19, 25, 31, 37, 43, 49, 55, 61, 67, 73, 79, 85, 91, 97, 103, 109, 115] gaps=[6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6]
+  TRACE W2-off cd_first=[0.08163265306122, 0.08003266639445, 0.07852377835605, 0.07709763014808, 0.0757469012754, 0.07446514910879, 0.07324667778405, 0.07208643029462] spin_first=[0.91666666666667, 0.83503401360544, 0.755001347211, 0.67647756885495, 0.59937993870687, 0.52363303743147, 0.44916788832267, 0.37592121053862]
+  TRACE W2-deep shots=20 steps=[2, 8, 14, 20, 26, 32, 38, 44, 50, 56, 62, 68, 74, 80, 86, 92, 98, 104, 110, 116] gaps=[6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6]
+  TRACE W2-deep cd_first=[0.06496598639456, 0.06336599972778, 0.06185711168938, 0.06043096348141, 0.05908023460874, 0.05779848244212, 0.05658001111738, 0.05541976362795] spin_first=[0.91666666666667, 0.83503401360544, 0.755001347211, 0.67647756885495, 0.59937993870687, 0.52363303743147, 0.44916788832267, 0.37592121053862]
+  TRACE W1-off shots=22 steps=[1, 15, 29, 43, 57, 71, 85, 99, 113, 127, 141, 155, 169, 183, 197, 211, 225, 239, 253, 267, 281, 295] gaps=[14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14]
+  TRACE W1-off cd_first=[0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2] spin_first=[0, 0, 0, 0, 0, 0, 0, 0]
+  TRACE W1-deep shots=22 steps=[2, 16, 30, 44, 58, 72, 86, 100, 114, 128, 142, 156, 170, 184, 198, 212, 226, 240, 254, 268, 282, 296] gaps=[14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14]
+  TRACE W1-deep cd_first=[0.18333333333333, 0.18333333333333, 0.18333333333333, 0.18333333333333, 0.18333333333333, 0.18333333333333, 0.18333333333333, 0.18333333333333] spin_first=[0, 0, 0, 0, 0, 0, 0, 0]
+  PASS | b5 W2 第二轮复现（exec/skip 与弹数比）
+  PASS | b6 W1 补测 300 步 → 执行 150/武跳 150
+  PASS | b7 W1 深载弹数 ≈ 关态（±10%，300 步窗口）
+  PASS | f1 boost 关 + deep_override=1 → deep_load false
+  PASS | f2 boost 关闭态 120 步 → 每步执行（exec=120、武跳=0）
+  PASS | f3 boost 关闭态相位不推进（_wpn_lod_phase=0）
+  PASS | f4 boost 关闭态弹数与开态关态一致（±10%）
+── c 逐武器族键记账（W1→武1 / W2→武2；桶和 ≤ 火段总µs；1Hz 行键序） ──
+  PASS | c1 深载键窗非全 0（30 物理步）
+  PASS | c2 W1 真件落 武1 桶（index 0 > 0）
+  PASS | c3 W2 真件落 武2 桶（index 1 > 0）
+  PASS | c4 十桶和 ≤ 火段总µs（副本桶9为火段子集/重叠口径已注明）
+  PASS | c5 驱动期 deep_load 恒 true
+  PASS | c6 1Hz 行十三键在位（武1..武9/副武/深/武跳/弹拒）
+  PASS | c7 键位序：派段µs < 武1 < 武2 < 武9 < 副武 < 深 < 武跳 < 弹拒
+  PASS | c8 行值映射：武1=111 武2=222 武9=888 副武=999
+  PASS | c9 deep 关 1Hz 行 深0
+── 收尾（弹/靶/设置/探针还原） ──
+验收汇总：24/24 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 16 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 110 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

@@ -25,8 +25,11 @@ const HP_BIG := 1.0e9
 # 十五键尾段连续正则（键序+邻接一次锁定；\d+ 保证数值整形可解析）
 const TAIL_PATTERN := "命µs(\\d+) 提µs(\\d+) 灭µs(\\d+) 回µs(\\d+) ipµs(\\d+) 段和µs(\\d+) 弹段µs(\\d+) 网段µs(\\d+) 敌段µs(\\d+) 跳段µs(\\d+) 玩段µs(\\d+) 特段µs(\\d+) UI段µs(\\d+) 他段µs(\\d+) 派段µs(\\d+)"
 # R289 行尾十三键续段（十五键段之后、尖峰标记之前；F2 位序断言剥离用——同
-# qa_r228_diagfreeze_cases.gd:171 第 11 次迁移协议，全量键强制在场）
-const R289_PATTERN := "^ 武1µs(\\d+) 武2µs(\\d+) 武3µs(\\d+) 武4µs(\\d+) 武5µs(\\d+) 武6µs(\\d+) 武7µs(\\d+) 武8µs(\\d+) 武9µs(\\d+) 副武µs(\\d+) 深(\\d+) 武跳(\\d+) 弹拒(\\d+)"
+# qa_r228_diagfreeze_cases.gd:171 第 11 次迁移协议，全量键强制在场）。
+# R293 刀C 续迁：再并入行尾 drawcallsN 键（Performance.RENDER_TOTAL_DRAW_CALLS_IN_
+# FRAME 末帧直读——合批生效真机自证键；追加在 弹拒N 之后、尖峰段之前——同 qa_r228
+# 第 12 次迁移协议；headless 无渲染恒 0）
+const R289_PATTERN := "^ 武1µs(\\d+) 武2µs(\\d+) 武3µs(\\d+) 武4µs(\\d+) 武5µs(\\d+) 武6µs(\\d+) 武7µs(\\d+) 武8µs(\\d+) 武9µs(\\d+) 副武µs(\\d+) 深(\\d+) 武跳(\\d+) 弹拒(\\d+) drawcalls(\\d+)"
 
 var tree: SceneTree
 var _gl: GameLoop = null
@@ -228,12 +231,12 @@ func _f_line_format() -> void:
 		return                      # 后续 F 项依赖捕获组——F1 红即止（已计 1 FAIL）
 	var i_peak := line.rfind("渲峰ms")
 	var rest := line.substr(m.get_end())
-	# R289 续段剥离（十五键段尾 → 武1..武9/副武/深/武跳/弹拒 → 尖峰/行尾）
+	# R289 续段剥离（十五键段尾 → 武1..武9/副武/深/武跳/弹拒 → R293 drawcalls → 尖峰/行尾）
 	var m289 := _r289_re.search(rest)
 	var rest_after289 := rest
 	if m289 != null:
 		rest_after289 = rest.substr(m289.get_end())
-	_check("F2 位序：十五键段起点在 渲峰ms 之后；段尾后仅允许 R289 十三键续段 + 尖峰 标记或行尾",
+	_check("F2 位序：十五键段起点在 渲峰ms 之后；段尾后仅允许 R289 十三键续段 + R293 drawcallsN + 尖峰 标记或行尾",
 		i_peak >= 0 and m.get_start() > i_peak and m289 != null
 			and (rest_after289.is_empty() or rest_after289.begins_with(" 尖峰")),
 		"渲峰ms@%d 段起@%d 段后残='%s' 289残='%s'" % [i_peak, m.get_start(),

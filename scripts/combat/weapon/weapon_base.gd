@@ -27,6 +27,10 @@ const WPN_FAMILY_INDEX := {
 	&"W8_orbit_field": 7, &"W9_arc_slash": 8,
 }
 const WPN_FAMILY_OTHER := 9
+# R293 模拟刀 B：② 段武器侧查询帧级共享助手（按路径 preload 引用——headless -s
+# 套件跑不重扫 global_script_class_cache，新 class_name 裸标识符不可解析；本类声明
+# 一份、子类〔OrbitWeapon/HomingWeapon 等〕继承沿用——父子同名 const = parse error）。
+const SimQueryShare = preload("res://scripts/combat/weapon/sim_query_share.gd")
 # R289 A：本步 weapon.tick 收到 dt×2（深载隔帧节流的执行步）——W8 挡弹概率/帽按此
 # 折算（两次判定的等效概率），只读不写（Player.tick 唯一写点）。
 static var lod_dt_doubled: bool = false
@@ -590,12 +594,22 @@ func acquire_target() -> Node2D:
 	# query_nearest(1600) 全网格扫合并为一次（缓存键 tick 拍序 + _in_tick 栈标记；
 	# 直调 try_fire/测试路径栈外恒真查，语义逐位保真；query_nearest 不过滤 dead，
 	# 帧内二查本就同值——缓存无漂移）
+	# R293 模拟刀 B：帧级共享——② 段网格为 ④ 冻结快照（敌位只在 ⑤ 变，R231 语义
+	# 锚），同帧同键 query_nearest 结果恒同 ⇒ 经 SimQueryShare 跨武器共享（键=网格
+	# 实例+纪元三轴〔② 相位括号/frame_stamp/_stamp〕+origin+reach；括号由 player.tick
+	# 武器段开合——括号/栈外恒原查询；惰性首查者付费留在本武器计时窗内——武9µs/
+	# 副武µs 归因链不断）。条目存裸最近节点，下方 dead 过滤逐调用执行
+	#（与原口径逐位同法——前序武器击杀唯一敌时本拍正确返 null 非假阳）。实查调用
+	# 形状保持 query_nearest（r220 计数桩「一拍恰 1 次」锁）；空场 is_empty() O(1)
+	# 早退（R287 口径：快照空 ⇒ 任何查询必零候选）。slash 模式覆写见 OrbitWeapon
+	#（1600 圆扫条目派生——与基类条目分命名空间）。
 	if _in_tick and _acq_cache_seq == _tick_seq:
 		return _acq_cache_target
 	var found: Node2D = null
 	if enemy_grid != null:
 		var origin := muzzle_position()
-		var cand := enemy_grid.query_nearest(origin, 1600.0, null)
+		var cand := SimQueryShare.shared_nearest(_in_tick, enemy_grid,
+			origin, SimQueryShare.TARGET_REACH)
 		if cand != null and not bool(cand.get("dead")):
 			found = cand
 	_acq_cache_seq = _tick_seq

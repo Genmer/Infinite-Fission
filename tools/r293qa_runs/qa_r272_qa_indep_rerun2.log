@@ -1,0 +1,66 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+════════ Infinite Fission · R272 V-C2 QA 独立挖掘（产品路径归还链/看门狗/MM 幂等/soak/trim 交互） ════════
+── q1 产品路径死亡归还链 ──
+  PASS | q1.1 spawner 产品路径出队（active 含夹具敌）
+  PASS | q1.2 产品路径落桶（spawner:101 host 注入 → _place_in_bucket）
+  PASS | q1.3 出队后池计数守恒（free+live==capacity）
+  PASS | q1.4 死亡链经 on_enemy_killed 归还（active 移除）
+  PASS | q1.5 boost 开产品路径归还留桶（V-C2 核心语义——unplace_lazy 零 reparent）
+  PASS | q1.6 归还件机械清理（visible=false——桶下不绘）
+  PASS | q1.7 归还后池计数守恒
+  PASS | q1.8 产品路径归还零污染零拒绝（pollution/rejected 基线差==0）
+── q2 尸体看门狗口 ──
+WARNING: [GameLoop] 尸体看门狗：死亡敌仍可见，强制归还 @Node2D@959（uid=41）
+     at: push_warning (core/variant/variant_utility.cpp:1112)
+  PASS | q2.1 看门狗归还（active 移除）
+  PASS | q2.2 看门狗归还同口 lazy（留桶非池根——:1499 → pool.release 统一分派）
+  PASS | q2.3 看门狗归还零污染零拒绝
+── q3 MM 镜像幂等与再激活 ──
+  PASS | q3.1 mm 资格敌 spawn 后镜像注册（mirror_tex_of 非空）
+  PASS | q3.2 注册后 mirror_count +1
+  PASS | q3.3 敌侧 _mm_on 在册
+  PASS | q3.4 release 镜像注销（mirror_tex_of 空——防幽灵实例绘制）
+  PASS | q3.5 注销后 mirror_count 回落
+  PASS | q3.6 _reset_state 清 _mm_on
+  PASS | q3.7 再激活取回同一件（LIFO）
+  PASS | q3.8 再激活镜像重注册（同贴图回同键）
+  PASS | q3.9 再激活零树进出（node_added==0 且 node_removed==0——留桶件复用）
+  PASS | q3.11a 前置：取到从未落位件（池根）
+  PASS | q3.10 未落位件 release 零镜像残留（mirror_count 不变）
+  PASS | q3.11 未落位件 release 原位（池根——unplace_lazy 不搬从未落位件）
+── q4 真实战斗 soak（6s） ──
+  PASS | q4.1 soak 期真实敌死亡链流量（enemy_killed ≥ 5 次）
+  PASS | q4.2 敌池零污染零拒绝（真实死亡-重生链）
+  PASS | q4.3 弹/xp 池零污染零拒绝
+  PASS | q4.4 敌池零运行期实例化（容量内周转）
+  PASS | q4.5 敌池真实周转（hits 增量 > 0）
+  PASS | q4.6 敌池空闲栈存在留桶件（soak 全程采样——lazy 归位真实生效）
+  PASS | q4.7 留桶空闲件全程不可见（不绘不断批）
+  PASS | q4.8 镜像注册表无幽灵（在册 owner 全在活跃表）
+  PASS | q4.9 soak 末仍在 PLAYING（会话保活）
+── q6 满载档释放门（评审#1 修复独立复核） ──
+  PASS | q6.1 前置：满载闪白换桶（活跃路径不受本刀影响）
+  PASS | q6.2 带闪死亡释放零树进出（dead 门挡回桶——修复前=复位贴图回桶 reparent）
+  FAIL | q6.3 带闪死亡释放镜像不回册（修复前=重注册违 :2217 不变量）（mirror=<ImageTexture#-9223371769358836969> mm_on=true）
+  PASS | q6.4 带闪死亡释放留原（闪）桶零搬动
+  PASS | q6.5 非 grunt（kind=dart）释放零树进出（修复前=回 grunt 桶 reparent）
+  PASS | q6.6 非 grunt 释放留原桶（不并 grunt 桶）
+  FAIL | q6.7 非 grunt 释放镜像不回册（）
+  PASS | q6.8 活跃期闪毕回原桶（守卫活侧不变——dead 门只挡归还路）
+  PASS | q6.9 活跃期闪毕镜像在册（活敌照常注册）
+  PASS | q6.10 满载臂后池计数守恒+零污染零拒绝
+── q5 trim_free_to 留桶交互 ──
+  PASS | q5.1 前置：3 件归还全留桶
+────────────────────────────────────────
+汇总：PASS 41 / FAIL 2（共 43 项）
+  FAIL 详情：q6.3 带闪死亡释放镜像不回册（修复前=重注册违 :2217 不变量）（mirror=<ImageTexture#-9223371769358836969> mm_on=true）
+  FAIL 详情：q6.7 非 grunt 释放镜像不回册（）
+验收汇总：41/43 通过
+WARNING: 4 RIDs of type "CanvasItem" were leaked.
+     at: _free_rids (servers/rendering/renderer_canvas_cull.cpp:2485)
+ERROR: 24 RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit.
+ERROR: 134 RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit.
+ERROR: 3 RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit.
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)

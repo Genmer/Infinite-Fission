@@ -1,0 +1,28 @@
+Godot Engine v4.3.stable.official.77dcf97d8 - https://godotengine.org
+
+══════════ Infinite Fission · R293 headless 深载模拟基准台架（敌90 驻场 + 弹448 顶格 + boost 促1 + 直驱 600 步） ══════════
+══ R293 深载模拟基准：敌90 驻场 + 弹448 顶格 + boost 促1 + 直驱 600 步（只量模拟轴） ══
+  PASS | boot 构筑挂载：W2 L5 五词条 12/12
+boot：grove w16 构成 42 敌种池，压血×0.30；W2 L5 五词条；boost_override=1（deep 强关）
+预热：180 直驱步（spin_up/弹/敌稳态）
+测量窗：600 直驱步（Time.get_ticks_usec 只包整步直调；段读数=stage_probe_us 逐帧采）
+── 读数（每步均值 ms/步，N=600 直驱步；headless 桌面口径，真机≈×0.5-2〔R224 修正〕） ──
+fixture：敌min=90（补位前下探83） 弹min(team-0)=432（下探408） 命中对数+44007 死亡冲刷+1020 玩家位移=212px
+整步墙钟 ms：p50=14.909 p95=20.432 p99=23.452（60Hz 预算 16.67）
+段键对照：player=②玩段全量 / projectile=④弹段（grid_projectile） / enemy=⑤敌段 / weapons=②内火段（player_wp）
+BENCH|total|14.835
+BENCH|player|0.210
+BENCH|projectile|11.096
+BENCH|enemy|1.905
+BENCH|weapons|0.183
+  PASS | s1 全程 state 恒 PLAYING（预热+测量）
+  PASS | s2 敌驻场 ≥85（补位后 standing count——r271 M4 门① 同款口径）
+  PASS | s3 team-0 活弹 ≥420（补位后 standing count——r271 M4 门① 同款口径）
+  PASS | s4 命中对数增量 >0（促1 T1 网格命中在账——真负载自证）
+  PASS | s5 玩家位置变化 >50px（风筝轨道在跑）
+  PASS | s6 四段探针全窗在账（player/projectile/enemy/weapons 计数=600）
+────────────────────────────────────────
+汇总：PASS 7 / FAIL 0（共 7 项）
+验收汇总：7/7 通过
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2284)
